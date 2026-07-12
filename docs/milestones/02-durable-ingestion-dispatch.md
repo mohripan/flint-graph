@@ -80,12 +80,33 @@ Local Docker Compose now includes:
 - `temporal`: Temporal development server on `localhost:7233` with Web UI on `localhost:8233`
 - `outbox-relay`: long-running relay process
 
+## Phase 4 outcome
+
+Temporal can now execute the stub ingestion workflow.
+
+`IngestDocumentWorkflow`:
+
+1. Runs `mark_ingestion_job_running`.
+2. Runs `run_stub_ingestion`.
+3. Runs `mark_ingestion_job_completed`.
+4. If stub ingestion fails, runs `mark_ingestion_job_failed` and re-raises the workflow failure.
+
+The workflow invokes activities by name so workflow code does not import database modules. Activity implementations own all database writes and call the explicit job-transition service from Phase 2.
+
+The worker process runs:
+
+```powershell
+uv run python -m atlas_rag.processes.ingestion_worker
+```
+
+Docker Compose now includes `ingestion-worker` on the same `ingestion` Temporal task queue as the relay.
+
 ## Current limitations
 
-- No workflow implementation or worker exists yet, so the relay can start executions only after Phase 4 adds `IngestDocumentWorkflow`.
 - Retry behavior is only implemented for repeated job-state transition activity calls.
 - Cancellation behavior is not active yet.
-- Object-storage access remains a contract only; no worker reads content yet.
+- Object-storage access remains a contract only; the worker does not read content yet.
+- Ingestion is a stub; parsing, chunking, embedding, indexing, and graph writes are not implemented.
 
 ## Phase 2 outcome
 
@@ -127,12 +148,20 @@ Phase 3 is covered by integration tests that prove:
 - Already-published messages are skipped by later relay passes.
 - Failed workflow starts leave the message pending and record retry state.
 
+Phase 4 is covered by tests that prove:
+
+- The workflow schedules the running, stub ingestion, and completed activities in order.
+- The workflow schedules the failed transition activity if stub ingestion fails.
+- Activity helpers move jobs to `running`, `completed`, and `failed` through the transition service.
+
 Useful commands:
 
 ```powershell
 uv run pytest tests\integration\test_outbox.py
 uv run pytest tests\integration\test_outbox_relay.py
+uv run pytest tests\integration\test_ingestion_activities.py
 uv run pytest tests\integration\test_job_transitions.py
+uv run pytest tests\unit\test_ingestion_workflow.py
 uv run pytest tests\integration\test_vertical_slice.py
 uv run pytest tests\unit
 uv run ruff check .

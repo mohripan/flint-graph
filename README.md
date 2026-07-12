@@ -40,6 +40,7 @@ In another shell, run Temporal locally and then start the outbox relay:
 ```bash
 temporal server start-dev
 make relay
+make worker
 ```
 
 ## Exercise the vertical slice

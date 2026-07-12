@@ -11,9 +11,11 @@ API transaction
     -> outbox_messages row
     -> outbox relay
     -> Temporal workflow start request
+    -> ingestion worker
+    -> stub ingestion activities
 ```
 
-The workflow and worker are added in the next phase. Until then, the relay can connect to Temporal and start the configured workflow type, but no worker will complete it.
+The current worker executes stub ingestion only. It proves dispatch and state transitions without parsing, chunking, embedding, indexing, or object-storage reads.
 
 ## Docker Compose
 
@@ -33,6 +35,7 @@ Relevant services:
 
 - `api`: records jobs and outbox messages
 - `outbox-relay`: polls `outbox_messages` and starts Temporal workflows
+- `ingestion-worker`: runs `IngestDocumentWorkflow` and stub activities
 - `temporal`: local Temporal development server
 - `postgres`: application database
 
@@ -62,6 +65,12 @@ Run the relay:
 uv run python -m atlas_rag.processes.outbox_relay
 ```
 
+Run the worker:
+
+```powershell
+uv run python -m atlas_rag.processes.ingestion_worker
+```
+
 ## Manual verification
 
 1. Create a tenant.
@@ -72,8 +81,9 @@ uv run python -m atlas_rag.processes.outbox_relay
 6. Let the relay run.
 7. Confirm the outbox message changes to `published`.
 8. Open Temporal Web UI and confirm a workflow with ID `ingestion-job-{job_id}` exists.
-
-Until Phase 4 is implemented, the workflow will not be processed by a worker.
+9. Let the worker run.
+10. Confirm the job status changes to `completed`.
+11. Fetch job events and confirm `job.queued`, `job.started`, and `job.completed`.
 
 ## Troubleshooting
 

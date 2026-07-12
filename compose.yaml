@@ -34,6 +34,22 @@ services:
       temporal:
         condition: service_started
 
+  ingestion-worker:
+    build: .
+    command: ["python", "-m", "atlas_rag.processes.ingestion_worker"]
+    environment:
+      ATLAS_ENV: local
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
+      ATLAS_TEMPORAL_ADDRESS: temporal:7233
+      ATLAS_OTEL_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_started
+
   migrate:
     build: .
     command: ["alembic", "upgrade", "head"]

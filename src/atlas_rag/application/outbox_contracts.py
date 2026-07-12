@@ -13,3 +13,9 @@ class IngestionJobQueuedPayload(TypedDict):
     source_type: str
     source_uri: str | None
     trace_context: dict[str, str]
+
+
+class IngestionFailurePayload(TypedDict):
+    payload: IngestionJobQueuedPayload
+    error_code: str
+    error_message: str

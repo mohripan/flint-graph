@@ -1,4 +1,4 @@
-.PHONY: install dev relay up down migrate revision test lint format typecheck check
+.PHONY: install dev relay worker up down migrate revision test lint format typecheck check
 
 install:
 	uv sync --all-groups
@@ -8,6 +8,9 @@ dev:
 
 relay:
 	uv run python -m atlas_rag.processes.outbox_relay
+
+worker:
+	uv run python -m atlas_rag.processes.ingestion_worker
 
 up:
 	docker compose up -d --build
