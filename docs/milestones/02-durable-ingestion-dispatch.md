@@ -104,9 +104,30 @@ Docker Compose now includes `ingestion-worker` on the same `ingestion` Temporal 
 ## Current limitations
 
 - Retry behavior is only implemented for repeated job-state transition activity calls.
-- Cancellation behavior is not active yet.
 - Object-storage access remains a contract only; the worker does not read content yet.
 - Ingestion is a stub; parsing, chunking, embedding, indexing, and graph writes are not implemented.
+
+## Phase 5 outcome
+
+Cancellation and trace propagation are now explicit.
+
+Cancellation behavior:
+
+- `POST /v1/ingestion-jobs/{job_id}/cancel` transitions a tenant-scoped queued or running job to `cancelled`.
+- Cancellation appends an `ingestion.job_cancelled` outbox message in the same request transaction.
+- The outbox relay cancels the deterministic Temporal workflow execution for that job.
+- Foreign jobs still return not found.
+- Completed and failed jobs cannot be cancelled.
+- Repeated cancellation of an already-cancelled job is an idempotent no-op through the transition service.
+- If a Temporal workflow receives a cancellation while running, it schedules `mark_ingestion_job_cancelled` before re-raising the cancellation.
+
+Trace propagation behavior:
+
+- The API captures W3C trace context when it creates the outbox message.
+- The relay passes outbox headers to the Temporal starter.
+- The Temporal starter stores the trace context in workflow memo as `trace_context`.
+
+Temporal Python does not automatically continue spans from workflow memo into worker activities in this implementation. The memo preserves correlation data for inspection and for a future interceptor-based propagation pass.
 
 ## Phase 2 outcome
 
@@ -154,14 +175,26 @@ Phase 4 is covered by tests that prove:
 - The workflow schedules the failed transition activity if stub ingestion fails.
 - Activity helpers move jobs to `running`, `completed`, and `failed` through the transition service.
 
+Phase 5 is covered by tests that prove:
+
+- The cancel endpoint moves queued jobs to `cancelled` and appends `job.cancelled`.
+- Cancellation writes a durable cancellation outbox message.
+- The relay publishes cancellation messages by calling Temporal workflow cancellation.
+- Tenant boundaries are preserved for cancellation.
+- Completed jobs cannot be cancelled.
+- Workflow cancellation schedules the cancellation transition activity.
+- Trace context is preserved in the Temporal workflow memo.
+
 Useful commands:
 
 ```powershell
 uv run pytest tests\integration\test_outbox.py
 uv run pytest tests\integration\test_outbox_relay.py
 uv run pytest tests\integration\test_ingestion_activities.py
+uv run pytest tests\integration\test_job_cancellation.py
 uv run pytest tests\integration\test_job_transitions.py
 uv run pytest tests\unit\test_ingestion_workflow.py
+uv run pytest tests\unit\test_temporal_adapter.py
 uv run pytest tests\integration\test_vertical_slice.py
 uv run pytest tests\unit
 uv run ruff check .

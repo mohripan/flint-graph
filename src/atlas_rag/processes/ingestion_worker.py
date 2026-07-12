@@ -6,6 +6,7 @@ from atlas_rag.config import get_settings
 from atlas_rag.infrastructure.temporal import connect_temporal
 from atlas_rag.logging import configure_logging
 from atlas_rag.worker.activities.ingestion import (
+    mark_ingestion_job_cancelled,
     mark_ingestion_job_completed,
     mark_ingestion_job_failed,
     mark_ingestion_job_running,
@@ -27,6 +28,7 @@ async def run_worker() -> None:
             run_stub_ingestion,
             mark_ingestion_job_completed,
             mark_ingestion_job_failed,
+            mark_ingestion_job_cancelled,
         ],
     )
     await worker.run()

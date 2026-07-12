@@ -1,10 +1,12 @@
 from typing import Any
 
 import pytest
+from temporalio.exceptions import CancelledError
 
 from atlas_rag.application.outbox_contracts import IngestionJobQueuedPayload
 from atlas_rag.workflows import ingestion
 from atlas_rag.workflows.ingestion import (
+    MARK_JOB_CANCELLED_ACTIVITY,
     MARK_JOB_COMPLETED_ACTIVITY,
     MARK_JOB_FAILED_ACTIVITY,
     MARK_JOB_RUNNING_ACTIVITY,
@@ -68,3 +70,25 @@ async def test_ingestion_workflow_marks_job_failed_when_stub_activity_fails(
     failure_payload = calls[-1][1]
     assert failure_payload["error_code"] == "ingestion_failed"
     assert failure_payload["error_message"] == "stub ingestion failed"
+
+
+async def test_ingestion_workflow_marks_job_cancelled_when_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def fake_execute_activity(activity_name: str, arg: dict[str, Any], **_: Any) -> None:
+        calls.append((activity_name, arg))
+        if activity_name == RUN_STUB_INGESTION_ACTIVITY:
+            raise CancelledError("cancelled by test")
+
+    monkeypatch.setattr(ingestion.workflow, "execute_activity", fake_execute_activity)
+
+    with pytest.raises(CancelledError):
+        await IngestDocumentWorkflow().run(_payload())
+
+    assert [name for name, _ in calls] == [
+        MARK_JOB_RUNNING_ACTIVITY,
+        RUN_STUB_INGESTION_ACTIVITY,
+        MARK_JOB_CANCELLED_ACTIVITY,
+    ]

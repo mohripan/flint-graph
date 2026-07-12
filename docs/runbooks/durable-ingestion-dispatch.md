@@ -85,6 +85,30 @@ uv run python -m atlas_rag.processes.ingestion_worker
 10. Confirm the job status changes to `completed`.
 11. Fetch job events and confirm `job.queued`, `job.started`, and `job.completed`.
 
+## Cancellation
+
+Cancel a queued or running job:
+
+```powershell
+curl -sS -X POST http://localhost:8000/v1/ingestion-jobs/<job-id>/cancel `
+  -H "X-Tenant-ID: <tenant-id>"
+```
+
+Expected result:
+
+- The job status becomes `cancelled`.
+- A `job.cancelled` event is appended.
+- An `ingestion.job_cancelled` outbox message is appended.
+- The relay sends a Temporal workflow cancellation request for `ingestion-job-{job_id}`.
+- Foreign tenant cancellation attempts return 404.
+- Completed or failed jobs return conflict.
+
+## Trace Correlation
+
+The API stores W3C trace context in the outbox message headers. The relay passes those headers to Temporal, and the Temporal starter writes them into workflow memo as `trace_context`.
+
+In Temporal Web UI, inspect the workflow memo to correlate a workflow execution back to the originating API trace. Automatic span continuation inside workflow and activity execution is not implemented yet.
+
 ## Troubleshooting
 
 - If messages stay `pending`, check the `outbox-relay` logs.

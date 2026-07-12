@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -107,6 +108,7 @@ async def create_ingestion_job(
                     from_status=None,
                     to_status=IngestionJobStatus.QUEUED,
                     details={"document_version": version_number},
+                    created_at=datetime.now(UTC),
                 )
             )
             await session.flush()

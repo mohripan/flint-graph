@@ -29,6 +29,16 @@ class TemporalIngestionWorkflowStarter:
             memo={"trace_context": headers},
         )
 
+    async def cancel_ingestion_workflow(
+        self,
+        *,
+        workflow_id: str,
+        payload: dict[str, Any],
+        headers: dict[str, Any],
+    ) -> None:
+        handle = self._client.get_workflow_handle(workflow_id)
+        await handle.cancel(reason="AtlasRAG ingestion job cancelled")
+
 
 async def connect_temporal(settings: Settings) -> Client:
     return await Client.connect(

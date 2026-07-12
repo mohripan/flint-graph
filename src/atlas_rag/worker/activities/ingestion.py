@@ -11,6 +11,7 @@ from atlas_rag.application.services.job_transitions import transition_ingestion_
 from atlas_rag.domain.enums import IngestionJobStatus
 from atlas_rag.infrastructure.db.session import SessionFactory
 from atlas_rag.workflows.ingestion import (
+    MARK_JOB_CANCELLED_ACTIVITY,
     MARK_JOB_COMPLETED_ACTIVITY,
     MARK_JOB_FAILED_ACTIVITY,
     MARK_JOB_RUNNING_ACTIVITY,
@@ -73,6 +74,24 @@ async def mark_ingestion_job_failed_for_payload(
     )
 
 
+async def mark_ingestion_job_cancelled_for_payload(
+    session: AsyncSession,
+    payload: IngestionJobQueuedPayload,
+) -> None:
+    await transition_ingestion_job(
+        session,
+        tenant_id=_tenant_id(payload),
+        job_id=_job_id(payload),
+        target_status=IngestionJobStatus.CANCELLED,
+        event_type="job.cancelled",
+        details={"requested_by": "temporal"},
+        expected_current_statuses={
+            IngestionJobStatus.QUEUED,
+            IngestionJobStatus.RUNNING,
+        },
+    )
+
+
 @activity.defn(name=MARK_JOB_RUNNING_ACTIVITY)
 async def mark_ingestion_job_running(payload: IngestionJobQueuedPayload) -> None:
     async with SessionFactory() as session:
@@ -106,6 +125,17 @@ async def mark_ingestion_job_failed(failure: IngestionFailurePayload) -> None:
     async with SessionFactory() as session:
         try:
             await mark_ingestion_job_failed_for_payload(session, failure)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+@activity.defn(name=MARK_JOB_CANCELLED_ACTIVITY)
+async def mark_ingestion_job_cancelled(payload: IngestionJobQueuedPayload) -> None:
+    async with SessionFactory() as session:
+        try:
+            await mark_ingestion_job_cancelled_for_payload(session, payload)
             await session.commit()
         except Exception:
             await session.rollback()

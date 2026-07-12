@@ -16,6 +16,7 @@ from atlas_rag.application.services.ingestion_jobs import (
     get_ingestion_job,
     list_ingestion_job_events,
 )
+from atlas_rag.application.services.job_cancellation import cancel_ingestion_job
 
 router = APIRouter(prefix="/v1", tags=["documents"])
 
@@ -36,7 +37,7 @@ def _job_response(record: JobRecord) -> IngestionJobResponse:
         error_code=job.error_code,
         error_message=job.error_message,
     )
-    
+
 
 @router.post("/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def create_document_endpoint(
@@ -85,6 +86,16 @@ async def get_job_endpoint(
     session: SessionDep,
 ) -> IngestionJobResponse:
     record = await get_ingestion_job(session, tenant_id=tenant_id, job_id=job_id)
+    return _job_response(record)
+
+
+@router.post("/ingestion-jobs/{job_id}/cancel", response_model=IngestionJobResponse)
+async def cancel_job_endpoint(
+    job_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> IngestionJobResponse:
+    record = await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job_id)
     return _job_response(record)
 
 

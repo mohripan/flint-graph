@@ -71,6 +71,7 @@ async def transition_ingestion_job(
             from_status=current_status,
             to_status=target_status,
             details=details,
+            created_at=now,
         )
     )
     await session.flush()

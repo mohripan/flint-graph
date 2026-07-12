@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import CancelledError
 
 from atlas_rag.application.outbox_contracts import (
     IngestionFailurePayload,
@@ -12,6 +13,7 @@ MARK_JOB_RUNNING_ACTIVITY = "mark_ingestion_job_running"
 RUN_STUB_INGESTION_ACTIVITY = "run_stub_ingestion"
 MARK_JOB_COMPLETED_ACTIVITY = "mark_ingestion_job_completed"
 MARK_JOB_FAILED_ACTIVITY = "mark_ingestion_job_failed"
+MARK_JOB_CANCELLED_ACTIVITY = "mark_ingestion_job_cancelled"
 
 _TRANSITION_ACTIVITY_TIMEOUT = timedelta(seconds=30)
 _INGESTION_ACTIVITY_TIMEOUT = timedelta(minutes=5)
@@ -41,6 +43,14 @@ class IngestDocumentWorkflow:
                 start_to_close_timeout=_TRANSITION_ACTIVITY_TIMEOUT,
                 retry_policy=_ACTIVITY_RETRY_POLICY,
             )
+        except CancelledError:
+            await workflow.execute_activity(
+                MARK_JOB_CANCELLED_ACTIVITY,
+                payload,
+                start_to_close_timeout=_TRANSITION_ACTIVITY_TIMEOUT,
+                retry_policy=_ACTIVITY_RETRY_POLICY,
+            )
+            raise
         except Exception as exc:
             failure_payload = IngestionFailurePayload(
                 payload=payload,

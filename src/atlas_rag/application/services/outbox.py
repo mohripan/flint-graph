@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +24,7 @@ async def append_outbox_message(
     payload: dict[str, Any],
     headers: dict[str, Any] | None = None,
 ) -> OutboxMessage:
+    now = datetime.now(UTC)
     message = OutboxMessage(
         tenant_id=tenant_id,
         topic=topic,
@@ -30,6 +32,8 @@ async def append_outbox_message(
         aggregate_id=aggregate_id,
         payload=payload,
         headers=headers or {},
+        created_at=now,
+        available_at=now,
     )
     session.add(message)
     await session.flush()

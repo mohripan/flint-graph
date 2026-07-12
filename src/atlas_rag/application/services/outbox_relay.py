@@ -4,7 +4,10 @@ from typing import Any, Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.outbox_contracts import INGESTION_JOB_QUEUED_TOPIC
+from atlas_rag.application.outbox_contracts import (
+    INGESTION_JOB_CANCELLED_TOPIC,
+    INGESTION_JOB_QUEUED_TOPIC,
+)
 from atlas_rag.domain.enums import OutboxMessageStatus
 from atlas_rag.infrastructure.db.models import OutboxMessage
 
@@ -18,9 +21,38 @@ class IngestionWorkflowStarter(Protocol):
         headers: dict[str, Any],
     ) -> None: ...
 
+    async def cancel_ingestion_workflow(
+        self,
+        *,
+        workflow_id: str,
+        payload: dict[str, Any],
+        headers: dict[str, Any],
+    ) -> None: ...
+
 
 def ingestion_workflow_id(message: OutboxMessage) -> str:
     return f"ingestion-job-{message.aggregate_id}"
+
+
+async def _publish_message(
+    message: OutboxMessage,
+    workflow_starter: IngestionWorkflowStarter,
+) -> None:
+    if message.topic == INGESTION_JOB_QUEUED_TOPIC:
+        await workflow_starter.start_ingestion_workflow(
+            workflow_id=ingestion_workflow_id(message),
+            payload=message.payload,
+            headers=message.headers,
+        )
+        return
+    if message.topic == INGESTION_JOB_CANCELLED_TOPIC:
+        await workflow_starter.cancel_ingestion_workflow(
+            workflow_id=ingestion_workflow_id(message),
+            payload=message.payload,
+            headers=message.headers,
+        )
+        return
+    raise ValueError(f"Unsupported outbox topic '{message.topic}'.")
 
 
 async def relay_outbox_batch(
@@ -36,7 +68,9 @@ async def relay_outbox_batch(
             select(OutboxMessage)
             .where(
                 OutboxMessage.status == OutboxMessageStatus.PENDING,
-                OutboxMessage.topic == INGESTION_JOB_QUEUED_TOPIC,
+                OutboxMessage.topic.in_(
+                    [INGESTION_JOB_QUEUED_TOPIC, INGESTION_JOB_CANCELLED_TOPIC]
+                ),
                 OutboxMessage.available_at <= datetime.now(UTC),
             )
             .order_by(OutboxMessage.available_at, OutboxMessage.created_at, OutboxMessage.id)
@@ -52,11 +86,7 @@ async def relay_outbox_batch(
         await session.flush()
 
         try:
-            await workflow_starter.start_ingestion_workflow(
-                workflow_id=ingestion_workflow_id(message),
-                payload=message.payload,
-                headers=message.headers,
-            )
+            await _publish_message(message, workflow_starter)
         except Exception as exc:
             message.status = OutboxMessageStatus.PENDING
             message.attempt_count += 1
