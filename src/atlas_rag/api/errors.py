@@ -39,7 +39,7 @@ def install_error_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         errors: list[dict[str, Any]] = [
             {
-                "location": list[error["loc"]],
+                "location": list(error["loc"]),
                 "message": error["msg"],
                 "type": error["type"],
             }
@@ -59,7 +59,7 @@ def install_error_handlers(app: FastAPI) -> None:
         
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
-        await logger.exception("unhandled_exception", path=request.url.path)
+        logger.exception("unhandled_exception", path=request.url.path)
         return _problem_response(
             ProblemDetail(
                 type="urn:atlas-rag:error.internal",

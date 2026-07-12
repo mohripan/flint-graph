@@ -122,7 +122,7 @@ class IngestionJobEvent(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (Index("ix_job_events_job_created", "job_id", "created_at"),)
     
     job_id: Mapped[UUID] = mapped_column(
-        ForeignKey("ingestion_jobs.id", ondelete="CASCADE"), nullable=False, Index=True
+        ForeignKey("ingestion_jobs.id", ondelete="CASCADE"), nullable=False, index=True
     )
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     from_status: Mapped[IngestionJobStatus | None] = mapped_column(

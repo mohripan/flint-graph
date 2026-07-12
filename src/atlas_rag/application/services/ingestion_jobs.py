@@ -120,7 +120,7 @@ async def create_ingestion_job(
         return JobRecord(job=job, version_number=version_number, created=False)
     
     await session.refresh(job)
-    return JobRecord(job=job, version_number=version_number, created=False)
+    return JobRecord(job=job, version_number=version_number, created=True)
 
 
 async def get_ingestion_job(
