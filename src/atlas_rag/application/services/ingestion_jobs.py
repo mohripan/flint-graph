@@ -5,6 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas_rag.application.outbox_contracts import (
+    INGESTION_JOB_AGGREGATE_TYPE,
+    INGESTION_JOB_QUEUED_TOPIC,
+    IngestionJobQueuedPayload,
+)
+from atlas_rag.application.services.outbox import append_outbox_message, capture_trace_context
 from atlas_rag.domain.enums import DocumentVersionStatus, IngestionJobStatus
 from atlas_rag.domain.errors import ConflictError, NotFoundError
 from atlas_rag.infrastructure.db.models import (
@@ -20,8 +26,8 @@ class JobRecord:
     job: IngestionJob
     version_number: int
     created: bool
-    
-    
+
+
 async def _find_by_idempotency_key(
     session: AsyncSession,
     *,
@@ -64,7 +70,7 @@ async def create_ingestion_job(
                         "This idempotency key was already used for a different document."
                     )
                 return JobRecord(job=job, version_number=version_number, created=False)
-            
+
             document = await session.scalar(
                 select(Document)
                 .where(Document.id == document_id, Document.tenant_id == tenant_id)
@@ -72,10 +78,10 @@ async def create_ingestion_job(
             )
             if document is None:
                 raise NotFoundError(f"Document '{document_id}' was not found.")
-            
+
             version_number = document.next_version_number
             document.next_version_number += 1
-            
+
             version = DocumentVersion(
                 document_id=document.id,
                 version_number=version_number,
@@ -83,7 +89,7 @@ async def create_ingestion_job(
             )
             session.add(version)
             await session.flush()
-            
+
             job = IngestionJob(
                 tenant_id=tenant_id,
                 document_id=document.id,
@@ -93,7 +99,7 @@ async def create_ingestion_job(
             )
             session.add(job)
             await session.flush()
-            
+
             session.add(
                 IngestionJobEvent(
                     job_id=job.id,
@@ -104,6 +110,27 @@ async def create_ingestion_job(
                 )
             )
             await session.flush()
+
+            trace_context = capture_trace_context()
+            payload = IngestionJobQueuedPayload(
+                tenant_id=str(tenant_id),
+                document_id=str(document.id),
+                document_version_id=str(version.id),
+                ingestion_job_id=str(job.id),
+                idempotency_key=idempotency_key,
+                source_type=document.source_type.value,
+                source_uri=document.source_uri,
+                trace_context=trace_context,
+            )
+            await append_outbox_message(
+                session,
+                tenant_id=tenant_id,
+                topic=INGESTION_JOB_QUEUED_TOPIC,
+                aggregate_type=INGESTION_JOB_AGGREGATE_TYPE,
+                aggregate_id=job.id,
+                payload=dict(payload),
+                headers=trace_context,
+            )
     except IntegrityError as exc:
         existing = await _find_by_idempotency_key(
             session,
@@ -118,7 +145,7 @@ async def create_ingestion_job(
                 "This idempotency key was already used for a different document."
             ) from exc
         return JobRecord(job=job, version_number=version_number, created=False)
-    
+
     await session.refresh(job)
     return JobRecord(job=job, version_number=version_number, created=True)
 
@@ -142,10 +169,7 @@ async def get_ingestion_job(
 
 
 async def list_ingestion_job_events(
-    session: AsyncSession,
-    *,
-    tenant_id: UUID,
-    job_id: UUID
+    session: AsyncSession, *, tenant_id: UUID, job_id: UUID
 ) -> list[IngestionJobEvent]:
     exists = await session.scalar(
         select(IngestionJob.id).where(
@@ -155,7 +179,7 @@ async def list_ingestion_job_events(
     )
     if exists is None:
         raise NotFoundError(f"Ingestion job '{job_id}' was not found.")
-    
+
     result = await session.scalars(
         select(IngestionJobEvent)
         .where(IngestionJobEvent.job_id == job_id)

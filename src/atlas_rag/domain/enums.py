@@ -7,14 +7,22 @@ class DocumentVersionStatus(StrEnum):
     SUPERSEDED = "superseded"
     FAILED = "failed"
     DELETED = "deleted"
-    
+
+
 class IngestionJobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-    
+
+
+class OutboxMessageStatus(StrEnum):
+    PENDING = "pending"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
 class SourceType(StrEnum):
     UPLOAD = "upload"
     URL = "url"
