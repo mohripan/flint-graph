@@ -31,21 +31,21 @@ def enum_column(enum_type: type[PyEnum], length: int) -> SAEnum:
         validate_strings=True,
         length=length,
     )
-    
-    
+
+
 class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tenants"
-    
+
     name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
-    
-    
+
+
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "documents"
     __table_args__ = (
         UniqueConstraint("tenant_id", "external_id", name="uq_documents_tenant_external_id"),
         Index("ix_documents_tenant_created_at", "tenant_id", "created_at"),
     )
-    
+
     tenant_id: Mapped[UUID] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -54,19 +54,19 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source_type: Mapped[SourceType] = mapped_column(enum_column(SourceType, 32), nullable=False)
     source_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    
+
     versions: Mapped[list["DocumentVersion"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
-    
-    
+
+
 class DocumentVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_versions"
     __table_args__ = (
         UniqueConstraint("document_id", "version_number", name="uq_document_versions_number"),
         Index("ix_document_versions_document_status", "document_id", "status"),
     )
-    
+
     document_id: Mapped[UUID] = mapped_column(
         ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -81,17 +81,18 @@ class DocumentVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict
     )
-    
+
     document: Mapped[Document] = relationship(back_populates="versions")
-    
-    
+
+
 class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ingestion_jobs"
     __table_args__ = (
+        UniqueConstraint("document_version_id"),
         UniqueConstraint("tenant_id", "idempotency_key", name="uq_jobs_tenant_idempotency"),
         Index("ix_jobs_tenant_status_created", "tenant_id", "status", "created_at"),
     )
-    
+
     tenant_id: Mapped[UUID] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -111,16 +112,16 @@ class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    
+
     events: Mapped[list["IngestionJobEvent"]] = relationship(
         back_populates="job", cascade="all, delete-orphan", order_by="IngestionJobEvent.created_at"
     )
-    
-    
+
+
 class IngestionJobEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "ingestion_job_events"
     __table_args__ = (Index("ix_job_events_job_created", "job_id", "created_at"),)
-    
+
     job_id: Mapped[UUID] = mapped_column(
         ForeignKey("ingestion_jobs.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -135,5 +136,5 @@ class IngestionJobEvent(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    
+
     job: Mapped[IngestionJob] = relationship(back_populates="events")

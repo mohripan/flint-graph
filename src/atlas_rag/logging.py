@@ -3,6 +3,7 @@ import sys
 
 import structlog
 
+
 def configure_logging(level: str) -> None:
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level.upper())
     structlog.configure(

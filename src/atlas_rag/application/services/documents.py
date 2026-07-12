@@ -8,6 +8,7 @@ from atlas_rag.domain.enums import SourceType
 from atlas_rag.domain.errors import ConflictError, NotFoundError
 from atlas_rag.infrastructure.db.models import Document
 
+
 async def create_document(
     session: AsyncSession,
     *,

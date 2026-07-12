@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class DocumentVersionStatus(StrEnum):
     PENDING = "pending"
     ACTIVE = "active"

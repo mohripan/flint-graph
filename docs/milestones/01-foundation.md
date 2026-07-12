@@ -18,6 +18,8 @@ A `Document` is the stable logical identity. Every ingestion attempt creates a `
 
 This makes reprocessing, rollback, provenance, and deletion tractable. We never silently overwrite the evidence behind an answer.
 
+Each ingestion job owns exactly one document version, and each document version can have at most one ingestion job. The database migration and ORM model both declare this uniqueness invariant so retry-safe job creation cannot accidentally attach multiple jobs to the same version.
+
 ### Idempotent job creation
 
 Clients supply an `Idempotency-Key`. Repeating the same request for the same tenant and document returns the original job. Reusing the key for a different document produces a conflict.
