@@ -1,0 +1,62 @@
+services:
+  api:
+    build: .
+    environment:
+      ATLAS_ENV: local
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
+      ATLAS_OTEL_ENABLED: "true"
+      ATLAS_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
+      ATLAS_OTEL_EXPORTER_OTLP_INSECURE: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      observability:
+        condition: service_healthy
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
+      ATLAS_OTEL_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_DB: atlas
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  observability:
+    image: grafana/otel-lgtm:0.28.0
+    ports:
+      - "3000:3000"
+      - "4317:4317"
+      - "4318:4318"
+    healthcheck:
+      test: ["CMD", "test", "-e", "/tmp/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - observability_data:/data
+
+volumes:
+  postgres_data:
+  observability_data:
