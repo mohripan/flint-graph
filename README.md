@@ -22,6 +22,7 @@ Then open:
 
 - API documentation: `http://localhost:8000/docs`
 - Grafana: `http://localhost:3000`
+- Temporal Web UI: `http://localhost:8233`
 - Liveness: `http://localhost:8000/health/live`
 - Readiness: `http://localhost:8000/health/ready`
 
@@ -32,6 +33,13 @@ cp .env.example .env
 uv sync --all-groups
 uv run alembic upgrade head
 uv run uvicorn atlas_rag.main:app --reload
+```
+
+In another shell, run Temporal locally and then start the outbox relay:
+
+```bash
+temporal server start-dev
+make relay
 ```
 
 ## Exercise the vertical slice
@@ -90,6 +98,7 @@ make check
 Introduce durable ingestion dispatch:
 
 - transactional outbox table
+- outbox relay
 - Temporal workflow and worker
 - object-storage upload contract
 - job state-transition service

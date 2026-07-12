@@ -59,10 +59,30 @@ The same trace context is also stored in `headers`. Later relay and worker phase
 
 Indexes are present for pending-message polling and aggregate lookup.
 
+## Phase 3 outcome
+
+The outbox relay can now safely move pending outbox messages to Temporal.
+
+The relay:
+
+- Polls pending `ingestion.job_queued` messages.
+- Locks each selected message with a relay ID.
+- Starts a Temporal workflow with deterministic workflow ID `ingestion-job-{job_id}`.
+- Uses the configured Temporal task queue.
+- Marks the message `published` only after workflow start returns successfully.
+- Skips already-published messages on later relay passes.
+- Records failure details for retry by incrementing `attempt_count`, clearing the lock, storing `last_error`, and delaying `available_at`.
+
+Temporal is behind a small workflow-starter interface. Tests use a fake starter, while local runtime uses the real Temporal Python SDK client.
+
+Local Docker Compose now includes:
+
+- `temporal`: Temporal development server on `localhost:7233` with Web UI on `localhost:8233`
+- `outbox-relay`: long-running relay process
+
 ## Current limitations
 
-- No relay polls or publishes outbox messages yet.
-- No Temporal client, workflow, or worker exists yet.
+- No workflow implementation or worker exists yet, so the relay can start executions only after Phase 4 adds `IngestDocumentWorkflow`.
 - Retry behavior is only implemented for repeated job-state transition activity calls.
 - Cancellation behavior is not active yet.
 - Object-storage access remains a contract only; no worker reads content yet.
@@ -101,10 +121,17 @@ Phase 2 is covered by integration tests that prove:
 - Failed transitions set terminal error fields.
 - Tenant boundaries are preserved for transition attempts.
 
+Phase 3 is covered by integration tests that prove:
+
+- Pending outbox messages are started as Temporal workflows and marked published.
+- Already-published messages are skipped by later relay passes.
+- Failed workflow starts leave the message pending and record retry state.
+
 Useful commands:
 
 ```powershell
 uv run pytest tests\integration\test_outbox.py
+uv run pytest tests\integration\test_outbox_relay.py
 uv run pytest tests\integration\test_job_transitions.py
 uv run pytest tests\integration\test_vertical_slice.py
 uv run pytest tests\unit

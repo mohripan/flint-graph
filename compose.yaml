@@ -4,6 +4,7 @@ services:
     environment:
       ATLAS_ENV: local
       ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
+      ATLAS_TEMPORAL_ADDRESS: temporal:7233
       ATLAS_OTEL_ENABLED: "true"
       ATLAS_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
       ATLAS_OTEL_EXPORTER_OTLP_INSECURE: "true"
@@ -16,6 +17,22 @@ services:
         condition: service_completed_successfully
       observability:
         condition: service_healthy
+
+  outbox-relay:
+    build: .
+    command: ["python", "-m", "atlas_rag.processes.outbox_relay"]
+    environment:
+      ATLAS_ENV: local
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
+      ATLAS_TEMPORAL_ADDRESS: temporal:7233
+      ATLAS_OTEL_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_started
 
   migrate:
     build: .
@@ -42,6 +59,13 @@ services:
       retries: 20
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  temporal:
+    image: temporalio/temporal:latest
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--namespace", "default"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
 
   observability:
     image: grafana/otel-lgtm:0.28.0
