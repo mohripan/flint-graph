@@ -5,6 +5,13 @@ services:
       ATLAS_ENV: local
       ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
       ATLAS_TEMPORAL_ADDRESS: temporal:7233
+      ATLAS_OBJECT_STORE_PROVIDER: s3
+      ATLAS_OBJECT_STORE_BUCKET: atlas-rag
+      ATLAS_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+      ATLAS_OBJECT_STORE_REGION: us-east-1
+      ATLAS_OBJECT_STORE_ACCESS_KEY_ID: atlas
+      ATLAS_OBJECT_STORE_SECRET_ACCESS_KEY: atlas-secret
+      ATLAS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
       ATLAS_OTEL_ENABLED: "true"
       ATLAS_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
       ATLAS_OTEL_EXPORTER_OTLP_INSECURE: "true"
@@ -14,6 +21,8 @@ services:
       postgres:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
       observability:
         condition: service_healthy
@@ -41,11 +50,20 @@ services:
       ATLAS_ENV: local
       ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
       ATLAS_TEMPORAL_ADDRESS: temporal:7233
+      ATLAS_OBJECT_STORE_PROVIDER: s3
+      ATLAS_OBJECT_STORE_BUCKET: atlas-rag
+      ATLAS_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+      ATLAS_OBJECT_STORE_REGION: us-east-1
+      ATLAS_OBJECT_STORE_ACCESS_KEY_ID: atlas
+      ATLAS_OBJECT_STORE_SECRET_ACCESS_KEY: atlas-secret
+      ATLAS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
       ATLAS_OTEL_ENABLED: "false"
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
       temporal:
         condition: service_started
@@ -76,6 +94,34 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: atlas
+      MINIO_ROOT_PASSWORD: atlas-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "mc alias set local http://minio:9000 atlas atlas-secret && mc mb --ignore-existing local/atlas-rag",
+      ]
+    depends_on:
+      minio:
+        condition: service_healthy
+
   temporal:
     image: temporalio/temporal:latest
     command: ["server", "start-dev", "--ip", "0.0.0.0", "--namespace", "default"]
@@ -99,4 +145,5 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:
   observability_data:

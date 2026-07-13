@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     temporal_task_queue: str = "ingestion"
     temporal_workflow_name: str = "IngestDocumentWorkflow"
 
+    object_store_provider: Literal["s3"] = "s3"
+    object_store_bucket: str = "atlas-rag"
+    object_store_endpoint_url: str | None = "http://localhost:9000"
+    object_store_region: str = "us-east-1"
+    object_store_access_key_id: str = "atlas"
+    object_store_secret_access_key: str = "atlas-secret"
+    object_store_force_path_style: bool = True
+    object_store_connect_timeout_seconds: int = Field(default=5, ge=1)
+    object_store_read_timeout_seconds: int = Field(default=30, ge=1)
+    object_store_max_pool_connections: int = Field(default=20, ge=1)
+
     outbox_relay_id: str = "atlas-rag-outbox-relay"
     outbox_relay_batch_size: int = Field(default=10, ge=1, le=100)
     outbox_relay_poll_interval_seconds: float = Field(default=2.0, gt=0.0)

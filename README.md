@@ -21,6 +21,7 @@ docker compose up --build
 Then open:
 
 - API documentation: `http://localhost:8000/docs`
+- MinIO console: `http://localhost:9001`
 - Grafana: `http://localhost:3000`
 - Temporal Web UI: `http://localhost:8233`
 - Liveness: `http://localhost:8000/health/live`

@@ -2,7 +2,21 @@
 
 ## Status
 
-Planned. This document describes the approved milestone target. It should be updated after implementation to describe completed behavior.
+In progress. Phase 1 storage and configuration are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+
+## Phase 1 Completed Behavior
+
+Implemented storage and configuration foundation:
+
+- Docker Compose includes MinIO and a `minio-init` bucket creation service.
+- Local bucket name is `atlas-rag`.
+- Host-local object-store endpoint is `http://localhost:9000`.
+- Container object-store endpoint is `http://minio:9000`.
+- Settings expose `ATLAS_OBJECT_STORE_*` variables for S3-compatible storage.
+- `atlas_rag.infrastructure.object_store` defines the object-store interface, S3 URI helpers, deterministic raw/artifact key generation, and an S3-compatible implementation.
+- Object URIs use internal `s3://<bucket>/<key>` references.
+
+Phase 1 does not yet add upload or URL intake. `document_versions.object_uri` and `document_versions.content_hash` remain nullable until Phase 2 materializes raw source bytes.
 
 ## Outcome Target
 
@@ -106,4 +120,3 @@ If Ollama is unavailable in optional mode, the extraction failure is recorded an
 - Cancellation marks both job and version cancelled.
 - Manual QA guide steps can be run by a semi-technical user.
 - Automated verification passes or any failures are clearly documented.
-
