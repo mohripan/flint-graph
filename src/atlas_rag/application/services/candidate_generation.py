@@ -59,10 +59,10 @@ async def generate_candidates(
     entity_ids = list((await session.execute(stmt)).scalars().all())
     if not entity_ids:
         return []
-    return await _load_candidates(session, entity_ids=entity_ids)
+    return await load_candidate_entities(session, entity_ids=entity_ids)
 
 
-async def _load_candidates(
+async def load_candidate_entities(
     session: AsyncSession, *, entity_ids: list[UUID]
 ) -> list[CandidateEntity]:
     entities = list(

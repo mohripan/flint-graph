@@ -12,7 +12,12 @@ from atlas_rag.worker.activities.ingestion import (
     mark_ingestion_job_running,
     run_ingestion_pipeline,
 )
+from atlas_rag.worker.activities.resolution import (
+    enqueue_tenant_resolution,
+    resolve_tenant_entities,
+)
 from atlas_rag.workflows.ingestion import IngestDocumentWorkflow
+from atlas_rag.workflows.resolution import ResolveEntitiesWorkflow
 
 
 async def run_worker() -> None:
@@ -22,13 +27,15 @@ async def run_worker() -> None:
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,
-        workflows=[IngestDocumentWorkflow],
+        workflows=[IngestDocumentWorkflow, ResolveEntitiesWorkflow],
         activities=[
             mark_ingestion_job_running,
             run_ingestion_pipeline,
             mark_ingestion_job_completed,
             mark_ingestion_job_failed,
             mark_ingestion_job_cancelled,
+            resolve_tenant_entities,
+            enqueue_tenant_resolution,
         ],
     )
     await worker.run()

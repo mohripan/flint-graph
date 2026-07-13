@@ -13,6 +13,7 @@ from atlas_rag.workflows.ingestion import (
     RUN_INGESTION_PIPELINE_ACTIVITY,
     IngestDocumentWorkflow,
 )
+from atlas_rag.workflows.resolution import ENQUEUE_TENANT_RESOLUTION_ACTIVITY
 
 
 def _payload() -> IngestionJobQueuedPayload:
@@ -44,7 +45,9 @@ async def test_ingestion_workflow_runs_pipeline_path_to_completion(
         MARK_JOB_RUNNING_ACTIVITY,
         RUN_INGESTION_PIPELINE_ACTIVITY,
         MARK_JOB_COMPLETED_ACTIVITY,
+        ENQUEUE_TENANT_RESOLUTION_ACTIVITY,
     ]
+    assert calls[-1][1] == _payload()["tenant_id"]
 
 
 async def test_ingestion_workflow_marks_job_failed_when_pipeline_activity_fails(

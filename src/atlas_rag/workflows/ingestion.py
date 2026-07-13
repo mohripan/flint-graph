@@ -8,6 +8,7 @@ from atlas_rag.application.outbox_contracts import (
     IngestionFailurePayload,
     IngestionJobQueuedPayload,
 )
+from atlas_rag.workflows.resolution import ENQUEUE_TENANT_RESOLUTION_ACTIVITY
 
 MARK_JOB_RUNNING_ACTIVITY = "mark_ingestion_job_running"
 RUN_INGESTION_PIPELINE_ACTIVITY = "run_ingestion_pipeline"
@@ -64,3 +65,12 @@ class IngestDocumentWorkflow:
                 retry_policy=_ACTIVITY_RETRY_POLICY,
             )
             raise
+
+        # The job is committed as completed; trigger per-tenant resolution as an
+        # isolated best-effort step so its failure cannot re-fail a completed job.
+        await workflow.execute_activity(
+            ENQUEUE_TENANT_RESOLUTION_ACTIVITY,
+            payload["tenant_id"],
+            start_to_close_timeout=_TRANSITION_ACTIVITY_TIMEOUT,
+            retry_policy=_ACTIVITY_RETRY_POLICY,
+        )
