@@ -106,6 +106,6 @@ Object metadata must not contain secrets.
 - Workers must not follow arbitrary external URLs as object URIs.
 - Upload authorization, tenant membership, content scanning, file size limits, and deletion behavior are future production-hardening work.
 
-## Current Limitation
+## Current Behavior
 
-The current ingestion worker is still a stub. It validates workflow dispatch and job transitions, but it does not read `object_uri`, verify `content_hash`, parse documents, create chunks, write embeddings, or mutate a graph.
+The ingestion worker reads `object_uri`, verifies `content_hash`, parses supported source formats, writes normalized and chunk-manifest artifacts, persists chunk lineage, and writes extraction provenance. The pipeline still stops before embeddings, vector indexes, and graph mutation.

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 6 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+In progress. Phases 1 through 7 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
 
 ## Phase 1 Completed Behavior
 
@@ -59,7 +59,7 @@ Implemented parser contracts:
 - `BoundedParserRunner` that executes parsing in a subprocess and enforces raw-byte, timeout, normalized-output, and element-count limits.
 - Parser contract documentation in `docs/architecture/content-artifact-contract.md`.
 
-The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, and artifact writes is planned for Phase 7.
+The parser contract landed before worker integration. Phase 7 wires these parser contracts into the Temporal worker.
 
 ## Phase 5 Completed Behavior
 
@@ -75,7 +75,7 @@ Implemented chunking and lineage services:
 - Chunk-manifest artifacts are written to `artifacts/chunks.json`.
 - Persisted chunk rows can be replaced for a document version, keeping retries idempotent at the service layer.
 
-The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, chunk persistence, extraction, and artifact writes is planned for Phase 7.
+Phase 7 wires these chunking and lineage services into the Temporal worker.
 
 ## Phase 6 Completed Behavior
 
@@ -90,7 +90,24 @@ Implemented structured extraction and provenance services:
 - Optional extraction failures persist provenance and return a non-blocking result.
 - Required extraction failures persist provenance and return a blocking result for Phase 7 worker job/version failure handling.
 
-The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, chunk persistence, extraction, artifact writes, and activation/failure decisions is planned for Phase 7.
+Phase 7 wires these extraction and provenance services into the Temporal worker.
+
+## Phase 7 Completed Behavior
+
+Implemented the real worker pipeline:
+
+- `IngestDocumentWorkflow` now executes `run_ingestion_pipeline` instead of the stub ingestion activity.
+- The ingestion worker registers the real pipeline activity with Temporal.
+- The pipeline activity loads the raw object URI and content hash from the document version.
+- Raw source bytes are read from object storage and verified against the persisted `sha256:` hash before parsing.
+- Parser execution uses `BoundedParserRunner` with configurable parser limits.
+- Normalized and chunk-manifest artifacts are written to object storage.
+- Queryable chunk lineage is persisted in PostgreSQL.
+- Extraction runs through the configured extraction service and Ollama client.
+- Optional extraction failure writes failure provenance and still allows job completion/version activation.
+- Required extraction failure writes failure provenance, fails the workflow activity, and the workflow marks the job and version failed.
+- Parser, hash, and raw-object contract failures fail the workflow activity before activation.
+- Docker Compose passes parser, chunking, and extraction settings to the ingestion worker.
 
 ## Outcome Target
 

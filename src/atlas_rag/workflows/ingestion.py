@@ -10,7 +10,7 @@ from atlas_rag.application.outbox_contracts import (
 )
 
 MARK_JOB_RUNNING_ACTIVITY = "mark_ingestion_job_running"
-RUN_STUB_INGESTION_ACTIVITY = "run_stub_ingestion"
+RUN_INGESTION_PIPELINE_ACTIVITY = "run_ingestion_pipeline"
 MARK_JOB_COMPLETED_ACTIVITY = "mark_ingestion_job_completed"
 MARK_JOB_FAILED_ACTIVITY = "mark_ingestion_job_failed"
 MARK_JOB_CANCELLED_ACTIVITY = "mark_ingestion_job_cancelled"
@@ -32,7 +32,7 @@ class IngestDocumentWorkflow:
         )
         try:
             await workflow.execute_activity(
-                RUN_STUB_INGESTION_ACTIVITY,
+                RUN_INGESTION_PIPELINE_ACTIVITY,
                 payload,
                 start_to_close_timeout=_INGESTION_ACTIVITY_TIMEOUT,
                 retry_policy=_ACTIVITY_RETRY_POLICY,

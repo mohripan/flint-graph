@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     intake_max_source_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
     intake_url_timeout_seconds: float = Field(default=10.0, gt=0.0)
 
+    parser_timeout_seconds: float = Field(default=30.0, gt=0.0)
+    parser_max_raw_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    parser_max_normalized_bytes: int = Field(default=5 * 1024 * 1024, ge=1)
+    parser_max_elements: int = Field(default=10_000, ge=1)
+
+    chunking_max_chunk_chars: int = Field(default=1200, ge=1)
+    chunking_overlap_chars: int = Field(default=120, ge=0)
+
     extraction_enabled: bool = True
     extraction_mode: Literal["disabled", "optional", "required"] = "optional"
     llm_provider: Literal["ollama"] = "ollama"

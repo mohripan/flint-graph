@@ -12,10 +12,10 @@ API transaction
     -> outbox relay
     -> Temporal workflow start request
     -> ingestion worker
-    -> stub ingestion activities
+    -> real content pipeline activity
 ```
 
-The current worker executes stub ingestion only. It proves dispatch and state transitions without parsing, chunking, embedding, indexing, or object-storage reads.
+The current worker reads raw source objects, verifies hashes, parses, chunks, writes artifacts, records extraction provenance, and then completes or fails the job. The older metadata-first document endpoint remains for compatibility, but jobs created from that path do not have raw object materialization and are expected to fail in the real pipeline. Use upload or URL intake for successful content-pipeline runs.
 
 ## Docker Compose
 
@@ -35,7 +35,7 @@ Relevant services:
 
 - `api`: records jobs and outbox messages
 - `outbox-relay`: polls `outbox_messages` and starts Temporal workflows
-- `ingestion-worker`: runs `IngestDocumentWorkflow` and stub activities
+- `ingestion-worker`: runs `IngestDocumentWorkflow` and the content pipeline activity
 - `temporal`: local Temporal development server
 - `postgres`: application database
 
@@ -74,8 +74,8 @@ uv run python -m atlas_rag.processes.ingestion_worker
 ## Manual verification
 
 1. Create a tenant.
-2. Create a document.
-3. Create an ingestion job with an `Idempotency-Key`.
+2. Upload a source file or create a document from URL with an `Idempotency-Key`.
+3. Capture the returned ingestion job ID.
 4. Confirm the API returns `queued`.
 5. Confirm an `outbox_messages` row exists with status `pending`.
 6. Let the relay run.
@@ -85,26 +85,30 @@ uv run python -m atlas_rag.processes.ingestion_worker
 10. Confirm the job status changes to `completed`.
 11. Fetch job events and confirm `job.queued`, `job.started`, and `job.completed`.
 
-Example requests:
+Example upload request:
 
 ```powershell
 $tenant = curl -sS -X POST http://localhost:8000/v1/tenants `
   -H "Content-Type: application/json" `
   -d '{"name":"Runbook Tenant"}' | ConvertFrom-Json
 
-$document = curl -sS -X POST http://localhost:8000/v1/documents `
-  -H "Content-Type: application/json" `
-  -H "X-Tenant-ID: $($tenant.id)" `
-  -d '{"title":"Runbook Document","source_type":"url","source_uri":"https://example.test/runbook"}' | ConvertFrom-Json
+@"
+# Runbook Document
 
-$job = curl -sS -X POST "http://localhost:8000/v1/documents/$($document.id)/ingestion-jobs" `
-  -H "X-Tenant-ID: $($tenant.id)" `
-  -H "Idempotency-Key: runbook-job-1" | ConvertFrom-Json
+This file exercises durable dispatch through the real content pipeline.
+"@ | Set-Content -Encoding utf8 .\runbook.md
 
-curl -sS "http://localhost:8000/v1/ingestion-jobs/$($job.id)" `
+$upload = curl -sS -X POST http://localhost:8000/v1/documents/uploads `
+  -H "X-Tenant-ID: $($tenant.id)" `
+  -H "Idempotency-Key: runbook-upload-1" `
+  -F "title=Runbook Document" `
+  -F "external_id=runbook-document" `
+  -F "file=@runbook.md;type=text/markdown" | ConvertFrom-Json
+
+curl -sS "http://localhost:8000/v1/ingestion-jobs/$($upload.ingestion_job_id)" `
   -H "X-Tenant-ID: $($tenant.id)"
 
-curl -sS "http://localhost:8000/v1/ingestion-jobs/$($job.id)/events" `
+curl -sS "http://localhost:8000/v1/ingestion-jobs/$($upload.ingestion_job_id)/events" `
   -H "X-Tenant-ID: $($tenant.id)"
 ```
 

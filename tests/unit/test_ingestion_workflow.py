@@ -10,7 +10,7 @@ from atlas_rag.workflows.ingestion import (
     MARK_JOB_COMPLETED_ACTIVITY,
     MARK_JOB_FAILED_ACTIVITY,
     MARK_JOB_RUNNING_ACTIVITY,
-    RUN_STUB_INGESTION_ACTIVITY,
+    RUN_INGESTION_PIPELINE_ACTIVITY,
     IngestDocumentWorkflow,
 )
 
@@ -28,7 +28,7 @@ def _payload() -> IngestionJobQueuedPayload:
     }
 
 
-async def test_ingestion_workflow_runs_stub_path_to_completion(
+async def test_ingestion_workflow_runs_pipeline_path_to_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
@@ -42,34 +42,34 @@ async def test_ingestion_workflow_runs_stub_path_to_completion(
 
     assert [name for name, _ in calls] == [
         MARK_JOB_RUNNING_ACTIVITY,
-        RUN_STUB_INGESTION_ACTIVITY,
+        RUN_INGESTION_PIPELINE_ACTIVITY,
         MARK_JOB_COMPLETED_ACTIVITY,
     ]
 
 
-async def test_ingestion_workflow_marks_job_failed_when_stub_activity_fails(
+async def test_ingestion_workflow_marks_job_failed_when_pipeline_activity_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
 
     async def fake_execute_activity(activity_name: str, arg: dict[str, Any], **_: Any) -> None:
         calls.append((activity_name, arg))
-        if activity_name == RUN_STUB_INGESTION_ACTIVITY:
-            raise RuntimeError("stub ingestion failed")
+        if activity_name == RUN_INGESTION_PIPELINE_ACTIVITY:
+            raise RuntimeError("parser failed")
 
     monkeypatch.setattr(ingestion.workflow, "execute_activity", fake_execute_activity)
 
-    with pytest.raises(RuntimeError, match="stub ingestion failed"):
+    with pytest.raises(RuntimeError, match="parser failed"):
         await IngestDocumentWorkflow().run(_payload())
 
     assert [name for name, _ in calls] == [
         MARK_JOB_RUNNING_ACTIVITY,
-        RUN_STUB_INGESTION_ACTIVITY,
+        RUN_INGESTION_PIPELINE_ACTIVITY,
         MARK_JOB_FAILED_ACTIVITY,
     ]
     failure_payload = calls[-1][1]
     assert failure_payload["error_code"] == "ingestion_failed"
-    assert failure_payload["error_message"] == "stub ingestion failed"
+    assert failure_payload["error_message"] == "parser failed"
 
 
 async def test_ingestion_workflow_marks_job_cancelled_when_cancelled(
@@ -79,7 +79,7 @@ async def test_ingestion_workflow_marks_job_cancelled_when_cancelled(
 
     async def fake_execute_activity(activity_name: str, arg: dict[str, Any], **_: Any) -> None:
         calls.append((activity_name, arg))
-        if activity_name == RUN_STUB_INGESTION_ACTIVITY:
+        if activity_name == RUN_INGESTION_PIPELINE_ACTIVITY:
             raise CancelledError("cancelled by test")
 
     monkeypatch.setattr(ingestion.workflow, "execute_activity", fake_execute_activity)
@@ -89,6 +89,6 @@ async def test_ingestion_workflow_marks_job_cancelled_when_cancelled(
 
     assert [name for name, _ in calls] == [
         MARK_JOB_RUNNING_ACTIVITY,
-        RUN_STUB_INGESTION_ACTIVITY,
+        RUN_INGESTION_PIPELINE_ACTIVITY,
         MARK_JOB_CANCELLED_ACTIVITY,
     ]

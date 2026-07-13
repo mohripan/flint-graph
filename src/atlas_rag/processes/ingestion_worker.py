@@ -10,7 +10,7 @@ from atlas_rag.worker.activities.ingestion import (
     mark_ingestion_job_completed,
     mark_ingestion_job_failed,
     mark_ingestion_job_running,
-    run_stub_ingestion,
+    run_ingestion_pipeline,
 )
 from atlas_rag.workflows.ingestion import IngestDocumentWorkflow
 
@@ -25,7 +25,7 @@ async def run_worker() -> None:
         workflows=[IngestDocumentWorkflow],
         activities=[
             mark_ingestion_job_running,
-            run_stub_ingestion,
+            run_ingestion_pipeline,
             mark_ingestion_job_completed,
             mark_ingestion_job_failed,
             mark_ingestion_job_cancelled,

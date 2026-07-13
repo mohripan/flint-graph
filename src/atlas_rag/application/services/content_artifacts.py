@@ -29,6 +29,7 @@ class PersistedContentArtifacts:
     normalized_artifact_uri: str
     chunk_manifest_uri: str
     chunk_count: int
+    chunk_manifest: DocumentChunkManifest
 
 
 async def persist_content_artifacts(
@@ -113,6 +114,7 @@ async def persist_content_artifacts(
         normalized_artifact_uri=normalized_uri,
         chunk_manifest_uri=manifest_uri,
         chunk_count=len(manifest.chunks),
+        chunk_manifest=manifest,
     )
 
 

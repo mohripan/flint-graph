@@ -147,7 +147,7 @@ Extraction artifacts use schema version `1` and are derived from chunk manifests
 
 The built-in extraction schema requires `summary` and accepts optional `title`, string `topics`, and `entities` with `person`, `organization`, `place`, `concept`, or `other` types. LLM output must parse as JSON and validate against this schema.
 
-Failed extraction attempts are also persisted. In that case, `status` is `failed`, `extraction` is `null`, and provenance includes `error_code` and `error_message`. Optional failures are non-blocking. Required failures return a blocking service result so the worker can fail the job and document version in Phase 7.
+Failed extraction attempts are also persisted. In that case, `status` is `failed`, `extraction` is `null`, and provenance includes `error_code` and `error_message`. Optional failures are non-blocking. Required failures return a blocking service result so the worker can fail the job and document version.
 
 Skipped extraction attempts can be persisted with `status` set to `skipped` when extraction is disabled.
 
@@ -160,8 +160,8 @@ Skipped extraction attempts can be persisted with `status` set to `skipped` when
 - Maximum normalized output bytes.
 - Maximum element count.
 
-Workflow code must not run parsers directly. Later worker activities should call the parser runner after reading and verifying raw source bytes.
+Workflow code must not run parsers directly. The ingestion worker activity calls the parser runner after reading and verifying raw source bytes.
 
 ## Current Limitation
 
-Phase 6 implements parser, chunking, artifact persistence, chunk-lineage, extraction, and extraction-provenance contracts in code. The Temporal worker still runs the stub ingestion activity until Phase 7 wires the real pipeline into worker activities.
+Phase 7 wires parser, chunking, artifact persistence, chunk-lineage, extraction, and extraction-provenance contracts into the Temporal worker. The milestone still stops before embeddings, vector indexes, graph mutation, and query execution.
