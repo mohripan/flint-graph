@@ -5,6 +5,10 @@ services:
       ATLAS_ENV: local
       ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
       ATLAS_TEMPORAL_ADDRESS: temporal:7233
+      ATLAS_NEO4J_URI: bolt://neo4j:7687
+      ATLAS_NEO4J_USER: neo4j
+      ATLAS_NEO4J_PASSWORD: atlaspassword
+      ATLAS_NEO4J_DATABASE: neo4j
       ATLAS_OBJECT_STORE_PROVIDER: s3
       ATLAS_OBJECT_STORE_BUCKET: atlas-rag
       ATLAS_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
@@ -26,6 +30,10 @@ services:
         condition: service_completed_successfully
       observability:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      neo4j-migrate:
+        condition: service_completed_successfully
 
   outbox-relay:
     build: .

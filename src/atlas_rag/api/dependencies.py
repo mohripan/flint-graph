@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from atlas_rag.config import Settings, get_settings
 from atlas_rag.domain.errors import NotFoundError
 from atlas_rag.infrastructure.db.models import Tenant
 from atlas_rag.infrastructure.db.session import get_session
+from atlas_rag.infrastructure.neo4j import Neo4jClient, create_neo4j_client
 from atlas_rag.infrastructure.object_store import ObjectStore, create_object_store
 from atlas_rag.infrastructure.url_fetcher import HTTPURLFetcher, URLFetcher
 
@@ -44,3 +46,14 @@ def get_url_fetcher(settings: SettingsDep) -> URLFetcher:
 
 
 URLFetcherDep = Annotated[URLFetcher, Depends(get_url_fetcher)]
+
+
+async def get_neo4j_client(settings: SettingsDep) -> AsyncIterator[Neo4jClient]:
+    client = create_neo4j_client(settings)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+Neo4jClientDep = Annotated[Neo4jClient, Depends(get_neo4j_client)]
