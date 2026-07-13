@@ -141,6 +141,34 @@ services:
       - "7233:7233"
       - "8233:8233"
 
+  neo4j:
+    image: neo4j:5.26-community
+    environment:
+      NEO4J_AUTH: neo4j/atlaspassword
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p atlaspassword 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - neo4j_data:/data
+
+  neo4j-migrate:
+    build: .
+    command: ["python", "-m", "atlas_rag.processes.neo4j_migrate"]
+    environment:
+      ATLAS_NEO4J_URI: bolt://neo4j:7687
+      ATLAS_NEO4J_USER: neo4j
+      ATLAS_NEO4J_PASSWORD: atlaspassword
+      ATLAS_NEO4J_DATABASE: neo4j
+      ATLAS_OTEL_ENABLED: "false"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
   observability:
     image: grafana/otel-lgtm:0.28.0
     ports:
@@ -158,4 +186,5 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  neo4j_data:
   observability_data:

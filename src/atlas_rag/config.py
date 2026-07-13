@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     temporal_task_queue: str = "ingestion"
     temporal_workflow_name: str = "IngestDocumentWorkflow"
 
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "atlaspassword"
+    neo4j_database: str = "neo4j"
+    neo4j_max_connection_pool_size: int = Field(default=50, ge=1)
+    neo4j_connection_timeout_seconds: float = Field(default=30.0, gt=0.0)
+
     object_store_provider: Literal["s3"] = "s3"
     object_store_bucket: str = "atlas-rag"
     object_store_endpoint_url: str | None = "http://localhost:9000"
