@@ -1,10 +1,10 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane plus durable dispatch from the API to a Temporal-backed stub ingestion worker.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane plus a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, and persists extraction provenance.
 
 ## Why these milestones come first
 
-LLM frameworks are intentionally absent. Before extraction or retrieval exists, the system needs durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, and a safe asynchronous dispatch path. LangGraph will later orchestrate query execution; it will not replace the ingestion control plane.
+The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, and a safe asynchronous dispatch path before retrieval and graph mutation are introduced. LangGraph will later orchestrate query execution; it will not replace the ingestion control plane.
 
 ## Requirements
 
@@ -54,49 +54,43 @@ curl -sS -X POST http://localhost:8000/v1/tenants \
   -d '{"name":"Acme Research"}'
 ```
 
-Use the returned tenant ID:
-
-```bash
-curl -sS -X POST http://localhost:8000/v1/documents \
-  -H 'Content-Type: application/json' \
-  -H 'X-Tenant-ID: <tenant-id>' \
-  -d '{
-    "title":"Graph Retrieval Architecture",
-    "source_type":"url",
-    "source_uri":"https://example.org/architecture",
-    "external_id":"architecture-001"
-  }'
-```
-
-Queue ingestion with a retry-safe key:
-
-```bash
-curl -sS -X POST \
-  http://localhost:8000/v1/documents/<document-id>/ingestion-jobs \
-  -H 'X-Tenant-ID: <tenant-id>' \
-  -H 'Idempotency-Key: architecture-001-ingest-1'
-```
-
-Repeating the same request returns the same job with HTTP 200 rather than creating another version. A new idempotency key creates the next immutable document version.
-
-With the relay and worker running, the job should move from `queued` to `running` to `completed`.
-
-Milestone 03 adds preferred raw-source intake endpoints that materialize immutable source bytes before queuing ingestion:
+Use the returned tenant ID to upload source material:
 
 ```bash
 curl -sS -X POST http://localhost:8000/v1/documents/uploads \
   -H 'X-Tenant-ID: <tenant-id>' \
   -H 'Idempotency-Key: upload-note-001' \
   -F 'title=Uploaded Note' \
+  -F 'external_id=uploaded-note-001' \
   -F 'file=@note.md;type=text/markdown'
 ```
+
+Or materialize a URL:
 
 ```bash
 curl -sS -X POST http://localhost:8000/v1/documents/from-url \
   -H 'Content-Type: application/json' \
   -H 'X-Tenant-ID: <tenant-id>' \
   -H 'Idempotency-Key: url-note-001' \
-  -d '{"title":"Example Page","source_url":"https://example.org/"}'
+  -d '{"title":"Example Page","source_url":"https://example.org/","external_id":"example-page"}'
+```
+
+Both intake endpoints create the document, document version, ingestion job, and outbox message in one durable path. Repeating the same request with the same idempotency key returns the same document/version/job with HTTP 200 rather than creating another version.
+
+With the relay and worker running, the job should move from `queued` to `running` to `completed`. The worker verifies the raw object hash, runs the bounded parser, writes `normalized.json`, `chunks.json`, and `extraction.json`, persists queryable chunk lineage, and activates the document version. If Ollama is unavailable in default optional extraction mode, extraction provenance records the failure and the job can still complete.
+
+Fetch a job:
+
+```bash
+curl -sS http://localhost:8000/v1/ingestion-jobs/<job-id> \
+  -H 'X-Tenant-ID: <tenant-id>' \
+```
+
+Fetch job events:
+
+```bash
+curl -sS http://localhost:8000/v1/ingestion-jobs/<job-id>/events \
+  -H 'X-Tenant-ID: <tenant-id>' \
 ```
 
 Cancel a queued or running job:
@@ -130,17 +124,16 @@ make check
 13. Activating a version supersedes any previous active version for the same document.
 14. Failed or cancelled newer versions do not disturb the current active version.
 15. API errors use `application/problem+json` and include a request ID.
+16. Upload and URL intake materialize immutable raw objects before queuing ingestion.
+17. The worker verifies raw content hashes before parsing.
+18. Normalized, chunk-manifest, and extraction artifacts are stored in object storage.
+19. Queryable chunk lineage is persisted in PostgreSQL.
+20. Optional extraction failure records provenance without blocking version activation.
+21. Required extraction failure records provenance and fails the job/version.
 
-## Next milestone
+## Current milestone boundary
 
-Introduce real content ingestion:
-
-- object-storage upload and retrieval implementation
-- content hashing and size limits
-- parser selection and controlled parse failures
-- chunking contracts
-- first persistence model for parsed artifacts
-- PostgreSQL concurrency tests for version allocation and relay locking
+Milestone 03 stops before embeddings, vector indexes, graph mutation, and query-time orchestration. The next major work should introduce retrieval/indexing contracts on top of the persisted chunks and artifact lineage.
 
 ## Security status
 
@@ -152,4 +145,7 @@ Milestone notes:
 
 - Foundation: `docs/milestones/01-foundation.md`
 - Durable ingestion dispatch: `docs/milestones/02-durable-ingestion-dispatch.md`
+- Content pipeline: `docs/milestones/03-content-pipeline.md`
 - Local dispatch runbook: `docs/runbooks/durable-ingestion-dispatch.md`
+- Content pipeline developer runbook: `docs/runbooks/content-pipeline-developer.md`
+- Content pipeline QA guide: `docs/runbooks/content-pipeline-qa-guide.md`

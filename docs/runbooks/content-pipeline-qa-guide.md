@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress for Milestone 03. Phases 1 through 7 are implemented. Upload and URL intake create durable jobs, and the Temporal worker now reads raw objects, verifies hashes, parses, chunks, writes artifacts, records lineage, runs extraction, and activates or fails document versions.
+Milestone 03 is complete. Upload and URL intake create durable jobs, and the Temporal worker reads raw objects, verifies hashes, parses, chunks, writes artifacts, records lineage, runs extraction, and activates or fails document versions.
 
 ## Audience
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 7 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+Complete. Phases 1 through 8 are implemented.
 
 ## Phase 1 Completed Behavior
 
@@ -108,6 +108,17 @@ Implemented the real worker pipeline:
 - Required extraction failure writes failure provenance, fails the workflow activity, and the workflow marks the job and version failed.
 - Parser, hash, and raw-object contract failures fail the workflow activity before activation.
 - Docker Compose passes parser, chunking, and extraction settings to the ingestion worker.
+
+## Phase 8 Completed Behavior
+
+Completed milestone documentation and manual verification:
+
+- README describes the current real content pipeline and preferred upload/URL intake path.
+- `docs/runbooks/content-pipeline-developer.md` documents developer-level pipeline checks and failure modes.
+- `docs/runbooks/content-pipeline-qa-guide.md` documents semi-technical end-to-end QA steps.
+- `docs/runbooks/durable-ingestion-dispatch.md` now uses upload intake for successful worker runs.
+- `docs/architecture/object-storage-contract.md` and `docs/architecture/content-artifact-contract.md` describe current artifact and worker behavior.
+- Manual verification results are recorded in `notes/milestone-03/02-manual-testing-content-pipeline.md`.
 
 ## Outcome Target
 
