@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AtlasRAG parser output is an Atlas-owned normalized artifact. It is not a LangChain loader object, a PDF library object, or an HTML parser object. Chunking consumes this contract directly, and later extraction code should consume the normalized and chunk-manifest artifacts rather than parser-specific objects.
+AtlasRAG parser output is an Atlas-owned normalized artifact. It is not a LangChain loader object, a PDF library object, or an HTML parser object. Chunking consumes this contract directly, and extraction consumes chunk manifests rather than parser-specific objects.
 
 ## Supported Source Formats
 
@@ -111,6 +111,46 @@ Phase 5 persists durable artifact and chunk lineage:
 
 The service writes `artifacts/normalized.json` and `artifacts/chunks.json` to object storage and stores queryable rows in PostgreSQL. Re-running the service for the same document version replaces normalized/chunk-manifest artifact rows and chunk rows for that version.
 
+## Extraction Artifact
+
+Extraction artifacts use schema version `1` and are derived from chunk manifests:
+
+```json
+{
+  "schema_version": "1",
+  "source": {
+    "document_id": "11111111-1111-4111-8111-111111111111",
+    "document_version_id": "22222222-2222-4222-8222-222222222222",
+    "chunk_manifest_hash": "sha256:..."
+  },
+  "status": "succeeded",
+  "extraction": {
+    "title": "Example",
+    "summary": "Short summary.",
+    "topics": ["content pipeline"],
+    "entities": [
+      {"name": "AtlasRAG", "type": "concept"}
+    ]
+  },
+  "provenance": {
+    "provider": "ollama",
+    "model": "gemma3:1b",
+    "prompt_version": "builtin-summary-v1",
+    "schema_version": "1",
+    "input_manifest_hash": "sha256:...",
+    "prompt_hash": "sha256:...",
+    "response_hash": "sha256:...",
+    "status": "succeeded"
+  }
+}
+```
+
+The built-in extraction schema requires `summary` and accepts optional `title`, string `topics`, and `entities` with `person`, `organization`, `place`, `concept`, or `other` types. LLM output must parse as JSON and validate against this schema.
+
+Failed extraction attempts are also persisted. In that case, `status` is `failed`, `extraction` is `null`, and provenance includes `error_code` and `error_message`. Optional failures are non-blocking. Required failures return a blocking service result so the worker can fail the job and document version in Phase 7.
+
+Skipped extraction attempts can be persisted with `status` set to `skipped` when extraction is disabled.
+
 ## Subprocess Boundary
 
 `BoundedParserRunner` executes parser code in a subprocess and enforces:
@@ -124,4 +164,4 @@ Workflow code must not run parsers directly. Later worker activities should call
 
 ## Current Limitation
 
-Phase 5 implements parser, chunking, artifact persistence, and chunk-lineage contracts in code. The Temporal worker still runs the stub ingestion activity until Phase 7 wires the real pipeline into worker activities.
+Phase 6 implements parser, chunking, artifact persistence, chunk-lineage, extraction, and extraction-provenance contracts in code. The Temporal worker still runs the stub ingestion activity until Phase 7 wires the real pipeline into worker activities.

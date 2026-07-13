@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 5 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+In progress. Phases 1 through 6 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
 
 ## Phase 1 Completed Behavior
 
@@ -76,6 +76,21 @@ Implemented chunking and lineage services:
 - Persisted chunk rows can be replaced for a document version, keeping retries idempotent at the service layer.
 
 The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, chunk persistence, extraction, and artifact writes is planned for Phase 7.
+
+## Phase 6 Completed Behavior
+
+Implemented structured extraction and provenance services:
+
+- Settings expose `ATLAS_EXTRACTION_*`, `ATLAS_LLM_PROVIDER`, and `ATLAS_OLLAMA_*` variables.
+- `OllamaExtractionClient` calls Ollama's JSON generation API behind the application extraction protocol.
+- The built-in extraction schema validates `title`, `summary`, `topics`, and typed `entities`.
+- Extraction prompts are deterministic and include chunk IDs for provenance.
+- `artifacts/extraction.json` is written for succeeded, failed, and skipped extraction attempts.
+- The `document_artifacts` extraction row records provider, model, prompt version, schema version, input manifest hash, prompt hash, response hash, status, and failure details.
+- Optional extraction failures persist provenance and return a non-blocking result.
+- Required extraction failures persist provenance and return a blocking result for Phase 7 worker job/version failure handling.
+
+The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, chunk persistence, extraction, artifact writes, and activation/failure decisions is planned for Phase 7.
 
 ## Outcome Target
 
@@ -161,6 +176,7 @@ ATLAS_EXTRACTION_MODE=optional
 ATLAS_LLM_PROVIDER=ollama
 ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:11434
 ATLAS_OLLAMA_MODEL=gemma3:1b
+ATLAS_EXTRACTION_TIMEOUT_SECONDS=60
 ```
 
 If Ollama is unavailable in optional mode, the extraction failure is recorded and the document version can still activate.

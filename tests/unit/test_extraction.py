@@ -1,0 +1,83 @@
+import json
+
+import httpx
+import pytest
+
+from atlas_rag.application.extraction import (
+    ExtractionValidationError,
+    build_extraction_prompt,
+    parse_extraction_response,
+)
+from atlas_rag.infrastructure.ollama import OllamaExtractionClient
+
+
+def test_parse_extraction_response_validates_builtin_schema() -> None:
+    payload = json.dumps(
+        {
+            "title": "Atlas",
+            "summary": "AtlasRAG stores source content and derives chunks.",
+            "topics": ["content pipeline", "lineage"],
+            "entities": [
+                {"name": "AtlasRAG", "type": "concept"},
+                {"name": "OpenAI", "type": "organization"},
+            ],
+        }
+    )
+
+    extraction = parse_extraction_response(payload)
+
+    assert extraction.title == "Atlas"
+    assert extraction.summary == "AtlasRAG stores source content and derives chunks."
+    assert extraction.topics == ["content pipeline", "lineage"]
+    assert extraction.entities[1].type == "organization"
+
+
+def test_parse_extraction_response_rejects_invalid_llm_json() -> None:
+    with pytest.raises(ExtractionValidationError, match="valid JSON"):
+        parse_extraction_response("not json")
+
+    with pytest.raises(ExtractionValidationError, match="summary"):
+        parse_extraction_response(json.dumps({"title": "Atlas"}))
+
+
+def test_build_extraction_prompt_is_deterministic_and_contains_schema() -> None:
+    chunks = [
+        ("chunk-000001", "AtlasRAG stores content."),
+        ("chunk-000002", "Chunks preserve lineage."),
+    ]
+
+    first = build_extraction_prompt(chunks)
+    second = build_extraction_prompt(chunks)
+
+    assert first == second
+    assert '"summary": "string"' in first
+    assert "[chunk-000001]\nAtlasRAG stores content." in first
+    assert "[chunk-000002]\nChunks preserve lineage." in first
+
+
+@pytest.mark.anyio
+async def test_ollama_extraction_client_returns_generate_response_text() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"response": '{"summary":"ok"}'})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://ollama") as http_client:
+        client = OllamaExtractionClient(http_client=http_client)
+
+        response = await client.extract(
+            prompt="Extract facts",
+            model="gemma3:1b",
+            timeout_seconds=30,
+        )
+
+    assert response == '{"summary":"ok"}'
+    assert requests[0].url.path == "/api/generate"
+    assert json.loads(requests[0].content) == {
+        "model": "gemma3:1b",
+        "prompt": "Extract facts",
+        "stream": False,
+        "format": "json",
+    }

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, Phase 3 document-version lifecycle semantics are implemented, Phase 4 parser contracts are implemented in code, and Phase 5 chunking plus artifact persistence services are implemented in code. Worker integration, extraction, and end-to-end artifact creation remain planned until later phases.
+In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, Phase 3 document-version lifecycle semantics are implemented, Phase 4 parser contracts are implemented in code, Phase 5 chunking plus artifact persistence services are implemented in code, and Phase 6 extraction plus provenance services are implemented in code. Worker integration and end-to-end artifact creation remain planned until Phase 7.
 
 ## Audience
 
@@ -34,11 +34,11 @@ Useful local pages:
 Expected services:
 
 - `api`: accepts uploads and URL intake.
-- `postgres`: stores tenants, documents, versions, jobs, outbox messages, document artifacts, and document chunks. Chunk rows are written by the Phase 5 service, but the worker does not call it yet.
-- `minio`: stores raw source objects. The Phase 5 service can write normalized and chunk-manifest artifacts, but the worker does not call it yet.
+- `postgres`: stores tenants, documents, versions, jobs, outbox messages, document artifacts, and document chunks. Chunk rows and extraction provenance are written by Phase 5 and 6 services, but the worker does not call them yet.
+- `minio`: stores raw source objects. The Phase 5 and 6 services can write normalized, chunk-manifest, and extraction artifacts, but the worker does not call them yet.
 - `outbox-relay`: starts Temporal workflows from durable outbox messages.
 - `temporal`: runs workflow orchestration.
-- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but worker parser integration, chunk persistence, and extraction are planned for later phases.
+- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but worker parser integration, chunk persistence, extraction, and required-extraction failure handling are planned for Phase 7.
 
 ## Step 1: Create A Tenant
 
@@ -155,7 +155,8 @@ Database effect during worker processing:
 - `ingestion_jobs.status` changes from `queued` to `running` to `completed`.
 - `document_versions.status` changes from `pending` to `active`.
 - Phase 5 service tests validate normalized artifact writes, chunk-manifest writes, and chunk rows in code.
-- These artifacts and chunk rows are not written during worker execution yet.
+- Phase 6 service tests validate extraction artifacts and success/failure provenance in code.
+- These artifacts, chunk rows, and extraction provenance are not written during worker execution yet.
 
 Check:
 
@@ -201,7 +202,7 @@ Expected Phase 2 object:
 tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/raw/source
 ```
 
-The Phase 5 service writes these derived artifacts when invoked by code, but the worker will not create them end-to-end until Phase 7:
+The Phase 5 and 6 services write these derived artifacts when invoked by code, but the worker will not create them end-to-end until Phase 7:
 
 ```text
 tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/normalized.json
@@ -239,9 +240,12 @@ Expected result:
 - Raw object appears in MinIO.
 - Phase 4 supports HTML parsing in code.
 - Phase 5 supports chunk rows and chunk-manifest artifacts in code.
+- Phase 6 supports extraction artifacts and provenance in code.
 - Worker integration is planned for Phase 7, so URL intake does not produce derived artifacts end-to-end yet.
 
 ## Step 7: Test Optional Extraction Failure
+
+This is a Phase 7 end-to-end check. In Phase 6, automated service tests already prove that optional extraction failure writes failure provenance and returns a non-blocking result.
 
 Set extraction optional and point Ollama to an unavailable host, then restart the API and worker:
 
@@ -265,6 +269,8 @@ What this proves:
 - Content parsing and chunking are not blocked by optional LLM availability.
 
 ## Step 8: Test Required Extraction Failure
+
+This is a Phase 7 end-to-end check. In Phase 6, automated service tests already prove that required extraction failure writes failure provenance and returns a blocking result.
 
 Set extraction required with the same unavailable Ollama URL:
 

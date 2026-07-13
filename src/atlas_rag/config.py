@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     intake_max_source_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
     intake_url_timeout_seconds: float = Field(default=10.0, gt=0.0)
 
+    extraction_enabled: bool = True
+    extraction_mode: Literal["disabled", "optional", "required"] = "optional"
+    llm_provider: Literal["ollama"] = "ollama"
+    ollama_base_url: str = "http://host.docker.internal:11434"
+    ollama_model: str = "gemma3:1b"
+    extraction_timeout_seconds: int = Field(default=60, ge=1)
+
     outbox_relay_id: str = "atlas-rag-outbox-relay"
     outbox_relay_batch_size: int = Field(default=10, ge=1, le=100)
     outbox_relay_poll_interval_seconds: float = Field(default=2.0, gt=0.0)
