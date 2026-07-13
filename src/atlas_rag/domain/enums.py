@@ -35,3 +35,66 @@ class DocumentArtifactType(StrEnum):
     NORMALIZED = "normalized"
     CHUNK_MANIFEST = "chunk_manifest"
     EXTRACTION = "extraction"
+
+
+class EntityType(StrEnum):
+    PERSON = "person"
+    ORGANIZATION = "organization"
+    PLACE = "place"
+    CONCEPT = "concept"
+    OTHER = "other"
+
+
+class EntityStatus(StrEnum):
+    ACTIVE = "active"
+    MERGED = "merged"
+    DEPRECATED = "deprecated"
+
+
+class AliasSource(StrEnum):
+    EXTRACTION = "extraction"
+    MERGE = "merge"
+    MANUAL = "manual"
+
+
+class MentionResolutionStatus(StrEnum):
+    PENDING = "pending"
+    RESOLVED = "resolved"
+    REVIEW = "review"
+    REJECTED = "rejected"
+
+
+class ClaimStatus(StrEnum):
+    PENDING = "pending"
+    LINKED = "linked"
+    REJECTED = "rejected"
+
+
+class RelationshipStatus(StrEnum):
+    ACTIVE = "active"
+    DEPRECATED = "deprecated"
+
+
+class MergeCandidateBand(StrEnum):
+    AUTO = "auto"
+    REVIEW = "review"
+    REJECT = "reject"
+
+
+class MergeCandidateStatus(StrEnum):
+    PENDING = "pending"
+    APPLIED = "applied"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class MergeDecisionType(StrEnum):
+    ATTACH = "attach"
+    MERGE = "merge"
+    NO_MERGE = "no_merge"
+    SPLIT = "split"
+
+
+class MergeDecisionSource(StrEnum):
+    AUTO = "auto"
+    HUMAN = "human"

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import (
     JSON,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -21,10 +22,20 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from atlas_rag.domain.enums import (
+    AliasSource,
+    ClaimStatus,
     DocumentArtifactType,
     DocumentVersionStatus,
+    EntityStatus,
+    EntityType,
     IngestionJobStatus,
+    MentionResolutionStatus,
+    MergeCandidateBand,
+    MergeCandidateStatus,
+    MergeDecisionSource,
+    MergeDecisionType,
     OutboxMessageStatus,
+    RelationshipStatus,
     SourceType,
 )
 from atlas_rag.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -247,3 +258,228 @@ class OutboxMessage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     locked_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CanonicalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "canonical_entities"
+    __table_args__ = (
+        Index(
+            "ix_canonical_entities_tenant_type_name",
+            "tenant_id",
+            "entity_type",
+            "normalized_name",
+        ),
+        Index("ix_canonical_entities_tenant_status", "tenant_id", "status"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entity_type: Mapped[EntityType] = mapped_column(enum_column(EntityType, 32), nullable=False)
+    canonical_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[EntityStatus] = mapped_column(
+        enum_column(EntityStatus, 32), nullable=False, default=EntityStatus.ACTIVE
+    )
+    merged_into_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), nullable=True
+    )
+    support_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class EntityAlias(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "entity_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "canonical_entity_id",
+            "normalized_form",
+            name="uq_entity_aliases_entity_form",
+        ),
+        Index("ix_entity_aliases_tenant_form", "tenant_id", "normalized_form"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canonical_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    surface_form: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_form: Mapped[str] = mapped_column(String(500), nullable=False)
+    source: Mapped[AliasSource] = mapped_column(
+        enum_column(AliasSource, 32), nullable=False, default=AliasSource.EXTRACTION
+    )
+
+
+class EntityMention(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "entity_mentions"
+    __table_args__ = (
+        Index("ix_entity_mentions_document_version", "document_version_id"),
+        Index("ix_entity_mentions_tenant_status", "tenant_id", "resolution_status"),
+        Index(
+            "ix_entity_mentions_tenant_type_text", "tenant_id", "entity_type", "normalized_text"
+        ),
+        Index("ix_entity_mentions_resolved_entity", "resolved_entity_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_artifact_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document_artifacts.id", ondelete="SET NULL"), nullable=True
+    )
+    surface_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    entity_type: Mapped[EntityType] = mapped_column(enum_column(EntityType, 32), nullable=False)
+    chunk_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    resolved_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_status: Mapped[MentionResolutionStatus] = mapped_column(
+        enum_column(MentionResolutionStatus, 32),
+        nullable=False,
+        default=MentionResolutionStatus.PENDING,
+    )
+    prompt_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    response_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class Claim(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "claims"
+    __table_args__ = (
+        Index("ix_claims_document_version", "tenant_id", "document_version_id"),
+        Index("ix_claims_subject_mention", "subject_mention_id"),
+        Index("ix_claims_object_mention", "object_mention_id"),
+        Index("ix_claims_tenant_status", "tenant_id", "status"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subject_mention_id: Mapped[UUID] = mapped_column(
+        ForeignKey("entity_mentions.id", ondelete="CASCADE"), nullable=False
+    )
+    predicate: Mapped[str] = mapped_column(String(200), nullable=False)
+    object_mention_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("entity_mentions.id", ondelete="CASCADE"), nullable=True
+    )
+    object_literal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claim_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_chunk_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[ClaimStatus] = mapped_column(
+        enum_column(ClaimStatus, 32), nullable=False, default=ClaimStatus.PENDING
+    )
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class EntityRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "entity_relationships"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "subject_entity_id",
+            "predicate",
+            "object_entity_id",
+            name="uq_entity_relationships_triple",
+        ),
+        Index("ix_entity_relationships_subject", "subject_entity_id"),
+        Index("ix_entity_relationships_object", "object_entity_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subject_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="CASCADE"), nullable=False
+    )
+    predicate: Mapped[str] = mapped_column(String(200), nullable=False)
+    object_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="CASCADE"), nullable=False
+    )
+    support_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provenance: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[RelationshipStatus] = mapped_column(
+        enum_column(RelationshipStatus, 32),
+        nullable=False,
+        default=RelationshipStatus.ACTIVE,
+    )
+
+
+class MergeCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "merge_candidates"
+    __table_args__ = (
+        Index("ix_merge_candidates_tenant_status", "tenant_id", "status"),
+        Index("ix_merge_candidates_target", "target_entity_id"),
+        Index("ix_merge_candidates_mention", "mention_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    mention_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("entity_mentions.id", ondelete="CASCADE"), nullable=True
+    )
+    source_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="CASCADE"), nullable=True
+    )
+    target_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="CASCADE"), nullable=False
+    )
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    band: Mapped[MergeCandidateBand] = mapped_column(
+        enum_column(MergeCandidateBand, 32), nullable=False
+    )
+    status: Mapped[MergeCandidateStatus] = mapped_column(
+        enum_column(MergeCandidateStatus, 32),
+        nullable=False,
+        default=MergeCandidateStatus.PENDING,
+    )
+
+
+class MergeDecision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "merge_decisions"
+    __table_args__ = (
+        Index("ix_merge_decisions_tenant_created", "tenant_id", "created_at"),
+        Index("ix_merge_decisions_candidate", "candidate_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    candidate_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merge_candidates.id", ondelete="SET NULL"), nullable=True
+    )
+    decision_type: Mapped[MergeDecisionType] = mapped_column(
+        enum_column(MergeDecisionType, 32), nullable=False
+    )
+    source: Mapped[MergeDecisionSource] = mapped_column(
+        enum_column(MergeDecisionSource, 32), nullable=False
+    )
+    actor: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
