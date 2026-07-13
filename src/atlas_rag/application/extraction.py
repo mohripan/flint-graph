@@ -28,24 +28,58 @@ class ExtractedClaim(BaseModel):
 
 class ExtractedDocumentFacts(BaseModel):
     title: str | None = None
-    summary: str = Field(min_length=1)
+    summary: str | None = None
     topics: list[str] = Field(default_factory=list)
     entities: list[ExtractedEntity] = Field(default_factory=list)
     claims: list[ExtractedClaim] = Field(default_factory=list)
 
 
 def parse_extraction_response(response_text: str) -> ExtractedDocumentFacts:
+    """Parse an LLM extraction response resiliently.
+
+    Only a non-JSON or non-object response is a hard failure. Otherwise valid
+    entities and claims are kept and malformed items (e.g. a null predicate, a
+    list-valued object, a missing field) are dropped, so a small local model that
+    emits mostly-correct output still yields usable graph facts. ``summary`` is
+    optional because entities and claims are the primary product of the pipeline.
+    """
+
     try:
         payload = json.loads(response_text)
     except json.JSONDecodeError as exc:
         raise ExtractionValidationError("LLM response must be valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise ExtractionValidationError("LLM response must be a JSON object.")
 
-    try:
-        return ExtractedDocumentFacts.model_validate(payload)
-    except ValidationError as exc:
-        raise ExtractionValidationError(
-            f"LLM response does not match extraction schema: {exc}"
-        ) from exc
+    return ExtractedDocumentFacts(
+        title=_optional_str(payload.get("title")),
+        summary=_optional_str(payload.get("summary")),
+        topics=_string_list(payload.get("topics")),
+        entities=_valid_items(payload.get("entities"), ExtractedEntity),
+        claims=_valid_items(payload.get("claims"), ExtractedClaim),
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _valid_items[ModelT: BaseModel](value: object, model: type[ModelT]) -> list[ModelT]:
+    if not isinstance(value, list):
+        return []
+    items: list[ModelT] = []
+    for raw in value:
+        try:
+            items.append(model.model_validate(raw))
+        except ValidationError:
+            continue
+    return items
 
 
 def build_extraction_prompt(chunks: Sequence[tuple[str, str]]) -> str:
@@ -72,9 +106,14 @@ def build_extraction_prompt(chunks: Sequence[tuple[str, str]]) -> str:
     return "\n".join(
         [
             "Extract structured facts and relationship claims from the document chunks.",
-            "Each claim is a (subject, predicate, object) triple stating a relationship "
-            "between entities named in the document.",
-            "Populate evidence_chunk_ids with the chunk ids that support each claim.",
+            "Rules:",
+            "- summary is a short non-empty string describing the document.",
+            "- Each entity has a non-empty name and a type from: "
+            "person, organization, place, concept, other.",
+            "- Each claim is a (subject, predicate, object) triple.",
+            "- subject, predicate, and object must each be a single non-empty string; "
+            "never use null or a list.",
+            "- evidence_chunk_ids is a list of the bracketed chunk ids that support the claim.",
             "Return only JSON matching this schema:",
             json.dumps(schema, indent=2, sort_keys=True),
             "Document chunks:",

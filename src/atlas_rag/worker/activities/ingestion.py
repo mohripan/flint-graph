@@ -23,6 +23,7 @@ from atlas_rag.application.services.extraction import (
     persist_extraction_artifact,
 )
 from atlas_rag.application.services.job_transitions import transition_ingestion_job
+from atlas_rag.application.services.mentions import persist_mentions_and_claims
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.domain.enums import IngestionJobStatus
 from atlas_rag.infrastructure.db.models import Document, DocumentVersion
@@ -181,6 +182,16 @@ async def run_ingestion_pipeline_for_payload(
         chunk_manifest=persisted_artifacts.chunk_manifest,
         config=extraction_config,
         client=extraction_client,
+    )
+    await persist_mentions_and_claims(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        version_id=version_id,
+        extraction=extraction_result.extraction,
+        source_artifact_id=extraction_result.extraction_artifact_id,
+        prompt_hash=extraction_result.prompt_hash,
+        response_hash=extraction_result.response_hash,
     )
     if extraction_result.blocks_version_activation:
         raise RequiredExtractionFailedError("required extraction failed")

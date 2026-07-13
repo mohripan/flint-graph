@@ -32,12 +32,58 @@ def test_parse_extraction_response_validates_builtin_schema() -> None:
     assert extraction.entities[1].type == "organization"
 
 
-def test_parse_extraction_response_rejects_invalid_llm_json() -> None:
+def test_parse_extraction_response_rejects_non_json_and_non_object() -> None:
     with pytest.raises(ExtractionValidationError, match="valid JSON"):
         parse_extraction_response("not json")
 
-    with pytest.raises(ExtractionValidationError, match="summary"):
-        parse_extraction_response(json.dumps({"title": "Atlas"}))
+    with pytest.raises(ExtractionValidationError, match="JSON object"):
+        parse_extraction_response(json.dumps(["not", "an", "object"]))
+
+
+def test_parse_extraction_response_allows_missing_summary() -> None:
+    payload = json.dumps({"entities": [{"name": "Acme", "type": "organization"}]})
+
+    extraction = parse_extraction_response(payload)
+
+    assert extraction.summary is None
+    assert extraction.entities[0].name == "Acme"
+
+
+def test_parse_extraction_response_drops_invalid_entities() -> None:
+    payload = json.dumps(
+        {
+            "summary": "s",
+            "entities": [
+                {"name": "Acme", "type": "organization"},
+                {"name": "Bad", "type": "alien"},
+                {"type": "person"},
+            ],
+        }
+    )
+
+    extraction = parse_extraction_response(payload)
+
+    assert [entity.name for entity in extraction.entities] == ["Acme"]
+
+
+def test_parse_extraction_response_drops_malformed_claims_keeps_valid() -> None:
+    payload = json.dumps(
+        {
+            "summary": "Acme facts.",
+            "entities": [{"name": "Acme Corp", "type": "organization"}],
+            "claims": [
+                {"subject": "Acme Corp", "predicate": "headquartered_in", "object": "Berlin"},
+                {"subject": "Acme Corp", "predicate": None, "object": "Berlin"},
+                {"subject": "Acme Corp", "predicate": "acquired", "object": ["Globex"]},
+                {"predicate": "leads", "object": "Acme Corp"},
+            ],
+        }
+    )
+
+    extraction = parse_extraction_response(payload)
+
+    assert len(extraction.claims) == 1
+    assert extraction.claims[0].predicate == "headquartered_in"
 
 
 def test_parse_extraction_response_parses_claim_triples() -> None:
@@ -83,18 +129,6 @@ def test_parse_extraction_response_v1_without_claims_is_backward_compatible() ->
 
     assert extraction.claims == []
     assert extraction.entities[0].name == "AtlasRAG"
-
-
-def test_parse_extraction_response_rejects_malformed_claim() -> None:
-    payload = json.dumps(
-        {
-            "summary": "A claim with an empty predicate is invalid.",
-            "claims": [{"subject": "Acme Corp", "predicate": "", "object": "Berlin"}],
-        }
-    )
-
-    with pytest.raises(ExtractionValidationError, match="predicate"):
-        parse_extraction_response(payload)
 
 
 def test_build_extraction_prompt_includes_claim_schema() -> None:

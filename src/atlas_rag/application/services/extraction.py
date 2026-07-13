@@ -69,8 +69,12 @@ class ExtractionArtifactPayload(BaseModel):
 @dataclass(slots=True, frozen=True)
 class PersistedExtractionArtifact:
     extraction_artifact_uri: str
+    extraction_artifact_id: UUID
     status: ExtractionStatus
     blocks_version_activation: bool
+    extraction: ExtractedDocumentFacts | None
+    prompt_hash: str
+    response_hash: str | None
 
 
 async def persist_extraction_artifact(
@@ -166,7 +170,7 @@ async def persist_extraction_artifact(
             "status": status,
         },
     )
-    await _replace_extraction_artifact_row(
+    extraction_artifact_id = await _replace_extraction_artifact_row(
         session,
         tenant_id=tenant_id,
         document_id=document_id,
@@ -179,8 +183,12 @@ async def persist_extraction_artifact(
 
     return PersistedExtractionArtifact(
         extraction_artifact_uri=extraction_uri,
+        extraction_artifact_id=extraction_artifact_id,
         status=status,
         blocks_version_activation=status == "failed" and config.mode == "required",
+        extraction=extraction,
+        prompt_hash=prompt_hash,
+        response_hash=response_hash,
     )
 
 
@@ -214,27 +222,27 @@ async def _replace_extraction_artifact_row(
     extraction_hash: str,
     extraction_size: int,
     provenance: ExtractionProvenance,
-) -> None:
+) -> UUID:
     await session.execute(
         delete(DocumentArtifact).where(
             DocumentArtifact.document_version_id == version_id,
             DocumentArtifact.artifact_type == DocumentArtifactType.EXTRACTION,
         )
     )
-    session.add(
-        DocumentArtifact(
-            tenant_id=tenant_id,
-            document_id=document_id,
-            document_version_id=version_id,
-            artifact_type=DocumentArtifactType.EXTRACTION,
-            object_uri=extraction_uri,
-            content_hash=extraction_hash,
-            size_bytes=extraction_size,
-            schema_version=EXTRACTION_SCHEMA_VERSION,
-            metadata_=_provenance_metadata(provenance),
-        )
+    artifact = DocumentArtifact(
+        tenant_id=tenant_id,
+        document_id=document_id,
+        document_version_id=version_id,
+        artifact_type=DocumentArtifactType.EXTRACTION,
+        object_uri=extraction_uri,
+        content_hash=extraction_hash,
+        size_bytes=extraction_size,
+        schema_version=EXTRACTION_SCHEMA_VERSION,
+        metadata_=_provenance_metadata(provenance),
     )
+    session.add(artifact)
     await session.flush()
+    return artifact.id
 
 
 def _provenance_metadata(provenance: ExtractionProvenance) -> dict[str, Any]:
