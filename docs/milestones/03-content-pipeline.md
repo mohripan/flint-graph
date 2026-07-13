@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1, 2, and 3 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+In progress. Phases 1 through 4 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
 
 ## Phase 1 Completed Behavior
 
@@ -44,6 +44,22 @@ Implemented document-version lifecycle semantics:
 - Activating a new version supersedes any previous active version for the same document.
 - Failed and cancelled newer versions do not disturb the current active version.
 - Job events are listed with deterministic lifecycle ordering when timestamps tie.
+
+## Phase 4 Completed Behavior
+
+Implemented parser contracts:
+
+- Format detection for plain text, Markdown, HTML, and PDF.
+- Atlas-owned normalized artifact models with schema version `1`.
+- Parser errors for unsupported formats, decode failures, execution failures, and limit failures.
+- Plain text parser that emits paragraph elements.
+- Markdown parser that emits heading, paragraph, list item, and code block elements.
+- HTML parser that emits title, heading, paragraph, and list item elements.
+- Text-based PDF parser backed by `pypdf`; scanned or empty-text PDFs fail with a controlled parser error.
+- `BoundedParserRunner` that executes parsing in a subprocess and enforces raw-byte, timeout, normalized-output, and element-count limits.
+- Parser contract documentation in `docs/architecture/content-artifact-contract.md`.
+
+The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, and artifact writes is planned for Phase 7.
 
 ## Outcome Target
 

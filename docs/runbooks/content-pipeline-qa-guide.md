@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, and Phase 3 document-version lifecycle semantics are implemented. Later steps that require parser, chunk, and extraction work remain planned until those phases are implemented.
+In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, Phase 3 document-version lifecycle semantics are implemented, and Phase 4 parser contracts are implemented in code. Later steps that require worker parser integration, chunk, and extraction work remain planned until those phases are implemented.
 
 ## Audience
 
@@ -38,7 +38,7 @@ Expected services:
 - `minio`: stores raw source objects. Derived content artifacts are planned for later phases.
 - `outbox-relay`: starts Temporal workflows from durable outbox messages.
 - `temporal`: runs workflow orchestration.
-- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but parsing, chunking, and extraction are planned for later phases.
+- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but worker parser integration, chunking, and extraction are planned for later phases.
 
 ## Step 1: Create A Tenant
 
@@ -155,6 +155,7 @@ Database effect during worker processing:
 - `ingestion_jobs.status` changes from `queued` to `running` to `completed`.
 - `document_versions.status` changes from `pending` to `active`.
 - Later phases will add normalized artifacts, chunk-manifest artifacts, chunk rows, and extraction provenance.
+- Phase 4 parser tests validate normalized artifact creation in code, but artifacts are not written during worker execution yet.
 
 Check:
 
@@ -237,6 +238,7 @@ Expected result:
 - Same table changes as upload intake.
 - Raw object appears in MinIO.
 - HTML parser output and chunk rows are planned for later phases.
+- Phase 4 supports HTML parsing in code; worker integration is planned for Phase 7.
 
 ## Step 7: Test Optional Extraction Failure
 
