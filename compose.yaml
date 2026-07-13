@@ -77,10 +77,10 @@ services:
       ATLAS_CHUNKING_OVERLAP_CHARS: "120"
       ATLAS_EXTRACTION_ENABLED: "true"
       ATLAS_EXTRACTION_MODE: optional
-      ATLAS_LLM_PROVIDER: ollama
+      ATLAS_LLM_PROVIDER: ${ATLAS_LLM_PROVIDER:-ollama}
       ATLAS_OLLAMA_BASE_URL: http://host.docker.internal:11434
       ATLAS_OLLAMA_MODEL: gemma3:1b
-      ATLAS_EXTRACTION_TIMEOUT_SECONDS: "60"
+      ATLAS_EXTRACTION_TIMEOUT_SECONDS: "180"
       ATLAS_OTEL_ENABLED: "false"
     depends_on:
       postgres:

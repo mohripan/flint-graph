@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 from pydantic import ValidationError
@@ -142,7 +144,9 @@ async def test_deterministic_extraction_model_extracts_capitalized_entity_propos
     ]
     assert batch.entities[0].entity_type == "other"
     assert batch.entities[0].evidence == [
-        EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")
+        EvidenceProposal(
+            chunk_id="chunk-000001", quote="Acme Corporation", start_hint=0
+        )
     ]
 
 
@@ -161,9 +165,32 @@ async def test_deterministic_extraction_model_deduplicates_entities_across_chunk
 
     assert [entity.name for entity in batch.entities] == ["Acme Corporation"]
     assert batch.entities[0].evidence == [
-        EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation"),
-        EvidenceProposal(chunk_id="chunk-000002", quote="Acme Corporation"),
+        EvidenceProposal(
+            chunk_id="chunk-000001", quote="Acme Corporation", start_hint=0
+        ),
+        EvidenceProposal(
+            chunk_id="chunk-000002", quote="Acme Corporation", start_hint=0
+        ),
     ]
+
+
+@pytest.mark.anyio
+async def test_deterministic_extraction_model_adds_start_hint_for_repeated_quote() -> None:
+    model = DeterministicExtractionModel()
+
+    batch = await model.extract_batch(
+        ExtractionBatchRequest(
+            chunks=[
+                ExtractionInputChunk(
+                    chunk_id="chunk-000001",
+                    text="Acme Corporation acquired Acme Corporation.",
+                )
+            ]
+        )
+    )
+
+    entity = next(entity for entity in batch.entities if entity.name == "Acme Corporation")
+    assert [evidence.start_hint for evidence in entity.evidence] == [0, 26]
 
 
 @pytest.mark.anyio
@@ -206,7 +233,37 @@ async def test_ollama_proposal_extraction_model_returns_validated_batch() -> Non
 
     assert batch == response_batch
     assert requests[0].url.path == "/api/generate"
-    request_payload = requests[0].read().decode("utf-8")
-    assert '"model":"llama3.2"' in request_payload
-    assert '"format":"json"' in request_payload
-    assert "Acme Corporation is headquartered in Berlin." in request_payload
+    request_payload = json.loads(requests[0].read().decode("utf-8"))
+    assert request_payload["model"] == "llama3.2"
+    assert request_payload["format"]["type"] == "object"
+    assert request_payload["format"]["properties"]["entities"]["items"]["properties"][
+        "entity_type"
+    ]["enum"] == ["person", "organization", "place", "concept", "other"]
+    assert request_payload["options"] == {"temperature": 0}
+    assert "Acme Corporation is headquartered in Berlin." in request_payload["prompt"]
+
+
+@pytest.mark.anyio
+async def test_ollama_proposal_extraction_model_includes_error_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, request=request, text="schema rejected")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://ollama") as http_client:
+        model = OllamaProposalExtractionModel(
+            http_client=http_client,
+            model="llama3.2",
+            timeout_seconds=45,
+        )
+
+        with pytest.raises(httpx.HTTPStatusError, match="schema rejected"):
+            await model.extract_batch(
+                ExtractionBatchRequest(
+                    chunks=[
+                        ExtractionInputChunk(
+                            chunk_id="chunk-000001",
+                            text="Acme Corporation is headquartered in Berlin.",
+                        )
+                    ]
+                )
+            )

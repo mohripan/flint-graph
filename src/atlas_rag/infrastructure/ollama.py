@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+from typing import Any
 
 import httpx
 
@@ -35,7 +35,7 @@ class OllamaExtractionClient:
             },
             timeout=timeout_seconds,
         )
-        response.raise_for_status()
+        _raise_for_status(response)
         payload = response.json()
         response_text = payload.get("response")
         if not isinstance(response_text, str):
@@ -65,11 +65,12 @@ class OllamaProposalExtractionModel:
                 "model": self._model,
                 "prompt": _build_proposal_extraction_prompt(request),
                 "stream": False,
-                "format": "json",
+                "format": _proposal_extraction_schema(),
+                "options": {"temperature": 0},
             },
             timeout=self._timeout_seconds,
         )
-        response.raise_for_status()
+        _raise_for_status(response)
         payload = response.json()
         response_text = payload.get("response")
         if not isinstance(response_text, str):
@@ -78,19 +79,130 @@ class OllamaProposalExtractionModel:
 
 
 def _build_proposal_extraction_prompt(request: ExtractionBatchRequest) -> str:
-    schema = ExtractionBatch.model_json_schema()
     chunks = "\n\n".join(f"[{chunk.chunk_id}]\n{chunk.text}" for chunk in request.chunks)
     return "\n".join(
         [
             "Extract evidence-backed knowledge proposals from the document chunks.",
-            "Return only JSON matching this schema:",
-            json.dumps(schema, indent=2, sort_keys=True),
+            "Return only JSON that satisfies the response schema supplied in the format parameter.",
             "Rules:",
             "- Use only chunk IDs from input_chunk_ids.",
+            "- Include input_chunk_ids exactly as supplied below.",
+            "- Entity type must be exactly one of: person, organization, place, concept, other.",
             "- Evidence quotes must be exact substrings from the referenced chunk.",
+            "- Every entity, relation, and claim must include at least one evidence item.",
             "- Use batch-local entity IDs for relation and claim references.",
             "- Do not include canonical entity IDs.",
+            "- Prefer empty arrays when the text does not support a proposal.",
+            "Example output shape:",
+            (
+                '{"input_chunk_ids":["chunk-000001"],"entities":[{"local_id":"e1",'
+                '"name":"Acme Corporation","entity_type":"organization","evidence":'
+                '[{"chunk_id":"chunk-000001","quote":"Acme Corporation"}]}],'
+                '"relations":[],"claims":[]}'
+            ),
             "Document chunks:",
             chunks,
         ]
     )
+
+
+def _proposal_extraction_schema() -> dict[str, Any]:
+    evidence_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "chunk_id": {"type": "string"},
+            "quote": {"type": "string"},
+            "start_hint": {"type": "integer"},
+        },
+        "required": ["chunk_id", "quote"],
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "input_chunk_ids": {"type": "array", "items": {"type": "string"}},
+            "entities": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "local_id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "entity_type": {
+                            "type": "string",
+                            "enum": [
+                                "person",
+                                "organization",
+                                "place",
+                                "concept",
+                                "other",
+                            ],
+                        },
+                        "aliases": {"type": "array", "items": {"type": "string"}},
+                        "confidence": {"type": "number"},
+                        "evidence": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": evidence_schema,
+                        },
+                    },
+                    "required": ["local_id", "name", "entity_type", "evidence"],
+                },
+            },
+            "relations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "local_id": {"type": "string"},
+                        "subject_entity_id": {"type": "string"},
+                        "predicate": {"type": "string"},
+                        "object_entity_id": {"type": "string"},
+                        "confidence": {"type": "number"},
+                        "evidence": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": evidence_schema,
+                        },
+                    },
+                    "required": [
+                        "local_id",
+                        "subject_entity_id",
+                        "predicate",
+                        "object_entity_id",
+                        "evidence",
+                    ],
+                },
+            },
+            "claims": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "local_id": {"type": "string"},
+                        "subject_entity_id": {"type": "string"},
+                        "predicate": {"type": "string"},
+                        "object_entity_id": {"type": "string"},
+                        "object_text": {"type": "string"},
+                        "confidence": {"type": "number"},
+                        "evidence": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": evidence_schema,
+                        },
+                    },
+                    "required": ["local_id", "predicate", "evidence"],
+                },
+            },
+        },
+        "required": ["input_chunk_ids", "entities", "relations", "claims"],
+    }
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    if response.is_success:
+        return
+    message = (
+        f"{response.status_code} {response.reason_phrase} from Ollama: "
+        f"{response.text[:500]}"
+    )
+    raise httpx.HTTPStatusError(message, request=response.request, response=response)

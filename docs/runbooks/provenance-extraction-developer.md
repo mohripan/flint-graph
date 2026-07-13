@@ -13,7 +13,7 @@ upload or URL intake
     -> raw object in MinIO
     -> parser and chunker
     -> persisted document_chunks
-    -> extraction activity
+    -> ingestion extraction stage
         -> bounded batch assembly
         -> structured provider call
         -> schema/reference validation
@@ -22,9 +22,12 @@ upload or URL intake
         -> manifest write
         -> staged-record transaction
     -> candidate generation
-    -> canonical resolution
+    -> canonical resolution workflow
     -> Neo4j projection
 ```
+
+The local worker supports `ATLAS_LLM_PROVIDER=ollama` for live structured model
+calls and `ATLAS_LLM_PROVIDER=deterministic` for stable offline smoke tests.
 
 ## Development Checks
 
@@ -74,10 +77,18 @@ Candidate records:
 docker compose exec postgres psql -U atlas -d atlas -c "select source_extracted_entity_id, target_kind, score, outcome, status from entity_resolution_candidates order by created_at desc limit 20;"
 ```
 
+Resolved staged entities:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select name, resolution_status, resolved_canonical_entity_id from extracted_entities order by created_at desc limit 20;"
+```
+
 ## Failure Modes
 
-- Provider timeout: run records a bounded provider error and the activity fails.
-- Invalid schema: invocation is recorded, invalid output is rejected, and the run fails or completes with warnings according to configuration.
+- Provider timeout: run records a bounded provider error; required extraction
+  fails the activity and optional extraction lets ingestion complete.
+- Invalid schema: run failure is recorded; required extraction fails the
+  activity and optional extraction lets ingestion complete.
 - Missing quote: the affected proposal is rejected; other valid proposals may continue.
 - Repeated quote without valid `start_hint`: evidence is rejected as ambiguous.
 - Cancellation: unfinished extraction run is marked failed with `cancelled`.

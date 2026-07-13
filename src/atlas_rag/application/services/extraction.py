@@ -39,9 +39,9 @@ class StructuredExtractionClient(Protocol):
 class ExtractionServiceConfig(BaseModel):
     enabled: bool = True
     mode: ExtractionMode = "optional"
-    provider: Literal["ollama"] = "ollama"
+    provider: Literal["ollama", "deterministic"] = "ollama"
     model: str = "gemma3:1b"
-    timeout_seconds: int = Field(default=60, ge=1)
+    timeout_seconds: int = Field(default=180, ge=1)
     prompt_version: str = EXTRACTION_PROMPT_VERSION
 
 

@@ -57,10 +57,10 @@ class Settings(BaseSettings):
 
     extraction_enabled: bool = True
     extraction_mode: Literal["disabled", "optional", "required"] = "optional"
-    llm_provider: Literal["ollama"] = "ollama"
+    llm_provider: Literal["ollama", "deterministic"] = "ollama"
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "gemma3:1b"
-    extraction_timeout_seconds: int = Field(default=60, ge=1)
+    extraction_timeout_seconds: int = Field(default=180, ge=1)
 
     entity_resolution_auto_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
     entity_resolution_review_threshold: float = Field(default=0.6, ge=0.0, le=1.0)

@@ -72,7 +72,7 @@ ATLAS_EXTRACTION_MODE=optional
 ATLAS_LLM_PROVIDER=ollama
 ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:11434
 ATLAS_OLLAMA_MODEL=gemma3:1b
-ATLAS_EXTRACTION_TIMEOUT_SECONDS=60
+ATLAS_EXTRACTION_TIMEOUT_SECONDS=180
 ```
 
 Default extraction is optional. If Ollama is unavailable, ingestion can still complete and `extraction.json` records failure provenance.

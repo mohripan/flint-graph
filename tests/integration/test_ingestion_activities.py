@@ -1,4 +1,3 @@
-import json
 from collections.abc import Mapping
 from uuid import UUID
 
@@ -6,23 +5,47 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.chunking import ChunkingConfig
+from atlas_rag.application.extraction_proposals import (
+    EvidenceProposal,
+    ExtractedClaimProposal,
+    ExtractedEntityProposal,
+    ExtractedRelationProposal,
+    ExtractionBatch,
+    ExtractionBatchRequest,
+)
 from atlas_rag.application.outbox_contracts import IngestionJobQueuedPayload
 from atlas_rag.application.parsing import BoundedParserRunner, ParserLimits
 from atlas_rag.application.services.documents import create_document
 from atlas_rag.application.services.extraction import ExtractionServiceConfig
 from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
 from atlas_rag.application.services.intake import create_upload_intake
+from atlas_rag.application.services.staged_resolution import resolve_pending_staged_entities
 from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import DocumentVersionStatus, IngestionJobStatus, SourceType
+from atlas_rag.domain.enums import (
+    DocumentVersionStatus,
+    EntityStatus,
+    EntityType,
+    ExtractionRunStatus,
+    IngestionJobStatus,
+    SourceType,
+    StagedResolutionStatus,
+)
 from atlas_rag.infrastructure.db.models import (
+    CanonicalEntity,
     DocumentArtifact,
     DocumentChunk,
     DocumentVersion,
+    EntityAlias,
+    EntityRelationship,
+    EntityResolutionCandidate,
+    ExtractedEntity,
+    ExtractionRun,
     IngestionJob,
     IngestionJobEvent,
 )
 from atlas_rag.infrastructure.object_store import ObjectInfo
 from atlas_rag.worker.activities.ingestion import (
+    _proposal_model_from_settings,
     mark_ingestion_job_completed_for_payload,
     mark_ingestion_job_failed_for_payload,
     mark_ingestion_job_running_for_payload,
@@ -109,6 +132,24 @@ class FakeExtractionClient:
         return self.response
 
 
+class FakeProposalExtractionModel:
+    def __init__(
+        self,
+        batch: ExtractionBatch | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.batch = batch
+        self.error = error
+        self.requests: list[ExtractionBatchRequest] = []
+
+    async def extract_batch(self, request: ExtractionBatchRequest) -> ExtractionBatch:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        assert self.batch is not None
+        return self.batch
+
+
 async def _create_upload_payload(
     db_session: AsyncSession,
     *,
@@ -152,15 +193,64 @@ def _parser_runner() -> BoundedParserRunner:
     )
 
 
-def _success_extraction_client() -> FakeExtractionClient:
-    return FakeExtractionClient(
-        response=json.dumps(
-            {
-                "title": "Pipeline",
-                "summary": "AtlasRAG parses and chunks content.",
-                "topics": ["pipeline"],
-                "entities": [{"name": "AtlasRAG", "type": "concept"}],
-            }
+def _success_proposal_model() -> FakeProposalExtractionModel:
+    return FakeProposalExtractionModel(
+        batch=ExtractionBatch(
+            input_chunk_ids=["chunk-000001"],
+            entities=[
+                ExtractedEntityProposal(
+                    local_id="e1",
+                    name="Acme Corporation",
+                    entity_type="organization",
+                    aliases=["Acme"],
+                    confidence=0.95,
+                    evidence=[
+                        EvidenceProposal(
+                            chunk_id="chunk-000001",
+                            quote="Acme Corporation",
+                        )
+                    ],
+                ),
+                ExtractedEntityProposal(
+                    local_id="e2",
+                    name="Berlin",
+                    entity_type="place",
+                    confidence=0.9,
+                    evidence=[
+                        EvidenceProposal(chunk_id="chunk-000001", quote="Berlin")
+                    ],
+                ),
+            ],
+            relations=[
+                ExtractedRelationProposal(
+                    local_id="r1",
+                    subject_entity_id="e1",
+                    predicate="headquartered_in",
+                    object_entity_id="e2",
+                    confidence=0.88,
+                    evidence=[
+                        EvidenceProposal(
+                            chunk_id="chunk-000001",
+                            quote="Acme Corporation is headquartered in Berlin",
+                        )
+                    ],
+                )
+            ],
+            claims=[
+                ExtractedClaimProposal(
+                    local_id="c1",
+                    subject_entity_id="e1",
+                    predicate="headquartered_in",
+                    object_entity_id="e2",
+                    confidence=0.86,
+                    evidence=[
+                        EvidenceProposal(
+                            chunk_id="chunk-000001",
+                            quote="Acme Corporation is headquartered in Berlin",
+                        )
+                    ],
+                )
+            ],
         )
     )
 
@@ -215,7 +305,16 @@ async def test_ingestion_activity_helpers_mark_job_failed(
     assert job.error_message == "pipeline failed"
 
 
-async def test_ingestion_pipeline_parses_chunks_extracts_and_completes_version(
+def test_ingestion_activity_supports_deterministic_provenance_provider() -> None:
+    from atlas_rag.application.extraction_proposals import DeterministicExtractionModel
+    from atlas_rag.config import Settings
+
+    settings = Settings(llm_provider="deterministic")
+
+    assert isinstance(_proposal_model_from_settings(settings), DeterministicExtractionModel)
+
+
+async def test_ingestion_pipeline_persists_provenance_extracts_candidates_and_resolves_graph(
     db_session: AsyncSession,
 ) -> None:
     store = FakeObjectStore()
@@ -223,7 +322,18 @@ async def test_ingestion_pipeline_parses_chunks_extracts_and_completes_version(
         db_session,
         store=store,
         idempotency_key="pipeline-success",
+        data=b"# Pipeline\n\nAcme Corporation is headquartered in Berlin.",
     )
+    db_session.add(
+        CanonicalEntity(
+            tenant_id=UUID(payload["tenant_id"]),
+            entity_type=EntityType.ORGANIZATION,
+            canonical_name="Acme Corporation",
+            normalized_name="acme corporation",
+            status=EntityStatus.ACTIVE,
+        )
+    )
+    await db_session.flush()
 
     await mark_ingestion_job_running_for_payload(db_session, payload)
     await run_ingestion_pipeline_for_payload(
@@ -234,9 +344,10 @@ async def test_ingestion_pipeline_parses_chunks_extracts_and_completes_version(
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
-        extraction_client=_success_extraction_client(),
+        extraction_model=_success_proposal_model(),
     )
     await mark_ingestion_job_completed_for_payload(db_session, payload)
+    await resolve_pending_staged_entities(db_session, tenant_id=UUID(payload["tenant_id"]))
 
     job = await db_session.get(IngestionJob, UUID(payload["ingestion_job_id"]))
     version = await db_session.get(DocumentVersion, UUID(payload["document_version_id"]))
@@ -248,25 +359,46 @@ async def test_ingestion_pipeline_parses_chunks_extracts_and_completes_version(
     chunks = list(
         await db_session.scalars(select(DocumentChunk).order_by(DocumentChunk.chunk_index))
     )
+    run = await db_session.scalar(select(ExtractionRun))
+    staged_entities = list(
+        await db_session.scalars(select(ExtractedEntity).order_by(ExtractedEntity.local_id))
+    )
+    candidates = list(await db_session.scalars(select(EntityResolutionCandidate)))
+    canonical_entities = list(
+        await db_session.scalars(select(CanonicalEntity).order_by(CanonicalEntity.normalized_name))
+    )
+    relationship = await db_session.scalar(select(EntityRelationship))
 
     assert job is not None
     assert version is not None
+    assert run is not None
     assert job.status == IngestionJobStatus.COMPLETED
     assert version.status == DocumentVersionStatus.ACTIVE
     assert [artifact.artifact_type for artifact in artifacts] == [
         "chunk_manifest",
-        "extraction",
         "normalized",
     ]
-    assert [chunk.text for chunk in chunks] == ["AtlasRAG parses and chunks content."]
-    extraction_artifact = next(
-        artifact for artifact in artifacts if artifact.artifact_type == "extraction"
-    )
-    assert extraction_artifact.metadata_["status"] == "succeeded"
-    extraction_payload = json.loads(store.objects[extraction_artifact.object_uri])
-    assert extraction_payload["extraction"]["summary"] == (
-        "AtlasRAG parses and chunks content."
-    )
+    assert [chunk.text for chunk in chunks] == [
+        "Acme Corporation is headquartered in Berlin."
+    ]
+    assert run.status == ExtractionRunStatus.READY
+    assert run.accepted_entity_count == 2
+    assert run.accepted_relation_count == 1
+    assert run.accepted_claim_count == 1
+    assert run.manifest_uri in store.objects
+    assert len(staged_entities) == 2
+    assert {entity.resolution_status for entity in staged_entities} == {
+        StagedResolutionStatus.RESOLVED
+    }
+    assert candidates
+    assert {entity.normalized_name for entity in canonical_entities} == {
+        "acme corporation",
+        "berlin",
+    }
+    assert (await db_session.scalar(select(EntityAlias))) is not None
+    assert relationship is not None
+    assert relationship.predicate == "headquartered_in"
+    assert relationship.support_count == 2
 
 
 async def test_ingestion_pipeline_optional_extraction_failure_still_completes(
@@ -288,23 +420,101 @@ async def test_ingestion_pipeline_optional_extraction_failure_still_completes(
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
-        extraction_client=FakeExtractionClient(error=RuntimeError("ollama unavailable")),
+        extraction_model=FakeProposalExtractionModel(
+            error=RuntimeError("ollama unavailable")
+        ),
     )
     await mark_ingestion_job_completed_for_payload(db_session, payload)
 
     job = await db_session.get(IngestionJob, UUID(payload["ingestion_job_id"]))
     version = await db_session.get(DocumentVersion, UUID(payload["document_version_id"]))
-    extraction_artifact = await db_session.scalar(
-        select(DocumentArtifact).where(DocumentArtifact.artifact_type == "extraction")
-    )
+    extraction_run = await db_session.scalar(select(ExtractionRun))
 
     assert job is not None
     assert version is not None
-    assert extraction_artifact is not None
+    assert extraction_run is not None
     assert job.status == IngestionJobStatus.COMPLETED
     assert version.status == DocumentVersionStatus.ACTIVE
-    assert extraction_artifact.metadata_["status"] == "failed"
-    assert extraction_artifact.metadata_["error_message"] == "ollama unavailable"
+    assert extraction_run.status == ExtractionRunStatus.FAILED
+    assert extraction_run.errors[0]["message"] == "ollama unavailable"
+
+
+async def test_ingestion_pipeline_persists_exception_type_for_blank_error_message(
+    db_session: AsyncSession,
+) -> None:
+    store = FakeObjectStore()
+    payload = await _create_upload_payload(
+        db_session,
+        store=store,
+        idempotency_key="pipeline-optional-blank-error-message",
+    )
+
+    await mark_ingestion_job_running_for_payload(db_session, payload)
+    await run_ingestion_pipeline_for_payload(
+        db_session,
+        payload,
+        object_store=store,
+        bucket="atlas-rag",
+        parser_runner=_parser_runner(),
+        chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
+        extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
+        extraction_model=FakeProposalExtractionModel(error=TimeoutError()),
+    )
+    await mark_ingestion_job_completed_for_payload(db_session, payload)
+
+    extraction_run = await db_session.scalar(select(ExtractionRun))
+
+    assert extraction_run is not None
+    assert extraction_run.status == ExtractionRunStatus.FAILED
+    assert extraction_run.errors[0]["message"] == "TimeoutError"
+
+
+async def test_ingestion_pipeline_optional_local_validation_failure_still_completes(
+    db_session: AsyncSession,
+) -> None:
+    store = FakeObjectStore()
+    payload = await _create_upload_payload(
+        db_session,
+        store=store,
+        idempotency_key="pipeline-optional-local-validation-failure",
+    )
+    bad_batch = ExtractionBatch(
+        input_chunk_ids=["chunk-000001"],
+        entities=[
+            ExtractedEntityProposal(
+                local_id="e1",
+                name="Missing Quote",
+                entity_type="other",
+                evidence=[
+                    EvidenceProposal(chunk_id="chunk-000001", quote="not in chunk")
+                ],
+            )
+        ],
+    )
+
+    await mark_ingestion_job_running_for_payload(db_session, payload)
+    await run_ingestion_pipeline_for_payload(
+        db_session,
+        payload,
+        object_store=store,
+        bucket="atlas-rag",
+        parser_runner=_parser_runner(),
+        chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
+        extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
+        extraction_model=FakeProposalExtractionModel(batch=bad_batch),
+    )
+    await mark_ingestion_job_completed_for_payload(db_session, payload)
+
+    job = await db_session.get(IngestionJob, UUID(payload["ingestion_job_id"]))
+    extraction_run = await db_session.scalar(select(ExtractionRun))
+
+    assert job is not None
+    assert extraction_run is not None
+    assert job.status == IngestionJobStatus.COMPLETED
+    assert extraction_run.status == ExtractionRunStatus.FAILED
+    assert extraction_run.errors[0]["message"] == (
+        "evidence quote was not found in chunk text"
+    )
 
 
 async def test_ingestion_pipeline_required_extraction_failure_fails_version(
@@ -327,7 +537,7 @@ async def test_ingestion_pipeline_required_extraction_failure_fails_version(
             parser_runner=_parser_runner(),
             chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
             extraction_config=ExtractionServiceConfig(mode="required", model="gemma3:1b"),
-            extraction_client=FakeExtractionClient(error=RuntimeError("bad response")),
+            extraction_model=FakeProposalExtractionModel(error=RuntimeError("bad response")),
         )
     except RuntimeError as exc:
         await mark_ingestion_job_failed_for_payload(
@@ -343,17 +553,15 @@ async def test_ingestion_pipeline_required_extraction_failure_fails_version(
 
     job = await db_session.get(IngestionJob, UUID(payload["ingestion_job_id"]))
     version = await db_session.get(DocumentVersion, UUID(payload["document_version_id"]))
-    extraction_artifact = await db_session.scalar(
-        select(DocumentArtifact).where(DocumentArtifact.artifact_type == "extraction")
-    )
+    extraction_run = await db_session.scalar(select(ExtractionRun))
 
     assert job is not None
     assert version is not None
-    assert extraction_artifact is not None
+    assert extraction_run is not None
     assert job.status == IngestionJobStatus.FAILED
     assert version.status == DocumentVersionStatus.FAILED
     assert job.error_message == "required extraction failed"
-    assert extraction_artifact.metadata_["status"] == "failed"
+    assert extraction_run.status == ExtractionRunStatus.FAILED
 
 
 async def test_ingestion_pipeline_rejects_raw_content_hash_mismatch(
@@ -381,7 +589,7 @@ async def test_ingestion_pipeline_rejects_raw_content_hash_mismatch(
             parser_runner=_parser_runner(),
             chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
             extraction_config=ExtractionServiceConfig(enabled=False),
-            extraction_client=_success_extraction_client(),
+            extraction_model=_success_proposal_model(),
         )
     except RuntimeError as exc:
         await mark_ingestion_job_failed_for_payload(

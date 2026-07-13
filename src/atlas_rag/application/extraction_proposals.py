@@ -183,12 +183,22 @@ class DeterministicExtractionModel:
                         local_id=local_id,
                         name=surface,
                         entity_type="other",
-                        evidence=[EvidenceProposal(chunk_id=chunk.chunk_id, quote=surface)],
+                        evidence=[
+                            EvidenceProposal(
+                                chunk_id=chunk.chunk_id,
+                                quote=surface,
+                                start_hint=match.start(),
+                            )
+                        ],
                     )
                     evidence_by_key[key] = list(entities_by_key[key].evidence)
                 else:
                     evidence_by_key[key].append(
-                        EvidenceProposal(chunk_id=chunk.chunk_id, quote=surface)
+                        EvidenceProposal(
+                            chunk_id=chunk.chunk_id,
+                            quote=surface,
+                            start_hint=match.start(),
+                        )
                     )
 
         entities = [

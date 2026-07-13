@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atlas_rag.application.entity_resolution import normalize_name
 from atlas_rag.application.extraction_evidence import ResolvedBatchEvidence, resolve_batch_evidence
 from atlas_rag.application.extraction_proposals import (
+    PROPOSAL_SCHEMA_VERSION,
     ExtractionBatch,
     ExtractionInputChunk,
 )
@@ -58,6 +59,11 @@ class PersistedProvenanceExtraction:
     extraction_run_id: UUID
     manifest_uri: str
     manifest_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class FailedProvenanceExtraction:
+    extraction_run_id: UUID
 
 
 async def persist_provenance_extraction_run(
@@ -258,6 +264,84 @@ async def persist_provenance_extraction_run(
     )
 
 
+async def persist_failed_provenance_extraction_run(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    document_id: UUID,
+    version_id: UUID,
+    chunks: list[ExtractionInputChunk],
+    metadata: ProvenanceExtractionMetadata,
+    error_code: str,
+    error_message: str,
+) -> FailedProvenanceExtraction:
+    await _ensure_version_exists(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        version_id=version_id,
+    )
+    input_hash = _input_hash(chunks)
+    existing = await _find_run(
+        session,
+        version_id=version_id,
+        input_hash=input_hash,
+        schema_version=PROPOSAL_SCHEMA_VERSION,
+        prompt_version=metadata.prompt_version,
+        extractor_version=metadata.extractor_version,
+        model_name=metadata.model_name,
+    )
+    if existing is not None:
+        existing.status = ExtractionRunStatus.FAILED
+        existing.errors = [{"code": error_code, "message": error_message}]
+        existing.warnings = []
+        await session.flush()
+        return FailedProvenanceExtraction(extraction_run_id=existing.id)
+
+    run = ExtractionRun(
+        tenant_id=tenant_id,
+        document_id=document_id,
+        document_version_id=version_id,
+        status=ExtractionRunStatus.FAILED,
+        schema_version=PROPOSAL_SCHEMA_VERSION,
+        prompt_version=metadata.prompt_version,
+        extractor_version=metadata.extractor_version,
+        model_provider=metadata.model_provider,
+        model_name=metadata.model_name,
+        input_hash=input_hash,
+        input_chunk_count=len(chunks),
+        invocation_count=1,
+        accepted_entity_count=0,
+        accepted_relation_count=0,
+        accepted_claim_count=0,
+        quality_metrics={},
+        warnings=[],
+        errors=[{"code": error_code, "message": error_message}],
+    )
+    session.add(run)
+    await session.flush()
+    session.add(
+        ExtractionInvocation(
+            tenant_id=tenant_id,
+            extraction_run_id=run.id,
+            invocation_index=0,
+            status=ExtractionInvocationStatus.FAILED,
+            input_chunk_ids=[chunk.chunk_id for chunk in chunks],
+            request_hash=metadata.request_hash,
+            response_hash=metadata.response_hash,
+            latency_ms=metadata.latency_ms,
+            input_char_count=sum(len(chunk.text) for chunk in chunks),
+            output_char_count=0,
+            prompt_token_count=metadata.prompt_token_count,
+            completion_token_count=metadata.completion_token_count,
+            error_code=error_code,
+            error_message=error_message,
+        )
+    )
+    await session.flush()
+    return FailedProvenanceExtraction(extraction_run_id=run.id)
+
+
 class ExtractionManifest(BaseModel):
     schema_version: str
     source: dict[str, str]
@@ -342,6 +426,35 @@ async def _find_ready_run(
     extractor_version: str,
     model_name: str,
 ) -> ExtractionRun | None:
+    existing = await _find_run(
+        session,
+        version_id=version_id,
+        input_hash=input_hash,
+        schema_version=schema_version,
+        prompt_version=prompt_version,
+        extractor_version=extractor_version,
+        model_name=model_name,
+    )
+    if (
+        existing is not None
+        and existing.status == ExtractionRunStatus.READY
+        and existing.manifest_uri is not None
+        and existing.manifest_hash is not None
+    ):
+        return existing
+    return None
+
+
+async def _find_run(
+    session: AsyncSession,
+    *,
+    version_id: UUID,
+    input_hash: str,
+    schema_version: str,
+    prompt_version: str,
+    extractor_version: str,
+    model_name: str,
+) -> ExtractionRun | None:
     existing: ExtractionRun | None = await session.scalar(
         select(ExtractionRun).where(
             ExtractionRun.document_version_id == version_id,
@@ -350,9 +463,6 @@ async def _find_ready_run(
             ExtractionRun.prompt_version == prompt_version,
             ExtractionRun.extractor_version == extractor_version,
             ExtractionRun.model_name == model_name,
-            ExtractionRun.status == ExtractionRunStatus.READY,
-            ExtractionRun.manifest_uri.is_not(None),
-            ExtractionRun.manifest_hash.is_not(None),
         )
     )
     return existing

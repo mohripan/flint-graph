@@ -4,8 +4,9 @@
 
 In progress. The provider-neutral proposal contract, evidence resolver,
 provenance persistence schema, transactional staged-record persistence,
-non-destructive staged candidate generation, and staged canonical resolver are
-implemented. Extraction workflow wiring and inspection APIs are still pending.
+non-destructive staged candidate generation, staged canonical resolver, and
+end-to-end ingestion wiring are implemented. Phase 8 is reserved for final
+documentation and manual verification.
 
 ## Goal
 
@@ -116,6 +117,13 @@ The canonical extraction manifest is content-addressed and stored in object stor
 
 The run, invocations, evidence spans, staged records, evidence links, and manifest artifact row persist transactionally. Retries reuse a ready run and immutable artifact rather than producing duplicate active staged records.
 
+The ingestion activity now builds provider-neutral extraction batch requests
+from persisted chunks, calls the configured proposal model, persists the
+provenance extraction run, and generates proposal candidates in the same activity
+transaction. Optional extraction failures record a failed extraction run and
+allow version activation; required extraction failures record the failed run and
+block activation.
+
 ## Candidate Generation And Resolution
 
 Candidate generation operates on staged extracted entities, not raw model output and not the old mention bridge.
@@ -155,9 +163,16 @@ Resolved staged relations and entity-object claims are folded into
 than incrementing counters on every retry. This prevents staged relationship
 support inflation.
 
+The implemented Phase 7 path wires ingestion to this staged pipeline. After a
+document is parsed and chunked, ingestion persists the provenance extraction run
+and candidate records. The existing Temporal resolution workflow then drains
+staged entities, applies deterministic resolution, and projects the resulting
+canonical graph to Neo4j.
+
 ## Failure And Retry Behavior
 
-- Provider timeout or validation failure records a bounded run error and fails the extraction activity.
+- Provider timeout or validation failure records a bounded run error and fails
+  the extraction activity only when extraction is required.
 - Evidence verification failure rejects only the affected proposal when other valid proposals remain.
 - A run with no accepted staged records can still be inspectable and failed or ready depending on configuration.
 - A cancelled ingestion job marks unfinished extraction runs failed with an explicit `cancelled` error code.
@@ -175,7 +190,9 @@ support inflation.
 - Staged records persist transactionally and retry idempotently.
 - Candidate generation is explainable and non-destructive.
 - Canonical resolution consumes staged proposals directly.
-- Tenant-scoped inspection APIs return 404 for foreign resources.
+- Tenant-scoped inspection APIs return 404 for foreign resources. Dedicated
+  extraction inspection endpoints are deferred to post-milestone API hardening;
+  the underlying rows are queryable in PostgreSQL.
 - Existing ingestion, chunking, job lifecycle, canonical graph, and Neo4j projection invariants still hold after the refactor.
 - Migration rendering, linting, strict typing, tests, package build, and Docker Compose validation pass.
 
