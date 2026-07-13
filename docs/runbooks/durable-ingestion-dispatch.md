@@ -85,6 +85,29 @@ uv run python -m atlas_rag.processes.ingestion_worker
 10. Confirm the job status changes to `completed`.
 11. Fetch job events and confirm `job.queued`, `job.started`, and `job.completed`.
 
+Example requests:
+
+```powershell
+$tenant = curl -sS -X POST http://localhost:8000/v1/tenants `
+  -H "Content-Type: application/json" `
+  -d '{"name":"Runbook Tenant"}' | ConvertFrom-Json
+
+$document = curl -sS -X POST http://localhost:8000/v1/documents `
+  -H "Content-Type: application/json" `
+  -H "X-Tenant-ID: $($tenant.id)" `
+  -d '{"title":"Runbook Document","source_type":"url","source_uri":"https://example.test/runbook"}' | ConvertFrom-Json
+
+$job = curl -sS -X POST "http://localhost:8000/v1/documents/$($document.id)/ingestion-jobs" `
+  -H "X-Tenant-ID: $($tenant.id)" `
+  -H "Idempotency-Key: runbook-job-1" | ConvertFrom-Json
+
+curl -sS "http://localhost:8000/v1/ingestion-jobs/$($job.id)" `
+  -H "X-Tenant-ID: $($tenant.id)"
+
+curl -sS "http://localhost:8000/v1/ingestion-jobs/$($job.id)/events" `
+  -H "X-Tenant-ID: $($tenant.id)"
+```
+
 ## Cancellation
 
 Cancel a queued or running job:
@@ -115,3 +138,5 @@ In Temporal Web UI, inspect the workflow memo to correlate a workflow execution 
 - If `attempt_count` increases, inspect `last_error`.
 - If Temporal cannot be reached, verify `ATLAS_TEMPORAL_ADDRESS`.
 - In Docker Compose, the relay uses `temporal:7233`; outside Docker, use `localhost:7233`.
+- If a workflow exists but the job remains `queued`, check `ingestion-worker` logs and verify it is using the `ingestion` task queue.
+- If cancellation status changes but Temporal does not cancel, check for a pending `ingestion.job_cancelled` outbox message.

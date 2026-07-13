@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.outbox_contracts import (
@@ -73,7 +73,16 @@ async def relay_outbox_batch(
                 ),
                 OutboxMessage.available_at <= datetime.now(UTC),
             )
-            .order_by(OutboxMessage.available_at, OutboxMessage.created_at, OutboxMessage.id)
+            .order_by(
+                OutboxMessage.available_at,
+                OutboxMessage.created_at,
+                case(
+                    (OutboxMessage.topic == INGESTION_JOB_QUEUED_TOPIC, 0),
+                    (OutboxMessage.topic == INGESTION_JOB_CANCELLED_TOPIC, 1),
+                    else_=2,
+                ),
+                OutboxMessage.id,
+            )
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )

@@ -1,10 +1,10 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. This foundation milestone implements the control plane for tenants, documents, immutable document versions, idempotent ingestion jobs, job events, database migrations, structured errors, request correlation, tracing, tests, and local infrastructure.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane plus durable dispatch from the API to a Temporal-backed stub ingestion worker.
 
-## Why this milestone comes first
+## Why these milestones come first
 
-LLM frameworks are intentionally absent. Before extraction or retrieval exists, the system needs durable identities, tenant boundaries, version semantics, idempotency, and inspectable job state. LangGraph will later orchestrate query execution; it will not replace the ingestion control plane.
+LLM frameworks are intentionally absent. Before extraction or retrieval exists, the system needs durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, and a safe asynchronous dispatch path. LangGraph will later orchestrate query execution; it will not replace the ingestion control plane.
 
 ## Requirements
 
@@ -78,6 +78,16 @@ curl -sS -X POST \
 
 Repeating the same request returns the same job with HTTP 200 rather than creating another version. A new idempotency key creates the next immutable document version.
 
+With the relay and worker running, the job should move from `queued` to `running` to `completed`.
+
+Cancel a queued or running job:
+
+```bash
+curl -sS -X POST \
+  http://localhost:8000/v1/ingestion-jobs/<job-id>/cancel \
+  -H 'X-Tenant-ID: <tenant-id>'
+```
+
 ## Quality commands
 
 ```bash
@@ -92,19 +102,21 @@ make check
 4. Version numbers are allocated while locking the document row.
 5. An idempotency key is unique within a tenant.
 6. The initial `job.queued` transition is written in the same transaction as the job.
-7. API errors use `application/problem+json` and include a request ID.
+7. New jobs and cancellations write transactional outbox messages before leaving the API transaction.
+8. The outbox relay marks messages published only after Temporal accepts the operation.
+9. Job state changes go through explicit transition rules and append events.
+10. API errors use `application/problem+json` and include a request ID.
 
 ## Next milestone
 
-Introduce durable ingestion dispatch:
+Introduce real content ingestion:
 
-- transactional outbox table
-- outbox relay
-- Temporal workflow and worker
-- object-storage upload contract
-- job state-transition service
-- retry and cancellation semantics
-- trace propagation from API to workflow activities
+- object-storage upload and retrieval implementation
+- content hashing and size limits
+- parser selection and controlled parse failures
+- chunking contracts
+- first persistence model for parsed artifacts
+- PostgreSQL concurrency tests for version allocation and relay locking
 
 ## Security status
 
@@ -112,4 +124,8 @@ This milestone is for local development. `X-Tenant-ID` is a tenant-routing input
 
 ## Learning notes
 
-The implementation walkthrough and the reasoning behind transaction ownership, immutable versions, idempotency, row locking, and tenant-safe lookups are in `docs/milestones/01-foundation.md`.
+Milestone notes:
+
+- Foundation: `docs/milestones/01-foundation.md`
+- Durable ingestion dispatch: `docs/milestones/02-durable-ingestion-dispatch.md`
+- Local dispatch runbook: `docs/runbooks/durable-ingestion-dispatch.md`

@@ -129,13 +129,11 @@ async def test_cancel_ingestion_job_appends_cancellation_outbox_message(
 
     messages = list(
         await db_session.scalars(
-            select(OutboxMessage).order_by(OutboxMessage.created_at, OutboxMessage.id)
+            select(OutboxMessage)
         )
     )
-    assert [message.topic for message in messages] == [
-        "ingestion.job_queued",
-        INGESTION_JOB_CANCELLED_TOPIC,
-    ]
-    cancellation_message = messages[-1]
+    messages_by_topic = {message.topic: message for message in messages}
+    assert set(messages_by_topic) == {"ingestion.job_queued", INGESTION_JOB_CANCELLED_TOPIC}
+    cancellation_message = messages_by_topic[INGESTION_JOB_CANCELLED_TOPIC]
     assert cancellation_message.aggregate_id == record.job.id
     assert cancellation_message.payload["ingestion_job_id"] == str(record.job.id)

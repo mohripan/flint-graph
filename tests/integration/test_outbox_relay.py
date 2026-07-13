@@ -111,11 +111,14 @@ async def _create_pending_cancellation_outbox_message(
     await cancel_ingestion_job(db_session, tenant_id=tenant.id, job_id=record.job.id)
     messages = list(
         await db_session.scalars(
-            select(OutboxMessage).order_by(OutboxMessage.created_at, OutboxMessage.id)
+            select(OutboxMessage)
         )
     )
     assert len(messages) == 2
-    return messages[-1]
+    cancellation_message = next(
+        message for message in messages if message.topic == "ingestion.job_cancelled"
+    )
+    return cancellation_message
 
 
 async def test_relay_publishes_pending_outbox_message(
