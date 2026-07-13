@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma3:1b"
     extraction_timeout_seconds: int = Field(default=60, ge=1)
 
+    entity_resolution_auto_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    entity_resolution_review_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+    entity_resolution_trigram_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
+    entity_resolution_candidate_limit: int = Field(default=20, ge=1)
+
     outbox_relay_id: str = "atlas-rag-outbox-relay"
     outbox_relay_batch_size: int = Field(default=10, ge=1, le=100)
     outbox_relay_poll_interval_seconds: float = Field(default=2.0, gt=0.0)
@@ -71,6 +76,14 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True
     otel_trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _validate_resolution_thresholds(self) -> Self:
+        if self.entity_resolution_review_threshold > self.entity_resolution_auto_threshold:
+            raise ValueError(
+                "entity_resolution_review_threshold must be <= entity_resolution_auto_threshold"
+            )
+        return self
 
 
 @lru_cache
