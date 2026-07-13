@@ -140,6 +140,24 @@ candidate regeneration.
 
 Canonical graph mutation happens only in resolution services that consume candidates and record decisions.
 
+## Staged Resolution
+
+Each accepted extracted entity has independent resolution state:
+
+- `resolution_status`;
+- `resolved_canonical_entity_id`;
+- `resolved_by_candidate_id`;
+- `resolved_at`.
+
+The staged resolver consumes ready extraction runs. Auto candidates may attach a
+staged entity to an active canonical entity or group same-run staged duplicates.
+Review candidates leave the staged entity unresolved for later review. Missing
+usable candidates create a new canonical entity from the staged surface form.
+
+Resolved staged relations and claims become canonical relationships only when
+both endpoint extracted entities resolve to canonical entities. Relationship
+support is rebuilt from staged provenance so retries are idempotent.
+
 ## Inspection APIs
 
 Tenant-scoped inspection APIs should allow local users and QA to:

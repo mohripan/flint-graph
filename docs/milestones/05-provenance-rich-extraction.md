@@ -3,9 +3,9 @@
 ## Status
 
 In progress. The provider-neutral proposal contract, evidence resolver,
-provenance persistence schema, transactional staged-record persistence, and
-non-destructive staged candidate generation are implemented. Workflow wiring,
-canonical resolution refactor, and inspection APIs are still pending.
+provenance persistence schema, transactional staged-record persistence,
+non-destructive staged candidate generation, and staged canonical resolver are
+implemented. Extraction workflow wiring and inspection APIs are still pending.
 
 ## Goal
 
@@ -141,6 +141,19 @@ and rewrites pending rows during retries. It does not apply auto decisions or
 change canonical graph state.
 
 Canonical resolution consumes ready staged records and candidates. Auto decisions are deterministic and recorded. Ambiguous candidates remain pending for review. Rejected extraction proposals do not leak into canonical graph state.
+
+The implemented Phase 6 resolver records resolution state directly on
+`extracted_entities`. Auto canonical candidates attach staged entities to active
+canonical entities. Auto same-run extracted-entity candidates collapse staged
+duplicates into one canonical entity. Staged entities with only review candidates
+remain unresolved in `review` state. Entities with no usable candidate create new
+canonical entities. The Temporal resolution activity drains both the legacy
+mention path and the staged path during the transition.
+
+Resolved staged relations and entity-object claims are folded into
+`entity_relationships` by recomputing staged provenance for the tenant, rather
+than incrementing counters on every retry. This prevents staged relationship
+support inflation.
 
 ## Failure And Retry Behavior
 

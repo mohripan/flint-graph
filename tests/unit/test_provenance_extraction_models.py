@@ -71,3 +71,20 @@ def test_entity_resolution_candidate_links_source_extracted_entity() -> None:
     }
 
     assert ("source_extracted_entity_id", "extracted_entities", "id") in foreign_keys
+
+
+def test_extracted_entity_tracks_staged_resolution_state() -> None:
+    columns = set(ExtractedEntity.__table__.columns.keys())
+    foreign_keys = {
+        (fk.parent.name, fk.column.table.name, fk.column.name)
+        for fk in ExtractedEntity.__table__.foreign_keys
+    }
+
+    assert "resolution_status" in columns
+    assert "resolved_at" in columns
+    assert ("resolved_canonical_entity_id", "canonical_entities", "id") in foreign_keys
+    assert (
+        "resolved_by_candidate_id",
+        "entity_resolution_candidates",
+        "id",
+    ) in foreign_keys

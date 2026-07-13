@@ -14,6 +14,7 @@ from atlas_rag.application.services.resolution import (
     acquire_tenant_resolution_lock,
     resolve_pending_mentions,
 )
+from atlas_rag.application.services.staged_resolution import resolve_pending_staged_entities
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.infrastructure.db.session import SessionFactory
 from atlas_rag.infrastructure.neo4j import create_neo4j_client
@@ -45,6 +46,9 @@ async def resolve_tenant_entities(tenant_id: str) -> int:
             result = await resolve_pending_mentions(
                 session, tenant_id=UUID(tenant_id), config=config
             )
+            staged_result = await resolve_pending_staged_entities(
+                session, tenant_id=UUID(tenant_id)
+            )
             await session.commit()
         except Exception:
             await session.rollback()
@@ -53,7 +57,7 @@ async def resolve_tenant_entities(tenant_id: str) -> int:
     # PostgreSQL is the system of record; project the committed graph into Neo4j.
     # A projection failure retries the activity and re-projects idempotently.
     await _project_tenant_graph(settings, UUID(tenant_id))
-    return result.mentions_processed
+    return result.mentions_processed + staged_result.source_entity_count
 
 
 async def _project_tenant_graph(settings: Settings, tenant_id: UUID) -> None:

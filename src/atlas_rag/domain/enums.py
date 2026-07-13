@@ -118,6 +118,13 @@ class StagedProposalStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class StagedResolutionStatus(StrEnum):
+    PENDING = "pending"
+    RESOLVED = "resolved"
+    REVIEW = "review"
+    REJECTED = "rejected"
+
+
 class CandidateTargetKind(StrEnum):
     CANONICAL_ENTITY = "canonical_entity"
     EXTRACTED_ENTITY = "extracted_entity"

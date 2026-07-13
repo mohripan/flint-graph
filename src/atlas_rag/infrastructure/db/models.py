@@ -42,6 +42,7 @@ from atlas_rag.domain.enums import (
     RelationshipStatus,
     SourceType,
     StagedProposalStatus,
+    StagedResolutionStatus,
 )
 from atlas_rag.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -648,6 +649,11 @@ class ExtractedEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "entity_type",
             "normalized_name",
         ),
+        Index(
+            "ix_extracted_entities_tenant_resolution",
+            "tenant_id",
+            "resolution_status",
+        ),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(
@@ -676,6 +682,20 @@ class ExtractedEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=StagedProposalStatus.ACCEPTED,
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution_status: Mapped[StagedResolutionStatus] = mapped_column(
+        enum_column(StagedResolutionStatus, 32),
+        nullable=False,
+        default=StagedResolutionStatus.PENDING,
+    )
+    resolved_canonical_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), nullable=True
+    )
+    resolved_by_candidate_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("entity_resolution_candidates.id", ondelete="SET NULL"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class ExtractedRelation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
