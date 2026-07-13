@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 04 it implements the ingestion control plane, a real Temporal-backed content pipeline, and a resolved knowledge graph with reviewable, reversible merges.
+AtlasRAG is an early GraphRAG platform. Through Milestone 04 it implements the ingestion control plane, a real Temporal-backed content pipeline, and a resolved knowledge graph with reviewable, reversible merges. Milestone 05 is planned as a corrective refactor of the extraction-to-resolution boundary: model output becomes staged, evidence-backed proposals before canonical resolution consumes it.
 
 Implemented path:
 
@@ -11,7 +11,7 @@ API intake -> immutable raw object in MinIO
     -> durable ingestion job + outbox message
     -> outbox relay -> Temporal ingestion workflow
     -> worker: verify hash -> parse -> chunk -> extract (entities + claim triples)
-    -> persist mentions + claims
+    -> persist mentions + claims (Milestone 04 bridge; superseded by planned Milestone 05 staged proposals)
     -> per-tenant resolution (candidates -> score -> band -> attach / review / new entity)
     -> aggregate relationships
     -> project resolved graph into Neo4j
@@ -103,6 +103,7 @@ Milestone 04 knowledge graph:
 - `src/atlas_rag/infrastructure/neo4j.py` and `neo4j_migrations.py`: Neo4j client and Cypher migration runner.
 - `migrations/versions/0005_knowledge_graph.py` and `migrations/neo4j/`: graph schema.
 - `docs/milestones/04-knowledge-graph.md`, `docs/adr/0004-postgres-authoritative-resolution-neo4j-projection.md`, `docs/architecture/knowledge-graph-contract.md`, `docs/runbooks/knowledge-graph-*.md`.
+- Planned Milestone 05 provenance refactor: `docs/milestones/05-provenance-rich-extraction.md`, `docs/adr/0005-staged-extraction-proposals-before-canonical-resolution.md`, `docs/architecture/extraction-proposal-contract.md`, `docs/runbooks/provenance-extraction-*.md`.
 
 ## Current Invariants
 

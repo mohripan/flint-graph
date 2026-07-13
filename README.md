@@ -172,7 +172,7 @@ make check
 
 ## Current milestone boundary
 
-Milestone 04 builds the resolved knowledge graph and its projection into Neo4j. It stops before embeddings, vector indexes, and query-time orchestration. The next major work should introduce retrieval/indexing and a query orchestrator on top of the resolved graph and persisted chunk lineage.
+Milestone 04 builds the resolved knowledge graph and its projection into Neo4j. The planned Milestone 05 work refactors the extraction-to-resolution boundary so canonical resolution consumes provenance-rich staged proposals with verified evidence spans instead of the current transitional mention/claim bridge. Retrieval, embeddings, vector indexes, and query-time orchestration remain later work.
 
 ## Security status
 
@@ -186,9 +186,11 @@ Milestone notes:
 - Durable ingestion dispatch: `docs/milestones/02-durable-ingestion-dispatch.md`
 - Content pipeline: `docs/milestones/03-content-pipeline.md`
 - Knowledge graph: `docs/milestones/04-knowledge-graph.md`
+- Provenance-rich extraction plan: `docs/milestones/05-provenance-rich-extraction.md`
 - Local dispatch runbook: `docs/runbooks/durable-ingestion-dispatch.md`
 - Content pipeline developer runbook: `docs/runbooks/content-pipeline-developer.md`
 - Content pipeline QA guide: `docs/runbooks/content-pipeline-qa-guide.md`
 - Knowledge graph developer runbook: `docs/runbooks/knowledge-graph-developer.md`
 - Knowledge graph QA guide: `docs/runbooks/knowledge-graph-qa-guide.md`
 - Knowledge graph contract: `docs/architecture/knowledge-graph-contract.md`
+- Extraction proposal contract: `docs/architecture/extraction-proposal-contract.md`

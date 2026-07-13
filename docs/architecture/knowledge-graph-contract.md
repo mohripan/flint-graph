@@ -4,6 +4,8 @@
 
 AtlasRAG turns per-document extraction output into a resolved, provenance-backed knowledge graph. PostgreSQL is the system of record; Neo4j is an idempotent projection. This contract describes the entities, aliases, mentions, claims, relationships, scoring, banded decisions, and provenance introduced in Milestone 04.
 
+Milestone 05 is planned to supersede the Milestone 04 mention/claim extraction bridge with staged extraction proposals and verified evidence spans. The canonical graph posture in this contract remains directionally valid; the upstream extraction input model is expected to change.
+
 ## Datastore Roles
 
 - PostgreSQL stores the authoritative control plane and resolved graph.

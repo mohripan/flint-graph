@@ -4,6 +4,8 @@
 
 Complete. Phases 1 through 9 are implemented.
 
+Milestone 05 is planned to supersede the extraction-to-resolution bridge described here. Milestone 04's completed behavior remains useful as the first working graph path, but staged extraction proposals with verified evidence spans are the intended next design.
+
 ## Phase 1 Completed Behavior
 
 Added Neo4j infrastructure and versioned graph migrations:
