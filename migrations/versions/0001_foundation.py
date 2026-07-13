@@ -23,6 +23,7 @@ version_status = sa.Enum(
     "active",
     "superseded",
     "failed",
+    "cancelled",
     "deleted",
     name="document_version_status",
     native_enum=False,

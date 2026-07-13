@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist and can be validated with this guide. Later steps that require parser, chunk, extraction, and version-activation work remain planned until those phases are implemented.
+In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, and Phase 3 document-version lifecycle semantics are implemented. Later steps that require parser, chunk, and extraction work remain planned until those phases are implemented.
 
 ## Audience
 
@@ -38,7 +38,7 @@ Expected services:
 - `minio`: stores raw source objects. Derived content artifacts are planned for later phases.
 - `outbox-relay`: starts Temporal workflows from durable outbox messages.
 - `temporal`: runs workflow orchestration.
-- `ingestion-worker`: currently runs the stub ingestion activity. Parsing, chunking, extraction, and version activation are planned for later phases.
+- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but parsing, chunking, and extraction are planned for later phases.
 
 ## Step 1: Create A Tenant
 
@@ -145,15 +145,15 @@ curl.exe -sS "http://localhost:8000/v1/ingestion-jobs/$($upload.ingestion_job_id
 
 Expected final status:
 
-- Through Phase 2 with the stub worker, job status can move to `completed` if the relay and worker are running.
-- Document version activation is planned for Phase 3, so the version may remain `pending`.
+- With the stub worker, job status can move to `completed` if the relay and worker are running.
+- Document version status changes from `pending` to `active` when the job completes.
 - Events include `job.queued`; with relay and worker running, they can also include `job.started` and `job.completed`.
 
 Database effect during worker processing:
 
 - `outbox_messages.status` changes from `pending` to `published`.
 - `ingestion_jobs.status` changes from `queued` to `running` to `completed`.
-- Later phases will make `document_versions.status` change from `pending` to `active`.
+- `document_versions.status` changes from `pending` to `active`.
 - Later phases will add normalized artifacts, chunk-manifest artifacts, chunk rows, and extraction provenance.
 
 Check:
@@ -332,6 +332,7 @@ What this proves:
 
 - Successful activation is atomic.
 - Failed or cancelled newer versions do not replace a known-good active version.
+- Job terminal state and document-version terminal state stay aligned.
 
 ## Clean Reset
 

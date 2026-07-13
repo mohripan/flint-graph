@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 and 2 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+In progress. Phases 1, 2, and 3 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
 
 ## Phase 1 Completed Behavior
 
@@ -31,6 +31,19 @@ Implemented raw-source intake:
 - Reusing an idempotency key with different source bytes or materially different intake metadata returns HTTP 409.
 
 The existing metadata-first document and explicit job endpoints still exist for Milestone 2 compatibility. They may still create document versions without `object_uri` and `content_hash`; the new intake endpoints are the preferred path for real source ingestion.
+
+## Phase 3 Completed Behavior
+
+Implemented document-version lifecycle semantics:
+
+- `document_versions.status` now includes `cancelled`.
+- Document-version changes go through `activate_document_version`, `fail_document_version`, and `cancel_document_version`.
+- Completing an ingestion job activates its document version.
+- Failing an ingestion job marks its document version `failed`.
+- Cancelling an ingestion job marks its document version `cancelled`.
+- Activating a new version supersedes any previous active version for the same document.
+- Failed and cancelled newer versions do not disturb the current active version.
+- Job events are listed with deterministic lifecycle ordering when timestamps tie.
 
 ## Outcome Target
 

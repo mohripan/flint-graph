@@ -6,6 +6,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas_rag.application.services.document_versions import (
+    activate_document_version,
+    cancel_document_version,
+    fail_document_version,
+)
 from atlas_rag.domain.enums import IngestionJobStatus
 from atlas_rag.domain.errors import ConflictError, NotFoundError
 from atlas_rag.domain.transitions import can_transition_job
@@ -63,6 +68,25 @@ async def transition_ingestion_job(
     if target_status == IngestionJobStatus.FAILED:
         job.error_code = error_code
         job.error_message = error_message
+
+    if target_status == IngestionJobStatus.COMPLETED:
+        await activate_document_version(
+            session,
+            tenant_id=tenant_id,
+            version_id=job.document_version_id,
+        )
+    elif target_status == IngestionJobStatus.FAILED:
+        await fail_document_version(
+            session,
+            tenant_id=tenant_id,
+            version_id=job.document_version_id,
+        )
+    elif target_status == IngestionJobStatus.CANCELLED:
+        await cancel_document_version(
+            session,
+            tenant_id=tenant_id,
+            version_id=job.document_version_id,
+        )
 
     session.add(
         IngestionJobEvent(

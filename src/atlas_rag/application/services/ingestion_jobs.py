@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -185,6 +185,14 @@ async def list_ingestion_job_events(
     result = await session.scalars(
         select(IngestionJobEvent)
         .where(IngestionJobEvent.job_id == job_id)
-        .order_by(IngestionJobEvent.created_at, IngestionJobEvent.id)
+        .order_by(
+            IngestionJobEvent.created_at,
+            case(
+                (IngestionJobEvent.to_status == IngestionJobStatus.QUEUED, 0),
+                (IngestionJobEvent.to_status == IngestionJobStatus.RUNNING, 1),
+                else_=2,
+            ),
+            IngestionJobEvent.id,
+        )
     )
     return list(result)

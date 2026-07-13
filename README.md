@@ -124,7 +124,12 @@ make check
 7. New jobs and cancellations write transactional outbox messages before leaving the API transaction.
 8. The outbox relay marks messages published only after Temporal accepts the operation.
 9. Job state changes go through explicit transition rules and append events.
-10. API errors use `application/problem+json` and include a request ID.
+10. Completed jobs activate their document version.
+11. Failed jobs fail their document version.
+12. Cancelled jobs cancel their document version.
+13. Activating a version supersedes any previous active version for the same document.
+14. Failed or cancelled newer versions do not disturb the current active version.
+15. API errors use `application/problem+json` and include a request ID.
 
 ## Next milestone
 

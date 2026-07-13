@@ -6,6 +6,7 @@ class DocumentVersionStatus(StrEnum):
     ACTIVE = "active"
     SUPERSEDED = "superseded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     DELETED = "deleted"
 
 
