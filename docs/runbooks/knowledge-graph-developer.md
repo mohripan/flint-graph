@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Use this runbook when changing or debugging the Milestone 04 knowledge graph: entity resolution, candidate generation, scoring, banded decisions, merges, relationship aggregation, and the Neo4j projection.
+Use this runbook when changing or debugging the resolved knowledge graph: entity resolution, candidate generation, scoring, banded decisions, merges, relationship aggregation, and the Neo4j projection. Milestone 05 feeds this graph from staged extraction proposals rather than the original Milestone 04 mention/claim bridge.
 
 For semi-technical manual validation, use `docs/runbooks/knowledge-graph-qa-guide.md`.
 
@@ -34,13 +34,13 @@ docker compose logs -f api
 
 ```text
 document version activation
-    -> extraction artifact (entities + claim triples)
-    -> persist_mentions_and_claims (entity_mentions + claims)
+    -> provenance extraction run and staged proposals
+    -> proposal candidate generation
     -> ingestion workflow enqueues ResolveEntitiesWorkflow (signal-with-start, id entity-resolution-{tenant})
     -> resolve_tenant_entities activity
         -> pg advisory lock (single writer per tenant)
-        -> resolve_pending_mentions: candidates -> score -> band -> attach / review / new entity
-        -> aggregate_relationships
+        -> staged resolver: auto attach / review / new entity
+        -> aggregate relationships from resolved staged relations and entity-object claims
         -> commit PostgreSQL
     -> project_tenant_graph (Neo4j MERGE + prune)
 ```
@@ -60,7 +60,7 @@ ATLAS_ENTITY_RESOLUTION_TRIGRAM_THRESHOLD=0.3
 ATLAS_ENTITY_RESOLUTION_CANDIDATE_LIMIT=20
 ```
 
-Extraction defaults to `gemma3:1b`; a stronger local model such as `llama3.2` produces cleaner triples.
+Extraction defaults to `gemma3:1b` through Ollama. Small local models can produce sparse proposals; failed or rejected extraction output is recorded in provenance tables and does not directly mutate the canonical graph.
 
 ## Database Checks
 
@@ -70,10 +70,10 @@ Entities and support counts:
 docker compose exec postgres psql -U atlas -d atlas -c "select canonical_name, entity_type, status, support_count from canonical_entities order by support_count desc, canonical_name limit 20;"
 ```
 
-Mentions and resolution status:
+Staged entities and resolution status:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select surface_text, entity_type, resolution_status, resolved_entity_id from entity_mentions order by created_at desc limit 20;"
+docker compose exec postgres psql -U atlas -d atlas -c "select name, entity_type, resolution_status, resolved_canonical_entity_id from extracted_entities order by created_at desc limit 20;"
 ```
 
 Relationships:

@@ -158,9 +158,11 @@ Resolved staged relations and claims become canonical relationships only when
 both endpoint extracted entities resolve to canonical entities. Relationship
 support is rebuilt from staged provenance so retries are idempotent.
 
-## Inspection APIs
+## Inspection
 
-Tenant-scoped inspection APIs should allow local users and QA to:
+Milestone 05 persists the inspection data in PostgreSQL. Dedicated
+tenant-scoped extraction inspection APIs are deferred to post-milestone API
+hardening. Those APIs should allow local users and QA to:
 
 - list extraction runs for a document version;
 - inspect provider invocations and bounded errors;

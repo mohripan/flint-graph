@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 04 it implements the ingestion control plane, a real Temporal-backed content pipeline, and a resolved knowledge graph with reviewable, reversible merges. Milestone 05 is planned as a corrective refactor of the extraction-to-resolution boundary: model output becomes staged, evidence-backed proposals before canonical resolution consumes it.
+AtlasRAG is an early GraphRAG platform. Through Milestone 05 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, and a resolved knowledge graph with reviewable, reversible merges.
 
 Implemented path:
 
@@ -10,14 +10,15 @@ Implemented path:
 API intake -> immutable raw object in MinIO
     -> durable ingestion job + outbox message
     -> outbox relay -> Temporal ingestion workflow
-    -> worker: verify hash -> parse -> chunk -> extract (entities + claim triples)
-    -> persist mentions + claims (Milestone 04 bridge; superseded by planned Milestone 05 staged proposals)
-    -> per-tenant resolution (candidates -> score -> band -> attach / review / new entity)
+    -> worker: verify hash -> parse -> chunk -> extract staged proposals
+    -> verify exact evidence spans + persist extraction run/invocation/staged records
+    -> proposal candidates
+    -> per-tenant staged resolution (auto attach / review / new entity)
     -> aggregate relationships
     -> project resolved graph into Neo4j
 ```
 
-PostgreSQL is the system of record for the control plane and the resolved graph. Neo4j is an idempotent, rebuildable projection. MinIO stores immutable raw and derived artifacts. The API also serves the entity, review-queue, merge/unmerge, and audit endpoints.
+PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, and the resolved graph. Neo4j is an idempotent, rebuildable projection. MinIO stores immutable raw and derived artifacts. The API serves the entity, review-queue, merge/unmerge, and audit endpoints; dedicated extraction inspection endpoints are deferred.
 
 Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
@@ -103,7 +104,16 @@ Milestone 04 knowledge graph:
 - `src/atlas_rag/infrastructure/neo4j.py` and `neo4j_migrations.py`: Neo4j client and Cypher migration runner.
 - `migrations/versions/0005_knowledge_graph.py` and `migrations/neo4j/`: graph schema.
 - `docs/milestones/04-knowledge-graph.md`, `docs/adr/0004-postgres-authoritative-resolution-neo4j-projection.md`, `docs/architecture/knowledge-graph-contract.md`, `docs/runbooks/knowledge-graph-*.md`.
-- Planned Milestone 05 provenance refactor: `docs/milestones/05-provenance-rich-extraction.md`, `docs/adr/0005-staged-extraction-proposals-before-canonical-resolution.md`, `docs/architecture/extraction-proposal-contract.md`, `docs/runbooks/provenance-extraction-*.md`.
+Milestone 05 provenance-rich extraction:
+
+- `src/atlas_rag/application/extraction_proposals.py`: provider-neutral proposal models and deterministic provider.
+- `src/atlas_rag/application/extraction_evidence.py`: exact quote evidence resolver.
+- `src/atlas_rag/application/services/provenance_extraction.py`: transactional extraction run, invocation, evidence, staged-record, and manifest persistence.
+- `src/atlas_rag/application/services/proposal_candidate_generation.py`: non-destructive proposal candidate generation.
+- `src/atlas_rag/application/services/staged_resolution.py`: canonical resolution over staged proposals.
+- `src/atlas_rag/infrastructure/ollama.py`: Ollama proposal adapter at the infrastructure edge.
+- `migrations/versions/0006_provenance_extraction.py` and `0007_staged_resolution_state.py`: provenance and staged-resolution schema.
+- `docs/milestones/05-provenance-rich-extraction.md`, `docs/adr/0005-staged-extraction-proposals-before-canonical-resolution.md`, `docs/architecture/extraction-proposal-contract.md`, `docs/runbooks/provenance-extraction-*.md`.
 
 ## Current Invariants
 
@@ -116,6 +126,9 @@ Milestone 04 knowledge graph:
 - The relay marks an outbox message `published` only after Temporal accepts the start or cancellation request.
 - Job state changes go through explicit transition rules and append events.
 - The relay prioritizes queued workflow-start messages before cancellation messages when both are available.
+- Model output is staged and evidence-verified before it can affect canonical graph state.
+- Accepted staged entities, relations, and claims retain at least one verified evidence span.
+- Canonical graph mutation happens in deterministic resolution services, not provider adapters.
 
 ## Temporal Notes
 
@@ -128,8 +141,8 @@ Milestone 04 knowledge graph:
 
 ## Known Limitations
 
-- Small local extraction models produce noisy claim triples; the pipeline persists them faithfully.
-- Relationship `support_count` can inflate across document re-ingests (clearing a version's claims does not decrement prior relationship contributions).
+- Small local extraction models can produce sparse or noisy proposals; the pipeline validates evidence and persists accepted output faithfully.
+- Dedicated extraction inspection APIs are not implemented yet; use PostgreSQL queries in the provenance extraction runbook.
 - `unmerge` reverses the most recent merge and assumes no conflicting interleaved graph changes.
 - Neo4j projection re-reconciles the whole tenant subgraph after each resolution rather than applying deltas.
 - Trace context is captured and carried into Temporal memo, but automatic distributed span continuation inside workflows and activities is not complete.

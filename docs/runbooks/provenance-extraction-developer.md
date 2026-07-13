@@ -28,6 +28,10 @@ upload or URL intake
 
 The local worker supports `ATLAS_LLM_PROVIDER=ollama` for live structured model
 calls and `ATLAS_LLM_PROVIDER=deterministic` for stable offline smoke tests.
+The Ollama adapter sends a simplified JSON Schema through the `format` request
+field and validates the response again with AtlasRAG's full Pydantic contract.
+The Docker Compose extraction timeout defaults to 180 seconds so small local
+models have enough time to produce structured output.
 
 ## Development Checks
 
@@ -87,6 +91,8 @@ docker compose exec postgres psql -U atlas -d atlas -c "select name, resolution_
 
 - Provider timeout: run records a bounded provider error; required extraction
   fails the activity and optional extraction lets ingestion complete.
+- Ollama schema or HTTP error: invocation/run errors include the bounded
+  provider response body when available.
 - Invalid schema: run failure is recorded; required extraction fails the
   activity and optional extraction lets ingestion complete.
 - Missing quote: the affected proposal is rejected; other valid proposals may continue.

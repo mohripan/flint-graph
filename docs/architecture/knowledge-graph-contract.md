@@ -2,15 +2,15 @@
 
 ## Purpose
 
-AtlasRAG turns per-document extraction output into a resolved, provenance-backed knowledge graph. PostgreSQL is the system of record; Neo4j is an idempotent projection. This contract describes the entities, aliases, mentions, claims, relationships, scoring, banded decisions, and provenance introduced in Milestone 04.
+AtlasRAG turns per-document extraction output into a resolved, provenance-backed knowledge graph. PostgreSQL is the system of record; Neo4j is an idempotent projection. This contract describes the canonical entities, aliases, relationships, scoring, banded decisions, and merge/review behavior introduced in Milestone 04 and fed by Milestone 05 staged extraction proposals.
 
-Milestone 05 is planned to supersede the Milestone 04 mention/claim extraction bridge with staged extraction proposals and verified evidence spans. The canonical graph posture in this contract remains directionally valid; the upstream extraction input model is expected to change.
+Milestone 05 superseded the Milestone 04 mention/claim extraction bridge with staged extraction proposals and verified evidence spans. The canonical graph posture in this contract remains valid; the upstream input model is now defined in `docs/architecture/extraction-proposal-contract.md`.
 
 ## Datastore Roles
 
 - PostgreSQL stores the authoritative control plane and resolved graph.
 - Neo4j stores a projection of active entities and relationships, tagged with `tenant_id` on every node and edge.
-- MinIO stores the extraction artifact that mentions and claims derive from.
+- MinIO stores immutable raw and derived artifacts, including content-addressed extraction manifests.
 
 ## Entities And Aliases
 
@@ -21,21 +21,21 @@ A canonical entity is a resolved, deduplicated real-world entity for a tenant.
 
 Entity types reuse the extraction taxonomy: `person`, `organization`, `place`, `concept`, `other`.
 
-## Mentions
+## Historical Mentions
 
 A mention is one occurrence of an entity-like surface in a document version.
 
 - `entity_mentions`: `surface_text`, `normalized_text`, `entity_type`, `chunk_ids`, `resolved_entity_id` (nullable until resolved), `resolution_status` (`pending` / `resolved` / `review` / `rejected`), plus provenance: `source_artifact_id`, `prompt_hash`, `response_hash`.
 
-Mentions are derived from a version's extraction artifact and are idempotent per version.
+Mentions were the Milestone 04 bridge from extraction output to resolution. Milestone 05 staged extracted entities now carry the primary resolution state.
 
-## Claims
+## Historical Claims
 
 A claim is a per-version asserted `(subject, predicate, object)` triple.
 
 - `claims`: `subject_mention_id`, `predicate`, `object_mention_id` (nullable), `object_literal` (nullable), `evidence_chunk_ids`, `status` (`pending` / `linked` / `rejected`).
 
-A claim links its object to an entity mention when the object surface matches an extracted entity; otherwise the object is stored as a literal. Claims with a literal object remain valid facts but do not become entity relationships.
+Claims were the Milestone 04 bridge from extraction output to canonical relationships. Milestone 05 staged relations and entity-object extracted claims now feed relationship aggregation after their endpoint entities resolve.
 
 ## Relationships
 
@@ -43,7 +43,7 @@ A relationship is a canonical edge between two resolved entities, aggregated fro
 
 - `entity_relationships`: `subject_entity_id`, `predicate`, `object_entity_id`, `support_count`, `provenance` (contributing claim and version references), unique per `(tenant_id, subject_entity_id, predicate, object_entity_id)`.
 
-Relationships form only when both a claim's subject and object mentions resolve to entities. Each contributing claim is marked `linked` so re-runs do not double count.
+Relationships form only when both staged relation or entity-object claim endpoints resolve to canonical entities. Staged relationship support is recomputed from resolved staged provenance so retries do not double count.
 
 ## Normalization
 
@@ -118,7 +118,7 @@ Neo4j holds `(:Entity {id, tenant_id, type, canonical_name, normalized_name, sta
 
 ## Current Limitations
 
-- Relationship support can inflate across document re-ingests.
+- Dedicated extraction inspection APIs are not implemented yet; use PostgreSQL provenance tables for local inspection.
 - Unmerge reverses the most recent merge and assumes no conflicting interleaved changes.
 - Projection re-reconciles the whole tenant subgraph rather than applying deltas.
 - The milestone stops before embeddings, vector indexes, and query-time orchestration.

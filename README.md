@@ -1,6 +1,6 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, and persists extraction provenance, and a resolved knowledge graph built from extracted entities and claims with reviewable, reversible merges. PostgreSQL is the system of record; Neo4j is an idempotent projection of the resolved graph.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, and builds a resolved knowledge graph with reviewable, reversible merges. PostgreSQL is the system of record; Neo4j is an idempotent projection of the resolved graph.
 
 ## Why these milestones come first
 
@@ -78,7 +78,7 @@ curl -sS -X POST http://localhost:8000/v1/documents/from-url \
 
 Both intake endpoints create the document, document version, ingestion job, and outbox message in one durable path. Repeating the same request with the same idempotency key returns the same document/version/job with HTTP 200 rather than creating another version.
 
-With the relay and worker running, the job should move from `queued` to `running` to `completed`. The worker verifies the raw object hash, runs the bounded parser, writes `normalized.json`, `chunks.json`, and `extraction.json`, persists queryable chunk lineage, and activates the document version. If Ollama is unavailable in default optional extraction mode, extraction provenance records the failure and the job can still complete.
+With the relay and worker running, the job should move from `queued` to `running` to `completed`. The worker verifies the raw object hash, runs the bounded parser, writes normalized and chunk artifacts, persists queryable chunk lineage, runs provider-neutral proposal extraction, verifies exact evidence quotes, persists extraction runs and staged records, and activates the document version. If Ollama is unavailable in default optional extraction mode, extraction provenance records the failure and the job can still complete.
 
 Fetch a job:
 
@@ -104,7 +104,7 @@ curl -sS -X POST \
 
 ## Explore the knowledge graph
 
-After a document is ingested, per-tenant entity resolution turns extracted entities and claims into canonical entities and relationships, then projects them into Neo4j. Inspect the resolved graph through the API:
+After a document is ingested, per-tenant entity resolution turns staged extracted proposals into canonical entities and relationships, then projects them into Neo4j. Inspect the resolved graph through the API:
 
 ```bash
 # Canonical entities (deduplicated across documents; support_count reflects cross-doc support)
@@ -132,7 +132,7 @@ curl -sS -X POST http://localhost:8000/v1/entities/<source-id>/unmerge \
 curl -sS http://localhost:8000/v1/merge-decisions -H 'X-Tenant-ID: <tenant-id>'
 ```
 
-The resolved graph is visible in the Neo4j browser at `http://localhost:7474`. A stronger local extraction model such as `llama3.2` produces cleaner relationship triples than the default `gemma3:1b`.
+The resolved graph is visible in the Neo4j browser at `http://localhost:7474`. Small local models such as the default `gemma3:1b` may produce sparse proposals; the pipeline records provider failures or rejected evidence without allowing raw model output to mutate the canonical graph.
 
 ## Quality commands
 
@@ -163,16 +163,16 @@ make check
 19. Queryable chunk lineage is persisted in PostgreSQL.
 20. Optional extraction failure records provenance without blocking version activation.
 21. Required extraction failure records provenance and fails the job/version.
-22. Entity mentions and claims are derived from extraction with provenance and persisted idempotently per version.
+22. Extraction produces provider-neutral staged proposals with verified evidence spans and queryable run/invocation provenance.
 23. Entity resolution runs one writer per tenant via a PostgreSQL advisory lock.
 24. Resolution applies banded decisions: auto-attach, review queue, or new entity.
 25. Every merge decision is recorded and reviewable; merges are soft and reversible.
-26. Relationships aggregate from claims whose subject and object both resolve to entities.
+26. Relationships aggregate from resolved staged relations and entity-object claims whose endpoints both resolve to canonical entities.
 27. PostgreSQL is authoritative; Neo4j is an idempotent projection rebuildable from PostgreSQL.
 
 ## Current milestone boundary
 
-Milestone 04 builds the resolved knowledge graph and its projection into Neo4j. The planned Milestone 05 work refactors the extraction-to-resolution boundary so canonical resolution consumes provenance-rich staged proposals with verified evidence spans instead of the current transitional mention/claim bridge. Retrieval, embeddings, vector indexes, and query-time orchestration remain later work.
+Milestone 05 refactors the extraction-to-resolution boundary so canonical resolution consumes provenance-rich staged proposals with verified evidence spans instead of the Milestone 04 transitional mention/claim bridge. Retrieval, embeddings, vector indexes, query-time orchestration, and dedicated extraction inspection APIs remain later work.
 
 ## Security status
 
@@ -186,7 +186,7 @@ Milestone notes:
 - Durable ingestion dispatch: `docs/milestones/02-durable-ingestion-dispatch.md`
 - Content pipeline: `docs/milestones/03-content-pipeline.md`
 - Knowledge graph: `docs/milestones/04-knowledge-graph.md`
-- Provenance-rich extraction plan: `docs/milestones/05-provenance-rich-extraction.md`
+- Provenance-rich extraction: `docs/milestones/05-provenance-rich-extraction.md`
 - Local dispatch runbook: `docs/runbooks/durable-ingestion-dispatch.md`
 - Content pipeline developer runbook: `docs/runbooks/content-pipeline-developer.md`
 - Content pipeline QA guide: `docs/runbooks/content-pipeline-qa-guide.md`

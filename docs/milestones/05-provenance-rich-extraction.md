@@ -2,11 +2,13 @@
 
 ## Status
 
-In progress. The provider-neutral proposal contract, evidence resolver,
-provenance persistence schema, transactional staged-record persistence,
-non-destructive staged candidate generation, staged canonical resolver, and
-end-to-end ingestion wiring are implemented. Phase 8 is reserved for final
-documentation and manual verification.
+Complete. Phases 1 through 8 are implemented.
+
+Milestone 05 replaces the premature Milestone 04 extraction-to-resolution bridge
+with staged, evidence-backed proposals. Ingestion now persists extraction runs,
+provider invocations, verified evidence spans, staged records, proposal
+candidates, and deterministic canonical-resolution outcomes before projecting
+the graph to Neo4j.
 
 ## Goal
 
@@ -33,7 +35,7 @@ The model proposes structured records. AtlasRAG validates, verifies evidence, as
 
 ## Scope
 
-Milestone 05 may break the current Milestone 04 extraction and graph API shape where needed. The project is still early, so the priority is the cleaner long-term boundary rather than preserving a transitional `entity_mentions` / `claims` bridge.
+Milestone 05 was allowed to break the Milestone 04 extraction and graph API shape where needed. The project is still early, so the priority was the cleaner long-term boundary rather than preserving a transitional `entity_mentions` / `claims` bridge.
 
 Preserved:
 
@@ -99,7 +101,7 @@ Every accepted staged entity, relation, and claim must retain at least one verif
 
 ## Persistence Model
 
-Add a new PostgreSQL migration, expected as `0006_provenance_extraction`, with:
+PostgreSQL migration `0006_provenance_extraction` added:
 
 - `extraction_runs`;
 - `extraction_invocations`;
@@ -169,6 +171,21 @@ and candidate records. The existing Temporal resolution workflow then drains
 staged entities, applies deterministic resolution, and projects the resulting
 canonical graph to Neo4j.
 
+## Phase 8 Completed Behavior
+
+Completed the milestone documentation and manual verification pass:
+
+- ADR `0005` accepted the staged proposal boundary.
+- The extraction proposal architecture contract describes provider output,
+  evidence verification, persistence, candidate records, and staged resolution.
+- Developer and QA runbooks document local validation with deterministic and
+  Ollama-backed providers.
+- README, AGENTS, Milestone 04, and knowledge-graph contract references were
+  updated so they no longer describe Milestone 05 as future work.
+- Manual validation notes record deterministic and Ollama end-to-end smoke
+  tests through API intake, MinIO, outbox, Temporal, worker execution,
+  PostgreSQL provenance, staged resolution, and Neo4j projection.
+
 ## Failure And Retry Behavior
 
 - Provider timeout or validation failure records a bounded run error and fails
@@ -190,15 +207,19 @@ canonical graph to Neo4j.
 - Staged records persist transactionally and retry idempotently.
 - Candidate generation is explainable and non-destructive.
 - Canonical resolution consumes staged proposals directly.
-- Tenant-scoped inspection APIs return 404 for foreign resources. Dedicated
-  extraction inspection endpoints are deferred to post-milestone API hardening;
-  the underlying rows are queryable in PostgreSQL.
+- Dedicated extraction inspection endpoints are deferred to post-milestone API
+  hardening; the underlying rows are queryable in tenant-scoped PostgreSQL
+  tables and current graph APIs retain tenant isolation.
 - Existing ingestion, chunking, job lifecycle, canonical graph, and Neo4j projection invariants still hold after the refactor.
 - Migration rendering, linting, strict typing, tests, package build, and Docker Compose validation pass.
 
-## Known Risks
+## Known Limitations
 
-- This milestone intentionally changes a working but premature design, so graph API and test churn is expected.
-- Migration strategy must decide whether to preserve old local development data or treat Milestone 04 graph data as disposable.
+- Dedicated extraction inspection APIs are not implemented yet; local
+  inspection uses PostgreSQL queries in the developer and QA runbooks.
 - Strict evidence requirements can reduce recall when a provider paraphrases instead of quoting exactly.
-- Relationship support recomputation should be addressed while claims/relations are refactored, otherwise Milestone 04's support-count inflation risk may survive.
+- Small local Ollama models can produce sparse or noisy proposals. The
+  deterministic backend proves workflow/provenance behavior, not semantic
+  quality.
+- Candidate generation and staged duplicate comparison are intentionally simple
+  and bounded for early corpora.

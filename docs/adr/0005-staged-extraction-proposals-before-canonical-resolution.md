@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted. Implemented in Milestone 05.
 
 ## Context
 
@@ -14,11 +14,11 @@ AtlasRAG needs a stronger trust boundary before query-time RAG is added. A model
 
 ## Decision
 
-Milestone 05 introduces staged extraction proposals as the boundary between chunks and canonical resolution.
+Milestone 05 introduced staged extraction proposals as the boundary between chunks and canonical resolution.
 
-The ingestion worker will run extraction as a separate activity after chunking. The activity assembles bounded batches of stored chunks, calls a provider-neutral structured extraction model, validates schema and local references, verifies quote evidence against stored chunk text, derives stable IDs and local offsets, writes a content-addressed manifest, and persists extraction runs, invocations, evidence spans, staged entities, staged relations, staged claims, and proposal candidates transactionally.
+The ingestion worker runs extraction after chunking. The activity assembles bounded batches of stored chunks, calls a provider-neutral structured extraction model, validates schema and local references, verifies quote evidence against stored chunk text, derives stable IDs and local offsets, writes a content-addressed manifest, and persists extraction runs, invocations, evidence spans, staged entities, staged relations, staged claims, and proposal candidates transactionally.
 
-Canonical resolution will consume ready staged proposals directly. Candidate generation creates explainable records and never mutates canonical graph state by itself. Auto decisions, review decisions, merges, and unmerges remain deterministic and auditable.
+Canonical resolution consumes ready staged proposals directly. Candidate generation creates explainable records and never mutates canonical graph state by itself. Auto decisions, review decisions, merges, and unmerges remain deterministic and auditable.
 
 The existing Milestone 04 `entity_mentions` / `claims` bridge is superseded as the primary resolution input. Those tables may be removed, renamed, or retained only as compatibility/internal projections if implementation needs them temporarily.
 

@@ -4,7 +4,11 @@
 
 Complete. Phases 1 through 9 are implemented.
 
-Milestone 05 is planned to supersede the extraction-to-resolution bridge described here. Milestone 04's completed behavior remains useful as the first working graph path, but staged extraction proposals with verified evidence spans are the intended next design.
+Milestone 05 superseded the extraction-to-resolution bridge described here.
+Milestone 04's canonical graph, review, merge, unmerge, and Neo4j projection
+behavior remain useful, but current ingestion feeds resolution from staged
+extraction proposals with verified evidence spans instead of the original
+`entity_mentions` / `claims` bridge.
 
 ## Phase 1 Completed Behavior
 
@@ -142,7 +146,7 @@ Defaults: auto `0.85`, review `0.6`, trigram blocking `0.3`.
 
 ## Known Limitations
 
-- Re-ingesting a document version deletes and rebuilds its mentions and claims, but does not decrement prior relationship support contributions, so relationship `support_count` can inflate across re-ingests. A full recompute-from-claims would remove this.
+- The Milestone 04 mention/claim bridge is no longer the primary ingestion input after Milestone 05.
 - `unmerge_entity` reverses the most recent merge of an entity and assumes no conflicting graph changes occurred in between.
 - Neo4j projection re-reconciles the whole tenant subgraph after each resolution; a delta-based projection is a future optimization for large tenants.
 - Small local models produce noisy triples (reversed direction, literal objects). The pipeline faithfully persists what the model returns; triple quality is a model concern, not a pipeline defect.
