@@ -2,22 +2,24 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. The current implementation is the ingestion control plane plus durable dispatch from the API to a Temporal-backed stub ingestion worker.
+AtlasRAG is an early GraphRAG platform. Through Milestone 04 it implements the ingestion control plane, a real Temporal-backed content pipeline, and a resolved knowledge graph with reviewable, reversible merges.
 
-Implemented dispatch path:
+Implemented path:
 
 ```text
-API transaction
-    -> create document version
-    -> create ingestion job
-    -> append job event
-    -> insert outbox message
-    -> outbox relay
-    -> Temporal workflow
-    -> ingestion worker
+API intake -> immutable raw object in MinIO
+    -> durable ingestion job + outbox message
+    -> outbox relay -> Temporal ingestion workflow
+    -> worker: verify hash -> parse -> chunk -> extract (entities + claim triples)
+    -> persist mentions + claims
+    -> per-tenant resolution (candidates -> score -> band -> attach / review / new entity)
+    -> aggregate relationships
+    -> project resolved graph into Neo4j
 ```
 
-The worker does not parse, chunk, embed, index, or read object storage yet. It only proves durable job dispatch, state transitions, cancellation, retry behavior, and process boundaries.
+PostgreSQL is the system of record for the control plane and the resolved graph. Neo4j is an idempotent, rebuildable projection. MinIO stores immutable raw and derived artifacts. The API also serves the entity, review-queue, merge/unmerge, and audit endpoints.
+
+Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
 ## Ground Rules
 
@@ -62,8 +64,10 @@ Docker Compose exposes:
 - API docs: `http://localhost:8000/docs`
 - Temporal Web UI: `http://localhost:8233`
 - Grafana: `http://localhost:3000`
+- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `atlaspassword`)
 - PostgreSQL host port: `localhost:55432`
 - Temporal gRPC host port: `localhost:7233`
+- Neo4j Bolt host port: `localhost:7687`
 
 The `temporal` compose service uses `temporalio/temporal:latest` with `server start-dev --ip 0.0.0.0 --namespace default`. Temporal's development server includes a Web UI by default.
 
@@ -85,6 +89,20 @@ The `temporal` compose service uses `temporalio/temporal:latest` with `server st
 - `docs/runbooks/durable-ingestion-dispatch.md`: durable dispatch runbook.
 - `docs/architecture/object-storage-contract.md`: future object-storage contract.
 - `docs/adr/0003-transactional-outbox-and-temporal.md`: durable dispatch ADR.
+
+Milestone 04 knowledge graph:
+
+- `src/atlas_rag/application/entity_resolution/`: pure normalization and scoring.
+- `src/atlas_rag/application/services/candidate_generation.py`: pg_trgm blocking.
+- `src/atlas_rag/application/services/resolution.py`: banded resolution + advisory lock + relationship aggregation.
+- `src/atlas_rag/application/services/entity_merge.py`: soft merge with undo log + unmerge.
+- `src/atlas_rag/application/services/review.py`: review-queue decisions.
+- `src/atlas_rag/application/services/graph_projection.py`: Neo4j projection/reconcile.
+- `src/atlas_rag/workflows/resolution.py` and `src/atlas_rag/worker/activities/resolution.py`: per-tenant resolution workflow/activities.
+- `src/atlas_rag/api/routes/graph.py`: entity, review, merge/unmerge, and audit endpoints.
+- `src/atlas_rag/infrastructure/neo4j.py` and `neo4j_migrations.py`: Neo4j client and Cypher migration runner.
+- `migrations/versions/0005_knowledge_graph.py` and `migrations/neo4j/`: graph schema.
+- `docs/milestones/04-knowledge-graph.md`, `docs/adr/0004-postgres-authoritative-resolution-neo4j-projection.md`, `docs/architecture/knowledge-graph-contract.md`, `docs/runbooks/knowledge-graph-*.md`.
 
 ## Current Invariants
 
@@ -109,8 +127,10 @@ The `temporal` compose service uses `temporalio/temporal:latest` with `server st
 
 ## Known Limitations
 
-- Ingestion is still a stub.
-- Object storage is contract-only; there is no storage client yet.
+- Small local extraction models produce noisy claim triples; the pipeline persists them faithfully.
+- Relationship `support_count` can inflate across document re-ingests (clearing a version's claims does not decrement prior relationship contributions).
+- `unmerge` reverses the most recent merge and assumes no conflicting interleaved graph changes.
+- Neo4j projection re-reconciles the whole tenant subgraph after each resolution rather than applying deltas.
 - Trace context is captured and carried into Temporal memo, but automatic distributed span continuation inside workflows and activities is not complete.
 - The local Temporal dev server is not production Temporal.
 - The compose Temporal service currently uses the `latest` image tag, which is convenient for early local development but should be pinned before production-like environments.

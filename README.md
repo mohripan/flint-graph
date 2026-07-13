@@ -1,6 +1,6 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane plus a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, and persists extraction provenance.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, and persists extraction provenance, and a resolved knowledge graph built from extracted entities and claims with reviewable, reversible merges. PostgreSQL is the system of record; Neo4j is an idempotent projection of the resolved graph.
 
 ## Why these milestones come first
 
@@ -24,6 +24,7 @@ Then open:
 - MinIO console: `http://localhost:9001`
 - Grafana: `http://localhost:3000`
 - Temporal Web UI: `http://localhost:8233`
+- Neo4j browser: `http://localhost:7474`
 - Liveness: `http://localhost:8000/health/live`
 - Readiness: `http://localhost:8000/health/ready`
 
@@ -101,6 +102,38 @@ curl -sS -X POST \
   -H 'X-Tenant-ID: <tenant-id>'
 ```
 
+## Explore the knowledge graph
+
+After a document is ingested, per-tenant entity resolution turns extracted entities and claims into canonical entities and relationships, then projects them into Neo4j. Inspect the resolved graph through the API:
+
+```bash
+# Canonical entities (deduplicated across documents; support_count reflects cross-doc support)
+curl -sS http://localhost:8000/v1/entities -H 'X-Tenant-ID: <tenant-id>'
+
+# One entity with its aliases, mentions, and relationships
+curl -sS http://localhost:8000/v1/entities/<entity-id> -H 'X-Tenant-ID: <tenant-id>'
+
+# Pending merge-review queue for ambiguous matches
+curl -sS http://localhost:8000/v1/merge-reviews -H 'X-Tenant-ID: <tenant-id>'
+
+# Resolve a review item (accept attaches to the candidate; reject creates a distinct entity)
+curl -sS -X POST http://localhost:8000/v1/merge-reviews/<candidate-id>/decision \
+  -H 'X-Tenant-ID: <tenant-id>' -H 'Content-Type: application/json' \
+  -d '{"decision":"accept","reason":"same company"}'
+
+# Manual, reversible merge and unmerge
+curl -sS -X POST http://localhost:8000/v1/entities/<source-id>/merge \
+  -H 'X-Tenant-ID: <tenant-id>' -H 'Content-Type: application/json' \
+  -d '{"target_entity_id":"<target-id>","reason":"duplicate"}'
+curl -sS -X POST http://localhost:8000/v1/entities/<source-id>/unmerge \
+  -H 'X-Tenant-ID: <tenant-id>' -H 'Content-Type: application/json' -d '{"reason":"was not a duplicate"}'
+
+# Merge decision audit log
+curl -sS http://localhost:8000/v1/merge-decisions -H 'X-Tenant-ID: <tenant-id>'
+```
+
+The resolved graph is visible in the Neo4j browser at `http://localhost:7474`. A stronger local extraction model such as `llama3.2` produces cleaner relationship triples than the default `gemma3:1b`.
+
 ## Quality commands
 
 ```bash
@@ -130,10 +163,16 @@ make check
 19. Queryable chunk lineage is persisted in PostgreSQL.
 20. Optional extraction failure records provenance without blocking version activation.
 21. Required extraction failure records provenance and fails the job/version.
+22. Entity mentions and claims are derived from extraction with provenance and persisted idempotently per version.
+23. Entity resolution runs one writer per tenant via a PostgreSQL advisory lock.
+24. Resolution applies banded decisions: auto-attach, review queue, or new entity.
+25. Every merge decision is recorded and reviewable; merges are soft and reversible.
+26. Relationships aggregate from claims whose subject and object both resolve to entities.
+27. PostgreSQL is authoritative; Neo4j is an idempotent projection rebuildable from PostgreSQL.
 
 ## Current milestone boundary
 
-Milestone 03 stops before embeddings, vector indexes, graph mutation, and query-time orchestration. The next major work should introduce retrieval/indexing contracts on top of the persisted chunks and artifact lineage.
+Milestone 04 builds the resolved knowledge graph and its projection into Neo4j. It stops before embeddings, vector indexes, and query-time orchestration. The next major work should introduce retrieval/indexing and a query orchestrator on top of the resolved graph and persisted chunk lineage.
 
 ## Security status
 
@@ -146,6 +185,10 @@ Milestone notes:
 - Foundation: `docs/milestones/01-foundation.md`
 - Durable ingestion dispatch: `docs/milestones/02-durable-ingestion-dispatch.md`
 - Content pipeline: `docs/milestones/03-content-pipeline.md`
+- Knowledge graph: `docs/milestones/04-knowledge-graph.md`
 - Local dispatch runbook: `docs/runbooks/durable-ingestion-dispatch.md`
 - Content pipeline developer runbook: `docs/runbooks/content-pipeline-developer.md`
 - Content pipeline QA guide: `docs/runbooks/content-pipeline-qa-guide.md`
+- Knowledge graph developer runbook: `docs/runbooks/knowledge-graph-developer.md`
+- Knowledge graph QA guide: `docs/runbooks/knowledge-graph-qa-guide.md`
+- Knowledge graph contract: `docs/architecture/knowledge-graph-contract.md`

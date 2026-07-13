@@ -113,11 +113,11 @@ The service writes `artifacts/normalized.json` and `artifacts/chunks.json` to ob
 
 ## Extraction Artifact
 
-Extraction artifacts use schema version `1` and are derived from chunk manifests:
+Extraction artifacts use schema version `2` (Milestone 04) and are derived from chunk manifests:
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "source": {
     "document_id": "11111111-1111-4111-8111-111111111111",
     "document_version_id": "22222222-2222-4222-8222-222222222222",
@@ -130,13 +130,21 @@ Extraction artifacts use schema version `1` and are derived from chunk manifests
     "topics": ["content pipeline"],
     "entities": [
       {"name": "AtlasRAG", "type": "concept"}
+    ],
+    "claims": [
+      {
+        "subject": "AtlasRAG",
+        "predicate": "stores",
+        "object": "source content",
+        "evidence_chunk_ids": ["chunk-000001"]
+      }
     ]
   },
   "provenance": {
     "provider": "ollama",
     "model": "gemma3:1b",
-    "prompt_version": "builtin-summary-v1",
-    "schema_version": "1",
+    "prompt_version": "builtin-graph-v2",
+    "schema_version": "2",
     "input_manifest_hash": "sha256:...",
     "prompt_hash": "sha256:...",
     "response_hash": "sha256:...",
@@ -145,11 +153,15 @@ Extraction artifacts use schema version `1` and are derived from chunk manifests
 }
 ```
 
-The built-in extraction schema requires `summary` and accepts optional `title`, string `topics`, and `entities` with `person`, `organization`, `place`, `concept`, or `other` types. LLM output must parse as JSON and validate against this schema.
+The built-in extraction schema accepts optional `title` and `summary`, string `topics`, `entities` with `person`, `organization`, `place`, `concept`, or `other` types, and `claims` as `(subject, predicate, object)` triples with optional `evidence_chunk_ids`.
+
+Parsing is resilient so that small local models still yield usable graph facts. Only a non-JSON or non-object response is a hard failure; otherwise valid entities and claims are kept and malformed items (for example a null predicate, a list-valued object, or a missing field) are dropped individually. This is a deliberate change from Milestone 03, where any schema error discarded the whole extraction.
 
 Failed extraction attempts are also persisted. In that case, `status` is `failed`, `extraction` is `null`, and provenance includes `error_code` and `error_message`. Optional failures are non-blocking. Required failures return a blocking service result so the worker can fail the job and document version.
 
 Skipped extraction attempts can be persisted with `status` set to `skipped` when extraction is disabled.
+
+Milestone 04 consumes these entities and claims to build the knowledge graph. See `docs/architecture/knowledge-graph-contract.md`.
 
 ## Subprocess Boundary
 
