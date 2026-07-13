@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phase 1 storage and configuration are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+In progress. Phases 1 and 2 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
 
 ## Phase 1 Completed Behavior
 
@@ -16,7 +16,21 @@ Implemented storage and configuration foundation:
 - `atlas_rag.infrastructure.object_store` defines the object-store interface, S3 URI helpers, deterministic raw/artifact key generation, and an S3-compatible implementation.
 - Object URIs use internal `s3://<bucket>/<key>` references.
 
-Phase 1 does not yet add upload or URL intake. `document_versions.object_uri` and `document_versions.content_hash` remain nullable until Phase 2 materializes raw source bytes.
+## Phase 2 Completed Behavior
+
+Implemented raw-source intake:
+
+- `POST /v1/documents/uploads` accepts multipart file uploads.
+- `POST /v1/documents/from-url` fetches URL content through the API.
+- Both intake endpoints require `Idempotency-Key`.
+- The API computes `sha256:<hex>` over raw source bytes.
+- The API writes raw source bytes to object storage before creating the durable ingestion intent.
+- Intake creates the document, first document version, ingestion job, `job.queued` event, and `ingestion.job_queued` outbox message.
+- `document_versions.object_uri`, `document_versions.content_hash`, and `document_versions.metadata` are populated for intake-created versions.
+- Replaying the same tenant/idempotency key with the same request returns the existing document/version/job with HTTP 200.
+- Reusing an idempotency key with different source bytes or materially different intake metadata returns HTTP 409.
+
+The existing metadata-first document and explicit job endpoints still exist for Milestone 2 compatibility. They may still create document versions without `object_uri` and `content_hash`; the new intake endpoints are the preferred path for real source ingestion.
 
 ## Outcome Target
 

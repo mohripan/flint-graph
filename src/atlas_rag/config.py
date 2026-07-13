@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     object_store_read_timeout_seconds: int = Field(default=30, ge=1)
     object_store_max_pool_connections: int = Field(default=20, ge=1)
 
+    intake_max_source_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    intake_url_timeout_seconds: float = Field(default=10.0, gt=0.0)
+
     outbox_relay_id: str = "atlas-rag-outbox-relay"
     outbox_relay_batch_size: int = Field(default=10, ge=1, le=100)
     outbox_relay_poll_interval_seconds: float = Field(default=2.0, gt=0.0)

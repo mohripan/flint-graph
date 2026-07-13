@@ -5,11 +5,15 @@ from fastapi import Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas_rag.config import Settings, get_settings
 from atlas_rag.domain.errors import NotFoundError
 from atlas_rag.infrastructure.db.models import Tenant
 from atlas_rag.infrastructure.db.session import get_session
+from atlas_rag.infrastructure.object_store import ObjectStore, create_object_store
+from atlas_rag.infrastructure.url_fetcher import HTTPURLFetcher, URLFetcher
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 async def get_tenant_id(
@@ -23,3 +27,20 @@ async def get_tenant_id(
 
 
 TenantIdDep = Annotated[UUID, Depends(get_tenant_id)]
+
+
+def get_object_store(settings: SettingsDep) -> ObjectStore:
+    return create_object_store(settings)
+
+
+ObjectStoreDep = Annotated[ObjectStore, Depends(get_object_store)]
+
+
+def get_url_fetcher(settings: SettingsDep) -> URLFetcher:
+    return HTTPURLFetcher(
+        timeout_seconds=settings.intake_url_timeout_seconds,
+        max_bytes=settings.intake_max_source_bytes,
+    )
+
+
+URLFetcherDep = Annotated[URLFetcher, Depends(get_url_fetcher)]

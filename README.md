@@ -81,6 +81,24 @@ Repeating the same request returns the same job with HTTP 200 rather than creati
 
 With the relay and worker running, the job should move from `queued` to `running` to `completed`.
 
+Milestone 03 adds preferred raw-source intake endpoints that materialize immutable source bytes before queuing ingestion:
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/documents/uploads \
+  -H 'X-Tenant-ID: <tenant-id>' \
+  -H 'Idempotency-Key: upload-note-001' \
+  -F 'title=Uploaded Note' \
+  -F 'file=@note.md;type=text/markdown'
+```
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/documents/from-url \
+  -H 'Content-Type: application/json' \
+  -H 'X-Tenant-ID: <tenant-id>' \
+  -H 'Idempotency-Key: url-note-001' \
+  -d '{"title":"Example Page","source_url":"https://example.org/"}'
+```
+
 Cancel a queued or running job:
 
 ```bash

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Document ingestion processes immutable source bytes from object storage. Milestone 03 Phase 1 adds the storage boundary and local MinIO configuration. Later phases will use this boundary from API intake and worker activities.
+Document ingestion processes immutable source bytes from object storage. Milestone 03 Phase 1 added the storage boundary and local MinIO configuration. Phase 2 uses that boundary from API intake to materialize raw upload and URL sources.
 
 AtlasRAG code should use `atlas_rag.infrastructure.object_store.ObjectStore` instead of calling an object-store SDK directly from application services, routes, workflows, or activities.
 
@@ -13,13 +13,15 @@ AtlasRAG code should use `atlas_rag.infrastructure.object_store.ObjectStore` ins
 - Identifies the immutable raw object for a document version.
 - Must refer to the exact bytes the worker should process.
 - Uses an internal S3-style URI.
-- Is nullable until upload-backed ingestion is implemented in Phase 2.
+- Is populated by upload and URL intake endpoints.
+- Can be null for legacy metadata-first document versions created through the Milestone 2 compatibility endpoint.
 
 `document_versions.content_hash`
 
 - Identifies the raw content bytes processed by ingestion.
 - Uses `sha256:<hex>`.
-- Is nullable until upload-backed ingestion is implemented in Phase 2.
+- Is populated by upload and URL intake endpoints.
+- Can be null for legacy metadata-first document versions created through the Milestone 2 compatibility endpoint.
 
 `document_versions.metadata`
 
@@ -86,12 +88,15 @@ Both use path-style S3 addressing for MinIO compatibility.
 
 ## Metadata Expectations
 
-Object metadata keys are normalized to lowercase with underscores replaced by hyphens. Raw source objects should include at least these metadata fields once Phase 2 intake is implemented:
+Object metadata keys are normalized to lowercase with underscores replaced by hyphens. Raw source objects include:
 
 - `content-hash`: `sha256:<hex>`
 - `source-type`: `upload` or `url`
 - `content-type`: source media type when known
+- `size-bytes`: raw source byte length
 - `original-filename`: upload filename when provided
+- `source-url`: original URL for URL intake
+- `final-url`: final URL after redirects for URL intake
 
 Object metadata must not contain secrets.
 
@@ -103,4 +108,4 @@ Object metadata must not contain secrets.
 
 ## Current Limitation
 
-The current ingestion worker is still a stub. It validates workflow dispatch and job transitions, but it does not read `object_uri`, compute `content_hash`, parse documents, create chunks, write embeddings, or mutate a graph.
+The current ingestion worker is still a stub. It validates workflow dispatch and job transitions, but it does not read `object_uri`, verify `content_hash`, parse documents, create chunks, write embeddings, or mutate a graph.

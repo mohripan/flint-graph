@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned for Milestone 03. The commands in this guide describe the intended manual acceptance path after the content pipeline is implemented. Some endpoints and tables do not exist yet.
+In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist and can be validated with this guide. Later steps that require parser, chunk, extraction, and version-activation work remain planned until those phases are implemented.
 
 ## Audience
 
@@ -34,11 +34,11 @@ Useful local pages:
 Expected services:
 
 - `api`: accepts uploads and URL intake.
-- `postgres`: stores tenants, documents, versions, jobs, chunks, and provenance.
-- `minio`: stores raw and derived content artifacts.
+- `postgres`: stores tenants, documents, versions, jobs, and outbox messages. Chunk and provenance tables are planned for later phases.
+- `minio`: stores raw source objects. Derived content artifacts are planned for later phases.
 - `outbox-relay`: starts Temporal workflows from durable outbox messages.
 - `temporal`: runs workflow orchestration.
-- `ingestion-worker`: parses, chunks, extracts, and activates versions.
+- `ingestion-worker`: currently runs the stub ingestion activity. Parsing, chunking, extraction, and version activation are planned for later phases.
 
 ## Step 1: Create A Tenant
 
@@ -109,6 +109,15 @@ MinIO effect:
 
 - Creates a raw source object under a tenant/document/version key.
 
+Response fields to note:
+
+- `document_id`
+- `document_version_id`
+- `ingestion_job_id`
+- `object_uri`
+- `content_hash`
+- `job_status`
+
 Check the DB:
 
 ```powershell
@@ -136,18 +145,16 @@ curl.exe -sS "http://localhost:8000/v1/ingestion-jobs/$($upload.ingestion_job_id
 
 Expected final status:
 
-- Job status is `completed`.
-- Document version status is `active`.
-- Events include `job.queued`, `job.started`, and `job.completed`.
+- Through Phase 2 with the stub worker, job status can move to `completed` if the relay and worker are running.
+- Document version activation is planned for Phase 3, so the version may remain `pending`.
+- Events include `job.queued`; with relay and worker running, they can also include `job.started` and `job.completed`.
 
 Database effect during worker processing:
 
 - `outbox_messages.status` changes from `pending` to `published`.
 - `ingestion_jobs.status` changes from `queued` to `running` to `completed`.
-- `document_versions.status` changes from `pending` to `active`.
-- `document_artifacts` receives normalized and chunk-manifest artifact rows.
-- `document_chunks` receives one or more chunk lineage rows.
-- Extraction provenance is inserted if extraction is enabled.
+- Later phases will make `document_versions.status` change from `pending` to `active`.
+- Later phases will add normalized artifacts, chunk-manifest artifacts, chunk rows, and extraction provenance.
 
 Check:
 
@@ -187,17 +194,17 @@ Open:
 http://localhost:9001
 ```
 
-Expected objects:
+Expected Phase 2 object:
 
 ```text
 tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/raw/source
-tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/normalized.json
-tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/chunks.json
 ```
 
-If extraction is enabled and succeeds or records a failure artifact:
+Later phases will add:
 
 ```text
+tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/normalized.json
+tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/chunks.json
 tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/extraction.json
 ```
 
@@ -229,8 +236,7 @@ Expected result:
 
 - Same table changes as upload intake.
 - Raw object appears in MinIO.
-- HTML parser produces a normalized artifact.
-- Chunk rows appear in `document_chunks`.
+- HTML parser output and chunk rows are planned for later phases.
 
 ## Step 7: Test Optional Extraction Failure
 
@@ -336,4 +342,3 @@ docker compose down -v
 ```
 
 Use this when manual testing gets confusing and a clean state is easier.
-

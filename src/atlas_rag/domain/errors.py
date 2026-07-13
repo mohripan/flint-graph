@@ -15,3 +15,8 @@ class NotFoundError(DomainError):
 class ConflictError(DomainError):
     def __init__(self, detail: str) -> None:
         super().__init__(409, "Conflict", detail, "conflict")
+
+
+class BadRequestError(DomainError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(400, "Bad request", detail, "bad-request")

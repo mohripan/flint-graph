@@ -42,6 +42,29 @@ class DocumentResponse(BaseModel):
     source_uri: str | None
     external_id: str | None
     created_at: datetime
+
+
+class URLIntakeCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    source_url: str = Field(min_length=1, max_length=4000)
+    external_id: str | None = Field(default=None, max_length=500)
+
+
+class DocumentIntakeResponse(BaseModel):
+    document_id: UUID
+    document_version_id: UUID
+    ingestion_job_id: UUID
+    tenant_id: UUID
+    title: str
+    source_type: SourceType
+    source_uri: str | None
+    external_id: str | None
+    version_number: int
+    job_status: IngestionJobStatus
+    idempotency_key: str
+    object_uri: str
+    content_hash: str
+    created_at: datetime
     
     
 class IngestionJobResponse(BaseModel):
