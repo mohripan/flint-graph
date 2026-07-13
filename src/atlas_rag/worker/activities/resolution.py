@@ -5,6 +5,10 @@ from uuid import UUID
 from temporalio import activity
 from temporalio.common import WorkflowIDConflictPolicy
 
+from atlas_rag.application.services.graph_projection import (
+    load_tenant_graph,
+    project_tenant_graph,
+)
 from atlas_rag.application.services.resolution import (
     ResolutionConfig,
     acquire_tenant_resolution_lock,
@@ -12,6 +16,7 @@ from atlas_rag.application.services.resolution import (
 )
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.infrastructure.db.session import SessionFactory
+from atlas_rag.infrastructure.neo4j import create_neo4j_client
 from atlas_rag.infrastructure.temporal import connect_temporal
 from atlas_rag.workflows.resolution import (
     ENQUEUE_TENANT_RESOLUTION_ACTIVITY,
@@ -41,10 +46,24 @@ async def resolve_tenant_entities(tenant_id: str) -> int:
                 session, tenant_id=UUID(tenant_id), config=config
             )
             await session.commit()
-            return result.mentions_processed
         except Exception:
             await session.rollback()
             raise
+
+    # PostgreSQL is the system of record; project the committed graph into Neo4j.
+    # A projection failure retries the activity and re-projects idempotently.
+    await _project_tenant_graph(settings, UUID(tenant_id))
+    return result.mentions_processed
+
+
+async def _project_tenant_graph(settings: Settings, tenant_id: UUID) -> None:
+    async with SessionFactory() as session:
+        graph = await load_tenant_graph(session, tenant_id=tenant_id)
+    client = create_neo4j_client(settings)
+    try:
+        await project_tenant_graph(client, tenant_id=tenant_id, graph=graph)
+    finally:
+        await client.close()
 
 
 @activity.defn(name=ENQUEUE_TENANT_RESOLUTION_ACTIVITY)
