@@ -2,7 +2,10 @@
 
 ## Status
 
-Planned. This milestone intentionally refactors the extraction-to-resolution boundary introduced in Milestone 04.
+In progress. The provider-neutral proposal contract, evidence resolver,
+provenance persistence schema, transactional staged-record persistence, and
+non-destructive staged candidate generation are implemented. Workflow wiring,
+canonical resolution refactor, and inspection APIs are still pending.
 
 ## Goal
 
@@ -129,6 +132,13 @@ Candidates include:
 - score, threshold outcome, reasons, and status.
 
 Candidate generation creates reviewable proposal records. It does not merge by itself.
+
+The implemented Phase 5 generator is deliberately bounded and deterministic for
+early corpora. For a ready extraction run it loads accepted staged entities,
+compares them with active tenant canonical entities and one-way same-run staged
+entity pairs, persists non-rejected candidates with feature vectors and reasons,
+and rewrites pending rows during retries. It does not apply auto decisions or
+change canonical graph state.
 
 Canonical resolution consumes ready staged records and candidates. Auto decisions are deterministic and recorded. Ambiguous candidates remain pending for review. Rejected extraction proposals do not leak into canonical graph state.
 

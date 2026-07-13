@@ -132,6 +132,12 @@ Candidate records include:
 - reasons;
 - status.
 
+The current generator compares accepted staged entities from a ready extraction run
+against active tenant canonical entities and one-way same-run staged entity pairs.
+It stores only non-rejected candidates, leaves every row in `pending` status, and
+rewrites pending rows for the run on retry. Reviewed rows are not mutated by
+candidate regeneration.
+
 Canonical graph mutation happens only in resolution services that consume candidates and record decisions.
 
 ## Inspection APIs
