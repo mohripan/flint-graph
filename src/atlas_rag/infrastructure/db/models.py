@@ -23,11 +23,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from atlas_rag.domain.enums import (
     AliasSource,
+    CandidateOutcome,
+    CandidateTargetKind,
     ClaimStatus,
     DocumentArtifactType,
     DocumentVersionStatus,
     EntityStatus,
     EntityType,
+    ExtractionInvocationStatus,
+    ExtractionRunStatus,
     IngestionJobStatus,
     MentionResolutionStatus,
     MergeCandidateBand,
@@ -37,6 +41,7 @@ from atlas_rag.domain.enums import (
     OutboxMessageStatus,
     RelationshipStatus,
     SourceType,
+    StagedProposalStatus,
 )
 from atlas_rag.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -482,4 +487,374 @@ class MergeDecision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     decided_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ExtractionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extraction_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_version_id",
+            "input_hash",
+            "schema_version",
+            "prompt_version",
+            "extractor_version",
+            "model_name",
+            name="uq_extraction_runs_ready_key",
+        ),
+        Index("ix_extraction_runs_tenant_status", "tenant_id", "status"),
+        Index("ix_extraction_runs_document_version", "document_version_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[ExtractionRunStatus] = mapped_column(
+        enum_column(ExtractionRunStatus, 32),
+        nullable=False,
+        default=ExtractionRunStatus.PENDING,
+    )
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    extractor_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    manifest_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manifest_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    input_chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invocation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    accepted_entity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    accepted_relation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    accepted_claim_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quality_metrics: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    warnings: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    errors: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+
+
+class ExtractionInvocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extraction_invocations"
+    __table_args__ = (
+        UniqueConstraint(
+            "extraction_run_id",
+            "invocation_index",
+            name="uq_extraction_invocations_run_index",
+        ),
+        Index("ix_extraction_invocations_run", "extraction_run_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    invocation_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ExtractionInvocationStatus] = mapped_column(
+        enum_column(ExtractionInvocationStatus, 32),
+        nullable=False,
+    )
+    input_chunk_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    request_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    response_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ExtractionArtifact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extraction_artifacts"
+    __table_args__ = (
+        UniqueConstraint("extraction_run_id", name="uq_extraction_artifacts_run"),
+        UniqueConstraint("tenant_id", "content_hash", name="uq_extraction_artifacts_hash"),
+        Index("ix_extraction_artifacts_run", "extraction_run_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    object_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class EvidenceSpan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "evidence_spans"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "stable_id", name="uq_evidence_spans_stable_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "document_version_id",
+            "chunk_id",
+            "start_offset",
+            "end_offset",
+            "span_hash",
+            name="uq_evidence_spans_location",
+        ),
+        Index("ix_evidence_spans_run", "extraction_run_id"),
+        Index("ix_evidence_spans_document_version", "document_version_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stable_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    chunk_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    quote: Mapped[str] = mapped_column(Text, nullable=False)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    span_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class ExtractedEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extracted_entities"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "stable_id", name="uq_extracted_entities_stable_id"),
+        UniqueConstraint(
+            "extraction_run_id", "local_id", name="uq_extracted_entities_run_local_id"
+        ),
+        Index("ix_extracted_entities_run", "extraction_run_id"),
+        Index(
+            "ix_extracted_entities_tenant_type_name",
+            "tenant_id",
+            "entity_type",
+            "normalized_name",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stable_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    local_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    entity_type: Mapped[EntityType] = mapped_column(enum_column(EntityType, 32), nullable=False)
+    aliases: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[StagedProposalStatus] = mapped_column(
+        enum_column(StagedProposalStatus, 32),
+        nullable=False,
+        default=StagedProposalStatus.ACCEPTED,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ExtractedRelation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extracted_relations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "stable_id", name="uq_extracted_relations_stable_id"),
+        UniqueConstraint(
+            "extraction_run_id", "local_id", name="uq_extracted_relations_run_local_id"
+        ),
+        Index("ix_extracted_relations_run", "extraction_run_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stable_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    local_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject_extracted_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=False
+    )
+    predicate: Mapped[str] = mapped_column(String(200), nullable=False)
+    object_extracted_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[StagedProposalStatus] = mapped_column(
+        enum_column(StagedProposalStatus, 32),
+        nullable=False,
+        default=StagedProposalStatus.ACCEPTED,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ExtractedClaim(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extracted_claims"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "stable_id", name="uq_extracted_claims_stable_id"),
+        UniqueConstraint(
+            "extraction_run_id", "local_id", name="uq_extracted_claims_run_local_id"
+        ),
+        Index("ix_extracted_claims_run", "extraction_run_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stable_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    local_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject_extracted_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=True
+    )
+    predicate: Mapped[str] = mapped_column(String(200), nullable=False)
+    object_extracted_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=True
+    )
+    object_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claim_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[StagedProposalStatus] = mapped_column(
+        enum_column(StagedProposalStatus, 32),
+        nullable=False,
+        default=StagedProposalStatus.ACCEPTED,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ExtractedEntityEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extracted_entity_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "extracted_entity_id",
+            "evidence_span_id",
+            name="uq_extracted_entity_evidence_pair",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extracted_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    evidence_span_id: Mapped[UUID] = mapped_column(
+        ForeignKey("evidence_spans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class ExtractedRelationEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extracted_relation_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "extracted_relation_id",
+            "evidence_span_id",
+            name="uq_extracted_relation_evidence_pair",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extracted_relation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extracted_relations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    evidence_span_id: Mapped[UUID] = mapped_column(
+        ForeignKey("evidence_spans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class ExtractedClaimEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "extracted_claim_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "extracted_claim_id",
+            "evidence_span_id",
+            name="uq_extracted_claim_evidence_pair",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extracted_claim_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extracted_claims.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    evidence_span_id: Mapped[UUID] = mapped_column(
+        ForeignKey("evidence_spans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class EntityResolutionCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "entity_resolution_candidates"
+    __table_args__ = (
+        Index("ix_entity_resolution_candidates_tenant_status", "tenant_id", "status"),
+        Index("ix_entity_resolution_candidates_source", "source_extracted_entity_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_extracted_entity_id: Mapped[UUID] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    target_kind: Mapped[CandidateTargetKind] = mapped_column(
+        enum_column(CandidateTargetKind, 32), nullable=False
+    )
+    target_canonical_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="CASCADE"), nullable=True
+    )
+    target_extracted_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("extracted_entities.id", ondelete="CASCADE"), nullable=True
+    )
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    outcome: Mapped[CandidateOutcome] = mapped_column(
+        enum_column(CandidateOutcome, 32), nullable=False
+    )
+    status: Mapped[MergeCandidateStatus] = mapped_column(
+        enum_column(MergeCandidateStatus, 32),
+        nullable=False,
+        default=MergeCandidateStatus.PENDING,
     )

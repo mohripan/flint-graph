@@ -98,3 +98,32 @@ class MergeDecisionType(StrEnum):
 class MergeDecisionSource(StrEnum):
     AUTO = "auto"
     HUMAN = "human"
+
+
+class ExtractionRunStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    READY = "ready"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExtractionInvocationStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class StagedProposalStatus(StrEnum):
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class CandidateTargetKind(StrEnum):
+    CANONICAL_ENTITY = "canonical_entity"
+    EXTRACTED_ENTITY = "extracted_entity"
+
+
+class CandidateOutcome(StrEnum):
+    AUTO = "auto"
+    REVIEW = "review"
+    REJECT = "reject"
