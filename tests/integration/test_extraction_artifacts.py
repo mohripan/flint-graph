@@ -118,10 +118,10 @@ async def test_persist_extraction_artifact_records_success_provenance(
     assert store.content_types[artifact.object_uri] == "application/json"
 
     payload = json.loads(store.objects[artifact.object_uri])
-    assert payload["schema_version"] == "1"
+    assert payload["schema_version"] == "2"
     assert payload["status"] == "succeeded"
     assert payload["extraction"]["summary"] == "AtlasRAG extracts structured facts."
-    assert payload["provenance"]["prompt_version"] == "builtin-summary-v1"
+    assert payload["provenance"]["prompt_version"] == "builtin-graph-v2"
     assert client.prompts and "chunk-000001" in client.prompts[0]
 
 

@@ -59,7 +59,7 @@ class ExtractionProvenance(BaseModel):
 
 
 class ExtractionArtifactPayload(BaseModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     source: dict[str, str]
     status: ExtractionStatus
     extraction: ExtractedDocumentFacts | None
