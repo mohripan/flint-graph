@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AtlasRAG parser output is an Atlas-owned normalized artifact. It is not a LangChain loader object, a PDF library object, or an HTML parser object. Later chunking, extraction, and lineage code should consume this contract.
+AtlasRAG parser output is an Atlas-owned normalized artifact. It is not a LangChain loader object, a PDF library object, or an HTML parser object. Chunking consumes this contract directly, and later extraction code should consume the normalized and chunk-manifest artifacts rather than parser-specific objects.
 
 ## Supported Source Formats
 
@@ -67,6 +67,50 @@ Format detection uses:
 
 Unknown binary content is rejected with a controlled parser error.
 
+## Chunk Manifest
+
+Chunk manifests use schema version `1` and are derived from normalized artifacts:
+
+```json
+{
+  "schema_version": "1",
+  "source": {
+    "document_id": "11111111-1111-4111-8111-111111111111",
+    "document_version_id": "22222222-2222-4222-8222-222222222222",
+    "content_hash": "sha256:..."
+  },
+  "chunking_config": {
+    "max_chunk_chars": 1200,
+    "overlap_chars": 120
+  },
+  "chunks": [
+    {
+      "chunk_id": "chunk-000001",
+      "chunk_index": 0,
+      "text": "Chunk text",
+      "chunk_hash": "sha256:...",
+      "source_element_ids": ["element-000002"],
+      "heading_path": ["Example"],
+      "page_start": 1,
+      "page_end": 1,
+      "source_offsets": {"start": 10, "end": 42},
+      "metadata": {}
+    }
+  ]
+}
+```
+
+Chunking is deterministic for the same normalized artifact and chunking config. Heading elements update the current heading path; they do not become standalone chunks. Paragraph, list item, and code block elements are preserved as structural units when they fit inside the configured maximum. Oversized elements split into bounded-overlap chunks.
+
+## Queryable Lineage
+
+Phase 5 persists durable artifact and chunk lineage:
+
+- `document_artifacts` records artifact type, object URI, content hash, size, schema version, and metadata for a document version.
+- `document_chunks` records chunk identity, chunk order, text, hash, source element IDs, heading path, page range, source offsets, and metadata.
+
+The service writes `artifacts/normalized.json` and `artifacts/chunks.json` to object storage and stores queryable rows in PostgreSQL. Re-running the service for the same document version replaces normalized/chunk-manifest artifact rows and chunk rows for that version.
+
 ## Subprocess Boundary
 
 `BoundedParserRunner` executes parser code in a subprocess and enforces:
@@ -80,4 +124,4 @@ Workflow code must not run parsers directly. Later worker activities should call
 
 ## Current Limitation
 
-Phase 4 implements parser contracts and parser tests. The Temporal worker still runs the stub ingestion activity until Phase 7 wires the real pipeline into worker activities.
+Phase 5 implements parser, chunking, artifact persistence, and chunk-lineage contracts in code. The Temporal worker still runs the stub ingestion activity until Phase 7 wires the real pipeline into worker activities.

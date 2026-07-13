@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, Phase 3 document-version lifecycle semantics are implemented, and Phase 4 parser contracts are implemented in code. Later steps that require worker parser integration, chunk, and extraction work remain planned until those phases are implemented.
+In progress for Milestone 03. Phase 2 upload and URL intake endpoints exist, Phase 3 document-version lifecycle semantics are implemented, Phase 4 parser contracts are implemented in code, and Phase 5 chunking plus artifact persistence services are implemented in code. Worker integration, extraction, and end-to-end artifact creation remain planned until later phases.
 
 ## Audience
 
@@ -34,11 +34,11 @@ Useful local pages:
 Expected services:
 
 - `api`: accepts uploads and URL intake.
-- `postgres`: stores tenants, documents, versions, jobs, and outbox messages. Chunk and provenance tables are planned for later phases.
-- `minio`: stores raw source objects. Derived content artifacts are planned for later phases.
+- `postgres`: stores tenants, documents, versions, jobs, outbox messages, document artifacts, and document chunks. Chunk rows are written by the Phase 5 service, but the worker does not call it yet.
+- `minio`: stores raw source objects. The Phase 5 service can write normalized and chunk-manifest artifacts, but the worker does not call it yet.
 - `outbox-relay`: starts Temporal workflows from durable outbox messages.
 - `temporal`: runs workflow orchestration.
-- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but worker parser integration, chunking, and extraction are planned for later phases.
+- `ingestion-worker`: currently runs the stub ingestion activity. Job completion activates the document version, but worker parser integration, chunk persistence, and extraction are planned for later phases.
 
 ## Step 1: Create A Tenant
 
@@ -154,8 +154,8 @@ Database effect during worker processing:
 - `outbox_messages.status` changes from `pending` to `published`.
 - `ingestion_jobs.status` changes from `queued` to `running` to `completed`.
 - `document_versions.status` changes from `pending` to `active`.
-- Later phases will add normalized artifacts, chunk-manifest artifacts, chunk rows, and extraction provenance.
-- Phase 4 parser tests validate normalized artifact creation in code, but artifacts are not written during worker execution yet.
+- Phase 5 service tests validate normalized artifact writes, chunk-manifest writes, and chunk rows in code.
+- These artifacts and chunk rows are not written during worker execution yet.
 
 Check:
 
@@ -201,7 +201,7 @@ Expected Phase 2 object:
 tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/raw/source
 ```
 
-Later phases will add:
+The Phase 5 service writes these derived artifacts when invoked by code, but the worker will not create them end-to-end until Phase 7:
 
 ```text
 tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/normalized.json
@@ -237,8 +237,9 @@ Expected result:
 
 - Same table changes as upload intake.
 - Raw object appears in MinIO.
-- HTML parser output and chunk rows are planned for later phases.
-- Phase 4 supports HTML parsing in code; worker integration is planned for Phase 7.
+- Phase 4 supports HTML parsing in code.
+- Phase 5 supports chunk rows and chunk-manifest artifacts in code.
+- Worker integration is planned for Phase 7, so URL intake does not produce derived artifacts end-to-end yet.
 
 ## Step 7: Test Optional Extraction Failure
 

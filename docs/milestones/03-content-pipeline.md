@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 4 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
+In progress. Phases 1 through 5 are implemented. The rest of this document describes the approved milestone target and should be updated as later phases land.
 
 ## Phase 1 Completed Behavior
 
@@ -60,6 +60,22 @@ Implemented parser contracts:
 - Parser contract documentation in `docs/architecture/content-artifact-contract.md`.
 
 The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, and artifact writes is planned for Phase 7.
+
+## Phase 5 Completed Behavior
+
+Implemented chunking and lineage services:
+
+- `document_artifacts` records normalized, chunk-manifest, raw, and extraction artifact identities.
+- `document_chunks` stores queryable chunk text, order, hashes, source element IDs, heading path, page range, offsets, and metadata.
+- Structural chunking consumes normalized document artifacts and is deterministic for the same artifact and config.
+- Heading elements are preserved as chunk context rather than standalone chunks.
+- Small structural elements are kept intact when possible.
+- Oversized elements split with bounded overlap.
+- Normalized artifacts are written to `artifacts/normalized.json`.
+- Chunk-manifest artifacts are written to `artifacts/chunks.json`.
+- Persisted chunk rows can be replaced for a document version, keeping retries idempotent at the service layer.
+
+The Temporal worker still runs the stub ingestion activity. Worker integration with raw-object verification, parser execution, chunk persistence, extraction, and artifact writes is planned for Phase 7.
 
 ## Outcome Target
 

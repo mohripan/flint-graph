@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from atlas_rag.domain.enums import (
+    DocumentArtifactType,
     DocumentVersionStatus,
     IngestionJobStatus,
     OutboxMessageStatus,
@@ -89,6 +90,78 @@ class DocumentVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     document: Mapped[Document] = relationship(back_populates="versions")
+
+
+class DocumentArtifact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "document_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_version_id",
+            "artifact_type",
+            name="uq_document_artifacts_version_type",
+        ),
+        Index("ix_document_artifacts_document_version", "document_version_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    artifact_type: Mapped[DocumentArtifactType] = mapped_column(
+        enum_column(DocumentArtifactType, 32),
+        nullable=False,
+    )
+    object_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_version_id",
+            "chunk_index",
+            name="uq_document_chunks_version_index",
+        ),
+        UniqueConstraint(
+            "document_version_id",
+            "chunk_id",
+            name="uq_document_chunks_version_chunk_id",
+        ),
+        Index("ix_document_chunks_document_version", "document_version_id", "chunk_index"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    chunk_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_element_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    heading_path: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_offsets: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
 
 
 class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -28,3 +28,10 @@ class SourceType(StrEnum):
     UPLOAD = "upload"
     URL = "url"
     CONNECTOR = "connector"
+
+
+class DocumentArtifactType(StrEnum):
+    RAW = "raw"
+    NORMALIZED = "normalized"
+    CHUNK_MANIFEST = "chunk_manifest"
+    EXTRACTION = "extraction"
