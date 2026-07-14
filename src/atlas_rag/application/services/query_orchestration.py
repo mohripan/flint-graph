@@ -14,6 +14,7 @@ from atlas_rag.application.query_orchestration import (
     QueryCandidate,
     QueryClassification,
     QueryReranker,
+    SupportChecker,
 )
 from atlas_rag.application.services.query_answering import generate_query_answer
 from atlas_rag.application.services.query_context_packing import pack_query_context
@@ -148,10 +149,13 @@ async def run_query_retrieval_graph(
     retrievers: QueryRetrieverBundle,
     reranker: QueryReranker | None = None,
     answer_generator: AnswerGenerator | None = None,
+    support_checker: SupportChecker | None = None,
     graph_depth: int = 1,
     rerank_max_results: int = 20,
     context_token_budget: int = 4000,
     context_max_records: int = 25,
+    min_supported_claim_ratio: float = 0.5,
+    min_context_relevance: float = 0.0,
     commit_after_node: bool = False,
     after_node_commit: Callable[[], Awaitable[None]] | None = None,
 ) -> QueryRetrievalGraphResult:
@@ -160,10 +164,13 @@ async def run_query_retrieval_graph(
         retrievers=retrievers,
         reranker=reranker,
         answer_generator=answer_generator,
+        support_checker=support_checker,
         graph_depth=graph_depth,
         rerank_max_results=rerank_max_results,
         context_token_budget=context_token_budget,
         context_max_records=context_max_records,
+        min_supported_claim_ratio=min_supported_claim_ratio,
+        min_context_relevance=min_context_relevance,
         commit_after_node=commit_after_node,
         after_node_commit=after_node_commit,
     )
@@ -208,10 +215,13 @@ def _build_retrieval_graph(
     retrievers: QueryRetrieverBundle,
     reranker: QueryReranker | None,
     answer_generator: AnswerGenerator | None,
+    support_checker: SupportChecker | None,
     graph_depth: int,
     rerank_max_results: int,
     context_token_budget: int,
     context_max_records: int,
+    min_supported_claim_ratio: float,
+    min_context_relevance: float,
     commit_after_node: bool,
     after_node_commit: Callable[[], Awaitable[None]] | None,
 ) -> Any:
@@ -422,6 +432,9 @@ def _build_retrieval_graph(
             tenant_id=state["tenant_id"],
             query_run_id=state["query_run_id"],
             generator=answer_generator,
+            support_checker=support_checker,
+            min_supported_claim_ratio=min_supported_claim_ratio,
+            min_context_relevance=min_context_relevance,
         )
         await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {

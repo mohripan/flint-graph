@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 and 2 are implemented.
+In progress. Phases 1 through 3 are implemented.
 
 Milestone 08 extends the Milestone 07 query orchestration path with grounded
 answer generation, deterministic citation repair, claim support checking,
@@ -58,10 +58,10 @@ and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
 
-Phases 1 and 2 do not add persistence columns, emit new faithfulness SSE events,
-stream live model tokens, run support checking inside the query graph, or expose
-provenance endpoints. Later phases adapt these contracts into the query runtime
-and database ledger.
+Phases 1 through 3 do not add persistence columns, emit new faithfulness SSE
+event types, stream live model tokens, persist per-claim support rows, or expose
+provenance endpoints. Later phases adapt the verified report into the query
+ledger and provenance APIs.
 
 ## Implemented Phase 2 Provider Wiring
 
@@ -84,6 +84,28 @@ future Ollama support judge.
 the SSE query execution path passes that generator into the LangGraph runtime.
 This makes `query_answer_provider = "ollama"` active for streamed API query
 runs while preserving deterministic defaults for tests and direct service calls.
+
+## Implemented Phase 3 Faithfulness Pipeline
+
+`src/atlas_rag/application/services/query_faithfulness.py` adds the runtime
+verification pipeline:
+
+- reads structured draft claims from answer metadata when providers supply them;
+- falls back to the legacy `GeneratedAnswer` shape for deterministic providers;
+- repairs citation markers against the packed context;
+- checks support with the configured `SupportChecker`;
+- applies the abstention policy;
+- returns a verified `GeneratedAnswer` plus an `AnswerFaithfulnessReport`.
+
+`src/atlas_rag/application/services/query_answering.py` now verifies generated
+drafts before appending answer events and completing a query run. The persisted
+`answer_text` and `answer_citations` are the verified answer, not the raw
+provider draft. Abstention returns the standard insufficient-context answer with
+no citations and completes the run.
+
+The LangGraph and API stream paths now pass the configured support checker and
+threshold settings into answer generation. The deterministic generator remains
+compatible through the legacy fallback path.
 
 ## Expected Invariants
 

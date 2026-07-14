@@ -99,7 +99,7 @@ class QueryAnswerGenerator:
         self.requests.append(request)
         record = request.context_pack.records[0]
         return GeneratedAnswer(
-            text="Provider-backed answer. [c1]",
+            text="Acme Corporation is headquartered in Berlin. [c1]",
             citations=[
                 AnswerCitation(
                     citation_id=record.citation_id,
@@ -313,7 +313,7 @@ async def test_query_run_api_stream_uses_answer_generator_dependency(
         headers=_headers(tenant_id),
     )
     assert inspected.status_code == 200
-    assert inspected.json()["answer_text"] == "Provider-backed answer. [c1]"
+    assert inspected.json()["answer_text"] == "Acme Corporation is headquartered in Berlin. [c1]"
     assert len(answer_generator.requests) == 1
     assert answer_generator.requests[0].context_pack.records[0].citation_id == "c1"
 

@@ -19,6 +19,7 @@ from atlas_rag.api.dependencies import (
     OpenSearchClientDep,
     SessionDep,
     SettingsDep,
+    SupportCheckerDep,
     TenantIdDep,
 )
 from atlas_rag.api.schemas import (
@@ -27,7 +28,11 @@ from atlas_rag.api.schemas import (
     QueryRunResponse,
 )
 from atlas_rag.application.embeddings import EmbeddingBatchRequest, EmbeddingInput
-from atlas_rag.application.query_orchestration import AnswerGenerator, QueryCandidate
+from atlas_rag.application.query_orchestration import (
+    AnswerGenerator,
+    QueryCandidate,
+    SupportChecker,
+)
 from atlas_rag.application.services.lexical_projection import build_lexical_search_body
 from atlas_rag.application.services.query_orchestration import (
     QueryRetrieverBundle,
@@ -124,6 +129,7 @@ async def stream_query_run_events_endpoint(
     neo4j_client: Neo4jClientDep,
     embedding_model: EmbeddingModelDep,
     answer_generator: AnswerGeneratorDep,
+    support_checker: SupportCheckerDep,
     poll_interval_seconds: float = Query(default=0.05, ge=0.01, le=5.0),
 ) -> StreamingResponse:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
@@ -157,6 +163,9 @@ async def stream_query_run_events_endpoint(
         context_token_budget=settings.query_context_token_budget,
         context_max_records=settings.query_max_context_records,
         answer_generator=answer_generator,
+        support_checker=support_checker,
+        min_supported_claim_ratio=settings.query_min_supported_claim_ratio,
+        min_context_relevance=settings.query_min_context_relevance,
         poll_interval_seconds=poll_interval_seconds,
     )
     return StreamingResponse(
@@ -319,6 +328,9 @@ async def _stream_query_events(
     context_token_budget: int,
     context_max_records: int,
     answer_generator: AnswerGenerator,
+    support_checker: SupportChecker,
+    min_supported_claim_ratio: float,
+    min_context_relevance: float,
     poll_interval_seconds: float,
 ) -> AsyncIterator[str]:
     if initial_status != QueryRunStatus.QUEUED:
@@ -342,6 +354,9 @@ async def _stream_query_events(
             context_token_budget=context_token_budget,
             context_max_records=context_max_records,
             answer_generator=answer_generator,
+            support_checker=support_checker,
+            min_supported_claim_ratio=min_supported_claim_ratio,
+            min_context_relevance=min_context_relevance,
             queue=queue,
         )
     )
@@ -366,6 +381,9 @@ async def _execute_query_run(
     context_token_budget: int,
     context_max_records: int,
     answer_generator: AnswerGenerator,
+    support_checker: SupportChecker,
+    min_supported_claim_ratio: float,
+    min_context_relevance: float,
     queue: asyncio.Queue[str | None],
 ) -> None:
     async with session_factory() as execution_session:
@@ -394,6 +412,9 @@ async def _execute_query_run(
                 context_token_budget=context_token_budget,
                 context_max_records=context_max_records,
                 answer_generator=answer_generator,
+                support_checker=support_checker,
+                min_supported_claim_ratio=min_supported_claim_ratio,
+                min_context_relevance=min_context_relevance,
                 commit_after_node=True,
                 after_node_commit=emit_new_events,
             )

@@ -8,12 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.embeddings import EmbeddingModel
-from atlas_rag.application.query_orchestration import AnswerGenerator
+from atlas_rag.application.query_orchestration import AnswerGenerator, SupportChecker
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.domain.errors import NotFoundError
 from atlas_rag.infrastructure.answer_generator_factory import (
     answer_generator_base_url,
     create_answer_generator,
+    create_support_checker,
 )
 from atlas_rag.infrastructure.db.models import Tenant
 from atlas_rag.infrastructure.db.session import get_session
@@ -100,6 +101,13 @@ async def get_answer_generator(settings: SettingsDep) -> AsyncIterator[AnswerGen
 
 
 AnswerGeneratorDep = Annotated[AnswerGenerator, Depends(get_answer_generator)]
+
+
+def get_support_checker(settings: SettingsDep) -> SupportChecker:
+    return create_support_checker(settings)
+
+
+SupportCheckerDep = Annotated[SupportChecker, Depends(get_support_checker)]
 
 
 async def get_index_backfill_workflow_starter(
