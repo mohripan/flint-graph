@@ -80,6 +80,15 @@ class Settings(BaseSettings):
     query_classifier_provider: Literal["deterministic", "ollama"] = "deterministic"
     query_reranker_provider: Literal["deterministic", "ollama"] = "deterministic"
     query_answer_provider: Literal["deterministic", "ollama"] = "deterministic"
+    query_answer_model: str = "llama3.2"
+    query_answer_timeout_seconds: int = Field(default=180, ge=1)
+    query_answer_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    query_answer_max_tokens: int = Field(default=1024, ge=1)
+    query_support_provider: Literal["deterministic", "ollama"] = "deterministic"
+    query_support_model: str = "llama3.2"
+    query_min_supported_claim_ratio: float = Field(default=0.5, ge=0.0, le=1.0)
+    query_min_context_relevance: float = Field(default=0.0, ge=0.0, le=1.0)
+    query_answer_stream_tokens: bool = True
     query_default_candidate_limit: int = Field(default=10, ge=1, le=100)
     query_max_candidate_limit: int = Field(default=50, ge=1, le=500)
     query_context_token_budget: int = Field(default=4000, ge=1, le=100_000)

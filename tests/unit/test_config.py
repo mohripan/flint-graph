@@ -28,6 +28,15 @@ def test_settings_accept_default_query_orchestration_configuration() -> None:
     assert settings.query_max_candidate_limit == 50
     assert settings.query_context_token_budget == 4000
     assert settings.query_stream_heartbeat_seconds == 15
+    assert settings.query_answer_model == "llama3.2"
+    assert settings.query_answer_timeout_seconds == 180
+    assert settings.query_answer_temperature == 0.0
+    assert settings.query_answer_max_tokens == 1024
+    assert settings.query_support_provider == "deterministic"
+    assert settings.query_support_model == "llama3.2"
+    assert settings.query_min_supported_claim_ratio == 0.5
+    assert settings.query_min_context_relevance == 0.0
+    assert settings.query_answer_stream_tokens is True
 
 
 def test_settings_reject_query_default_candidate_limit_above_maximum() -> None:
@@ -36,6 +45,14 @@ def test_settings_reject_query_default_candidate_limit_above_maximum() -> None:
             query_default_candidate_limit=51,
             query_max_candidate_limit=50,
         )
+
+
+def test_settings_reject_invalid_query_faithfulness_thresholds() -> None:
+    with pytest.raises(ValidationError):
+        Settings(query_min_supported_claim_ratio=1.1)
+
+    with pytest.raises(ValidationError):
+        Settings(query_min_context_relevance=-0.1)
 
 
 def test_settings_reject_openai_compatible_provider_without_base_url() -> None:

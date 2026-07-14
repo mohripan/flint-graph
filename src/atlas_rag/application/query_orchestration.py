@@ -24,6 +24,8 @@ QueryLabel = Literal[
 RetrieverSource = Literal["lexical", "vector", "graph"]
 CandidateType = Literal["chunk", "entity", "relationship", "evidence_span"]
 EntityLinkStatus = Literal["accepted", "ambiguous", "rejected"]
+SupportStatus = Literal["supported", "partial", "unsupported"]
+CitationRepairAction = Literal["kept", "normalized", "dropped_unknown", "deduplicated"]
 QueryStreamEventType = Literal[
     "query.started",
     "query.classified",
@@ -246,6 +248,67 @@ class GeneratedAnswer(BaseModel):
         return self
 
 
+class AnswerDraft(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    text: str = Field(min_length=1, max_length=16000)
+    raw_citation_markers: list[str] = Field(default_factory=list, max_length=100)
+    insufficient_context: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_bounded_metadata(self) -> Self:
+        _validate_json_size("metadata", self.metadata, MAX_METADATA_BYTES)
+        return self
+
+
+class CitationRepair(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    original_marker: str = Field(min_length=1, max_length=100)
+    resolved_citation_id: str | None = Field(default=None, max_length=100)
+    action: CitationRepairAction
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class SupportCheckClaim(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    claim_index: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=4000)
+    citation_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class AnswerClaim(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    claim_index: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=4000)
+    citation_ids: list[str] = Field(default_factory=list, max_length=100)
+    support_status: SupportStatus
+    support_score: float = Field(ge=0.0, le=1.0)
+    support_reason: str = Field(min_length=1, max_length=1000)
+    method: str = Field(min_length=1, max_length=100)
+
+
+class AnswerFaithfulnessReport(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    claims: list[AnswerClaim] = Field(default_factory=list, max_length=100)
+    repairs: list[CitationRepair] = Field(default_factory=list, max_length=200)
+    supported_claim_count: int = Field(ge=0)
+    unsupported_claim_count: int = Field(ge=0)
+    abstained: bool
+    abstain_reason: str | None = Field(default=None, max_length=500)
+    support_method: str = Field(min_length=1, max_length=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_bounded_metadata(self) -> Self:
+        _validate_json_size("metadata", self.metadata, MAX_METADATA_BYTES)
+        return self
+
+
 class AnswerGenerationRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -274,6 +337,34 @@ class QueryStreamEvent(BaseModel):
         return self
 
 
+class SupportCheckRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    tenant_id: UUID
+    query: str = Field(min_length=1, max_length=1000)
+    context_pack: QueryContextPack
+    claims: list[SupportCheckClaim] = Field(default_factory=list, max_length=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_bounded_metadata(self) -> Self:
+        _validate_json_size("metadata", self.metadata, MAX_METADATA_BYTES)
+        return self
+
+
+class SupportCheckResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    claims: list[AnswerClaim] = Field(default_factory=list, max_length=100)
+    method: str = Field(min_length=1, max_length=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_bounded_metadata(self) -> Self:
+        _validate_json_size("metadata", self.metadata, MAX_METADATA_BYTES)
+        return self
+
+
 class QueryClassifier(Protocol):
     async def classify(self, request: QueryClassificationRequest) -> QueryClassification: ...
 
@@ -284,6 +375,10 @@ class QueryReranker(Protocol):
 
 class AnswerGenerator(Protocol):
     async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer: ...
+
+
+class SupportChecker(Protocol):
+    async def check(self, request: SupportCheckRequest) -> SupportCheckResult: ...
 
 
 class DeterministicQueryClassifier:
