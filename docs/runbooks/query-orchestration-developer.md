@@ -95,8 +95,15 @@ During Phase 4, the compact LangGraph runtime is available through
 `atlas_rag.application.services.query_orchestration.run_query_retrieval_graph`.
 It starts the query run, classifies the query, links entities, plans retrievers,
 runs configured retrievers in parallel, persists raw candidates, and records
-retrieval progress events. Successful retrieval currently leaves the run
-`running` for later fusion, reranking, context packing, and answer generation.
+retrieval progress events.
+
+During Phase 5, the same graph continues into deterministic fusion and
+reranking. `atlas_rag.application.services.query_fusion` groups duplicate
+candidates by candidate type plus source IDs, writes `fusion_score`, reranks
+fused representatives through the provider-neutral reranker protocol, writes
+`rerank_score` and `rerank_rank`, and appends `fusion.completed` plus
+`rerank.completed`. Successful execution currently leaves the run `running` for
+later context packing and answer generation.
 Runtime OpenSearch, Neo4j, and PostgreSQL retriever adapters are still planned;
 tests inject protocol-compatible retrievers.
 
@@ -116,6 +123,12 @@ Inspect raw persisted retrieval candidates for a run:
 
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "select source, candidate_type, dedupe_key, rank, raw_score, normalized_score from query_run_candidates where query_run_id = '<query-run-id>' order by source, rank;"
+```
+
+Inspect Phase 5 fusion and rerank scores:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select source, dedupe_key, fusion_score, rerank_score, rerank_rank, reasons from query_run_candidates where query_run_id = '<query-run-id>' order by coalesce(rerank_rank, 999999), source, rank;"
 ```
 
 ## API Checks

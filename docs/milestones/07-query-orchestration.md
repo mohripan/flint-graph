@@ -2,13 +2,13 @@
 
 ## Status
 
-In progress. Phases 1 through 4 are implemented: application-level query
+In progress. Phases 1 through 5 are implemented: application-level query
 contracts, provider-neutral protocols, deterministic classifier/reranker/answer
 generator, query orchestration settings, the PostgreSQL query-run ledger, and
 deterministic query classification/entity linking services, plus the first
-LangGraph query orchestration runtime for parallel retrieval. API routes, SSE
-streaming, fusion, reranking, context packing, and answer generation are still
-planned.
+LangGraph query orchestration runtime for parallel retrieval, candidate fusion,
+and deterministic reranking. API routes, SSE streaming, context packing, and
+answer generation are still planned.
 
 ## Goal
 
@@ -130,6 +130,8 @@ initialize_run
     -> link_entities
     -> plan_retrieval
     -> retrieve_parallel
+    -> fuse_candidates
+    -> rerank_candidates
 ```
 
 The graph starts a queued query run, persists `query.started`, reuses the Phase
@@ -144,8 +146,24 @@ LangGraph nodes to OpenSearch, Neo4j, or provider SDK objects.
 `retrieval.progress`, and `retrieval.completed` events. Graph retrieval is
 conservative: it is skipped unless accepted entity links are available. A
 required retriever failure transitions the run to `failed` with bounded error
-metadata; successful retrieval leaves the run `running` for later fusion,
-reranking, context packing, and answer-generation phases.
+metadata; successful retrieval continues into the Phase 5 fusion and reranking
+nodes.
+
+## Implemented Phase 5 Fusion And Reranking
+
+`src/atlas_rag/application/services/query_fusion.py` adds deterministic
+candidate fusion and persisted reranking. Fusion loads raw
+`query_run_candidates`, groups duplicates by candidate type plus source IDs,
+computes a weighted score from the classified retriever weights, normalized
+score, and reciprocal rank, and writes `fusion_score` back to the raw candidate
+rows. It appends `fusion.completed` with input, fused, and deduplicated counts.
+
+Reranking uses the provider-neutral `QueryReranker` protocol and defaults to
+`DeterministicQueryReranker`. It reranks the fused representative candidates,
+persists `rerank_score`, `rerank_rank`, and reasons on selected candidate rows,
+and appends `rerank.completed`. Successful Phase 5 execution still leaves the
+query run `running` so later phases can pack context and generate the final
+answer.
 
 ## Architecture
 

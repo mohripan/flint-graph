@@ -8,7 +8,15 @@ from uuid import UUID
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.query_orchestration import QueryCandidate, QueryClassification
+from atlas_rag.application.query_orchestration import (
+    QueryCandidate,
+    QueryClassification,
+    QueryReranker,
+)
+from atlas_rag.application.services.query_fusion import (
+    fuse_query_candidates,
+    rerank_fused_query_candidates,
+)
 from atlas_rag.application.services.query_planning import classify_query_run, link_query_entities
 from atlas_rag.application.services.query_runs import (
     append_query_run_event,
@@ -74,6 +82,8 @@ class QueryRetrievalGraphResult:
     enabled_retrievers: list[RetrieverName]
     linked_entity_ids: list[UUID]
     retrieved_candidate_count: int
+    fused_candidate_count: int
+    reranked_candidate_count: int
     errors: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -90,6 +100,8 @@ class _GraphState(TypedDict, total=False):
     allow_partial_retrieval: bool
     linked_entity_ids: list[UUID]
     retrieved_candidate_count: int
+    fused_candidate_count: int
+    reranked_candidate_count: int
     errors: list[dict[str, Any]]
 
 
@@ -99,12 +111,16 @@ async def run_query_retrieval_graph(
     tenant_id: UUID,
     query_run_id: UUID,
     retrievers: QueryRetrieverBundle,
+    reranker: QueryReranker | None = None,
     graph_depth: int = 1,
+    rerank_max_results: int = 20,
 ) -> QueryRetrievalGraphResult:
     graph = _build_retrieval_graph(
         session=session,
         retrievers=retrievers,
+        reranker=reranker,
         graph_depth=graph_depth,
+        rerank_max_results=rerank_max_results,
     )
     state = await graph.ainvoke(
         {
@@ -114,6 +130,8 @@ async def run_query_retrieval_graph(
             "enabled_retrievers": [],
             "linked_entity_ids": [],
             "retrieved_candidate_count": 0,
+            "fused_candidate_count": 0,
+            "reranked_candidate_count": 0,
         }
     )
     return QueryRetrievalGraphResult(
@@ -124,6 +142,8 @@ async def run_query_retrieval_graph(
         enabled_retrievers=state.get("enabled_retrievers", []),
         linked_entity_ids=state.get("linked_entity_ids", []),
         retrieved_candidate_count=state.get("retrieved_candidate_count", 0),
+        fused_candidate_count=state.get("fused_candidate_count", 0),
+        reranked_candidate_count=state.get("reranked_candidate_count", 0),
         errors=state.get("errors", []),
     )
 
@@ -132,7 +152,9 @@ def _build_retrieval_graph(
     *,
     session: AsyncSession,
     retrievers: QueryRetrieverBundle,
+    reranker: QueryReranker | None,
     graph_depth: int,
+    rerank_max_results: int,
 ) -> Any:
     builder = StateGraph(_GraphState)
 
@@ -286,17 +308,44 @@ def _build_retrieval_graph(
             "errors": errors,
         }
 
+    async def fuse_candidates(state: _GraphState) -> _GraphState:
+        if state.get("status") == QueryRunStatus.FAILED:
+            return {}
+        result = await fuse_query_candidates(
+            session,
+            tenant_id=state["tenant_id"],
+            query_run_id=state["query_run_id"],
+            classification=state["classification"],
+        )
+        return {"fused_candidate_count": result.fused_candidate_count}
+
+    async def rerank_candidates(state: _GraphState) -> _GraphState:
+        if state.get("status") == QueryRunStatus.FAILED:
+            return {}
+        result = await rerank_fused_query_candidates(
+            session,
+            tenant_id=state["tenant_id"],
+            query_run_id=state["query_run_id"],
+            reranker=reranker,
+            max_results=rerank_max_results,
+        )
+        return {"reranked_candidate_count": result.reranked_candidate_count}
+
     builder.add_node("initialize_run", initialize_run)
     builder.add_node("classify_query", classify)
     builder.add_node("link_entities", link_entities)
     builder.add_node("plan_retrieval", plan_retrieval)
     builder.add_node("retrieve_parallel", retrieve_parallel)
+    builder.add_node("fuse_candidates", fuse_candidates)
+    builder.add_node("rerank_candidates", rerank_candidates)
     builder.add_edge(START, "initialize_run")
     builder.add_edge("initialize_run", "classify_query")
     builder.add_edge("classify_query", "link_entities")
     builder.add_edge("link_entities", "plan_retrieval")
     builder.add_edge("plan_retrieval", "retrieve_parallel")
-    builder.add_edge("retrieve_parallel", END)
+    builder.add_edge("retrieve_parallel", "fuse_candidates")
+    builder.add_edge("fuse_candidates", "rerank_candidates")
+    builder.add_edge("rerank_candidates", END)
     return builder.compile()
 
 

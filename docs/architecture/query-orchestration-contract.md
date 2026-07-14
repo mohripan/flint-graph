@@ -93,14 +93,15 @@ initialize_run
     -> link_entities
     -> plan_retrieval
     -> retrieve_parallel
+    -> fuse_candidates
+    -> rerank_candidates
 ```
 
 It uses `langgraph.graph.StateGraph` and stores only compact run state:
 tenant ID, query-run ID, selected retrieval index version, classification,
 linked entity IDs, enabled retrievers, candidate limits, counters, and bounded
 errors. On successful retrieval it leaves the query run `running` so later
-nodes can perform fusion, graph expansion, reranking, context packing, and
-answer generation.
+nodes can perform graph expansion, context packing, and answer generation.
 
 ## Classification
 
@@ -172,6 +173,18 @@ answer usefulness.
 
 Both stages must record enough metadata to explain rank movement during
 inspection.
+
+The implemented Phase 5 fusion service groups duplicate candidates by candidate
+type plus source IDs. It computes `fusion_score` from the classified retriever
+weight, normalized score, and reciprocal rank, then persists the score on the
+raw candidate rows. Duplicate rows keep the same group fusion score, while
+reranking is applied to one deterministic representative per group.
+
+Reranking uses the provider-neutral `QueryReranker` protocol and defaults to
+the deterministic term-overlap reranker. Selected representative rows receive
+`rerank_score`, `rerank_rank`, and explanatory reasons. The graph appends
+`fusion.completed` and `rerank.completed` events before leaving the run
+`running` for later context-packing and answer-generation nodes.
 
 ## Context Packing
 

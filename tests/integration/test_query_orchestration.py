@@ -221,6 +221,9 @@ def _candidate(
     source: str,
     candidate_id: str,
     rank: int,
+    normalized_score: float = 1.0,
+    text_preview: str | None = None,
+    source_ids: dict[str, str] | None = None,
 ) -> QueryCandidate:
     return QueryCandidate(
         candidate_id=candidate_id,
@@ -228,10 +231,10 @@ def _candidate(
         candidate_type="chunk",
         tenant_id=tenant_id,
         retrieval_index_version_id=index_id,
-        source_ids={"chunk_id": candidate_id.rsplit(":", maxsplit=1)[-1]},
-        text_preview=f"{source} candidate",
-        raw_score=1.0,
-        normalized_score=1.0,
+        source_ids=source_ids or {"chunk_id": candidate_id.rsplit(":", maxsplit=1)[-1]},
+        text_preview=text_preview or f"{source} candidate",
+        raw_score=normalized_score,
+        normalized_score=normalized_score,
         rank=rank,
     )
 
@@ -338,7 +341,11 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
         "retrieval.progress",
         "retrieval.progress",
         "retrieval.completed",
+        "fusion.completed",
+        "rerank.completed",
     ]
+    assert all(row.fusion_score is not None for row in rows)
+    assert [row.rerank_rank for row in rows if row.rerank_rank is not None] == [1, 2, 3]
 
 
 async def test_query_retrieval_graph_skips_graph_without_accepted_links(
@@ -385,6 +392,101 @@ async def test_query_retrieval_graph_skips_graph_without_accepted_links(
     assert state.enabled_retrievers == ["lexical", "vector"]
     assert state.retrieved_candidate_count == 2
     assert [source for source, _payload in retrievers.calls] == ["lexical", "vector"]
+
+
+async def test_query_retrieval_graph_fuses_duplicate_candidates_and_reranks(
+    db_session: AsyncSession,
+) -> None:
+    tenant = await _tenant(db_session)
+    run_id, index_id = await _query_run(
+        db_session,
+        tenant,
+        "Where is Acme Corporation headquartered in Berlin?",
+    )
+    retrievers = FakeRetrievers(
+        lexical_results=[
+            _candidate(
+                tenant_id=tenant.id,
+                index_id=index_id,
+                source="lexical",
+                candidate_id="lexical:chunk:chunk-acme",
+                rank=1,
+                normalized_score=0.8,
+                source_ids={"chunk_id": "chunk-acme"},
+                text_preview="Acme Corporation is headquartered in Berlin.",
+            )
+        ],
+        vector_results=[
+            _candidate(
+                tenant_id=tenant.id,
+                index_id=index_id,
+                source="vector",
+                candidate_id="vector:chunk:chunk-acme",
+                rank=2,
+                normalized_score=0.9,
+                source_ids={"chunk_id": "chunk-acme"},
+                text_preview="Acme Corporation is headquartered in Berlin.",
+            ),
+            _candidate(
+                tenant_id=tenant.id,
+                index_id=index_id,
+                source="vector",
+                candidate_id="vector:chunk:chunk-paris",
+                rank=1,
+                normalized_score=1.0,
+                source_ids={"chunk_id": "chunk-paris"},
+                text_preview="Quarterly revenue increased in Paris.",
+            ),
+        ],
+    )
+
+    state = await run_query_retrieval_graph(
+        db_session,
+        tenant_id=tenant.id,
+        query_run_id=run_id,
+        retrievers=QueryRetrieverBundle(
+            lexical=retrievers,
+            vector=retrievers,
+            graph=retrievers,
+        ),
+    )
+
+    rows = list(
+        await db_session.scalars(
+            select(QueryRunCandidate)
+            .where(QueryRunCandidate.query_run_id == run_id)
+            .order_by(QueryRunCandidate.source, QueryRunCandidate.dedupe_key)
+        )
+    )
+    ranked_rows = sorted(
+        (row for row in rows if row.rerank_rank is not None),
+        key=lambda row: row.rerank_rank or 0,
+    )
+    events = list(
+        await db_session.scalars(
+            select(QueryRunEvent)
+            .where(QueryRunEvent.query_run_id == run_id)
+            .order_by(QueryRunEvent.sequence)
+        )
+    )
+
+    assert state.status == QueryRunStatus.RUNNING
+    assert state.retrieved_candidate_count == 3
+    assert state.fused_candidate_count == 2
+    assert state.reranked_candidate_count == 2
+    assert [event.event_type for event in events][-2:] == [
+        "fusion.completed",
+        "rerank.completed",
+    ]
+    assert [row.dedupe_key for row in ranked_rows] == [
+        "lexical:chunk:chunk-acme",
+        "vector:chunk:chunk-paris",
+    ]
+    assert ranked_rows[0].rerank_score is not None
+    assert ranked_rows[0].rerank_score > (ranked_rows[1].rerank_score or 0)
+    duplicate_rows = [row for row in rows if row.source_ids["chunk_id"] == "chunk-acme"]
+    assert len(duplicate_rows) == 2
+    assert {row.fusion_score for row in duplicate_rows} == {ranked_rows[0].fusion_score}
 
 
 async def test_query_retrieval_graph_fails_run_when_required_retriever_fails(
