@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from typing import Literal, Self
 
@@ -79,13 +80,21 @@ class Settings(BaseSettings):
     query_enabled: bool = True
     query_classifier_provider: Literal["deterministic", "ollama"] = "deterministic"
     query_reranker_provider: Literal["deterministic", "ollama"] = "deterministic"
-    query_answer_provider: Literal["deterministic", "ollama"] = "deterministic"
+    # Left unset (None) so defaults resolve by env: test -> deterministic,
+    # otherwise -> anthropic. Explicit values always win. See _resolve_model_providers.
+    query_answer_provider: Literal["deterministic", "ollama", "anthropic"] | None = None
     query_answer_model: str = "llama3.2"
     query_answer_timeout_seconds: int = Field(default=180, ge=1)
     query_answer_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     query_answer_max_tokens: int = Field(default=1024, ge=1)
-    query_support_provider: Literal["deterministic", "ollama"] = "deterministic"
+    query_support_provider: Literal["deterministic", "ollama", "anthropic"] | None = None
     query_support_model: str = "llama3.2"
+
+    anthropic_api_key: str | None = None
+    anthropic_answer_model: str = "claude-opus-4-8"
+    anthropic_support_model: str = "claude-opus-4-8"
+    anthropic_support_max_tokens: int = Field(default=1024, ge=1)
+    anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     query_min_supported_claim_ratio: float = Field(default=0.5, ge=0.0, le=1.0)
     query_min_context_relevance: float = Field(default=0.0, ge=0.0, le=1.0)
     query_answer_stream_tokens: bool = True
@@ -143,6 +152,29 @@ class Settings(BaseSettings):
         if self.query_default_candidate_limit > self.query_max_candidate_limit:
             raise ValueError(
                 "query_default_candidate_limit must be <= query_max_candidate_limit"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _resolve_model_providers(self) -> Self:
+        resolved: Literal["deterministic", "anthropic"] = (
+            "deterministic" if self.env == "test" else "anthropic"
+        )
+        if self.query_answer_provider is None:
+            self.query_answer_provider = resolved
+        if self.query_support_provider is None:
+            self.query_support_provider = resolved
+
+        uses_anthropic = "anthropic" in (
+            self.query_answer_provider,
+            self.query_support_provider,
+        )
+        if uses_anthropic and not self.anthropic_api_key and not os.environ.get(
+            "ANTHROPIC_API_KEY"
+        ):
+            raise ValueError(
+                "anthropic_api_key (or the ANTHROPIC_API_KEY environment variable) is "
+                "required when an anthropic provider is selected"
             )
         return self
 

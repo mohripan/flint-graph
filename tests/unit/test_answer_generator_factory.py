@@ -8,6 +8,10 @@ from atlas_rag.infrastructure.answer_generator_factory import (
     create_answer_generator,
     create_support_checker,
 )
+from atlas_rag.infrastructure.anthropic import (
+    AnthropicAnswerGenerator,
+    AnthropicSupportChecker,
+)
 from atlas_rag.infrastructure.ollama import OllamaAnswerGenerator
 
 
@@ -46,3 +50,27 @@ def test_support_checker_factory_rejects_unimplemented_ollama_judge() -> None:
 
     with pytest.raises(RuntimeError, match="Ollama support checker is not implemented"):
         create_support_checker(settings)
+
+
+def test_answer_generator_factory_creates_anthropic_generator() -> None:
+    settings = Settings(
+        query_answer_provider="anthropic",
+        anthropic_api_key="sk-test",
+        anthropic_answer_model="claude-opus-4-8",
+    )
+
+    generator = create_answer_generator(settings, http_client=httpx.AsyncClient())
+
+    assert isinstance(generator, AnthropicAnswerGenerator)
+
+
+def test_support_checker_factory_creates_anthropic_checker() -> None:
+    settings = Settings(
+        query_support_provider="anthropic",
+        anthropic_api_key="sk-test",
+        anthropic_support_model="claude-opus-4-8",
+    )
+
+    checker = create_support_checker(settings)
+
+    assert isinstance(checker, AnthropicSupportChecker)

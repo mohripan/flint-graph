@@ -3,6 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 import httpx
+from anthropic import AsyncAnthropic
 from fastapi import Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -96,6 +97,13 @@ EmbeddingModelDep = Annotated[EmbeddingModel, Depends(get_embedding_model)]
 
 
 async def get_answer_generator(settings: SettingsDep) -> AsyncIterator[AnswerGenerator]:
+    if settings.query_answer_provider == "anthropic":
+        async with AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            timeout=settings.query_answer_timeout_seconds,
+        ) as anthropic_client:
+            yield create_answer_generator(settings, anthropic_client=anthropic_client)
+        return
     async with httpx.AsyncClient(base_url=answer_generator_base_url(settings)) as http_client:
         yield create_answer_generator(settings, http_client=http_client)
 
@@ -103,8 +111,15 @@ async def get_answer_generator(settings: SettingsDep) -> AsyncIterator[AnswerGen
 AnswerGeneratorDep = Annotated[AnswerGenerator, Depends(get_answer_generator)]
 
 
-def get_support_checker(settings: SettingsDep) -> SupportChecker:
-    return create_support_checker(settings)
+async def get_support_checker(settings: SettingsDep) -> AsyncIterator[SupportChecker]:
+    if settings.query_support_provider == "anthropic":
+        async with AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            timeout=settings.query_answer_timeout_seconds,
+        ) as anthropic_client:
+            yield create_support_checker(settings, anthropic_client=anthropic_client)
+        return
+    yield create_support_checker(settings)
 
 
 SupportCheckerDep = Annotated[SupportChecker, Depends(get_support_checker)]

@@ -69,3 +69,44 @@ def test_settings_reject_openai_compatible_provider_without_api_key() -> None:
             embedding_provider="openai_compatible",
             embedding_openai_api_key=None,
         )
+
+
+def test_model_providers_resolve_to_deterministic_in_test_env() -> None:
+    settings = Settings(env="test")
+
+    assert settings.query_answer_provider == "deterministic"
+    assert settings.query_support_provider == "deterministic"
+
+
+def test_model_providers_resolve_to_anthropic_outside_test_env() -> None:
+    settings = Settings(env="local", anthropic_api_key="sk-test")
+
+    assert settings.query_answer_provider == "anthropic"
+    assert settings.query_support_provider == "anthropic"
+
+
+def test_explicit_model_provider_overrides_env_default() -> None:
+    settings = Settings(
+        env="local",
+        query_answer_provider="deterministic",
+        query_support_provider="deterministic",
+    )
+
+    assert settings.query_answer_provider == "deterministic"
+    assert settings.query_support_provider == "deterministic"
+
+
+def test_anthropic_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    with pytest.raises(ValidationError, match="anthropic_api_key"):
+        Settings(env="local")
+
+
+def test_anthropic_provider_accepts_env_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env")
+
+    settings = Settings(env="production")
+
+    assert settings.query_answer_provider == "anthropic"
+    assert settings.anthropic_api_key is None

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from atlas_rag.application.query_faithfulness import DeterministicSupportChecker
@@ -9,33 +11,64 @@ from atlas_rag.application.query_orchestration import (
     SupportChecker,
 )
 from atlas_rag.config import Settings
+from atlas_rag.infrastructure.anthropic import (
+    AnthropicAnswerGenerator,
+    AnthropicSupportChecker,
+)
 from atlas_rag.infrastructure.ollama import OllamaAnswerGenerator
 
 
 def create_answer_generator(
     settings: Settings,
     *,
-    http_client: httpx.AsyncClient,
+    http_client: httpx.AsyncClient | None = None,
+    anthropic_client: Any | None = None,
 ) -> AnswerGenerator:
-    if settings.query_answer_provider == "deterministic":
-        return DeterministicAnswerGenerator()
-    return OllamaAnswerGenerator(
-        model=settings.query_answer_model,
-        timeout_seconds=settings.query_answer_timeout_seconds,
-        temperature=settings.query_answer_temperature,
-        max_tokens=settings.query_answer_max_tokens,
-        http_client=http_client,
-        base_url=settings.ollama_base_url,
-    )
+    provider = settings.query_answer_provider
+    if provider == "ollama":
+        if http_client is None:
+            raise RuntimeError("the ollama answer generator requires an http client")
+        return OllamaAnswerGenerator(
+            model=settings.query_answer_model,
+            timeout_seconds=settings.query_answer_timeout_seconds,
+            temperature=settings.query_answer_temperature,
+            max_tokens=settings.query_answer_max_tokens,
+            http_client=http_client,
+            base_url=settings.ollama_base_url,
+        )
+    if provider == "anthropic":
+        # The Anthropic SDK client manages its own transport; when no client is
+        # injected the adapter constructs one from the configured API key.
+        return AnthropicAnswerGenerator(
+            model=settings.anthropic_answer_model,
+            max_tokens=settings.query_answer_max_tokens,
+            effort=settings.anthropic_effort,
+            timeout_seconds=settings.query_answer_timeout_seconds,
+            api_key=settings.anthropic_api_key,
+            client=anthropic_client,
+        )
+    return DeterministicAnswerGenerator()
 
 
-def create_support_checker(settings: Settings) -> SupportChecker:
-    if settings.query_support_provider == "deterministic":
-        return DeterministicSupportChecker()
-    raise RuntimeError("Ollama support checker is not implemented yet.")
+def create_support_checker(
+    settings: Settings,
+    *,
+    anthropic_client: Any | None = None,
+) -> SupportChecker:
+    provider = settings.query_support_provider
+    if provider == "anthropic":
+        return AnthropicSupportChecker(
+            model=settings.anthropic_support_model,
+            max_tokens=settings.anthropic_support_max_tokens,
+            effort=settings.anthropic_effort,
+            timeout_seconds=settings.query_answer_timeout_seconds,
+            api_key=settings.anthropic_api_key,
+            client=anthropic_client,
+        )
+    if provider == "ollama":
+        raise RuntimeError("Ollama support checker is not implemented yet.")
+    return DeterministicSupportChecker()
 
 
 def answer_generator_base_url(settings: Settings) -> str:
-    if settings.query_answer_provider == "ollama":
-        return settings.ollama_base_url
     return settings.ollama_base_url
