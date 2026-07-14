@@ -148,6 +148,18 @@ page, status, and other metadata fields are mapped for exact filters.
 
 Search requests must always include a tenant filter.
 
+Phase 3 implements the lexical projection contract in
+`atlas_rag.application.services.lexical_projection` and
+`atlas_rag.infrastructure.opensearch`. OpenSearch document IDs are stable by
+tenant, document version, and chunk ID. Bulk upsert and delete operations use
+NDJSON actions with those stable IDs so retries replace or remove the same
+records.
+
+The default chunk mapping indexes `title`, `text`, and `heading_path` as text
+fields, stores tenant/document/version/chunk/index identifiers as keywords, and
+keeps page fields numeric. Search body generation always includes a `tenant_id`
+term filter before adding optional metadata filters.
+
 ## Backfill And Reconcile
 
 Backfills scan active document versions missing a target index version. They

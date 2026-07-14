@@ -19,6 +19,7 @@ services:
       ATLAS_OTEL_ENABLED: "true"
       ATLAS_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
       ATLAS_OTEL_EXPORTER_OTLP_INSECURE: "true"
+      ATLAS_OPENSEARCH_URL: http://opensearch:9200
     ports:
       - "8000:8000"
     depends_on:
@@ -34,6 +35,8 @@ services:
         condition: service_healthy
       neo4j-migrate:
         condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
 
   outbox-relay:
     build: .
@@ -82,6 +85,7 @@ services:
       ATLAS_OLLAMA_MODEL: gemma3:1b
       ATLAS_EXTRACTION_TIMEOUT_SECONDS: "180"
       ATLAS_OTEL_ENABLED: "false"
+      ATLAS_OPENSEARCH_URL: http://opensearch:9200
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,6 +99,8 @@ services:
         condition: service_healthy
       neo4j-migrate:
         condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
 
   migrate:
     build: .
@@ -185,6 +191,23 @@ services:
       neo4j:
         condition: service_healthy
 
+  opensearch:
+    image: opensearchproject/opensearch:2.19.3
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: atlasOpenSearch1!
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
   observability:
     image: grafana/otel-lgtm:0.28.0
     ports:
@@ -203,4 +226,5 @@ volumes:
   postgres_data:
   minio_data:
   neo4j_data:
+  opensearch_data:
   observability_data:

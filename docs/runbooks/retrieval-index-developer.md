@@ -126,11 +126,23 @@ must not be reused for the new chunk.
 
 ## OpenSearch Checks
 
+Phase 3 adds the local OpenSearch service and projection adapter. The service is
+available at `http://localhost:9200` from the host and
+`http://opensearch:9200` inside Compose.
+
 List indexes and aliases:
 
 ```powershell
 curl.exe -sS http://localhost:9200/_cat/indices?v
 curl.exe -sS http://localhost:9200/_cat/aliases?v
+```
+
+Create a smoke-test index:
+
+```powershell
+curl.exe -sS -X PUT http://localhost:9200/atlas_chunks_smoke `
+  -H "Content-Type: application/json" `
+  -d '{"settings":{"index":{"number_of_shards":1,"number_of_replicas":0}},"mappings":{"properties":{"tenant_id":{"type":"keyword"},"text":{"type":"text"}}}}'
 ```
 
 Run a tenant-filtered lexical smoke query:

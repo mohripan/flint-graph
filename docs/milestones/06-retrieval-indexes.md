@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 and 2 are implemented.
+In progress. Phases 1 through 3 are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -74,8 +74,18 @@ Completed in Phase 2:
   version per tenant;
 - transition service for create, activate, deprecate, and fail operations.
 
-No Neo4j vector projection, OpenSearch projection, indexing workflow, backfill
-execution, or primitive retrieval API behavior is active yet.
+Completed in Phase 3:
+
+- OpenSearch local Compose service and internal service URL wiring;
+- deterministic chunk index mapping for text search and metadata filters;
+- lexical chunk record contract and stable OpenSearch document IDs;
+- idempotent bulk upsert and delete payload builders;
+- OpenSearch HTTP adapter for index creation, alias updates, bulk writes, and
+  search;
+- tenant-filtered lexical search body builder.
+
+No Neo4j vector projection, indexing workflow, backfill execution, or primitive
+retrieval API behavior is active yet.
 
 ## Datastore Roles
 
@@ -90,6 +100,10 @@ canonical graph projection.
 OpenSearch is introduced as the lexical retrieval projection. It stores
 searchable chunk records with analyzers, relevance scoring, and metadata
 filters. Its physical indexes are versioned behind aliases.
+
+Phase 3 adds the OpenSearch adapter, mapping, alias, bulk payload, and search
+request builders. Later phases call these builders from indexing workflows and
+public retrieval APIs.
 
 MinIO continues to store immutable raw and derived artifacts. Embedding or index
 manifests may be added only when content-addressed snapshots are useful.
