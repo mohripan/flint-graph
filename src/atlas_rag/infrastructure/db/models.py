@@ -43,6 +43,7 @@ from atlas_rag.domain.enums import (
     MergeDecisionSource,
     MergeDecisionType,
     OutboxMessageStatus,
+    QueryRunStatus,
     RelationshipStatus,
     RetrievalIndexScope,
     RetrievalIndexVersionStatus,
@@ -364,6 +365,232 @@ class IndexBackfillJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "query_runs"
+    __table_args__ = (
+        Index("ix_query_runs_tenant_status_created", "tenant_id", "status", "created_at"),
+        Index(
+            "ix_query_runs_tenant_hash_created",
+            "tenant_id",
+            "normalized_query_hash",
+            "created_at",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    retrieval_index_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("retrieval_index_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_query_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[QueryRunStatus] = mapped_column(
+        enum_column(QueryRunStatus, 32),
+        nullable=False,
+        default=QueryRunStatus.QUEUED,
+    )
+    classification_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    retrieval_strategy: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    classification_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answer_citations: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    context_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+    events: Mapped[list["QueryRunEvent"]] = relationship(
+        back_populates="query_run",
+        cascade="all, delete-orphan",
+        order_by="QueryRunEvent.sequence",
+    )
+
+
+class QueryRunEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "query_run_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "query_run_id",
+            "sequence",
+            name="uq_query_run_events_run_sequence",
+        ),
+        Index("ix_query_run_events_run_sequence", "query_run_id", "sequence"),
+        Index("ix_query_run_events_tenant_created", "tenant_id", "created_at"),
+    )
+
+    query_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    query_run: Mapped[QueryRun] = relationship(back_populates="events")
+
+
+class QueryRunLinkedEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "query_run_linked_entities"
+    __table_args__ = (
+        Index("ix_query_run_linked_entities_tenant_status", "tenant_id", "status"),
+        Index("ix_query_run_linked_entities_run", "query_run_id"),
+    )
+
+    query_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    canonical_entity_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), nullable=True
+    )
+    mention_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    method: Mapped[str] = mapped_column(String(100), nullable=False)
+    candidate_entity_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class QueryRunCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "query_run_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "query_run_id",
+            "dedupe_key",
+            name="uq_query_run_candidates_run_dedupe",
+        ),
+        Index("ix_query_run_candidates_tenant_source", "tenant_id", "source"),
+        Index("ix_query_run_candidates_run_rank", "query_run_id", "rank"),
+    )
+
+    query_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    retrieval_index_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("retrieval_index_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    candidate_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ids: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    text_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_score: Mapped[float] = mapped_column(Float, nullable=False)
+    normalized_score: Mapped[float] = mapped_column(Float, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    fusion_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rerank_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rerank_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class QueryContextPack(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "query_context_packs"
+    __table_args__ = (
+        UniqueConstraint(
+            "query_run_id",
+            "pack_version",
+            name="uq_query_context_packs_run_version",
+        ),
+        Index("ix_query_context_packs_run_version", "query_run_id", "pack_version"),
+    )
+
+    query_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    pack_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    pack_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_candidate_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    citation_map: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+    records: Mapped[list["QueryContextPackRecord"]] = relationship(
+        back_populates="context_pack",
+        cascade="all, delete-orphan",
+        order_by="QueryContextPackRecord.citation_id",
+    )
+
+
+class QueryContextPackRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "query_context_pack_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "query_context_pack_id",
+            "citation_id",
+            name="uq_query_context_pack_records_pack_citation",
+        ),
+        UniqueConstraint(
+            "query_context_pack_id",
+            "context_id",
+            name="uq_query_context_pack_records_pack_context",
+        ),
+        Index("ix_query_context_pack_records_pack", "query_context_pack_id"),
+    )
+
+    query_context_pack_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_context_packs.id", ondelete="CASCADE"), nullable=False
+    )
+    query_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    context_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    candidate_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    citation_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_ids: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+    context_pack: Mapped[QueryContextPack] = relationship(back_populates="records")
 
 
 class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):

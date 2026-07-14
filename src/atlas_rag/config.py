@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -76,6 +76,17 @@ class Settings(BaseSettings):
     active_retrieval_index_version_id: str | None = None
     index_backfill_batch_size: int = Field(default=25, ge=1, le=500)
 
+    query_enabled: bool = True
+    query_classifier_provider: Literal["deterministic", "ollama"] = "deterministic"
+    query_reranker_provider: Literal["deterministic", "ollama"] = "deterministic"
+    query_answer_provider: Literal["deterministic", "ollama"] = "deterministic"
+    query_default_candidate_limit: int = Field(default=10, ge=1, le=100)
+    query_max_candidate_limit: int = Field(default=50, ge=1, le=500)
+    query_context_token_budget: int = Field(default=4000, ge=1, le=100_000)
+    query_max_context_records: int = Field(default=25, ge=1, le=100)
+    query_graph_depth: int = Field(default=1, ge=0, le=3)
+    query_stream_heartbeat_seconds: int = Field(default=15, ge=1, le=300)
+
     opensearch_url: str = "http://localhost:9200"
     opensearch_username: str | None = None
     opensearch_password: str | None = None
@@ -96,6 +107,13 @@ class Settings(BaseSettings):
     otel_exporter_otlp_insecure: bool = True
     otel_trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
 
+    @field_validator("active_retrieval_index_version_id", mode="before")
+    @classmethod
+    def _empty_active_index_version_id_to_none(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
+
     @model_validator(mode="after")
     def _validate_resolution_thresholds(self) -> Self:
         if self.entity_resolution_review_threshold > self.entity_resolution_auto_threshold:
@@ -113,6 +131,10 @@ class Settings(BaseSettings):
                     "embedding_openai_api_key is required when embedding_provider is "
                     "openai_compatible"
                 )
+        if self.query_default_candidate_limit > self.query_max_candidate_limit:
+            raise ValueError(
+                "query_default_candidate_limit must be <= query_max_candidate_limit"
+            )
         return self
 
 
