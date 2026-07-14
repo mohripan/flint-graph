@@ -250,17 +250,33 @@ backfill can repair the version first.
 
 ## Primitive Retrieval APIs
 
-Milestone 06 APIs expose:
+Milestone 06 APIs expose tenant-scoped primitive retrieval operations:
 
-- index versions;
-- index coverage;
-- backfill start and status;
-- lexical search;
-- vector search;
-- graph neighborhood traversal.
+- `GET /v1/index-versions` lists global versions plus versions scoped to the
+  request tenant;
+- `GET /v1/index-coverage` lists authoritative PostgreSQL coverage rows with
+  optional version, document, document-version, and status filters;
+- `POST /v1/index-backfills` creates a tenant-scoped backfill job and starts
+  `IndexBackfillWorkflow`;
+- `GET /v1/index-backfills/{job_id}` returns tenant-visible job progress;
+- `POST /v1/search/lexical` queries the selected OpenSearch physical index;
+- `POST /v1/search/vector` embeds the query and queries the selected Neo4j
+  vector index;
+- `GET /v1/entities/{entity_id}/neighborhood` returns a bounded PostgreSQL
+  graph neighborhood.
 
 Responses contain ranked chunks, scores, metadata, entity context, and traversal
 records as applicable. They do not generate final natural-language answers.
+
+Search endpoints use the active tenant-scoped retrieval index version when one
+exists, otherwise the active global version. Callers may provide an explicit
+active version ID for inspection or comparison. Search requests always include
+tenant and index-version filters. Metadata filters accept scalar values only so
+they map predictably to projection filter clauses.
+
+Entity neighborhoods are loaded from PostgreSQL canonical graph state because
+PostgreSQL is authoritative and Neo4j projection may lag. Traversal is bounded
+by depth and relationship limit.
 
 ## Failure Modes
 

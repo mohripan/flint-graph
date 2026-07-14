@@ -6,12 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from atlas_rag.domain.enums import (
     AliasSource,
+    DocumentIndexCoverageStatus,
     EntityStatus,
     EntityType,
+    IndexBackfillJobStatus,
     IngestionJobStatus,
     MentionResolutionStatus,
     MergeDecisionSource,
     MergeDecisionType,
+    RetrievalIndexScope,
+    RetrievalIndexVersionStatus,
     SourceType,
 )
 
@@ -210,3 +214,124 @@ class MergeDecisionResponse(BaseModel):
     payload: dict[str, Any]
     decided_at: datetime
     created_at: datetime
+
+
+class RetrievalIndexVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    scope: RetrievalIndexScope
+    tenant_id: UUID | None
+    embedding_provider: str
+    embedding_model: str
+    vector_dimension: int
+    embedding_config_hash: str
+    chunking_schema_version: str
+    chunking_config_hash: str
+    lexical_schema_version: str
+    neo4j_vector_index_name: str
+    neo4j_vector_property_name: str
+    opensearch_index_name: str
+    opensearch_alias_name: str
+    status: RetrievalIndexVersionStatus
+    activated_at: datetime | None
+    deprecated_at: datetime | None
+    failed_at: datetime | None
+    error_code: str | None
+    error_message: str | None
+    metadata_: dict[str, Any] = Field(serialization_alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentIndexCoverageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    document_id: UUID
+    document_version_id: UUID
+    retrieval_index_version_id: UUID
+    status: DocumentIndexCoverageStatus
+    chunk_count: int
+    embedded_count: int
+    vector_count: int
+    lexical_count: int
+    started_at: datetime | None
+    completed_at: datetime | None
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class IndexBackfillCreateRequest(BaseModel):
+    retrieval_index_version_id: UUID
+    document_id: UUID | None = None
+    document_version_id: UUID | None = None
+
+
+class IndexBackfillJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID | None
+    retrieval_index_version_id: UUID
+    document_id: UUID | None
+    document_version_id: UUID | None
+    status: IndexBackfillJobStatus
+    total_count: int
+    processed_count: int
+    failed_count: int
+    checkpoint: dict[str, Any]
+    last_error: dict[str, Any] | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RetrievalSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    limit: int = Field(default=10, ge=1, le=50)
+    retrieval_index_version_id: UUID | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_filters(self) -> Self:
+        for name, value in self.filters.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError("filter names must be non-empty strings.")
+            if not isinstance(value, str | int | float | bool):
+                raise ValueError("filter values must be strings, numbers, or booleans.")
+        return self
+
+
+class RetrievalChunkResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    score: float
+    tenant_id: UUID
+    document_id: UUID
+    document_version_id: UUID
+    chunk_id: str
+    chunk_hash: str
+    text: str | None
+    title: str | None
+    heading_path: list[str]
+    page_start: int | None
+    page_end: int | None
+    source_uri: str | None
+    metadata: dict[str, Any]
+
+
+class RetrievalSearchResponse(BaseModel):
+    index_version_id: UUID
+    results: list[RetrievalChunkResultResponse]
+
+
+class EntityNeighborhoodResponse(BaseModel):
+    root_entity_id: UUID
+    depth: int
+    entities: list[CanonicalEntitySummary]
+    relationships: list[EntityRelationshipSummary]

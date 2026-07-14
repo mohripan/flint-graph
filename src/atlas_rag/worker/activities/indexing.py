@@ -6,7 +6,6 @@ import httpx
 from temporalio import activity
 from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 
-from atlas_rag.application.embeddings import DeterministicEmbeddingModel, EmbeddingModel
 from atlas_rag.application.outbox_contracts import (
     DocumentIndexingFailurePayload,
     IndexDocumentBatchPayload,
@@ -25,9 +24,11 @@ from atlas_rag.application.services.indexing import (
 )
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.infrastructure.db.session import SessionFactory
-from atlas_rag.infrastructure.embeddings import OpenAICompatibleEmbeddingModel
+from atlas_rag.infrastructure.embedding_factory import (
+    create_embedding_model,
+    embedding_base_url,
+)
 from atlas_rag.infrastructure.neo4j import create_neo4j_client
-from atlas_rag.infrastructure.ollama import OllamaEmbeddingModel
 from atlas_rag.infrastructure.opensearch import create_opensearch_client
 from atlas_rag.infrastructure.temporal import connect_temporal
 from atlas_rag.workflows.indexing import (
@@ -138,8 +139,8 @@ async def plan_document_indexing_activity(
 @activity.defn(name=INDEX_DOCUMENT_BATCH_ACTIVITY)
 async def index_document_batch(payload: IndexDocumentBatchPayload) -> dict[str, int]:
     settings = get_settings()
-    async with httpx.AsyncClient(base_url=_embedding_base_url(settings)) as http_client:
-        embedding_model = _embedding_model_from_settings(settings, http_client=http_client)
+    async with httpx.AsyncClient(base_url=embedding_base_url(settings)) as http_client:
+        embedding_model = create_embedding_model(settings, http_client=http_client)
         neo4j_client = create_neo4j_client(settings)
         opensearch_client = create_opensearch_client(settings)
         async with SessionFactory() as session:
@@ -221,37 +222,6 @@ async def mark_document_indexing_cancelled(payload: IndexDocumentVersionPayload)
         except Exception:
             await session.rollback()
             raise
-
-
-def _embedding_model_from_settings(
-    settings: Settings,
-    *,
-    http_client: httpx.AsyncClient,
-) -> EmbeddingModel:
-    if settings.embedding_provider == "deterministic":
-        return DeterministicEmbeddingModel()
-    if settings.embedding_provider == "ollama":
-        return OllamaEmbeddingModel(
-            model=settings.embedding_model,
-            timeout_seconds=settings.embedding_timeout_seconds,
-            http_client=http_client,
-            base_url=settings.embedding_ollama_base_url,
-        )
-    if settings.embedding_openai_api_key is None:
-        raise RuntimeError("embedding_openai_api_key is required")
-    return OpenAICompatibleEmbeddingModel(
-        model=settings.embedding_model,
-        api_key=settings.embedding_openai_api_key,
-        timeout_seconds=settings.embedding_timeout_seconds,
-        http_client=http_client,
-        base_url=settings.embedding_openai_base_url,
-    )
-
-
-def _embedding_base_url(settings: Settings) -> str:
-    if settings.embedding_provider == "ollama":
-        return settings.embedding_ollama_base_url
-    return settings.embedding_openai_base_url or "https://api.openai.com"
 
 
 def _indexing_workflow_id(payload: IndexDocumentVersionPayload) -> str:

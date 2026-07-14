@@ -3,7 +3,9 @@ from typing import Any
 from temporalio.client import Client
 from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 
+from atlas_rag.application.outbox_contracts import IndexBackfillPayload
 from atlas_rag.config import Settings
+from atlas_rag.workflows.backfill import INDEX_BACKFILL_WORKFLOW
 
 
 class TemporalIngestionWorkflowStarter:
@@ -38,6 +40,23 @@ class TemporalIngestionWorkflowStarter:
     ) -> None:
         handle = self._client.get_workflow_handle(workflow_id)
         await handle.cancel(reason="AtlasRAG ingestion job cancelled")
+
+
+class TemporalIndexBackfillWorkflowStarter:
+    def __init__(self, client: Client, *, task_queue: str) -> None:
+        self._client = client
+        self._task_queue = task_queue
+
+    async def start_index_backfill_workflow(self, *, job_id: object) -> None:
+        payload = IndexBackfillPayload(backfill_job_id=str(job_id))
+        await self._client.start_workflow(
+            INDEX_BACKFILL_WORKFLOW,
+            payload,
+            id=f"index-backfill-{job_id}",
+            task_queue=self._task_queue,
+            id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
+            id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+        )
 
 
 async def connect_temporal(settings: Settings) -> Client:

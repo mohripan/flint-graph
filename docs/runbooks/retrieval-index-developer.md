@@ -164,8 +164,7 @@ mode failures should leave ingestion completed and mark
 ## Backfill And Reconcile Checks
 
 Phase 6 adds `IndexBackfillWorkflow`. Backfill jobs are stored in
-`index_backfill_jobs`; API creation starts in Phase 7, but local development can
-insert jobs through Python or tests and run the workflow from Temporal.
+`index_backfill_jobs`. Phase 7 adds API creation and status endpoints.
 
 Workflow name:
 
@@ -178,6 +177,18 @@ Backfill workflow payload:
 ```json
 {"backfill_job_id":"<index_backfill_jobs.id>"}
 ```
+
+Start a tenant-scoped backfill through the API:
+
+```powershell
+curl.exe -sS -X POST http://localhost:8000/v1/index-backfills `
+  -H "X-Tenant-ID: <tenant-id>" -H "Content-Type: application/json" `
+  -d '{"retrieval_index_version_id":"<index-version-id>"}'
+```
+
+Optional `document_id` and `document_version_id` fields narrow the backfill
+scope. Foreign tenant documents, document versions, index versions, and jobs
+return 404.
 
 Backfill eligibility includes missing coverage, incomplete coverage,
 count-mismatched coverage, and stale chunk hashes where current chunks do not
@@ -254,11 +265,12 @@ docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "MATCH (c:Chunk
 
 ## API Checks
 
-After implementation, expected primitive checks:
+Phase 7 primitive checks:
 
 ```powershell
 curl.exe -sS http://localhost:8000/v1/index-versions -H "X-Tenant-ID: <tenant-id>"
 curl.exe -sS http://localhost:8000/v1/index-coverage -H "X-Tenant-ID: <tenant-id>"
+curl.exe -sS http://localhost:8000/v1/index-backfills/<job-id> -H "X-Tenant-ID: <tenant-id>"
 ```
 
 Lexical search:
@@ -266,7 +278,7 @@ Lexical search:
 ```powershell
 curl.exe -sS -X POST http://localhost:8000/v1/search/lexical `
   -H "X-Tenant-ID: <tenant-id>" -H "Content-Type: application/json" `
-  -d '{"query":"acme","limit":5}'
+  -d '{"query":"acme","limit":5,"filters":{"source_type":"upload"}}'
 ```
 
 Vector search:
@@ -283,6 +295,10 @@ Graph neighborhood:
 curl.exe -sS "http://localhost:8000/v1/entities/<entity-id>/neighborhood?depth=1&limit=25" `
   -H "X-Tenant-ID: <tenant-id>"
 ```
+
+Search defaults to the tenant active retrieval index version, then the active
+global version. Add `retrieval_index_version_id` to the search request body to
+query an explicit active version visible to the tenant.
 
 ## Failure Modes
 

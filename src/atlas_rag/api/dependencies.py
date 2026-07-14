@@ -2,16 +2,27 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas_rag.application.embeddings import EmbeddingModel
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.domain.errors import NotFoundError
 from atlas_rag.infrastructure.db.models import Tenant
 from atlas_rag.infrastructure.db.session import get_session
+from atlas_rag.infrastructure.embedding_factory import (
+    create_embedding_model,
+    embedding_base_url,
+)
 from atlas_rag.infrastructure.neo4j import Neo4jClient, create_neo4j_client
 from atlas_rag.infrastructure.object_store import ObjectStore, create_object_store
+from atlas_rag.infrastructure.opensearch import OpenSearchClient, create_opensearch_client
+from atlas_rag.infrastructure.temporal import (
+    TemporalIndexBackfillWorkflowStarter,
+    connect_temporal,
+)
 from atlas_rag.infrastructure.url_fetcher import HTTPURLFetcher, URLFetcher
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -57,3 +68,38 @@ async def get_neo4j_client(settings: SettingsDep) -> AsyncIterator[Neo4jClient]:
 
 
 Neo4jClientDep = Annotated[Neo4jClient, Depends(get_neo4j_client)]
+
+
+async def get_opensearch_client(settings: SettingsDep) -> AsyncIterator[OpenSearchClient]:
+    client = create_opensearch_client(settings)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+OpenSearchClientDep = Annotated[OpenSearchClient, Depends(get_opensearch_client)]
+
+
+async def get_embedding_model(settings: SettingsDep) -> AsyncIterator[EmbeddingModel]:
+    async with httpx.AsyncClient(base_url=embedding_base_url(settings)) as http_client:
+        yield create_embedding_model(settings, http_client=http_client)
+
+
+EmbeddingModelDep = Annotated[EmbeddingModel, Depends(get_embedding_model)]
+
+
+async def get_index_backfill_workflow_starter(
+    settings: SettingsDep,
+) -> TemporalIndexBackfillWorkflowStarter:
+    client = await connect_temporal(settings)
+    return TemporalIndexBackfillWorkflowStarter(
+        client,
+        task_queue=settings.temporal_task_queue,
+    )
+
+
+IndexBackfillWorkflowStarterDep = Annotated[
+    TemporalIndexBackfillWorkflowStarter,
+    Depends(get_index_backfill_workflow_starter),
+]

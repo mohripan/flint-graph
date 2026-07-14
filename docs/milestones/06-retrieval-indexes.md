@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 6 are implemented.
+In progress. Phases 1 through 7 are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -118,7 +118,22 @@ Completed in Phase 6:
 - retrieval index reconcile command that replays completed PostgreSQL coverage
   into Neo4j and OpenSearch without re-embedding.
 
-No primitive retrieval API behavior is active yet.
+Completed in Phase 7:
+
+- tenant-scoped primitive retrieval API routes for index versions, coverage,
+  backfill start/status, lexical search, vector search, and entity
+  neighborhoods;
+- request/response schemas for ranked chunk records and graph traversal records;
+- API-side validation for search limits, traversal bounds, and scalar metadata
+  filters;
+- active retrieval index version resolution with tenant-specific versions
+  preferred over global versions;
+- OpenSearch lexical search dispatch with tenant and index-version filters;
+- Neo4j vector search dispatch using the configured embedding model and
+  retrieval index vector metadata;
+- API-side backfill job creation with duplicate-safe Temporal workflow start;
+- PostgreSQL-authoritative bounded neighborhood traversal over active canonical
+  relationships.
 
 ## Datastore Roles
 
@@ -215,12 +230,13 @@ the document version.
 
 Milestone 06 exposes low-level retrieval APIs:
 
-- index version listing;
-- index coverage checks;
-- backfill start/status;
-- lexical search against OpenSearch;
-- vector search against Neo4j;
-- bounded entity neighborhood traversal.
+- `GET /v1/index-versions`;
+- `GET /v1/index-coverage`;
+- `POST /v1/index-backfills`;
+- `GET /v1/index-backfills/{job_id}`;
+- `POST /v1/search/lexical`;
+- `POST /v1/search/vector`;
+- `GET /v1/entities/{entity_id}/neighborhood`.
 
 These APIs return ranked records and graph context. They do not synthesize final
 answers.
