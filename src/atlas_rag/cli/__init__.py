@@ -1,0 +1,1 @@
+"""AtlasRAG command-line entrypoints."""

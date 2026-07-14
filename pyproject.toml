@@ -39,6 +39,9 @@ dev = [
   "types-pyyaml>=6,<7",
 ]
 
+[project.scripts]
+atlas-eval = "atlas_rag.cli.eval:main"
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"

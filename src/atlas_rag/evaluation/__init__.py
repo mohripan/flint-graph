@@ -13,6 +13,7 @@ from atlas_rag.evaluation.baselines import (
     load_baseline,
     save_baseline,
 )
+from atlas_rag.evaluation.comparison import comparison_table, run_comparison
 from atlas_rag.evaluation.datasets import (
     DatasetMetadata,
     GoldenDataset,
@@ -23,6 +24,7 @@ from atlas_rag.evaluation.datasets import (
     load_queries,
 )
 from atlas_rag.evaluation.experiment import QueryEvaluator, run_experiment
+from atlas_rag.evaluation.experiments import ExperimentConfig, load_experiment
 from atlas_rag.evaluation.metrics import (
     QueryEvaluation,
     aggregate_metrics,
@@ -34,6 +36,11 @@ from atlas_rag.evaluation.metrics import (
     recall_at_k,
     reciprocal_rank,
 )
+from atlas_rag.evaluation.recorded import (
+    RecordedEvaluation,
+    load_recorded_evaluations,
+    recorded_evaluator,
+)
 from atlas_rag.evaluation.report import (
     ExperimentReport,
     PerQueryResult,
@@ -44,6 +51,7 @@ from atlas_rag.evaluation.report import (
 
 __all__ = [
     "DatasetMetadata",
+    "ExperimentConfig",
     "ExperimentReport",
     "GoldenDataset",
     "GoldenQuery",
@@ -52,23 +60,29 @@ __all__ = [
     "QueryEvaluation",
     "QueryEvaluator",
     "QueryType",
+    "RecordedEvaluation",
     "RunMetadata",
     "ThresholdViolation",
     "aggregate_metrics",
     "answer_matches",
     "check_regressions",
     "check_thresholds",
+    "comparison_table",
     "hit_at_k",
     "load_baseline",
     "load_dataset",
+    "load_experiment",
     "load_metadata",
     "load_queries",
+    "load_recorded_evaluations",
     "ndcg_at_k",
     "per_query_metrics",
     "precision_at_k",
     "read_report",
     "recall_at_k",
     "reciprocal_rank",
+    "recorded_evaluator",
+    "run_comparison",
     "run_experiment",
     "save_baseline",
     "write_report",
