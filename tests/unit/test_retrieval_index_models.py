@@ -1,6 +1,10 @@
 from sqlalchemy import Index, UniqueConstraint
 
-from atlas_rag.infrastructure.db.models import ChunkEmbedding, RetrievalIndexVersion
+from atlas_rag.infrastructure.db.models import (
+    ChunkEmbedding,
+    DocumentIndexCoverage,
+    RetrievalIndexVersion,
+)
 
 
 def test_retrieval_index_version_model_declares_active_scope_indexes() -> None:
@@ -29,3 +33,13 @@ def test_chunk_embedding_model_declares_idempotency_constraint() -> None:
         "chunk_id",
         "chunk_hash",
     ) in unique_columns
+
+
+def test_document_index_coverage_model_declares_idempotency_constraint() -> None:
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in DocumentIndexCoverage.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+
+    assert ("retrieval_index_version_id", "document_version_id") in unique_columns

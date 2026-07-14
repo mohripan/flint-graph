@@ -111,6 +111,49 @@ chunk hash. Vector values are persisted as JSON until a later phase decides
 whether a PostgreSQL vector extension is needed; Neo4j remains the intended
 vector search projection for Milestone 06.
 
+## Document Index Coverage
+
+Document index coverage records whether one document version has been indexed
+into one retrieval index version. Coverage rows are unique by retrieval index
+version and document version.
+
+Each coverage row stores:
+
+- tenant, document, and document-version identity;
+- retrieval index version identity;
+- status: `running`, `completed`, `failed`, or `cancelled`;
+- planned chunk count;
+- embedded, Neo4j vector, and OpenSearch lexical projection counts;
+- start/completion timestamps;
+- bounded error code and message.
+
+Coverage is a control-plane record in PostgreSQL. It is the future source for
+index coverage APIs and for backfill/reconcile decisions. Neo4j and OpenSearch
+remain rebuildable projections and do not define authoritative coverage state.
+
+## Indexing Workflow
+
+`IndexDocumentVersionWorkflow` indexes one document version into one retrieval
+index version. It plans chunk batches, runs each batch, then marks coverage
+complete. Failures mark coverage failed and re-raise so Temporal retry and
+required-ingestion semantics remain explicit. Cancellation marks coverage
+cancelled.
+
+The workflow payload contains IDs only. Activities load chunk text and existing
+metadata from PostgreSQL, embed batches through the provider-neutral contract,
+persist `chunk_embeddings`, project vectors to Neo4j, and bulk upsert lexical
+records into OpenSearch.
+
+Ingestion honors indexing mode:
+
+- `disabled`: do not start indexing;
+- `optional`: complete ingestion first, then start indexing as follow-up;
+- `required`: wait for indexing before completing ingestion.
+
+Required indexing failures fail the ingestion job and document version because
+the normal ingestion completion transition is not reached. Optional indexing
+failures update coverage but cannot re-fail a completed ingestion job.
+
 ## Neo4j Vector Projection
 
 Neo4j stores retrieval projection nodes or properties with:

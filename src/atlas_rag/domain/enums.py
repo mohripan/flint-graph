@@ -148,6 +148,13 @@ class RetrievalIndexVersionStatus(StrEnum):
     FAILED = "failed"
 
 
+class DocumentIndexCoverageStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class IndexBackfillJobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"

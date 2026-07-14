@@ -104,6 +104,12 @@ Backfill jobs:
 docker compose exec postgres psql -U atlas -d atlas -c "select id, status, processed_count, failed_count, last_error from index_backfill_jobs order by created_at desc limit 20;"
 ```
 
+Document index coverage:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select document_version_id, retrieval_index_version_id, status, chunk_count, embedded_count, vector_count, lexical_count, error_code from document_index_coverages order by created_at desc limit 20;"
+```
+
 Active-version invariant:
 
 ```powershell
@@ -123,6 +129,30 @@ retrieval_index_version_id + document_version_id + chunk_id + chunk_hash
 
 If a chunk hash changes, the old embedding remains tied to the old hash and
 must not be reused for the new chunk.
+
+## Indexing Workflow Checks
+
+Phase 5 adds `IndexDocumentVersionWorkflow` and registers it in the ingestion
+worker. The workflow is started by ingestion according to `ATLAS_INDEXING_MODE`:
+
+- `disabled`: no indexing workflow starts;
+- `optional`: ingestion completes, then the workflow starts as follow-up;
+- `required`: ingestion waits for indexing before completing.
+
+Temporal workflow IDs use:
+
+```text
+index-document-version-<document_version_id>-<retrieval_index_version_id>
+```
+
+In Temporal Web UI, inspect `http://localhost:8233` and search for
+`IndexDocumentVersionWorkflow` after ingesting a document with an active
+retrieval index version.
+
+Required-mode failures happen before `job.completed`, so the ingestion job and
+document version fail through the normal ingestion transition path. Optional
+mode failures should leave ingestion completed and mark
+`document_index_coverages.status = 'failed'`.
 
 ## OpenSearch Checks
 

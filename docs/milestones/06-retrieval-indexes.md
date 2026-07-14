@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 4 are implemented.
+In progress. Phases 1 through 5 are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -93,8 +93,21 @@ Completed in Phase 4:
 - idempotent chunk vector upsert and bounded delete helpers;
 - safe Cypher generation for versioned vector indexes.
 
-No indexing workflow, backfill execution, or primitive retrieval API behavior is
-active yet.
+Completed in Phase 5:
+
+- separate `IndexDocumentVersionWorkflow` for indexing one document version into
+  one retrieval index version;
+- ingestion workflow integration for `disabled`, `optional`, and `required`
+  indexing modes;
+- document index coverage persistence with status, planned chunk count,
+  projection counts, timestamps, and bounded failure metadata;
+- batched chunk embedding persistence tied to retrieval index version and chunk
+  hash;
+- idempotent Neo4j vector and OpenSearch lexical projection calls from indexing
+  activities;
+- worker registration for indexing workflow and activities.
+
+No backfill execution or primitive retrieval API behavior is active yet.
 
 ## Datastore Roles
 
@@ -145,6 +158,22 @@ both enforce one active global version and one active version per tenant.
 
 Indexing should run in a separate Temporal workflow after ingestion has produced
 chunks and extraction/resolution work has committed.
+
+Phase 5 adds `IndexDocumentVersionWorkflow`. The ingestion workflow prepares an
+indexing target after parsing, chunking, and extraction finish:
+
+- `disabled` mode completes ingestion without starting indexing;
+- `optional` mode completes ingestion first, then starts the indexing workflow
+  as a follow-up so indexing failures cannot fail a completed ingestion job;
+- `required` mode waits for the indexing workflow before marking ingestion
+  complete, so indexing failures fail the ingestion job and document version.
+
+Workflow history carries only document/index IDs, batch indexes, and counters.
+Chunk text and vectors are loaded inside activities from PostgreSQL.
+
+Document-version coverage is stored in `document_index_coverages`. Each row is
+unique by retrieval index version and document version, and records status,
+chunk count, embedded/vector/lexical counts, timestamps, and bounded errors.
 
 Backfills use the same indexing services as ingestion. A backfill scans active
 document versions missing the target version, embeds their chunks, persists

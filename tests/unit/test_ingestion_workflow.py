@@ -10,6 +10,7 @@ from atlas_rag.workflows.ingestion import (
     MARK_JOB_COMPLETED_ACTIVITY,
     MARK_JOB_FAILED_ACTIVITY,
     MARK_JOB_RUNNING_ACTIVITY,
+    PREPARE_DOCUMENT_INDEXING_ACTIVITY,
     RUN_INGESTION_PIPELINE_ACTIVITY,
     IngestDocumentWorkflow,
 )
@@ -36,6 +37,9 @@ async def test_ingestion_workflow_runs_pipeline_path_to_completion(
 
     async def fake_execute_activity(activity_name: str, arg: dict[str, Any], **_: Any) -> None:
         calls.append((activity_name, arg))
+        if activity_name == PREPARE_DOCUMENT_INDEXING_ACTIVITY:
+            return {"mode": "disabled", "should_index": False}
+        return None
 
     monkeypatch.setattr(ingestion.workflow, "execute_activity", fake_execute_activity)
 
@@ -44,6 +48,7 @@ async def test_ingestion_workflow_runs_pipeline_path_to_completion(
     assert [name for name, _ in calls] == [
         MARK_JOB_RUNNING_ACTIVITY,
         RUN_INGESTION_PIPELINE_ACTIVITY,
+        PREPARE_DOCUMENT_INDEXING_ACTIVITY,
         MARK_JOB_COMPLETED_ACTIVITY,
         ENQUEUE_TENANT_RESOLUTION_ACTIVITY,
     ]
@@ -59,6 +64,9 @@ async def test_ingestion_workflow_marks_job_failed_when_pipeline_activity_fails(
         calls.append((activity_name, arg))
         if activity_name == RUN_INGESTION_PIPELINE_ACTIVITY:
             raise RuntimeError("parser failed")
+        if activity_name == PREPARE_DOCUMENT_INDEXING_ACTIVITY:
+            return {"mode": "disabled", "should_index": False}
+        return None
 
     monkeypatch.setattr(ingestion.workflow, "execute_activity", fake_execute_activity)
 
@@ -84,6 +92,9 @@ async def test_ingestion_workflow_marks_job_cancelled_when_cancelled(
         calls.append((activity_name, arg))
         if activity_name == RUN_INGESTION_PIPELINE_ACTIVITY:
             raise CancelledError("cancelled by test")
+        if activity_name == PREPARE_DOCUMENT_INDEXING_ACTIVITY:
+            return {"mode": "disabled", "should_index": False}
+        return None
 
     monkeypatch.setattr(ingestion.workflow, "execute_activity", fake_execute_activity)
 

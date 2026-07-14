@@ -29,6 +29,7 @@ from atlas_rag.domain.enums import (
     CandidateTargetKind,
     ClaimStatus,
     DocumentArtifactType,
+    DocumentIndexCoverageStatus,
     DocumentVersionStatus,
     EntityStatus,
     EntityType,
@@ -283,6 +284,51 @@ class ChunkEmbedding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     vector: Mapped[list[float]] = mapped_column(JSON, nullable=False)
     provider_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     request_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class DocumentIndexCoverage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "document_index_coverages"
+    __table_args__ = (
+        UniqueConstraint(
+            "retrieval_index_version_id",
+            "document_version_id",
+            name="uq_document_index_coverages_version_document_version",
+        ),
+        Index("ix_document_index_coverages_tenant_status", "tenant_id", "status"),
+        Index("ix_document_index_coverages_document_version", "document_version_id"),
+        Index(
+            "ix_document_index_coverages_index_version",
+            "retrieval_index_version_id",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    retrieval_index_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("retrieval_index_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[DocumentIndexCoverageStatus] = mapped_column(
+        enum_column(DocumentIndexCoverageStatus, 32),
+        nullable=False,
+        default=DocumentIndexCoverageStatus.RUNNING,
+    )
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    embedded_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    vector_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lexical_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class IndexBackfillJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
