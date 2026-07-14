@@ -1,6 +1,6 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, and exposes LangGraph-backed query orchestration with streamed, citation-bearing answers. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, and exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 ## Why these milestones come first
 
@@ -161,6 +161,20 @@ curl -sS http://localhost:8000/v1/query-runs/<query-run-id>/events \
   -H 'X-Tenant-ID: <tenant-id>'
 ```
 
+Inspect answer provenance:
+
+```bash
+curl -sS http://localhost:8000/v1/query-runs/<query-run-id>/provenance \
+  -H 'X-Tenant-ID: <tenant-id>'
+curl -sS http://localhost:8000/v1/query-runs/<query-run-id>/citations/c1 \
+  -H 'X-Tenant-ID: <tenant-id>'
+```
+
+Grounded answer generation repairs model-emitted citation markers, checks each
+claim against its cited context, abstains when support is weak, persists
+per-claim support decisions, and streams authoritative final answer events after
+verification.
+
 ## Quality commands
 
 ```bash
@@ -196,10 +210,14 @@ make check
 25. Every merge decision is recorded and reviewable; merges are soft and reversible.
 26. Relationships aggregate from resolved staged relations and entity-object claims whose endpoints both resolve to canonical entities.
 27. PostgreSQL is authoritative; Neo4j is an idempotent projection rebuildable from PostgreSQL.
+28. Query runs persist faithfulness summaries and per-claim support decisions.
+29. Every final answer citation maps to a packed context record.
+30. Unsupported answers abstain without fabricating citations.
+31. Query provenance endpoints apply tenant filters.
 
 ## Current milestone boundary
 
-Milestone 07 adds LangGraph query orchestration, query-run inspection, parallel lexical/vector/graph retrieval, fusion, reranking, context packing, deterministic answer generation, SSE query events, and deterministic query eval fixtures. Dedicated extraction inspection APIs remain later work.
+Milestone 08 adds grounded answer generation, citation repair, support checking, abstention, faithfulness persistence, verified streaming answer events, provenance APIs, and deterministic faithfulness eval fixtures. Dedicated extraction inspection APIs remain later work.
 
 ## Security status
 
@@ -229,3 +247,7 @@ Milestone notes:
 - Query orchestration contract: `docs/architecture/query-orchestration-contract.md`
 - Query orchestration developer runbook: `docs/runbooks/query-orchestration-developer.md`
 - Query orchestration QA guide: `docs/runbooks/query-orchestration-qa-guide.md`
+- Grounded answer generation: `docs/milestones/08-grounded-answer-generation.md`
+- Answer faithfulness contract: `docs/architecture/answer-faithfulness-contract.md`
+- Grounded answer developer runbook: `docs/runbooks/grounded-answer-generation-developer.md`
+- Grounded answer QA guide: `docs/runbooks/grounded-answer-generation-qa-guide.md`

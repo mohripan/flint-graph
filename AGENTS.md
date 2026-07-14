@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 07 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, and LangGraph-backed query orchestration with streamed citation-bearing answers.
+AtlasRAG is an early GraphRAG platform. Through Milestone 08 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, and LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs.
 
 Implemented path:
 
@@ -18,11 +18,12 @@ API intake -> immutable raw object in MinIO
     -> project resolved graph into Neo4j
     -> index chunks into PostgreSQL embeddings + Neo4j vectors + OpenSearch lexical records
     -> primitive lexical/vector/neighborhood retrieval APIs
-    -> LangGraph query run -> classify/link/retrieve/fuse/rerank/pack/answer
-    -> persisted SSE events + inspectable query run
+    -> LangGraph query run -> classify/link/retrieve/fuse/rerank/pack
+    -> draft answer -> repair citations -> support check -> abstain/finalize
+    -> persisted SSE events + inspectable query run + answer provenance
 ```
 
-PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, and answer metadata. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, and SSE query streaming endpoints; dedicated extraction inspection endpoints are deferred.
+PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, answer metadata, answer claims, support decisions, and answer provenance. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, SSE query streaming, answer-provenance, and citation-provenance endpoints; dedicated extraction inspection endpoints are deferred.
 
 Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
@@ -151,6 +152,19 @@ Milestone 07 query orchestration:
 - `tests/fixtures/query_orchestration_eval_cases.json`: deterministic query eval fixtures.
 - `docs/milestones/07-query-orchestration.md`, `docs/adr/0007-langgraph-query-orchestration.md`, `docs/architecture/query-orchestration-contract.md`, `docs/runbooks/query-orchestration-*.md`.
 
+Milestone 08 grounded answer generation:
+
+- `src/atlas_rag/application/query_faithfulness.py`: citation repair, deterministic support checking, and abstention policy helpers.
+- `src/atlas_rag/application/services/query_faithfulness.py`: draft-to-verified-answer runtime pipeline.
+- `src/atlas_rag/application/services/query_answering.py`: verified answer event emission, answer-claim persistence, and completion.
+- `src/atlas_rag/application/services/query_provenance.py`: tenant-scoped answer and citation provenance readers.
+- `src/atlas_rag/infrastructure/ollama.py`: Ollama answer generation and streaming adapter.
+- `src/atlas_rag/infrastructure/answer_generator_factory.py`: answer generator and support checker provider selection.
+- `src/atlas_rag/api/routes/query.py`: query-run, event replay, SSE streaming, provenance, and citation endpoints.
+- `migrations/versions/0011_answer_faithfulness.py`: query-run faithfulness columns and `query_answer_claims`.
+- `tests/fixtures/query_orchestration_eval_cases.json`: deterministic query and faithfulness eval fixtures.
+- `docs/milestones/08-grounded-answer-generation.md`, `docs/adr/0008-grounded-answer-generation-and-faithfulness.md`, `docs/architecture/answer-faithfulness-contract.md`, `docs/runbooks/grounded-answer-generation-*.md`.
+
 ## Current Invariants
 
 - A document belongs to one tenant.
@@ -173,6 +187,9 @@ Milestone 07 query orchestration:
 - Query runs use visible active retrieval index versions.
 - Query events are persisted in monotonic per-run order.
 - Every answer citation maps to a packed context record.
+- Every persisted answer claim carries a support decision.
+- Unsupported generated answers abstain rather than serving fabricated citations.
+- Query provenance APIs apply tenant filters and resolve from PostgreSQL.
 
 ## Temporal Notes
 
@@ -198,7 +215,8 @@ Milestone 07 query orchestration:
 - The compose Temporal service currently uses the `latest` image tag, which is convenient for early local development but should be pinned before production-like environments.
 - OpenSearch near-real-time indexing may require refresh or polling before a just-indexed chunk appears in search.
 - Query API SSE execution is request-bound; it is not a durable background workflow.
-- Deterministic query providers are useful for repeatable smoke tests, not production answer quality.
+- Deterministic query and support providers are useful for repeatable smoke tests, not production answer quality.
+- Small local answer models can emit malformed or sparse draft claims; citation repair and support checking bound what reaches the persisted final answer.
 
 ## Before Ending A Change
 

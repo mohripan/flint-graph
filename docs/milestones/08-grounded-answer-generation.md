@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 6 are implemented.
+Complete. Phases 1 through 7 are implemented.
 
 Milestone 08 extends the Milestone 07 query orchestration path with grounded
 answer generation, deterministic citation repair, claim support checking,
@@ -58,8 +58,8 @@ and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
 
-Phases 1 through 6 expose answer faithfulness, streaming, persistence, and
-tenant-scoped provenance reads. Later phases add eval coverage, runbooks, and
+Milestone 08 exposes answer faithfulness, streaming, persistence,
+tenant-scoped provenance reads, deterministic eval coverage, runbooks, and
 manual verification notes.
 
 ## Implemented Phase 2 Provider Wiring
@@ -163,6 +163,24 @@ captured in context-pack records rather than deep-joining every possible source
 type. This keeps the API stable across chunk, graph, and future candidate
 sources while preserving the source chain needed for inspection.
 
+## Implemented Phase 7 Eval, Docs, And Verification
+
+`tests/fixtures/query_orchestration_eval_cases.json` now includes
+faithfulness-specific cases for citation repair and unsupported-claim
+abstention. `tests/unit/test_query_orchestration_eval_fixtures.py` verifies both
+the deterministic query providers and the faithfulness pipeline against those
+fixtures.
+
+ADR 0008 is accepted and implemented. The answer-faithfulness architecture
+contract, Milestone 08 doc, README, AGENTS handoff, and dedicated developer and
+QA runbooks describe the completed behavior, endpoints, settings, inspection
+queries, and manual smoke flow.
+
+Manual verification notes live under
+`notes/milestone-08/02-manual-verification-results.md`. They record the Docker
+Compose and API smoke results for streamed events, support checking, final
+answer persistence, and provenance inspection.
+
 ## Expected Invariants
 
 - Every surviving repaired citation maps to a packed context record.
@@ -173,4 +191,6 @@ sources while preserving the source chain needed for inspection.
   answer events.
 - Provenance reads are tenant-scoped and are derived from PostgreSQL, not from
   Neo4j or OpenSearch projections.
+- Deterministic eval fixtures cover both query orchestration and answer
+  faithfulness behavior without live model services.
 - Provider-specific SDK objects do not leak into application contracts.

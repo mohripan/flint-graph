@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for Milestone 08.
+Accepted. Implemented in Milestone 08.
 
 ## Context
 
@@ -21,7 +21,7 @@ is grounded. Small local models (for example `gemma3:1b`, `llama3.2`) make this
 worse: they frequently emit malformed or invented citation markers and
 overclaim.
 
-Milestone 08 needs a grounded answer path that is faithful to the packed
+Milestone 08 needed a grounded answer path that is faithful to the packed
 context, abstains when support is weak, streams responsively, and stays
 inspectable — without abandoning the milestone's invariants (PostgreSQL
 authoritative, deterministic providers for offline tests, no provider SDK
@@ -29,7 +29,7 @@ objects in application contracts).
 
 ## Decision
 
-Milestone 08 will add a provider-backed grounded answer path built from four
+Milestone 08 adds a provider-backed grounded answer path built from four
 composable stages behind provider-neutral contracts, plus provenance APIs.
 
 1. **Citation-only generation.** The answer model receives only the packed

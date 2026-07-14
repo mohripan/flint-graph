@@ -9,7 +9,11 @@
     "expected_retrievers": ["lexical", "vector"],
     "expected_answer": "Acme Corporation is headquartered in Berlin. [c1]",
     "expected_markers": ["[c1]"],
-    "expected_insufficient_context": false
+    "expected_insufficient_context": false,
+    "expected_abstained": false,
+    "expected_supported_claim_count": 1,
+    "expected_unsupported_claim_count": 0,
+    "expected_surviving_markers": ["[c1]"]
   },
   {
     "id": "relationship-office",
@@ -21,7 +25,11 @@
     "expected_retrievers": ["lexical", "vector", "graph"],
     "expected_answer": "Acme Corporation operates a research office in Berlin. [c1]",
     "expected_markers": ["[c1]"],
-    "expected_insufficient_context": false
+    "expected_insufficient_context": false,
+    "expected_abstained": false,
+    "expected_supported_claim_count": 1,
+    "expected_unsupported_claim_count": 0,
+    "expected_surviving_markers": ["[c1]"]
   },
   {
     "id": "summary-brief",
@@ -34,7 +42,11 @@
     "expected_retrievers": ["lexical", "vector"],
     "expected_answer": "Acme Corporation researches graph retrieval and maintains a Berlin office. [c1]",
     "expected_markers": ["[c1]", "[c2]"],
-    "expected_insufficient_context": false
+    "expected_insufficient_context": false,
+    "expected_abstained": false,
+    "expected_supported_claim_count": 1,
+    "expected_unsupported_claim_count": 0,
+    "expected_surviving_markers": ["[c1]", "[c2]"]
   },
   {
     "id": "insufficient-context",
@@ -44,6 +56,58 @@
     "expected_retrievers": ["lexical", "vector"],
     "expected_answer": "The available context is insufficient to answer this query.",
     "expected_markers": [],
-    "expected_insufficient_context": true
+    "expected_insufficient_context": true,
+    "expected_abstained": true,
+    "expected_supported_claim_count": 0,
+    "expected_unsupported_claim_count": 1,
+    "expected_surviving_markers": []
+  },
+  {
+    "id": "faithfulness-citation-repair",
+    "query": "What does AtlasRAG persist for grounded answers?",
+    "context": [
+      "AtlasRAG persists answer claims in PostgreSQL."
+    ],
+    "expected_label": "factoid",
+    "expected_retrievers": ["lexical", "vector"],
+    "expected_answer": "AtlasRAG persists answer claims in PostgreSQL. [c1]",
+    "expected_markers": ["[c1]"],
+    "expected_insufficient_context": false,
+    "draft_claims": [
+      {
+        "claim_index": 0,
+        "text": "AtlasRAG persists answer claims in PostgreSQL.",
+        "raw_citation_markers": ["C1", "c9", "[c1]"]
+      }
+    ],
+    "expected_abstained": false,
+    "expected_supported_claim_count": 1,
+    "expected_unsupported_claim_count": 0,
+    "expected_surviving_markers": ["[c1]"]
+  },
+  {
+    "id": "faithfulness-unsupported-abstains",
+    "query": "What changed in Singapore revenue?",
+    "context": [
+      "AtlasRAG persists answer claims in PostgreSQL."
+    ],
+    "expected_label": "factoid",
+    "expected_retrievers": ["lexical", "vector"],
+    "expected_answer": "AtlasRAG persists answer claims in PostgreSQL. [c1]",
+    "expected_markers": ["[c1]"],
+    "expected_insufficient_context": false,
+    "draft_claims": [
+      {
+        "claim_index": 0,
+        "text": "Quarterly revenue doubled in Singapore.",
+        "raw_citation_markers": ["c1"]
+      }
+    ],
+    "expected_verified_answer": "The available context is insufficient to answer this query.",
+    "expected_verified_insufficient_context": true,
+    "expected_abstained": true,
+    "expected_supported_claim_count": 0,
+    "expected_unsupported_claim_count": 1,
+    "expected_surviving_markers": []
   }
 ]
