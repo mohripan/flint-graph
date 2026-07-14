@@ -161,10 +161,17 @@ List Neo4j indexes:
 docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "SHOW INDEXES YIELD name, type, labelsOrTypes, properties RETURN name, type, labelsOrTypes, properties"
 ```
 
+Expected Phase 4 indexes include:
+
+- `chunk_id_unique`;
+- `chunk_tenant_index_version`;
+- `chunk_document_version`;
+- `chunk_embedding_default`.
+
 Check vector-bearing retrieval records:
 
 ```powershell
-docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "MATCH (c {tenant_id: '<tenant-id>'}) WHERE c.chunk_id IS NOT NULL RETURN labels(c), c.chunk_id, keys(c) LIMIT 20"
+docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "MATCH (c:Chunk {tenant_id: '<tenant-id>'}) RETURN c.id, c.chunk_id, c.retrieval_index_version_id, keys(c) LIMIT 20"
 ```
 
 ## API Checks

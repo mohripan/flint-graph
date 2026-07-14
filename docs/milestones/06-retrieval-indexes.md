@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 3 are implemented.
+In progress. Phases 1 through 4 are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -84,8 +84,17 @@ Completed in Phase 3:
   search;
 - tenant-filtered lexical search body builder.
 
-No Neo4j vector projection, indexing workflow, backfill execution, or primitive
-retrieval API behavior is active yet.
+Completed in Phase 4:
+
+- Neo4j `:Chunk` retrieval node schema migration;
+- default 384-dimensional Neo4j vector index for `Chunk.embedding`;
+- lookup indexes for chunk tenant/index/document-version identity;
+- vector projection service with stable chunk node IDs;
+- idempotent chunk vector upsert and bounded delete helpers;
+- safe Cypher generation for versioned vector indexes.
+
+No indexing workflow, backfill execution, or primitive retrieval API behavior is
+active yet.
 
 ## Datastore Roles
 
@@ -96,6 +105,9 @@ state.
 Neo4j remains a rebuildable projection. Milestone 06 extends it with
 vector-bearing retrieval records and vector indexes while preserving the existing
 canonical graph projection.
+
+Phase 4 adds separate `:Chunk` retrieval nodes for vector projection. Canonical
+`:Entity` graph projection remains unchanged.
 
 OpenSearch is introduced as the lexical retrieval projection. It stores
 searchable chunk records with analyzers, relevance scoring, and metadata

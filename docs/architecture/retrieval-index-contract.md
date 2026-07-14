@@ -125,6 +125,19 @@ Neo4j stores retrieval projection nodes or properties with:
 Vector index names and vector property names are versioned. Rebuilding a Neo4j
 vector projection must be possible from PostgreSQL chunk embeddings.
 
+Phase 4 projects vectors onto separate `:Chunk` nodes. A chunk node ID is stable
+by tenant ID, retrieval index version ID, document version ID, and chunk ID.
+Nodes store tenant, document, document-version, chunk, chunk-hash, and retrieval
+index-version identity fields plus a configurable vector property. The default
+schema migration creates `Chunk.id` uniqueness, lookup indexes for
+tenant/index-version and document-version/chunk queries, and a default
+384-dimensional cosine vector index on `Chunk.embedding`.
+
+Version-specific vector indexes can be generated from retrieval index version
+metadata. Because Neo4j identifiers cannot be parameterized, index names,
+labels, and vector property names are validated before being interpolated into
+Cypher.
+
 ## OpenSearch Lexical Projection
 
 OpenSearch stores chunk records in versioned physical indexes behind aliases.

@@ -78,11 +78,19 @@ def test_repo_migration_defines_entity_constraint() -> None:
 
     versions = {migration.version for migration in migrations}
     assert "0001_entity_constraints" in versions
+    assert "0002_chunk_vector_indexes" in versions
 
     initial = next(m for m in migrations if m.version == "0001_entity_constraints")
     joined = "\n".join(initial.statements)
     assert "entity_id_unique" in joined
     assert "entity_tenant_type_name" in joined
+
+    vector = next(m for m in migrations if m.version == "0002_chunk_vector_indexes")
+    vector_joined = "\n".join(vector.statements)
+    assert "chunk_id_unique" in vector_joined
+    assert "chunk_tenant_index_version" in vector_joined
+    assert "chunk_embedding_default" in vector_joined
+    assert "vector.dimensions`: 384" in vector_joined
 
 
 async def test_apply_migrations_runs_statements_and_records_versions() -> None:
