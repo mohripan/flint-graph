@@ -66,6 +66,12 @@ class IndexingBatchResult:
     lexical_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class ReconcileIndexProjectionResult:
+    vector_count: int
+    lexical_count: int
+
+
 async def select_active_retrieval_index_version(
     session: AsyncSession,
     *,
@@ -546,3 +552,137 @@ def _content_hash(data: bytes) -> str:
 def payload_hash(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return _content_hash(encoded)
+
+
+async def reconcile_document_index_projection(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    document_version_id: UUID,
+    retrieval_index_version_id: UUID,
+    neo4j_client: SupportsCypher,
+    opensearch_client: SupportsOpenSearchBulk,
+) -> ReconcileIndexProjectionResult:
+    index_version = await _load_index_version(
+        session,
+        tenant_id=tenant_id,
+        retrieval_index_version_id=retrieval_index_version_id,
+    )
+    rows = (
+        await session.execute(
+            select(DocumentChunk, Document, ChunkEmbedding)
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .outerjoin(
+                ChunkEmbedding,
+                (ChunkEmbedding.tenant_id == DocumentChunk.tenant_id)
+                & (ChunkEmbedding.document_version_id == DocumentChunk.document_version_id)
+                & (ChunkEmbedding.chunk_id == DocumentChunk.chunk_id)
+                & (ChunkEmbedding.chunk_hash == DocumentChunk.chunk_hash)
+                & (
+                    ChunkEmbedding.retrieval_index_version_id
+                    == retrieval_index_version_id
+                ),
+            )
+            .where(
+                DocumentChunk.tenant_id == tenant_id,
+                DocumentChunk.document_version_id == document_version_id,
+            )
+            .order_by(DocumentChunk.chunk_index)
+        )
+    ).all()
+    if not rows:
+        return ReconcileIndexProjectionResult(vector_count=0, lexical_count=0)
+
+    vector_records: list[VectorChunkRecord] = []
+    lexical_records: list[LexicalChunkRecord] = []
+    for chunk, document, embedding in rows:
+        if embedding is None:
+            raise RuntimeError("missing current chunk embeddings for document version")
+        metadata = {
+            "chunk_index": chunk.chunk_index,
+            "heading_path": chunk.heading_path,
+            "page_start": chunk.page_start,
+            "page_end": chunk.page_end,
+        }
+        vector_records.append(
+            VectorChunkRecord(
+                tenant_id=tenant_id,
+                document_id=chunk.document_id,
+                document_version_id=chunk.document_version_id,
+                chunk_id=chunk.chunk_id,
+                chunk_hash=chunk.chunk_hash,
+                retrieval_index_version_id=retrieval_index_version_id,
+                vector=embedding.vector,
+                text_preview=chunk.text[:200],
+                metadata=metadata,
+            )
+        )
+        lexical_records.append(
+            LexicalChunkRecord(
+                tenant_id=tenant_id,
+                document_id=chunk.document_id,
+                document_version_id=chunk.document_version_id,
+                chunk_id=chunk.chunk_id,
+                chunk_hash=chunk.chunk_hash,
+                title=document.title,
+                text=chunk.text,
+                heading_path=chunk.heading_path,
+                page_start=chunk.page_start,
+                page_end=chunk.page_end,
+                source_uri=document.source_uri,
+                metadata=chunk.metadata_,
+            )
+        )
+
+    await project_chunk_vectors(
+        neo4j_client,
+        records=vector_records,
+        vector_property_name=index_version.neo4j_vector_property_name,
+    )
+    await opensearch_client.bulk(
+        body=build_upsert_chunks_bulk_body(
+            index_name=index_version.opensearch_index_name,
+            records=lexical_records,
+            index_version_id=index_version.id,
+        )
+    )
+    return ReconcileIndexProjectionResult(
+        vector_count=len(vector_records),
+        lexical_count=len(lexical_records),
+    )
+
+
+async def reconcile_completed_index_projections(
+    session: AsyncSession,
+    *,
+    neo4j_client: SupportsCypher,
+    opensearch_client: SupportsOpenSearchBulk,
+    tenant_id: UUID | None = None,
+    retrieval_index_version_id: UUID | None = None,
+) -> int:
+    statement = select(DocumentIndexCoverage).where(
+        DocumentIndexCoverage.status == DocumentIndexCoverageStatus.COMPLETED
+    )
+    if tenant_id is not None:
+        statement = statement.where(DocumentIndexCoverage.tenant_id == tenant_id)
+    if retrieval_index_version_id is not None:
+        statement = statement.where(
+            DocumentIndexCoverage.retrieval_index_version_id
+            == retrieval_index_version_id
+        )
+    coverages = list(
+        await session.scalars(statement.order_by(DocumentIndexCoverage.created_at))
+    )
+
+    reconciled = 0
+    for coverage in coverages:
+        await reconcile_document_index_projection(
+            session,
+            tenant_id=coverage.tenant_id,
+            document_version_id=coverage.document_version_id,
+            retrieval_index_version_id=coverage.retrieval_index_version_id,
+            neo4j_client=neo4j_client,
+            opensearch_client=opensearch_client,
+        )
+        reconciled += 1
+    return reconciled

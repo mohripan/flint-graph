@@ -53,3 +53,14 @@ class DocumentIndexingFailurePayload(TypedDict):
     payload: IndexDocumentVersionPayload
     error_code: str
     error_message: str
+
+
+class IndexBackfillPayload(TypedDict):
+    backfill_job_id: str
+
+
+class BackfillDocumentFailurePayload(TypedDict):
+    backfill_job_id: str
+    document_version_id: str
+    error_code: str
+    error_message: str

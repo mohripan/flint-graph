@@ -5,6 +5,15 @@ from temporalio.worker import Worker
 from atlas_rag.config import get_settings
 from atlas_rag.infrastructure.temporal import connect_temporal
 from atlas_rag.logging import configure_logging
+from atlas_rag.worker.activities.index_backfill import (
+    complete_index_backfill_activity,
+    fail_index_backfill_activity,
+    load_index_backfill_batch,
+    mark_index_backfill_cancelled,
+    mark_index_backfill_document_completed,
+    mark_index_backfill_document_failed,
+    mark_index_backfill_running,
+)
 from atlas_rag.worker.activities.indexing import (
     enqueue_document_indexing,
     index_document_batch,
@@ -25,6 +34,7 @@ from atlas_rag.worker.activities.resolution import (
     enqueue_tenant_resolution,
     resolve_tenant_entities,
 )
+from atlas_rag.workflows.backfill import IndexBackfillWorkflow
 from atlas_rag.workflows.indexing import IndexDocumentVersionWorkflow
 from atlas_rag.workflows.ingestion import IngestDocumentWorkflow
 from atlas_rag.workflows.resolution import ResolveEntitiesWorkflow
@@ -40,6 +50,7 @@ async def run_worker() -> None:
         workflows=[
             IngestDocumentWorkflow,
             IndexDocumentVersionWorkflow,
+            IndexBackfillWorkflow,
             ResolveEntitiesWorkflow,
         ],
         activities=[
@@ -55,6 +66,13 @@ async def run_worker() -> None:
             mark_document_indexing_completed,
             mark_document_indexing_failed,
             mark_document_indexing_cancelled,
+            mark_index_backfill_running,
+            load_index_backfill_batch,
+            mark_index_backfill_document_completed,
+            mark_index_backfill_document_failed,
+            complete_index_backfill_activity,
+            fail_index_backfill_activity,
+            mark_index_backfill_cancelled,
             resolve_tenant_entities,
             enqueue_tenant_resolution,
         ],

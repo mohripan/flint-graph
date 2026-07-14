@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     embedding_openai_base_url: str | None = "https://api.openai.com"
     embedding_openai_api_key: str | None = None
     active_retrieval_index_version_id: str | None = None
+    index_backfill_batch_size: int = Field(default=25, ge=1, le=500)
 
     opensearch_url: str = "http://localhost:9200"
     opensearch_username: str | None = None

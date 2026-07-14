@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 5 are implemented.
+In progress. Phases 1 through 6 are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -107,7 +107,18 @@ Completed in Phase 5:
   activities;
 - worker registration for indexing workflow and activities.
 
-No backfill execution or primitive retrieval API behavior is active yet.
+Completed in Phase 6:
+
+- `IndexBackfillWorkflow` for restartable document-version backfills;
+- backfill job creation, running/completed/failed/cancelled transitions;
+- scoped backfill scans by tenant, document, or document version;
+- missing, incomplete, count-mismatch, and stale chunk-hash detection;
+- per-document checkpoint/progress counters and bounded failure metadata;
+- child-workflow reuse of `IndexDocumentVersionWorkflow`;
+- retrieval index reconcile command that replays completed PostgreSQL coverage
+  into Neo4j and OpenSearch without re-embedding.
+
+No primitive retrieval API behavior is active yet.
 
 ## Datastore Roles
 
@@ -175,15 +186,30 @@ Document-version coverage is stored in `document_index_coverages`. Each row is
 unique by retrieval index version and document version, and records status,
 chunk count, embedded/vector/lexical counts, timestamps, and bounded errors.
 
-Backfills use the same indexing services as ingestion. A backfill scans active
-document versions missing the target version, embeds their chunks, persists
-embedding rows, updates Neo4j vectors, upserts OpenSearch records, and records
-checkpoint progress.
+Phase 6 adds restartable backfill execution. Backfills use the same
+document-version indexing workflow as ingestion. A backfill scans active
+document versions missing the target version or needing repair, embeds their
+chunks, persists embedding rows, updates Neo4j vectors, upserts OpenSearch
+records, and records checkpoint progress.
 
 All writes are idempotent by tenant, document version, chunk ID, chunk hash, and
 index version.
 
-Phase 2 stores backfill job state but does not yet execute backfill workflows.
+Backfill eligibility includes:
+
+- missing coverage row;
+- coverage not completed;
+- coverage counts that no longer match current chunks;
+- current chunks without matching `chunk_embeddings` by chunk ID and chunk hash.
+
+The checkpoint cursor stores the last document version attempted. Retrying a
+job resumes after that cursor while preserving processed and failed counters.
+
+Phase 6 also adds `python -m atlas_rag.processes.retrieval_index_reconcile`.
+It scans completed coverage rows, reloads current chunk embeddings from
+PostgreSQL, and replays Neo4j/OpenSearch projections without calling the
+embedding provider. Missing embeddings fail reconcile so a backfill can repair
+the document version.
 
 ## Primitive APIs
 

@@ -229,8 +229,24 @@ Both paths are idempotent.
 
 Backfill jobs are stored in PostgreSQL in `index_backfill_jobs` with optional
 tenant, document, and document-version scope, status, counters, checkpoint, and
-bounded last-error metadata. Phase 2 persists this state; execution is added in
-later phases.
+bounded last-error metadata.
+
+Phase 6 adds `IndexBackfillWorkflow`. It loads the next eligible document
+versions for a backfill job, starts `IndexDocumentVersionWorkflow` as a child
+workflow for each document version, and advances the checkpoint after every
+success or failure. A backfill job completes only when all processed document
+versions succeed; child indexing failures are counted and leave the job failed
+with bounded last-error metadata.
+
+Backfill eligibility is computed from PostgreSQL state. A document version is
+eligible when coverage is missing, incomplete, count-mismatched, or when any
+current chunk lacks a matching `chunk_embeddings` row for the target retrieval
+index version and current chunk hash.
+
+The retrieval reconcile process scans completed coverage rows and replays
+Neo4j/OpenSearch projection from stored chunk embeddings. It does not
+re-embed. Missing current embeddings are treated as reconcile failures so a
+backfill can repair the version first.
 
 ## Primitive Retrieval APIs
 

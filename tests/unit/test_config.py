@@ -12,6 +12,7 @@ def test_settings_accept_default_retrieval_indexing_configuration() -> None:
     assert settings.embedding_model == "deterministic-test"
     assert settings.embedding_dimensions == 384
     assert settings.embedding_batch_size == 32
+    assert settings.index_backfill_batch_size == 25
     assert settings.opensearch_url == "http://localhost:9200"
     assert settings.active_retrieval_index_version_id is None
 

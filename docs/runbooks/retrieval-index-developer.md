@@ -70,6 +70,7 @@ Relevant environment variables use the `ATLAS_` prefix:
 - `ATLAS_EMBEDDING_OPENAI_BASE_URL`;
 - `ATLAS_EMBEDDING_OPENAI_API_KEY`;
 - `ATLAS_ACTIVE_RETRIEVAL_INDEX_VERSION_ID`;
+- `ATLAS_INDEX_BACKFILL_BATCH_SIZE`;
 - `ATLAS_OPENSEARCH_URL`.
 
 The default provider is deterministic so unit and local contract tests do not
@@ -102,6 +103,12 @@ Backfill jobs:
 
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "select id, status, processed_count, failed_count, last_error from index_backfill_jobs order by created_at desc limit 20;"
+```
+
+Backfill checkpoints:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select id, status, total_count, processed_count, failed_count, checkpoint, last_error from index_backfill_jobs order by created_at desc limit 20;"
 ```
 
 Document index coverage:
@@ -153,6 +160,47 @@ Required-mode failures happen before `job.completed`, so the ingestion job and
 document version fail through the normal ingestion transition path. Optional
 mode failures should leave ingestion completed and mark
 `document_index_coverages.status = 'failed'`.
+
+## Backfill And Reconcile Checks
+
+Phase 6 adds `IndexBackfillWorkflow`. Backfill jobs are stored in
+`index_backfill_jobs`; API creation starts in Phase 7, but local development can
+insert jobs through Python or tests and run the workflow from Temporal.
+
+Workflow name:
+
+```text
+IndexBackfillWorkflow
+```
+
+Backfill workflow payload:
+
+```json
+{"backfill_job_id":"<index_backfill_jobs.id>"}
+```
+
+Backfill eligibility includes missing coverage, incomplete coverage,
+count-mismatched coverage, and stale chunk hashes where current chunks do not
+have matching `chunk_embeddings` rows for the target retrieval index version.
+
+Reconcile completed retrieval projections without re-embedding:
+
+```powershell
+$env:ATLAS_DATABASE_URL='postgresql+asyncpg://atlas:atlas@localhost:55432/atlas'
+$env:ATLAS_NEO4J_URI='bolt://localhost:7687'
+$env:ATLAS_NEO4J_USER='neo4j'
+$env:ATLAS_NEO4J_PASSWORD='atlaspassword'
+$env:ATLAS_NEO4J_DATABASE='neo4j'
+$env:ATLAS_OPENSEARCH_URL='http://localhost:9200'
+uv run python -m atlas_rag.processes.retrieval_index_reconcile
+```
+
+Expected reconcile behavior:
+
+- completed coverage rows are replayed to Neo4j and OpenSearch;
+- embeddings are loaded from PostgreSQL `chunk_embeddings`;
+- missing current embeddings fail reconcile and should be repaired by backfill;
+- no embedding provider call is made.
 
 ## OpenSearch Checks
 
