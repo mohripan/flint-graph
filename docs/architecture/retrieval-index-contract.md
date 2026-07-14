@@ -1,0 +1,159 @@
+# Retrieval Index Contract
+
+## Purpose
+
+AtlasRAG retrieval indexes turn authoritative PostgreSQL chunks and graph state
+into queryable lexical, vector, and graph-traversal primitives.
+
+Milestone 06 defines the index contract. Milestone 07 will use it for query
+planning, retriever orchestration, fusion, reranking, context packing, and
+answer generation.
+
+## Source Records
+
+The primary indexing input is `document_chunks` for active document versions.
+Each chunk has:
+
+- tenant ID;
+- document ID;
+- document version ID;
+- stable chunk ID;
+- chunk index;
+- text;
+- chunk hash;
+- source element IDs;
+- heading path;
+- page fields;
+- source offsets;
+- metadata.
+
+Canonical entities, relationships, and evidence spans provide graph context and
+future citation links. PostgreSQL remains authoritative for all source records.
+
+## Embedding Provider Contract
+
+The application depends on a provider-neutral asynchronous embedding protocol.
+The protocol accepts bounded batches of text plus model/config metadata and
+returns vectors, dimensions, and provider metadata.
+
+Provider-specific SDK objects, request payloads, error shapes, and credentials
+must not leak into application services, persistence models, workflow contracts,
+or API schemas.
+
+Required implementations:
+
+- deterministic embedding model for tests;
+- at least one local development adapter;
+- an OpenAI-compatible adapter shape so additional providers can be added behind
+  the same contract.
+
+## Index Versions
+
+A retrieval index version identifies a complete retrieval contract:
+
+- scope: global or tenant;
+- embedding provider;
+- embedding model;
+- vector dimension;
+- embedding config hash;
+- chunking/schema version;
+- lexical schema version;
+- Neo4j vector index/property names;
+- OpenSearch physical index and alias names;
+- status: `building`, `active`, `deprecated`, or `failed`;
+- activation and error metadata.
+
+Only active versions are used by default search endpoints. Explicit version IDs
+may be used for inspection, backfill validation, and rollbacks.
+
+## Chunk Embeddings
+
+A chunk embedding is tied to:
+
+- tenant ID;
+- document ID;
+- document version ID;
+- chunk ID;
+- chunk hash;
+- retrieval index version;
+- vector dimension.
+
+The same chunk text and version can be retried without duplicate active rows.
+If the chunk hash changes, the previous embedding is stale and must not be
+reused for the new chunk.
+
+## Neo4j Vector Projection
+
+Neo4j stores retrieval projection nodes or properties with:
+
+- tenant ID;
+- document/document-version/chunk identity;
+- chunk hash;
+- index version identity;
+- vector property for the active embedding contract;
+- optional links to canonical entities when provenance supports it.
+
+Vector index names and vector property names are versioned. Rebuilding a Neo4j
+vector projection must be possible from PostgreSQL chunk embeddings.
+
+## OpenSearch Lexical Projection
+
+OpenSearch stores chunk records in versioned physical indexes behind aliases.
+Each document contains:
+
+- tenant ID;
+- document ID;
+- document version ID;
+- chunk ID;
+- chunk hash;
+- title and source metadata;
+- chunk text;
+- heading path;
+- page fields;
+- entity or evidence metadata when available;
+- active/deleted status;
+- index version identity.
+
+Text fields are mapped for lexical relevance. Tenant, document, version, source,
+page, status, and other metadata fields are mapped for exact filters.
+
+Search requests must always include a tenant filter.
+
+## Backfill And Reconcile
+
+Backfills scan active document versions missing a target index version. They
+embed chunks, persist embeddings, update Neo4j vector projection, upsert
+OpenSearch records, and checkpoint progress.
+
+Reconcile operations repair projection drift by replaying PostgreSQL source
+state into Neo4j and OpenSearch.
+
+Both paths are idempotent.
+
+## Primitive Retrieval APIs
+
+Milestone 06 APIs expose:
+
+- index versions;
+- index coverage;
+- backfill start and status;
+- lexical search;
+- vector search;
+- graph neighborhood traversal.
+
+Responses contain ranked chunks, scores, metadata, entity context, and traversal
+records as applicable. They do not generate final natural-language answers.
+
+## Failure Modes
+
+- Provider failure records bounded error metadata and follows indexing mode.
+- OpenSearch projection failure leaves coverage incomplete and can be retried.
+- Neo4j projection failure leaves coverage incomplete and can be retried.
+- Backfill failure preserves checkpoint and last error.
+- Failed index versions are not used by default endpoints.
+
+## Security Boundary
+
+`X-Tenant-ID` remains local tenant routing, not authentication. Every retrieval
+API and projection query must apply tenant scoping. Foreign tenant resources
+return 404 or empty result sets according to the endpoint contract.
