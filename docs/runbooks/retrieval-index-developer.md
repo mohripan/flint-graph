@@ -78,7 +78,7 @@ and API key at settings validation time.
 
 ## Database Checks
 
-Expected Milestone 06 tables:
+Milestone 06 Phase 2 tables:
 
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "\dt *retrieval*"
@@ -103,6 +103,26 @@ Backfill jobs:
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "select id, status, processed_count, failed_count, last_error from index_backfill_jobs order by created_at desc limit 20;"
 ```
+
+Active-version invariant:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select scope, tenant_id, count(*) from retrieval_index_versions where status = 'active' group by scope, tenant_id;"
+```
+
+Expected:
+
+- at most one row with `scope = global` and `tenant_id` empty;
+- at most one active row for each tenant.
+
+Chunk embedding idempotency key:
+
+```text
+retrieval_index_version_id + document_version_id + chunk_id + chunk_hash
+```
+
+If a chunk hash changes, the old embedding remains tied to the old hash and
+must not be reused for the new chunk.
 
 ## OpenSearch Checks
 

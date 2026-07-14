@@ -78,6 +78,17 @@ A retrieval index version identifies a complete retrieval contract:
 Only active versions are used by default search endpoints. Explicit version IDs
 may be used for inspection, backfill validation, and rollbacks.
 
+Index versions are stored in PostgreSQL in `retrieval_index_versions`. Versions
+are either global or tenant-scoped. A global version must have no tenant ID; a
+tenant-scoped version must have one. Partial unique indexes enforce that only
+one global version and one version per tenant can be active at a time.
+
+Valid version statuses are `building`, `active`, `deprecated`, and `failed`.
+The application transition service creates versions in `building`, activates a
+building version while deprecating any active version in the same scope,
+deprecates building or active versions, and records bounded failure metadata for
+non-active versions.
+
 ## Chunk Embeddings
 
 A chunk embedding is tied to:
@@ -93,6 +104,12 @@ A chunk embedding is tied to:
 The same chunk text and version can be retried without duplicate active rows.
 If the chunk hash changes, the previous embedding is stale and must not be
 reused for the new chunk.
+
+Chunk embeddings are stored in PostgreSQL in `chunk_embeddings`. The
+idempotency key is retrieval index version, document version, chunk ID, and
+chunk hash. Vector values are persisted as JSON until a later phase decides
+whether a PostgreSQL vector extension is needed; Neo4j remains the intended
+vector search projection for Milestone 06.
 
 ## Neo4j Vector Projection
 
@@ -141,6 +158,11 @@ Reconcile operations repair projection drift by replaying PostgreSQL source
 state into Neo4j and OpenSearch.
 
 Both paths are idempotent.
+
+Backfill jobs are stored in PostgreSQL in `index_backfill_jobs` with optional
+tenant, document, and document-version scope, status, counters, checkpoint, and
+bounded last-error metadata. Phase 2 persists this state; execution is added in
+later phases.
 
 ## Primitive Retrieval APIs
 

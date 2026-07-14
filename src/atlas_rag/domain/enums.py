@@ -134,3 +134,23 @@ class CandidateOutcome(StrEnum):
     AUTO = "auto"
     REVIEW = "review"
     REJECT = "reject"
+
+
+class RetrievalIndexScope(StrEnum):
+    GLOBAL = "global"
+    TENANT = "tenant"
+
+
+class RetrievalIndexVersionStatus(StrEnum):
+    BUILDING = "building"
+    ACTIVE = "active"
+    DEPRECATED = "deprecated"
+    FAILED = "failed"
+
+
+class IndexBackfillJobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"

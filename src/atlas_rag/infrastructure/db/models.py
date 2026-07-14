@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -32,6 +34,7 @@ from atlas_rag.domain.enums import (
     EntityType,
     ExtractionInvocationStatus,
     ExtractionRunStatus,
+    IndexBackfillJobStatus,
     IngestionJobStatus,
     MentionResolutionStatus,
     MergeCandidateBand,
@@ -40,6 +43,8 @@ from atlas_rag.domain.enums import (
     MergeDecisionType,
     OutboxMessageStatus,
     RelationshipStatus,
+    RetrievalIndexScope,
+    RetrievalIndexVersionStatus,
     SourceType,
     StagedProposalStatus,
     StagedResolutionStatus,
@@ -179,6 +184,140 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict
     )
+
+
+class RetrievalIndexVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "retrieval_index_versions"
+    __table_args__ = (
+        CheckConstraint(
+            "(scope = 'global' AND tenant_id IS NULL) OR "
+            "(scope = 'tenant' AND tenant_id IS NOT NULL)",
+            name="ck_retrieval_index_versions_scope_tenant",
+        ),
+        Index(
+            "ix_retrieval_index_versions_scope_status",
+            "scope",
+            "tenant_id",
+            "status",
+        ),
+        Index(
+            "uq_retrieval_index_versions_active_global",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'active' AND tenant_id IS NULL"),
+            sqlite_where=text("status = 'active' AND tenant_id IS NULL"),
+        ),
+        Index(
+            "uq_retrieval_index_versions_active_tenant",
+            "tenant_id",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'active' AND tenant_id IS NOT NULL"),
+            sqlite_where=text("status = 'active' AND tenant_id IS NOT NULL"),
+        ),
+    )
+
+    scope: Mapped[RetrievalIndexScope] = mapped_column(
+        enum_column(RetrievalIndexScope, 32), nullable=False
+    )
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    embedding_provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(200), nullable=False)
+    vector_dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_config_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    chunking_schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    chunking_config_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    lexical_schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    neo4j_vector_index_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    neo4j_vector_property_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    opensearch_index_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    opensearch_alias_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[RetrievalIndexVersionStatus] = mapped_column(
+        enum_column(RetrievalIndexVersionStatus, 32),
+        nullable=False,
+        default=RetrievalIndexVersionStatus.BUILDING,
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+
+
+class ChunkEmbedding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "chunk_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "retrieval_index_version_id",
+            "document_version_id",
+            "chunk_id",
+            "chunk_hash",
+            name="uq_chunk_embeddings_index_chunk_hash",
+        ),
+        Index("ix_chunk_embeddings_tenant_version", "tenant_id", "retrieval_index_version_id"),
+        Index("ix_chunk_embeddings_document_version", "document_version_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    retrieval_index_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("retrieval_index_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    chunk_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    vector_dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    vector: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+    provider_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    request_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class IndexBackfillJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "index_backfill_jobs"
+    __table_args__ = (
+        Index("ix_index_backfill_jobs_tenant_status", "tenant_id", "status"),
+        Index("ix_index_backfill_jobs_version_status", "retrieval_index_version_id", "status"),
+    )
+
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    retrieval_index_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("retrieval_index_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    document_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    status: Mapped[IndexBackfillJobStatus] = mapped_column(
+        enum_column(IndexBackfillJobStatus, 32),
+        nullable=False,
+        default=IndexBackfillJobStatus.QUEUED,
+    )
+    total_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    checkpoint: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):

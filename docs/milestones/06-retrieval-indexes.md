@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phase 1 contracts and configuration are implemented.
+In progress. Phases 1 and 2 are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -64,8 +64,18 @@ Completed in Phase 1:
 - OpenAI-compatible embedding adapter shape behind the same protocol;
 - indexing, embedding, OpenSearch, and active index-version settings.
 
-No PostgreSQL retrieval ledger, Neo4j vector projection, OpenSearch projection,
-indexing workflow, backfill, or primitive retrieval API behavior is active yet.
+Completed in Phase 2:
+
+- PostgreSQL retrieval index ledger models and migration;
+- retrieval index version scope/status enums;
+- chunk embedding persistence model with idempotency constraint;
+- backfill job persistence model with progress and checkpoint fields;
+- partial unique indexes enforcing one active global version and one active
+  version per tenant;
+- transition service for create, activate, deprecate, and fail operations.
+
+No Neo4j vector projection, OpenSearch projection, indexing workflow, backfill
+execution, or primitive retrieval API behavior is active yet.
 
 ## Datastore Roles
 
@@ -101,6 +111,10 @@ Changing any retrieval-shaping input creates a new index version and requires
 backfill. Active endpoints use the active version by default but may accept an
 explicit version for inspection.
 
+The ledger supports global and tenant-scoped versions. Global versions have no
+tenant ID. Tenant-scoped versions require a tenant ID. The database and service
+both enforce one active global version and one active version per tenant.
+
 ## Ingestion And Backfill
 
 Indexing should run in a separate Temporal workflow after ingestion has produced
@@ -113,6 +127,8 @@ checkpoint progress.
 
 All writes are idempotent by tenant, document version, chunk ID, chunk hash, and
 index version.
+
+Phase 2 stores backfill job state but does not yet execute backfill workflows.
 
 ## Primitive APIs
 
