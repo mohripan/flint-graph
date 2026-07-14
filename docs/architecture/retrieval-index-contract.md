@@ -36,6 +36,18 @@ The application depends on a provider-neutral asynchronous embedding protocol.
 The protocol accepts bounded batches of text plus model/config metadata and
 returns vectors, dimensions, and provider metadata.
 
+The Phase 1 application contract lives in `atlas_rag.application.embeddings`.
+It defines `EmbeddingInput`, `EmbeddingBatchRequest`, `EmbeddingVector`,
+`EmbeddingBatchResult`, and the `EmbeddingModel` protocol. Requests validate
+unique input IDs, bounded batch size, provider name, model name, and vector
+dimension. Results validate that every returned vector matches the declared
+dimension.
+
+Embedding configuration hashes are generated from canonical JSON containing the
+contract version, provider, model, dimension, and provider config. Hashes use
+the existing `sha256:<hex>` format so index versions can compare retrieval
+shaping inputs deterministically.
+
 Provider-specific SDK objects, request payloads, error shapes, and credentials
 must not leak into application services, persistence models, workflow contracts,
 or API schemas.
@@ -43,8 +55,8 @@ or API schemas.
 Required implementations:
 
 - deterministic embedding model for tests;
-- at least one local development adapter;
-- an OpenAI-compatible adapter shape so additional providers can be added behind
+- Ollama local development adapter;
+- OpenAI-compatible adapter shape so additional providers can be added behind
   the same contract.
 
 ## Index Versions

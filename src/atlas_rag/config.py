@@ -62,6 +62,24 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma3:1b"
     extraction_timeout_seconds: int = Field(default=180, ge=1)
 
+    indexing_mode: Literal["disabled", "optional", "required"] = "optional"
+    embedding_provider: Literal["deterministic", "ollama", "openai_compatible"] = (
+        "deterministic"
+    )
+    embedding_model: str = "deterministic-test"
+    embedding_dimensions: int = Field(default=384, ge=1)
+    embedding_batch_size: int = Field(default=32, ge=1, le=512)
+    embedding_timeout_seconds: int = Field(default=60, ge=1)
+    embedding_ollama_base_url: str = "http://host.docker.internal:11434"
+    embedding_openai_base_url: str | None = "https://api.openai.com"
+    embedding_openai_api_key: str | None = None
+    active_retrieval_index_version_id: str | None = None
+
+    opensearch_url: str = "http://localhost:9200"
+    opensearch_username: str | None = None
+    opensearch_password: str | None = None
+    opensearch_timeout_seconds: int = Field(default=30, ge=1)
+
     entity_resolution_auto_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
     entity_resolution_review_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
     entity_resolution_trigram_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
@@ -83,6 +101,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 "entity_resolution_review_threshold must be <= entity_resolution_auto_threshold"
             )
+        if self.embedding_provider == "openai_compatible":
+            if not self.embedding_openai_base_url:
+                raise ValueError(
+                    "embedding_openai_base_url is required when embedding_provider is "
+                    "openai_compatible"
+                )
+            if not self.embedding_openai_api_key:
+                raise ValueError(
+                    "embedding_openai_api_key is required when embedding_provider is "
+                    "openai_compatible"
+                )
         return self
 
 

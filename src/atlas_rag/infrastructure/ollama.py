@@ -4,6 +4,11 @@ from typing import Any
 
 import httpx
 
+from atlas_rag.application.embeddings import (
+    EmbeddingBatchRequest,
+    EmbeddingBatchResult,
+    EmbeddingVector,
+)
 from atlas_rag.application.extraction_proposals import ExtractionBatch, ExtractionBatchRequest
 
 
@@ -76,6 +81,55 @@ class OllamaProposalExtractionModel:
         if not isinstance(response_text, str):
             raise ValueError("Ollama response did not include a string 'response' field.")
         return ExtractionBatch.model_validate_json(response_text)
+
+
+class OllamaEmbeddingModel:
+    def __init__(
+        self,
+        *,
+        model: str,
+        timeout_seconds: int,
+        http_client: httpx.AsyncClient | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        self._model = model
+        self._timeout_seconds = timeout_seconds
+        self._http_client = http_client or httpx.AsyncClient(
+            base_url=base_url or "http://localhost:11434"
+        )
+
+    async def embed_batch(self, request: EmbeddingBatchRequest) -> EmbeddingBatchResult:
+        response = await self._http_client.post(
+            "/api/embed",
+            json={
+                "model": self._model,
+                "input": [item.text for item in request.inputs],
+            },
+            timeout=self._timeout_seconds,
+        )
+        _raise_for_status(response)
+        payload = response.json()
+        embeddings = payload.get("embeddings")
+        if not isinstance(embeddings, list):
+            raise ValueError("Ollama response did not include a list 'embeddings' field.")
+        if len(embeddings) != len(request.inputs):
+            raise ValueError(
+                f"Ollama returned {len(embeddings)} embeddings for {len(request.inputs)} inputs"
+            )
+
+        return EmbeddingBatchResult(
+            provider=request.provider,
+            model=request.model,
+            dimensions=request.dimensions,
+            embeddings=[
+                EmbeddingVector(
+                    input_id=item.input_id,
+                    vector=_parse_vector(vector),
+                )
+                for item, vector in zip(request.inputs, embeddings, strict=True)
+            ],
+            metadata={"response_model": payload.get("model", self._model)},
+        )
 
 
 def _build_proposal_extraction_prompt(request: ExtractionBatchRequest) -> str:
@@ -196,6 +250,12 @@ def _proposal_extraction_schema() -> dict[str, Any]:
         },
         "required": ["input_chunk_ids", "entities", "relations", "claims"],
     }
+
+
+def _parse_vector(value: Any) -> list[float]:
+    if not isinstance(value, list) or not all(isinstance(item, int | float) for item in value):
+        raise ValueError("embedding vector must be a list of numbers.")
+    return [float(item) for item in value]
 
 
 def _raise_for_status(response: httpx.Response) -> None:

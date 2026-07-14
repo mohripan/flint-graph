@@ -54,6 +54,28 @@ docker compose logs -f api
 docker compose logs -f opensearch
 ```
 
+## Phase 1 Configuration
+
+Phase 1 adds the embedding contract and settings but does not start indexing.
+Relevant environment variables use the `ATLAS_` prefix:
+
+- `ATLAS_INDEXING_MODE`: `disabled`, `optional`, or `required`;
+- `ATLAS_EMBEDDING_PROVIDER`: `deterministic`, `ollama`, or
+  `openai_compatible`;
+- `ATLAS_EMBEDDING_MODEL`;
+- `ATLAS_EMBEDDING_DIMENSIONS`;
+- `ATLAS_EMBEDDING_BATCH_SIZE`;
+- `ATLAS_EMBEDDING_TIMEOUT_SECONDS`;
+- `ATLAS_EMBEDDING_OLLAMA_BASE_URL`;
+- `ATLAS_EMBEDDING_OPENAI_BASE_URL`;
+- `ATLAS_EMBEDDING_OPENAI_API_KEY`;
+- `ATLAS_ACTIVE_RETRIEVAL_INDEX_VERSION_ID`;
+- `ATLAS_OPENSEARCH_URL`.
+
+The default provider is deterministic so unit and local contract tests do not
+require a live embedding service. `openai_compatible` requires both a base URL
+and API key at settings validation time.
+
 ## Database Checks
 
 Expected Milestone 06 tables:

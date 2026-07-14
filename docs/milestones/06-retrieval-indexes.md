@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+In progress. Phase 1 contracts and configuration are implemented.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -52,6 +52,20 @@ Excluded:
 - fusion, reranking, context packing, and answer generation;
 - SSE query streaming;
 - Kafka-based event fan-out.
+
+## Implementation Progress
+
+Completed in Phase 1:
+
+- provider-neutral embedding request/result models and asynchronous protocol;
+- deterministic embedding model for repeatable tests and local validation;
+- stable embedding configuration hash using canonical JSON and SHA-256;
+- Ollama embedding adapter behind the application protocol;
+- OpenAI-compatible embedding adapter shape behind the same protocol;
+- indexing, embedding, OpenSearch, and active index-version settings.
+
+No PostgreSQL retrieval ledger, Neo4j vector projection, OpenSearch projection,
+indexing workflow, backfill, or primitive retrieval API behavior is active yet.
 
 ## Datastore Roles
 
