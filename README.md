@@ -1,6 +1,6 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, and exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, and includes real-model defaults plus an offline evaluation quality gate. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 ## Why these milestones come first
 
@@ -181,6 +181,21 @@ verification.
 make check
 ```
 
+`make check` runs lint, typecheck, tests, and the offline deterministic eval gate. On Windows
+PowerShell, the direct commands are usually clearer:
+
+```powershell
+uv run ruff check .
+uv run mypy
+uv run pytest
+uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
+```
+
+Milestone 09 real-model defaults are env-aware: `ATLAS_ENV=test` stays deterministic and
+offline; non-test environments default to real providers unless explicitly overridden. For a
+no-cost local query path, set `ATLAS_QUERY_ANSWER_PROVIDER=deterministic`,
+`ATLAS_QUERY_SUPPORT_PROVIDER=deterministic`, and `ATLAS_EMBEDDING_PROVIDER=deterministic`.
+
 ## Implemented invariants
 
 1. Every document belongs to exactly one tenant.
@@ -214,10 +229,13 @@ make check
 29. Every final answer citation maps to a packed context record.
 30. Unsupported answers abstain without fabricating citations.
 31. Query provenance endpoints apply tenant filters.
+32. Test and PR evaluation paths remain offline and deterministic.
+33. Real provider selection without required credentials fails fast.
+34. Evaluation baselines change only through an explicit reviewed update.
 
 ## Current milestone boundary
 
-Milestone 08 adds grounded answer generation, citation repair, support checking, abstention, faithfulness persistence, verified streaming answer events, provenance APIs, and deterministic faithfulness eval fixtures. Dedicated extraction inspection APIs remain later work.
+Milestone 09 adds real-model provider defaults outside tests, Anthropic answer/support adapters, real embedding default resolution, a golden evaluation dataset, the `atlas-eval` CLI, baseline regression checks, offline PR quality gates, and secrets-gated live eval workflow scaffolding. Dedicated extraction inspection APIs remain later work.
 
 ## Security status
 
@@ -251,3 +269,8 @@ Milestone notes:
 - Answer faithfulness contract: `docs/architecture/answer-faithfulness-contract.md`
 - Grounded answer developer runbook: `docs/runbooks/grounded-answer-generation-developer.md`
 - Grounded answer QA guide: `docs/runbooks/grounded-answer-generation-qa-guide.md`
+- Real models and evaluation: `docs/milestones/09-real-models-and-evaluation.md`
+- Evaluation contract: `docs/architecture/evaluation-contract.md`
+- Real models developer runbook: `docs/runbooks/real-models-developer.md`
+- Evaluation developer runbook: `docs/runbooks/evaluation-developer.md`
+- Evaluation QA guide: `docs/runbooks/evaluation-qa-guide.md`

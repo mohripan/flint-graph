@@ -1,6 +1,6 @@
 # Evaluation contract
 
-> Status: Proposed (Milestone 09). Defines the dataset schema, metric definitions, experiment
+> Status: Accepted (Milestone 09). Defines the dataset schema, metric definitions, experiment
 > and report formats, and threshold/baseline semantics for the AtlasRAG evaluation platform.
 > Implementation target: `src/atlas_rag/evaluation/` + the `atlas-eval` CLI, with data under
 > `evals/`. See ADR 0010.

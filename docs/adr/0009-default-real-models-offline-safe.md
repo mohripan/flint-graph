@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Target: Milestone 09.
+Accepted. Implemented in Milestone 09.
 
 ## Context
 

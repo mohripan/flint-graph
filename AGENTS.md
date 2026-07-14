@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 08 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, and LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs.
+AtlasRAG is an early GraphRAG platform. Through Milestone 09 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, and an offline evaluation quality gate.
 
 Implemented path:
 
@@ -21,9 +21,10 @@ API intake -> immutable raw object in MinIO
     -> LangGraph query run -> classify/link/retrieve/fuse/rerank/pack
     -> draft answer -> repair citations -> support check -> abstain/finalize
     -> persisted SSE events + inspectable query run + answer provenance
+    -> offline golden-dataset eval gate + optional secrets-gated live eval
 ```
 
-PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, answer metadata, answer claims, support decisions, and answer provenance. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, SSE query streaming, answer-provenance, and citation-provenance endpoints; dedicated extraction inspection endpoints are deferred.
+PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, answer metadata, answer claims, support decisions, and answer provenance. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. Evaluation datasets, recorded evaluations, reports, and baselines are file-based under `evals/`. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, SSE query streaming, answer-provenance, and citation-provenance endpoints; dedicated extraction inspection endpoints are deferred.
 
 Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
@@ -43,6 +44,7 @@ uv sync --all-groups
 uv run pytest
 uv run ruff check .
 uv run mypy
+uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 uv run alembic upgrade head --sql
 docker compose config
 docker compose up --build
@@ -55,6 +57,7 @@ Convenience make targets exist for Unix-like shells:
 make test
 make lint
 make typecheck
+make eval-gate
 make check
 make relay
 make worker
@@ -165,6 +168,19 @@ Milestone 08 grounded answer generation:
 - `tests/fixtures/query_orchestration_eval_cases.json`: deterministic query and faithfulness eval fixtures.
 - `docs/milestones/08-grounded-answer-generation.md`, `docs/adr/0008-grounded-answer-generation-and-faithfulness.md`, `docs/architecture/answer-faithfulness-contract.md`, `docs/runbooks/grounded-answer-generation-*.md`.
 
+Milestone 09 real models and evaluation:
+
+- `src/atlas_rag/infrastructure/anthropic.py`: Anthropic answer generation, streaming, and support checking adapters.
+- `src/atlas_rag/config.py`: env-aware provider defaults and credential validation.
+- `src/atlas_rag/evaluation/`: dataset loading, metrics, experiment runner, reports, baselines, recorded evaluators, and comparisons.
+- `src/atlas_rag/cli/eval.py`: `atlas-eval` CLI for offline scoring, comparisons, and baseline updates.
+- `evals/datasets/acme-smoke/`: fixed golden corpus and labeled queries.
+- `evals/experiments/acme-smoke.yaml`: offline/live experiment thresholds.
+- `evals/reports/acme-smoke/`: deterministic recorded eval fixture and accepted baselines.
+- `.github/workflows/ci.yml`: offline deterministic PR quality gate.
+- `.github/workflows/live-eval.yml`: scheduled/manual secrets-gated live eval gate.
+- `docs/milestones/09-real-models-and-evaluation.md`, `docs/adr/0009-default-real-models-offline-safe.md`, `docs/adr/0010-evaluation-platform-and-quality-gates.md`, `docs/architecture/evaluation-contract.md`, `docs/runbooks/real-models-developer.md`, `docs/runbooks/evaluation-*.md`.
+
 ## Current Invariants
 
 - A document belongs to one tenant.
@@ -190,6 +206,10 @@ Milestone 08 grounded answer generation:
 - Every persisted answer claim carries a support decision.
 - Unsupported generated answers abstain rather than serving fabricated citations.
 - Query provenance APIs apply tenant filters and resolve from PostgreSQL.
+- `env=test` resolves model providers to deterministic values and remains offline.
+- Non-test real provider selections validate required credentials at startup.
+- Evaluation baselines are explicit reviewed files, never silently updated.
+- The PR quality gate uses deterministic recorded evaluations and requires no live model service.
 
 ## Temporal Notes
 
@@ -217,6 +237,8 @@ Milestone 08 grounded answer generation:
 - Query API SSE execution is request-bound; it is not a durable background workflow.
 - Deterministic query and support providers are useful for repeatable smoke tests, not production answer quality.
 - Small local answer models can emit malformed or sparse draft claims; citation repair and support checking bound what reaches the persisted final answer.
+- Non-test defaults select Anthropic for answer/support, so no-cost local development should explicitly set deterministic or Ollama query providers when no Anthropic key is available.
+- The live eval workflow checks a live-captured recording file; capture automation is intentionally separate from the offline PR gate.
 
 ## Before Ending A Change
 
@@ -226,6 +248,7 @@ Run the narrowest meaningful verification, and prefer the full set when behavior
 uv run pytest
 uv run ruff check .
 uv run mypy
+uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 uv run alembic upgrade head --sql
 docker compose config
 ```

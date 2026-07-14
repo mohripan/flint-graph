@@ -1,0 +1,35 @@
+name: Live Eval
+
+'on':
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  live-claude-eval:
+    runs-on: ubuntu-latest
+    if: ${{ vars.ATLAS_RUN_LIVE_EVAL == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Require live eval recording
+        run: |
+          test -n "$ANTHROPIC_API_KEY"
+          test -f "$ATLAS_LIVE_EVAL_RECORDINGS"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ATLAS_LIVE_EVAL_RECORDINGS: ${{ vars.ATLAS_LIVE_EVAL_RECORDINGS || 'evals/reports/acme-smoke/live-claude-recorded.jsonl' }}
+      - name: Gate live-claude eval
+        run: >
+          uv run atlas-eval run
+          --dataset evals/datasets/acme-smoke
+          --evaluations "$ATLAS_LIVE_EVAL_RECORDINGS"
+          --experiment evals/experiments/acme-smoke.yaml
+          --baseline evals/reports/acme-smoke/baselines.json
+          --config-name live-claude
+          --report evals/reports/acme-smoke/live-claude-latest.json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ATLAS_LIVE_EVAL_RECORDINGS: ${{ vars.ATLAS_LIVE_EVAL_RECORDINGS || 'evals/reports/acme-smoke/live-claude-recorded.jsonl' }}

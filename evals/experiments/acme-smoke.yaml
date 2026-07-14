@@ -1,0 +1,26 @@
+dataset: acme-smoke
+k_values: [1, 5, 10]
+configs:
+  deterministic:
+    embedding_provider: deterministic
+    query_answer_provider: deterministic
+    query_support_provider: deterministic
+  live-claude:
+    embedding_provider: ollama
+    embedding_model: nomic-embed-text
+    query_answer_provider: anthropic
+    query_support_provider: anthropic
+    anthropic_answer_model: claude-opus-4-8
+    anthropic_support_model: claude-opus-4-8
+retrieval_modes: [lexical, vector, graph, fused]
+thresholds:
+  recall@1: {min: 0.80}
+  recall@5: {min: 0.95}
+  mrr: {min: 0.95}
+  supported_claim_ratio: {min: 1.0}
+  unsupported_claim_count: {max: 0.0}
+  citation_validity: {min: 1.0}
+  abstention_accuracy: {min: 1.0}
+  abstention_recall: {min: 1.0}
+  answer_match: {min: 1.0}
+  must_cite_satisfied: {min: 1.0}

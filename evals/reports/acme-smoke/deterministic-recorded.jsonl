@@ -1,0 +1,10 @@
+{"query_id":"q-acme-hq","evaluation":{"retrieved_chunk_ids":["acme-overview"],"answer_text":"Berlin","cited_source_ids":["acme-overview"],"supported_claim_count":1,"latency_ms":10.0}}
+{"query_id":"q-acme-founder","evaluation":{"retrieved_chunk_ids":["acme-overview"],"answer_text":"Elena Ruiz","cited_source_ids":["acme-overview"],"supported_claim_count":1,"latency_ms":11.0}}
+{"query_id":"q-globex-location","evaluation":{"retrieved_chunk_ids":["globex-profile"],"answer_text":"Osaka","cited_source_ids":["globex-profile"],"supported_claim_count":1,"latency_ms":12.0}}
+{"query_id":"q-acme-ceo","evaluation":{"retrieved_chunk_ids":["acme-leadership"],"answer_text":"Elena Ruiz","cited_source_ids":["acme-leadership"],"supported_claim_count":1,"latency_ms":13.0}}
+{"query_id":"q-globex-acquirer-hq","evaluation":{"retrieved_chunk_ids":["acme-globex-acquisition","acme-overview"],"answer_text":"Berlin","cited_source_ids":["acme-globex-acquisition","acme-overview"],"supported_claim_count":1,"latency_ms":14.0}}
+{"query_id":"q-globex-acquirer-founder","evaluation":{"retrieved_chunk_ids":["acme-globex-acquisition","acme-overview"],"answer_text":"Elena Ruiz","cited_source_ids":["acme-globex-acquisition","acme-overview"],"supported_claim_count":1,"latency_ms":15.0}}
+{"query_id":"q-what-is-acme","evaluation":{"retrieved_entity_ids":["Acme Corporation"],"answer_text":"Acme Corporation is a Berlin robotics company.","cited_source_ids":["acme-overview"],"supported_claim_count":1,"latency_ms":16.0}}
+{"query_id":"q-about-globex","evaluation":{"retrieved_entity_ids":["Globex Industries"],"answer_text":"Globex Industries works on polymers materials.","cited_source_ids":["globex-profile"],"supported_claim_count":1,"latency_ms":17.0}}
+{"query_id":"q-acme-revenue","evaluation":{"abstained":true,"latency_ms":18.0}}
+{"query_id":"q-initech-ceo","evaluation":{"abstained":true,"latency_ms":19.0}}

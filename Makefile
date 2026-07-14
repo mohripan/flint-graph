@@ -1,4 +1,4 @@
-.PHONY: install dev relay worker up down migrate revision test lint format typecheck check
+.PHONY: install dev relay worker up down migrate revision test lint format typecheck eval-gate check
 
 install:
 	uv sync --all-groups
@@ -36,4 +36,7 @@ format:
 typecheck:
 	uv run mypy
 
-check: lint typecheck test
+eval-gate:
+	uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
+
+check: lint typecheck test eval-gate
