@@ -2,11 +2,11 @@
 
 ## Status
 
-In progress. Phases 1 and 2 are implemented: application-level query
+In progress. Phases 1 through 3 are implemented: application-level query
 contracts, provider-neutral protocols, deterministic classifier/reranker/answer
-generator, query orchestration settings, and the PostgreSQL query-run ledger.
-The LangGraph runtime, query classification/linking services, API routes, and
-SSE streaming are still planned.
+generator, query orchestration settings, the PostgreSQL query-run ledger, and
+deterministic query classification/entity linking services. The LangGraph
+runtime, API routes, and SSE streaming are still planned.
 
 ## Goal
 
@@ -98,6 +98,24 @@ version visible to the tenant.
 Query-run state changes use `QueryRunStatus` and explicit transition rules in
 `atlas_rag.domain.transitions`. Foreign-tenant query-run reads return
 `NotFoundError`.
+
+## Implemented Phase 3 Classification And Linking
+
+`src/atlas_rag/application/services/query_planning.py` adds the deterministic
+query planning service boundary:
+
+- `classify_query_run` loads a tenant-scoped query run, invokes the
+  provider-neutral classifier contract, persists classification metadata, and
+  appends `query.classified`;
+- `link_query_entities` loads a tenant-scoped query run, links query mentions
+  against tenant-scoped active canonical entities and aliases, persists
+  accepted/ambiguous/rejected link decisions, and appends `entities.linked`.
+
+Entity linking reuses the existing entity-resolution normalization logic.
+Exact normalized canonical-name or alias matches are accepted when they resolve
+to one entity, ambiguous when they resolve to multiple entities, and rejected
+when no tenant-scoped match exists. Foreign tenant aliases and entities are not
+considered.
 
 ## Architecture
 

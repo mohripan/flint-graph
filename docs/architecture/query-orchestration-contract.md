@@ -100,6 +100,10 @@ The classifier returns a structured result:
 The initial labels are `factoid`, `summary`, `relationship`, `comparison`,
 `exploratory`, and `unsupported`.
 
+The implemented deterministic classification service persists the classifier
+output to `query_runs.classification_*` fields and appends a `query.classified`
+event.
+
 ## Entity Linking
 
 Entity linking maps query mentions to canonical entities. It may use existing
@@ -109,6 +113,12 @@ disambiguation.
 Accepted links can seed graph retrieval. Ambiguous links are persisted for
 inspection but are not used for expansion unless the query strategy explicitly
 allows it.
+
+The implemented deterministic linker uses existing entity-resolution
+normalization and tenant-scoped active canonical entities plus aliases. Exact
+normalized canonical-name or alias matches become accepted links when unique,
+ambiguous links when multiple active tenant entities match, and rejected links
+when no tenant-scoped match exists.
 
 ## Retriever Outputs
 

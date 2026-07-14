@@ -88,6 +88,15 @@ During Phase 2, these tables are populated through
 `atlas_rag.application.services.query_runs`. Public query APIs are still planned
 for a later phase.
 
+During Phase 3, classification and entity-link decisions are populated through
+`atlas_rag.application.services.query_planning`.
+
+Inspect linked entities:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, mention_text, status, canonical_entity_id, score, method from query_run_linked_entities order by created_at desc limit 50;"
+```
+
 ## API Checks
 
 Create a run:
