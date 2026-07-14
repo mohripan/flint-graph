@@ -217,13 +217,33 @@ not read arbitrary raw retrieval state or mutate canonical graph state.
 The implemented Phase 7 answer service loads the latest persisted context pack,
 reconstructs the provider-neutral application contract, calls an injected
 `AnswerGenerator`, and defaults to the deterministic answer generator. It
-persists `answer_text` and structured citation metadata on `query_runs`, appends
-`query.completed`, and marks the run `completed`. When generation raises an
-error, the run is marked `failed` with bounded error details and `query.failed`.
+appends `answer.delta` and `answer.citation` events, persists `answer_text` and
+structured citation metadata on `query_runs`, appends `query.completed`, and
+marks the run `completed`. When generation raises an error, the run is marked
+`failed` with bounded error details and `query.failed`.
+
+## Query APIs
+
+The implemented API surface is tenant-scoped:
+
+- `POST /v1/query-runs` creates a queued query run against an explicit or
+  resolved active retrieval index version.
+- `GET /v1/query-runs/{query_run_id}` returns the inspectable run state,
+  classification summary, counters, answer, citations, and bounded errors.
+- `GET /v1/query-runs/{query_run_id}/events` returns the persisted event list.
+- `GET /v1/query-runs/{query_run_id}/events/stream` starts execution for queued
+  runs and streams the persisted event sequence as Server-Sent Events.
+
+The streaming endpoint emits only committed query-run events. The graph commits
+after node boundaries in the streaming path and pushes newly committed events to
+the SSE response, preserving the same sequence that later inspection endpoints
+return. Lexical and vector API adapters use an immutable retrieval-index
+snapshot inside parallel retriever branches so concurrent retrievers do not
+share a database session.
 
 ## Streaming Events
 
-SSE event types should include:
+SSE event types include:
 
 - `query.started`;
 - `query.classified`;

@@ -14,6 +14,7 @@ from atlas_rag.domain.enums import (
     MentionResolutionStatus,
     MergeDecisionSource,
     MergeDecisionType,
+    QueryRunStatus,
     RetrievalIndexScope,
     RetrievalIndexVersionStatus,
     SourceType,
@@ -335,3 +336,59 @@ class EntityNeighborhoodResponse(BaseModel):
     depth: int
     entities: list[CanonicalEntitySummary]
     relationships: list[EntityRelationshipSummary]
+
+
+class QueryRunCreateRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    retrieval_index_version_id: UUID | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+    stream: bool = True
+
+    @model_validator(mode="after")
+    def validate_filters(self) -> Self:
+        for name, value in self.filters.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError("filter names must be non-empty strings.")
+            if not isinstance(value, str | int | float | bool):
+                raise ValueError("filter values must be strings, numbers, or booleans.")
+        return self
+
+
+class QueryRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    retrieval_index_version_id: UUID
+    query_text: str
+    status: QueryRunStatus
+    classification_label: str | None
+    retrieval_strategy: str | None
+    classification_confidence: float | None
+    classification_metadata: dict[str, Any]
+    answer_text: str | None
+    answer_citations: list[dict[str, Any]]
+    candidate_count: int
+    context_token_count: int
+    started_at: datetime | None
+    completed_at: datetime | None
+    failed_at: datetime | None
+    cancelled_at: datetime | None
+    error_code: str | None
+    error_message: str | None
+    error_details: dict[str, Any]
+    metadata_: dict[str, Any] = Field(serialization_alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+
+class QueryRunEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    query_run_id: UUID
+    tenant_id: UUID
+    sequence: int
+    event_type: str
+    payload: dict[str, Any]
+    created_at: datetime

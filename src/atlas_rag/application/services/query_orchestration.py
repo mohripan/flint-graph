@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, NotRequired, Protocol, Required, TypedDict
 from uuid import UUID
@@ -151,6 +152,8 @@ async def run_query_retrieval_graph(
     rerank_max_results: int = 20,
     context_token_budget: int = 4000,
     context_max_records: int = 25,
+    commit_after_node: bool = False,
+    after_node_commit: Callable[[], Awaitable[None]] | None = None,
 ) -> QueryRetrievalGraphResult:
     graph = _build_retrieval_graph(
         session=session,
@@ -161,6 +164,8 @@ async def run_query_retrieval_graph(
         rerank_max_results=rerank_max_results,
         context_token_budget=context_token_budget,
         context_max_records=context_max_records,
+        commit_after_node=commit_after_node,
+        after_node_commit=after_node_commit,
     )
     state = await graph.ainvoke(
         {
@@ -207,6 +212,8 @@ def _build_retrieval_graph(
     rerank_max_results: int,
     context_token_budget: int,
     context_max_records: int,
+    commit_after_node: bool,
+    after_node_commit: Callable[[], Awaitable[None]] | None,
 ) -> Any:
     builder = StateGraph(_GraphState)
 
@@ -219,6 +226,7 @@ def _build_retrieval_graph(
             event_type="query.started",
             payload={"node": "initialize_run"},
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
             "query": run.query_text,
             "retrieval_index_version_id": run.retrieval_index_version_id,
@@ -231,6 +239,7 @@ def _build_retrieval_graph(
             tenant_id=state["tenant_id"],
             query_run_id=state["query_run_id"],
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
             "classification": classification,
             "classification_label": classification.label,
@@ -242,6 +251,7 @@ def _build_retrieval_graph(
             tenant_id=state["tenant_id"],
             query_run_id=state["query_run_id"],
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         accepted = [
             link.canonical_entity_id
             for link in links
@@ -338,6 +348,7 @@ def _build_retrieval_graph(
                 error_message="One or more required retrievers failed.",
                 error_details={"errors": errors},
             )
+            await _commit_if_requested(session, commit_after_node, after_node_commit)
             return {
                 "status": QueryRunStatus.FAILED,
                 "retrieved_candidate_count": candidate_count,
@@ -354,6 +365,7 @@ def _build_retrieval_graph(
                 "failed_retrievers": [error["source"] for error in errors],
             },
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
             "status": QueryRunStatus.RUNNING,
             "retrieved_candidate_count": candidate_count,
@@ -370,6 +382,7 @@ def _build_retrieval_graph(
             query_run_id=state["query_run_id"],
             classification=classification,
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {"fused_candidate_count": result.fused_candidate_count}
 
     async def rerank_candidates(state: _GraphState) -> _GraphStateUpdate:
@@ -382,6 +395,7 @@ def _build_retrieval_graph(
             reranker=reranker,
             max_results=rerank_max_results,
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {"reranked_candidate_count": result.reranked_candidate_count}
 
     async def pack_context(state: _GraphState) -> _GraphStateUpdate:
@@ -394,6 +408,7 @@ def _build_retrieval_graph(
             token_budget=context_token_budget,
             max_records=context_max_records,
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
             "context_pack_record_count": result.record_count,
             "context_token_count": result.token_count,
@@ -408,6 +423,7 @@ def _build_retrieval_graph(
             query_run_id=state["query_run_id"],
             generator=answer_generator,
         )
+        await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
             "status": result.status,
             "answer_text": result.answer_text,
@@ -501,3 +517,14 @@ def _require_classification(state: _GraphState) -> QueryClassification:
     if classification is None:
         raise RuntimeError("classification is missing from graph state")
     return classification
+
+
+async def _commit_if_requested(
+    session: AsyncSession,
+    enabled: bool,
+    after_commit: Callable[[], Awaitable[None]] | None,
+) -> None:
+    if enabled:
+        await session.commit()
+        if after_commit is not None:
+            await after_commit()

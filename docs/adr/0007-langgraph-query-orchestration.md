@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for Milestone 07.
+Accepted for Milestone 07.
 
 ## Context
 

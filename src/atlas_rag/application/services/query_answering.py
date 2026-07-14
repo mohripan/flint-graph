@@ -16,7 +16,11 @@ from atlas_rag.application.query_orchestration import (
 from atlas_rag.application.query_orchestration import (
     QueryContextPack as ApplicationQueryContextPack,
 )
-from atlas_rag.application.services.query_runs import get_query_run, transition_query_run
+from atlas_rag.application.services.query_runs import (
+    append_query_run_event,
+    get_query_run,
+    transition_query_run,
+)
 from atlas_rag.domain.enums import QueryRunStatus
 from atlas_rag.infrastructure.db.models import (
     QueryContextPack,
@@ -59,6 +63,25 @@ async def generate_query_answer(
         answer_citations = [
             citation.model_dump(mode="json") for citation in answer.citations
         ]
+        await append_query_run_event(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            event_type="answer.delta",
+            payload={
+                "text": answer.text,
+                "char_count": len(answer.text),
+                "insufficient_context": answer.insufficient_context,
+            },
+        )
+        for citation in answer_citations:
+            await append_query_run_event(
+                session,
+                tenant_id=tenant_id,
+                query_run_id=query_run_id,
+                event_type="answer.citation",
+                payload=citation,
+            )
         await transition_query_run(
             session,
             tenant_id=tenant_id,

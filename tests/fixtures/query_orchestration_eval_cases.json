@@ -1,0 +1,49 @@
+[
+  {
+    "id": "factoid-headquarters",
+    "query": "Where is Acme Corporation headquartered?",
+    "context": [
+      "Acme Corporation is headquartered in Berlin."
+    ],
+    "expected_label": "factoid",
+    "expected_retrievers": ["lexical", "vector"],
+    "expected_answer": "Acme Corporation is headquartered in Berlin. [c1]",
+    "expected_markers": ["[c1]"],
+    "expected_insufficient_context": false
+  },
+  {
+    "id": "relationship-office",
+    "query": "How are Acme Corporation and Berlin connected?",
+    "context": [
+      "Acme Corporation operates a research office in Berlin."
+    ],
+    "expected_label": "relationship",
+    "expected_retrievers": ["lexical", "vector", "graph"],
+    "expected_answer": "Acme Corporation operates a research office in Berlin. [c1]",
+    "expected_markers": ["[c1]"],
+    "expected_insufficient_context": false
+  },
+  {
+    "id": "summary-brief",
+    "query": "Summarize Acme Corporation",
+    "context": [
+      "Acme Corporation researches graph retrieval and maintains a Berlin office.",
+      "The Berlin office supports retrieval evaluation work."
+    ],
+    "expected_label": "summary",
+    "expected_retrievers": ["lexical", "vector"],
+    "expected_answer": "Acme Corporation researches graph retrieval and maintains a Berlin office. [c1]",
+    "expected_markers": ["[c1]", "[c2]"],
+    "expected_insufficient_context": false
+  },
+  {
+    "id": "insufficient-context",
+    "query": "Where did Acme Corporation file its 1899 patent?",
+    "context": [],
+    "expected_label": "factoid",
+    "expected_retrievers": ["lexical", "vector"],
+    "expected_answer": "The available context is insufficient to answer this query.",
+    "expected_markers": [],
+    "expected_insufficient_context": true
+  }
+]

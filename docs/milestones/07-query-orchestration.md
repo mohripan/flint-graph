@@ -2,14 +2,13 @@
 
 ## Status
 
-In progress. Phases 1 through 7 are implemented: application-level query
-contracts, provider-neutral protocols, deterministic classifier/reranker/answer
-generator, query orchestration settings, the PostgreSQL query-run ledger, and
-deterministic query classification/entity linking services, plus the first
-LangGraph query orchestration runtime for parallel retrieval, candidate fusion,
-deterministic reranking, citation-ready context packing, and deterministic
-answer generation. API routes, SSE streaming, and graph expansion hydration are
-still planned.
+Complete. Milestone 07 implements application-level query contracts,
+provider-neutral protocols, deterministic classifier/reranker/answer generator,
+query orchestration settings, the PostgreSQL query-run ledger, deterministic
+query classification/entity linking, LangGraph query orchestration, parallel
+retrieval, candidate fusion, deterministic reranking, citation-ready context
+packing, deterministic answer generation, public query-run APIs, persisted SSE
+events, deterministic evaluation fixtures, and manual verification notes.
 
 ## Goal
 
@@ -181,18 +180,47 @@ context IDs and `c1` style citation IDs, persists them through
 returns context record and token counts. Successful Phase 6 execution continues
 into the Phase 7 answer-generation node.
 
-## Implemented Phase 7 Answer Generation
+## Implemented Phase 7 Answer Generation And SSE APIs
 
 `src/atlas_rag/application/services/query_answering.py` adds deterministic
 answer generation and completion persistence. It loads the latest persisted
 context pack, reconstructs the provider-neutral `QueryContextPack`, invokes the
 `AnswerGenerator` protocol, and defaults to `DeterministicAnswerGenerator`.
 
-The service transitions the query run from `running` to `completed`, persists
-`answer_text` and structured `answer_citations`, and appends
-`query.completed`. If generation fails, it transitions the run to `failed` with
-bounded error details and a `query.failed` event. Phase 7 does not implement
-SSE transport yet, so `answer.delta` streaming remains planned.
+The service appends `answer.delta` and `answer.citation` events, transitions
+the query run from `running` to `completed`, persists `answer_text` and
+structured `answer_citations`, and appends `query.completed`. If generation
+fails, it transitions the run to `failed` with bounded error details and a
+`query.failed` event.
+
+`src/atlas_rag/api/routes/query.py` exposes tenant-scoped query APIs:
+
+- `POST /v1/query-runs` creates a queued query run against an explicit or
+  resolved active retrieval index version.
+- `GET /v1/query-runs/{query_run_id}` returns the inspectable run state,
+  classification summary, counters, answer, citations, and bounded errors.
+- `GET /v1/query-runs/{query_run_id}/events` returns the persisted event list.
+- `GET /v1/query-runs/{query_run_id}/events/stream` executes queued runs and
+  streams the same persisted events as SSE.
+
+The SSE execution path uses API-edge retriever adapters for OpenSearch lexical
+search, Neo4j vector search, and PostgreSQL graph neighborhoods. Lexical/vector
+adapters use an immutable retrieval-index snapshot during parallel retrieval so
+concurrent branches do not share a database session.
+
+## Implemented Phase 8 Evaluation, Docs, And Manual Verification
+
+`tests/fixtures/query_orchestration_eval_cases.json` adds deterministic query
+evaluation fixtures covering factoid, relationship, summary, and insufficient
+context cases. `tests/unit/test_query_orchestration_eval_fixtures.py` verifies
+the fixtures against the deterministic classifier and answer generator,
+including expected retriever plans, citation markers, and insufficient-context
+behavior.
+
+The milestone docs, architecture contract, developer runbook, QA guide, README,
+and agent handoff are updated to describe the completed query orchestration API
+surface and verification path. Manual end-to-end verification results are
+recorded under `notes/milestone-07/`.
 
 ## Architecture
 
@@ -226,12 +254,12 @@ inspection endpoint for post-run debugging.
 
 ## Public APIs
 
-Planned endpoints:
+Implemented endpoints:
 
 - `POST /v1/query-runs`;
 - `GET /v1/query-runs/{query_run_id}`;
 - `GET /v1/query-runs/{query_run_id}/events`;
-- optional `POST /v1/query` as a thin non-streaming convenience wrapper.
+- `GET /v1/query-runs/{query_run_id}/events/stream`.
 
 All endpoints are tenant-scoped. Foreign tenant query runs return 404.
 

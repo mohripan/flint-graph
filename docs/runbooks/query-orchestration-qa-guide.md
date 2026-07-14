@@ -13,6 +13,13 @@ perspective.
 - Test documents have completed ingestion, graph resolution, and indexing.
 - The query providers are configured, or deterministic providers are enabled.
 
+Deterministic eval fixtures live in
+`tests/fixtures/query_orchestration_eval_cases.json`. Run them with:
+
+```powershell
+uv run pytest tests\unit\test_query_orchestration_eval_fixtures.py
+```
+
 ## Smoke Scenarios
 
 ### Factoid Query
@@ -88,6 +95,13 @@ terminal event:
 Answer text should arrive through `answer.delta` events. Citations should arrive
 as `answer.citation` events or in the final completed payload.
 
+The live SSE endpoint is:
+
+```powershell
+curl.exe -N http://localhost:8000/v1/query-runs/<query-run-id>/events/stream `
+  -H "X-Tenant-ID: <tenant-id>"
+```
+
 ## Pass Criteria
 
 - All query APIs are tenant-scoped.
@@ -95,3 +109,4 @@ as `answer.citation` events or in the final completed payload.
 - Query-run inspection explains classification, entity linking, retrieval
   sources, fusion/rerank movement, context packing, and terminal status.
 - Deterministic-provider tests pass without live model services.
+- Manual smoke results are recorded under `notes/milestone-07/`.

@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 06 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, and rebuildable retrieval indexes.
+AtlasRAG is an early GraphRAG platform. Through Milestone 07 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, and LangGraph-backed query orchestration with streamed citation-bearing answers.
 
 Implemented path:
 
@@ -18,9 +18,11 @@ API intake -> immutable raw object in MinIO
     -> project resolved graph into Neo4j
     -> index chunks into PostgreSQL embeddings + Neo4j vectors + OpenSearch lexical records
     -> primitive lexical/vector/neighborhood retrieval APIs
+    -> LangGraph query run -> classify/link/retrieve/fuse/rerank/pack/answer
+    -> persisted SSE events + inspectable query run
 ```
 
-PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, and backfill state. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, and graph-neighborhood endpoints; dedicated extraction inspection endpoints are deferred.
+PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, and answer metadata. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, and SSE query streaming endpoints; dedicated extraction inspection endpoints are deferred.
 
 Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
@@ -135,6 +137,20 @@ Milestone 06 retrieval indexes:
 - `migrations/versions/0008_retrieval_index_ledger.py`, `0009_document_index_coverage.py`, and `migrations/neo4j/0002_chunk_vector_indexes.cypher`: retrieval schema.
 - `docs/milestones/06-retrieval-indexes.md`, `docs/adr/0006-rebuildable-retrieval-indexes.md`, `docs/architecture/retrieval-index-contract.md`, `docs/runbooks/retrieval-index-*.md`.
 
+Milestone 07 query orchestration:
+
+- `src/atlas_rag/application/query_orchestration.py`: provider-neutral query contracts and deterministic providers.
+- `src/atlas_rag/application/services/query_runs.py`: query-run ledger and event persistence.
+- `src/atlas_rag/application/services/query_planning.py`: deterministic classification and entity linking.
+- `src/atlas_rag/application/services/query_orchestration.py`: LangGraph query runtime.
+- `src/atlas_rag/application/services/query_fusion.py`: candidate fusion and reranking persistence.
+- `src/atlas_rag/application/services/query_context_packing.py`: citation-ready context packs.
+- `src/atlas_rag/application/services/query_answering.py`: answer events, citations, and completion.
+- `src/atlas_rag/api/routes/query.py`: query-run, event replay, and SSE streaming endpoints.
+- `migrations/versions/0010_query_run_ledger.py`: query-run schema.
+- `tests/fixtures/query_orchestration_eval_cases.json`: deterministic query eval fixtures.
+- `docs/milestones/07-query-orchestration.md`, `docs/adr/0007-langgraph-query-orchestration.md`, `docs/architecture/query-orchestration-contract.md`, `docs/runbooks/query-orchestration-*.md`.
+
 ## Current Invariants
 
 - A document belongs to one tenant.
@@ -153,6 +169,10 @@ Milestone 06 retrieval indexes:
 - Chunk embeddings are tied to chunk hashes and retrieval index versions.
 - Neo4j and OpenSearch retrieval records are rebuildable from PostgreSQL.
 - Primitive retrieval APIs always apply tenant filters.
+- Query APIs always apply tenant filters.
+- Query runs use visible active retrieval index versions.
+- Query events are persisted in monotonic per-run order.
+- Every answer citation maps to a packed context record.
 
 ## Temporal Notes
 
@@ -177,6 +197,8 @@ Milestone 06 retrieval indexes:
 - The local Temporal dev server is not production Temporal.
 - The compose Temporal service currently uses the `latest` image tag, which is convenient for early local development but should be pinned before production-like environments.
 - OpenSearch near-real-time indexing may require refresh or polling before a just-indexed chunk appears in search.
+- Query API SSE execution is request-bound; it is not a durable background workflow.
+- Deterministic query providers are useful for repeatable smoke tests, not production answer quality.
 
 ## Before Ending A Change
 

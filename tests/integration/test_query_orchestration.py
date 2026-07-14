@@ -347,6 +347,10 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
         "fusion.completed",
         "rerank.completed",
         "context.packed",
+        "answer.delta",
+        "answer.citation",
+        "answer.citation",
+        "answer.citation",
         "query.completed",
     ]
     assert all(row.fusion_score is not None for row in rows)
@@ -481,8 +485,10 @@ async def test_query_retrieval_graph_fuses_duplicate_candidates_and_reranks(
     assert state.reranked_candidate_count == 2
     assert state.context_pack_record_count == 2
     assert state.answer_citation_count == 2
-    assert [event.event_type for event in events][-2:] == [
-        "context.packed",
+    assert [event.event_type for event in events][-4:] == [
+        "answer.delta",
+        "answer.citation",
+        "answer.citation",
         "query.completed",
     ]
     assert [row.dedupe_key for row in ranked_rows] == [
@@ -586,8 +592,13 @@ async def test_query_retrieval_graph_packs_ranked_context_with_budget(
     assert records[0].candidate_id == "lexical:chunk:chunk-acme"
     assert records[0].source_ids == {"chunk_id": "chunk-acme"}
     assert records[0].text == "Acme Corporation is headquartered in Berlin."
-    assert events[-2].event_type == "context.packed"
-    assert events[-2].payload["token_count"] == 6
+    packed_event = next(event for event in events if event.event_type == "context.packed")
+    assert packed_event.payload["token_count"] == 6
+    assert [event.event_type for event in events][-3:] == [
+        "answer.delta",
+        "answer.citation",
+        "query.completed",
+    ]
     assert events[-1].event_type == "query.completed"
 
 

@@ -1,10 +1,10 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, and maintains rebuildable retrieval indexes. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, and exposes LangGraph-backed query orchestration with streamed, citation-bearing answers. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 ## Why these milestones come first
 
-The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, a safe asynchronous dispatch path, canonical graph mutation, and retrieval primitives before query-time orchestration is introduced. LangGraph will later orchestrate query execution; it will not replace the ingestion or indexing control planes.
+The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, a safe asynchronous dispatch path, canonical graph mutation, retrieval primitives, and query-time orchestration. LangGraph orchestrates query execution; it does not replace the ingestion or indexing control planes.
 
 ## Requirements
 
@@ -134,6 +134,33 @@ curl -sS http://localhost:8000/v1/merge-decisions -H 'X-Tenant-ID: <tenant-id>'
 
 The resolved graph is visible in the Neo4j browser at `http://localhost:7474`. Small local models such as the default `gemma3:1b` may produce sparse proposals; the pipeline records provider failures or rejected evidence without allowing raw model output to mutate the canonical graph.
 
+## Ask streamed, citation-bearing queries
+
+Create a query run:
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/query-runs \
+  -H 'X-Tenant-ID: <tenant-id>' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"Where is Acme headquartered?"}'
+```
+
+Stream the persisted event sequence and execute a queued run:
+
+```bash
+curl -N http://localhost:8000/v1/query-runs/<query-run-id>/events/stream \
+  -H 'X-Tenant-ID: <tenant-id>'
+```
+
+Inspect the final run and replay persisted events:
+
+```bash
+curl -sS http://localhost:8000/v1/query-runs/<query-run-id> \
+  -H 'X-Tenant-ID: <tenant-id>'
+curl -sS http://localhost:8000/v1/query-runs/<query-run-id>/events \
+  -H 'X-Tenant-ID: <tenant-id>'
+```
+
 ## Quality commands
 
 ```bash
@@ -172,7 +199,7 @@ make check
 
 ## Current milestone boundary
 
-Milestone 06 adds provider-neutral embeddings, versioned retrieval index state, Neo4j vector projection, OpenSearch lexical projection, restartable indexing/backfill workflows, reconcile replay, and primitive retrieval APIs. Query planning, retriever orchestration, fusion, reranking, context packing, answer synthesis, SSE query streaming, and dedicated extraction inspection APIs remain later work.
+Milestone 07 adds LangGraph query orchestration, query-run inspection, parallel lexical/vector/graph retrieval, fusion, reranking, context packing, deterministic answer generation, SSE query events, and deterministic query eval fixtures. Dedicated extraction inspection APIs remain later work.
 
 ## Security status
 
@@ -198,3 +225,7 @@ Milestone notes:
 - Retrieval index contract: `docs/architecture/retrieval-index-contract.md`
 - Retrieval index developer runbook: `docs/runbooks/retrieval-index-developer.md`
 - Retrieval index QA guide: `docs/runbooks/retrieval-index-qa-guide.md`
+- Query orchestration: `docs/milestones/07-query-orchestration.md`
+- Query orchestration contract: `docs/architecture/query-orchestration-contract.md`
+- Query orchestration developer runbook: `docs/runbooks/query-orchestration-developer.md`
+- Query orchestration QA guide: `docs/runbooks/query-orchestration-qa-guide.md`

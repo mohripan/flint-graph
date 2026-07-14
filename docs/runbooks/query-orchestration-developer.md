@@ -85,8 +85,7 @@ docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, pac
 ```
 
 During Phase 2, these tables are populated through
-`atlas_rag.application.services.query_runs`. Public query APIs are still planned
-for a later phase.
+`atlas_rag.application.services.query_runs`.
 
 During Phase 3, classification and entity-link decisions are populated through
 `atlas_rag.application.services.query_planning`.
@@ -112,11 +111,20 @@ budget and max-record limits, skips candidates without preview text, writes
 
 During Phase 7, `atlas_rag.application.services.query_answering` loads the
 latest context pack, invokes the provider-neutral answer generator, persists
-`answer_text` and `answer_citations`, appends `query.completed`, and marks the
-run `completed`. The default deterministic generator uses the first packed
-context sentence and citation. SSE streaming remains planned.
-Runtime OpenSearch, Neo4j, and PostgreSQL retriever adapters are still planned;
-tests inject protocol-compatible retrievers.
+`answer_text` and `answer_citations`, appends `answer.delta`,
+`answer.citation`, and `query.completed`, and marks the run `completed`. The
+default deterministic generator uses the first packed context sentence and
+citation.
+
+`atlas_rag.api.routes.query` exposes the public query-run and event APIs. The
+SSE endpoint starts queued query runs, executes the graph, commits after node
+boundaries, and streams the same persisted event sequence that the inspection
+endpoint returns. API-edge retriever adapters call OpenSearch lexical search,
+Neo4j vector search, and PostgreSQL graph neighborhoods.
+
+During Phase 8, deterministic eval fixtures live in
+`tests/fixtures/query_orchestration_eval_cases.json` and are checked by
+`tests/unit/test_query_orchestration_eval_fixtures.py`.
 
 Inspect linked entities:
 
@@ -167,13 +175,20 @@ Create a run:
 ```powershell
 curl.exe -sS -X POST http://localhost:8000/v1/query-runs `
   -H "X-Tenant-ID: <tenant-id>" -H "Content-Type: application/json" `
-  -d '{"query":"Where is Acme headquartered?","limits":{"candidates":10}}'
+  -d '{"query":"Where is Acme headquartered?"}'
 ```
 
 Stream events:
 
 ```powershell
-curl.exe -N http://localhost:8000/v1/query-runs/<query-run-id>/events `
+curl.exe -N http://localhost:8000/v1/query-runs/<query-run-id>/events/stream `
+  -H "X-Tenant-ID: <tenant-id>"
+```
+
+Replay persisted events:
+
+```powershell
+curl.exe -sS http://localhost:8000/v1/query-runs/<query-run-id>/events `
   -H "X-Tenant-ID: <tenant-id>"
 ```
 
