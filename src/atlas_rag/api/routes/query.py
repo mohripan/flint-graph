@@ -23,6 +23,8 @@ from atlas_rag.api.dependencies import (
     TenantIdDep,
 )
 from atlas_rag.api.schemas import (
+    QueryAnswerProvenanceResponse,
+    QueryCitationProvenanceResponse,
     QueryRunCreateRequest,
     QueryRunEventResponse,
     QueryRunResponse,
@@ -37,6 +39,10 @@ from atlas_rag.application.services.lexical_projection import build_lexical_sear
 from atlas_rag.application.services.query_orchestration import (
     QueryRetrieverBundle,
     run_query_retrieval_graph,
+)
+from atlas_rag.application.services.query_provenance import (
+    get_query_answer_provenance,
+    get_query_citation_provenance,
 )
 from atlas_rag.application.services.query_runs import (
     QueryRunCreate,
@@ -117,6 +123,42 @@ async def list_query_run_events_endpoint(
 ) -> list[QueryRunEventResponse]:
     events = await list_query_run_events(session, tenant_id=tenant_id, query_run_id=query_run_id)
     return [QueryRunEventResponse.model_validate(event) for event in events]
+
+
+@router.get(
+    "/query-runs/{query_run_id}/provenance",
+    response_model=QueryAnswerProvenanceResponse,
+)
+async def get_query_answer_provenance_endpoint(
+    query_run_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> QueryAnswerProvenanceResponse:
+    provenance = await get_query_answer_provenance(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
+    )
+    return QueryAnswerProvenanceResponse.model_validate(provenance)
+
+
+@router.get(
+    "/query-runs/{query_run_id}/citations/{citation_id}",
+    response_model=QueryCitationProvenanceResponse,
+)
+async def get_query_citation_provenance_endpoint(
+    query_run_id: UUID,
+    citation_id: str,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> QueryCitationProvenanceResponse:
+    citation = await get_query_citation_provenance(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
+        citation_id=citation_id,
+    )
+    return QueryCitationProvenanceResponse.model_validate(citation)
 
 
 @router.get("/query-runs/{query_run_id}/events/stream")

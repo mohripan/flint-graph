@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 5 are implemented.
+In progress. Phases 1 through 6 are implemented.
 
 Milestone 08 extends the Milestone 07 query orchestration path with grounded
 answer generation, deterministic citation repair, claim support checking,
@@ -58,10 +58,9 @@ and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
 
-Phases 1 through 5 do not expose provenance endpoints. Phase 5 emits
-faithfulness-aware answer events and supports provider-backed provisional
-streaming, while later phases adapt the persisted claim rows into provenance
-APIs.
+Phases 1 through 6 expose answer faithfulness, streaming, persistence, and
+tenant-scoped provenance reads. Later phases add eval coverage, runbooks, and
+manual verification notes.
 
 ## Implemented Phase 2 Provider Wiring
 
@@ -144,6 +143,26 @@ fragment as a provisional delta, and validating the assembled structured draft
 before the existing citation repair, support checking, abstention, and
 persistence stages run.
 
+## Implemented Phase 6 Provenance APIs
+
+`src/atlas_rag/application/services/query_provenance.py` reads the authoritative
+PostgreSQL state for a query run and assembles the answer-to-source chain from
+existing records. It combines the completed `query_runs` answer summary,
+`query_answer_claims` support decisions, and the latest
+`query_context_pack_records` citation map.
+
+`GET /v1/query-runs/{query_run_id}/provenance` returns the verified answer,
+faithfulness summary, checked claims, and the context records backing each
+surviving citation. `GET /v1/query-runs/{query_run_id}/citations/{citation_id}`
+returns one citation record and the claims that cite it. Both endpoints apply
+the existing tenant filter and return 404 for foreign runs or unknown
+citations.
+
+The Phase 6 response intentionally exposes the compact source IDs already
+captured in context-pack records rather than deep-joining every possible source
+type. This keeps the API stable across chunk, graph, and future candidate
+sources while preserving the source chain needed for inspection.
+
 ## Expected Invariants
 
 - Every surviving repaired citation maps to a packed context record.
@@ -152,4 +171,6 @@ persistence stages run.
 - Deterministic support and abstention logic run without live model services.
 - Persisted query events remain monotonic per run across provisional and final
   answer events.
+- Provenance reads are tenant-scoped and are derived from PostgreSQL, not from
+  Neo4j or OpenSearch projections.
 - Provider-specific SDK objects do not leak into application contracts.

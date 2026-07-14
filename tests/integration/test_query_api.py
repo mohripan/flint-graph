@@ -321,6 +321,116 @@ async def test_query_run_api_stream_uses_answer_generator_dependency(
 
 
 @pytest.mark.asyncio
+async def test_query_run_api_returns_answer_provenance(
+    query_api_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        QueryOpenSearchClient,
+        QueryNeo4jClient,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant_id = tenant.id
+
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant_id),
+        json={
+            "query": "Where is Acme Corporation headquartered?",
+            "retrieval_index_version_id": str(index_version_id),
+        },
+    )
+    assert created.status_code == 201
+    query_run_id = created.json()["id"]
+    stream = await client.get(
+        f"/v1/query-runs/{query_run_id}/events/stream",
+        headers=_headers(tenant_id),
+    )
+    assert stream.status_code == 200
+
+    provenance = await client.get(
+        f"/v1/query-runs/{query_run_id}/provenance",
+        headers=_headers(tenant_id),
+    )
+
+    assert provenance.status_code == 200
+    body = provenance.json()
+    assert body["query_run_id"] == query_run_id
+    assert body["tenant_id"] == str(tenant_id)
+    assert body["answer_text"] == "Acme Corporation is headquartered in Berlin. [c1]"
+    assert body["abstained"] is False
+    assert body["supported_claim_count"] == 1
+    assert body["unsupported_claim_count"] == 0
+    assert len(body["claims"]) == 1
+    claim = body["claims"][0]
+    assert claim["claim_index"] == 0
+    assert claim["text"] == "Acme Corporation is headquartered in Berlin."
+    assert claim["citation_ids"] == ["c1"]
+    assert claim["support_status"] == "supported"
+    assert claim["method"] == "deterministic-lexical"
+    assert [citation["citation_id"] for citation in claim["citations"]] == ["c1"]
+    citation = claim["citations"][0]
+    assert citation["context_id"] == "ctx-0001"
+    assert citation["candidate_id"] == "lexical:chunk:chunk-acme"
+    assert citation["text"] == "Acme Corporation is headquartered in Berlin."
+    assert citation["source_ids"] == {"chunk_id": "chunk-acme"}
+    assert body["citations"] == [citation]
+
+
+@pytest.mark.asyncio
+async def test_query_run_api_resolves_single_citation_provenance(
+    query_api_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        QueryOpenSearchClient,
+        QueryNeo4jClient,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant_id = tenant.id
+
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant_id),
+        json={
+            "query": "Where is Acme Corporation headquartered?",
+            "retrieval_index_version_id": str(index_version_id),
+        },
+    )
+    query_run_id = created.json()["id"]
+    await client.get(
+        f"/v1/query-runs/{query_run_id}/events/stream",
+        headers=_headers(tenant_id),
+    )
+
+    resolved = await client.get(
+        f"/v1/query-runs/{query_run_id}/citations/c1",
+        headers=_headers(tenant_id),
+    )
+    missing = await client.get(
+        f"/v1/query-runs/{query_run_id}/citations/c9",
+        headers=_headers(tenant_id),
+    )
+
+    assert resolved.status_code == 200
+    body = resolved.json()
+    assert body["query_run_id"] == query_run_id
+    assert body["citation_id"] == "c1"
+    assert body["context_id"] == "ctx-0001"
+    assert body["claims"][0]["claim_index"] == 0
+    assert body["claims"][0]["text"] == "Acme Corporation is headquartered in Berlin."
+    assert body["claims"][0]["support_status"] == "supported"
+    assert body["claims"][0]["support_score"] == 1.0
+    assert "supported" in body["claims"][0]["support_reason"]
+    assert body["claims"][0]["method"] == "deterministic-lexical"
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_query_run_inspection_preserves_tenant_boundary(
     query_api_env: tuple[
         httpx.AsyncClient,
@@ -352,4 +462,14 @@ async def test_query_run_inspection_preserves_tenant_boundary(
         f"/v1/query-runs/{created.json()['id']}",
         headers=_headers(other_id),
     )
+    foreign_provenance = await client.get(
+        f"/v1/query-runs/{created.json()['id']}/provenance",
+        headers=_headers(other_id),
+    )
+    foreign_citation = await client.get(
+        f"/v1/query-runs/{created.json()['id']}/citations/c1",
+        headers=_headers(other_id),
+    )
     assert foreign.status_code == 404
+    assert foreign_provenance.status_code == 404
+    assert foreign_citation.status_code == 404

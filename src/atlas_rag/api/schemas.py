@@ -392,3 +392,59 @@ class QueryRunEventResponse(BaseModel):
     event_type: str
     payload: dict[str, Any]
     created_at: datetime
+
+
+class QueryCitationClaimProvenanceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    claim_index: int
+    text: str
+    support_status: str
+    support_score: float
+    support_reason: str
+    method: str
+
+
+class QueryCitationProvenanceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    query_run_id: UUID
+    tenant_id: UUID
+    citation_id: str
+    context_id: str
+    candidate_id: str
+    text: str
+    token_count: int
+    source_ids: dict[str, str]
+    metadata: dict[str, Any]
+    claims: list[QueryCitationClaimProvenanceResponse]
+
+
+class QueryAnswerClaimProvenanceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    claim_index: int
+    text: str
+    citation_ids: list[str]
+    support_status: str
+    support_score: float
+    support_reason: str
+    method: str
+    citations: list[QueryCitationProvenanceResponse]
+
+
+class QueryAnswerProvenanceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    query_run_id: UUID
+    tenant_id: UUID
+    answer_text: str | None
+    answer_citations: list[dict[str, Any]]
+    abstained: bool
+    abstain_reason: str | None
+    supported_claim_count: int
+    unsupported_claim_count: int
+    support_method: str | None
+    answer_provider: str | None
+    claims: list[QueryAnswerClaimProvenanceResponse]
+    citations: list[QueryCitationProvenanceResponse]

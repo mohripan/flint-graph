@@ -120,6 +120,13 @@ Two tenant-scoped inspection endpoints expose grounding:
 Foreign tenant query runs return 404. Responses never include foreign tenant
 context.
 
+The implemented Phase 6 API resolves provenance from PostgreSQL query-run
+state, answer-claim rows, and context-pack records. Citation responses include
+the packed context text, candidate ID, source IDs, record metadata, and the
+claim support decisions that reference that citation. Deep source-specific joins
+remain outside the Phase 6 contract so the same response shape works for chunk,
+graph, and future candidate sources.
+
 ## Provider Selection
 
 `create_answer_generator(settings)` returns the deterministic or Ollama
