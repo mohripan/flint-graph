@@ -108,8 +108,13 @@ During Phase 6, `atlas_rag.application.services.query_context_packing` packs
 reranked candidate previews into persisted context records. It enforces token
 budget and max-record limits, skips candidates without preview text, writes
 `query_context_packs` and `query_context_pack_records`, and appends
-`context.packed`. Successful execution currently leaves the run `running` for
-later answer generation and streaming.
+`context.packed`.
+
+During Phase 7, `atlas_rag.application.services.query_answering` loads the
+latest context pack, invokes the provider-neutral answer generator, persists
+`answer_text` and `answer_citations`, appends `query.completed`, and marks the
+run `completed`. The default deterministic generator uses the first packed
+context sentence and citation. SSE streaming remains planned.
 Runtime OpenSearch, Neo4j, and PostgreSQL retriever adapters are still planned;
 tests inject protocol-compatible retrievers.
 
@@ -147,6 +152,12 @@ Inspect Phase 6 context records:
 
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "select context_id, citation_id, candidate_id, token_count, source_ids from query_context_pack_records where query_run_id = '<query-run-id>' order by citation_id;"
+```
+
+Inspect Phase 7 answers:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select id, status, answer_text, answer_citations, completed_at, error_code from query_runs where id = '<query-run-id>';"
 ```
 
 ## API Checks

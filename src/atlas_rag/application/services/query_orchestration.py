@@ -9,10 +9,12 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.query_orchestration import (
+    AnswerGenerator,
     QueryCandidate,
     QueryClassification,
     QueryReranker,
 )
+from atlas_rag.application.services.query_answering import generate_query_answer
 from atlas_rag.application.services.query_context_packing import pack_query_context
 from atlas_rag.application.services.query_fusion import (
     fuse_query_candidates,
@@ -87,6 +89,9 @@ class QueryRetrievalGraphResult:
     reranked_candidate_count: int
     context_pack_record_count: int
     context_token_count: int
+    answer_text: str | None
+    answer_citation_count: int
+    insufficient_context: bool
     errors: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -100,12 +105,15 @@ class _GraphState(TypedDict, total=False):
     reranked_candidate_count: Required[int]
     context_pack_record_count: Required[int]
     context_token_count: Required[int]
+    answer_citation_count: Required[int]
+    insufficient_context: Required[bool]
     errors: Required[list[dict[str, Any]]]
     query: NotRequired[str]
     retrieval_index_version_id: NotRequired[UUID]
     status: NotRequired[QueryRunStatus]
     classification: NotRequired[QueryClassification]
     classification_label: NotRequired[str]
+    answer_text: NotRequired[str | None]
     candidate_limits: NotRequired[dict[str, int]]
     allow_partial_retrieval: NotRequired[bool]
 
@@ -125,6 +133,9 @@ class _GraphStateUpdate(TypedDict, total=False):
     reranked_candidate_count: int
     context_pack_record_count: int
     context_token_count: int
+    answer_text: str | None
+    answer_citation_count: int
+    insufficient_context: bool
     errors: list[dict[str, Any]]
 
 
@@ -135,6 +146,7 @@ async def run_query_retrieval_graph(
     query_run_id: UUID,
     retrievers: QueryRetrieverBundle,
     reranker: QueryReranker | None = None,
+    answer_generator: AnswerGenerator | None = None,
     graph_depth: int = 1,
     rerank_max_results: int = 20,
     context_token_budget: int = 4000,
@@ -144,6 +156,7 @@ async def run_query_retrieval_graph(
         session=session,
         retrievers=retrievers,
         reranker=reranker,
+        answer_generator=answer_generator,
         graph_depth=graph_depth,
         rerank_max_results=rerank_max_results,
         context_token_budget=context_token_budget,
@@ -161,6 +174,8 @@ async def run_query_retrieval_graph(
             "reranked_candidate_count": 0,
             "context_pack_record_count": 0,
             "context_token_count": 0,
+            "answer_citation_count": 0,
+            "insufficient_context": False,
         }
     )
     return QueryRetrievalGraphResult(
@@ -175,6 +190,9 @@ async def run_query_retrieval_graph(
         reranked_candidate_count=state.get("reranked_candidate_count", 0),
         context_pack_record_count=state.get("context_pack_record_count", 0),
         context_token_count=state.get("context_token_count", 0),
+        answer_text=state.get("answer_text"),
+        answer_citation_count=state.get("answer_citation_count", 0),
+        insufficient_context=state.get("insufficient_context", False),
         errors=state.get("errors", []),
     )
 
@@ -184,6 +202,7 @@ def _build_retrieval_graph(
     session: AsyncSession,
     retrievers: QueryRetrieverBundle,
     reranker: QueryReranker | None,
+    answer_generator: AnswerGenerator | None,
     graph_depth: int,
     rerank_max_results: int,
     context_token_budget: int,
@@ -380,6 +399,23 @@ def _build_retrieval_graph(
             "context_token_count": result.token_count,
         }
 
+    async def generate_answer(state: _GraphState) -> _GraphStateUpdate:
+        if state.get("status") == QueryRunStatus.FAILED:
+            return {}
+        result = await generate_query_answer(
+            session,
+            tenant_id=state["tenant_id"],
+            query_run_id=state["query_run_id"],
+            generator=answer_generator,
+        )
+        return {
+            "status": result.status,
+            "answer_text": result.answer_text,
+            "answer_citation_count": result.answer_citation_count,
+            "insufficient_context": result.insufficient_context,
+            "errors": result.errors,
+        }
+
     builder.add_node("initialize_run", initialize_run)
     builder.add_node("classify_query", classify)
     builder.add_node("link_entities", link_entities)
@@ -388,6 +424,7 @@ def _build_retrieval_graph(
     builder.add_node("fuse_candidates", fuse_candidates)
     builder.add_node("rerank_candidates", rerank_candidates)
     builder.add_node("pack_context", pack_context)
+    builder.add_node("generate_answer", generate_answer)
     builder.add_edge(START, "initialize_run")
     builder.add_edge("initialize_run", "classify_query")
     builder.add_edge("classify_query", "link_entities")
@@ -396,7 +433,8 @@ def _build_retrieval_graph(
     builder.add_edge("retrieve_parallel", "fuse_candidates")
     builder.add_edge("fuse_candidates", "rerank_candidates")
     builder.add_edge("rerank_candidates", "pack_context")
-    builder.add_edge("pack_context", END)
+    builder.add_edge("pack_context", "generate_answer")
+    builder.add_edge("generate_answer", END)
     return builder.compile()
 
 

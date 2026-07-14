@@ -2,13 +2,14 @@
 
 ## Status
 
-In progress. Phases 1 through 6 are implemented: application-level query
+In progress. Phases 1 through 7 are implemented: application-level query
 contracts, provider-neutral protocols, deterministic classifier/reranker/answer
 generator, query orchestration settings, the PostgreSQL query-run ledger, and
 deterministic query classification/entity linking services, plus the first
 LangGraph query orchestration runtime for parallel retrieval, candidate fusion,
-deterministic reranking, and citation-ready context packing. API routes, SSE
-streaming, graph expansion hydration, and answer generation are still planned.
+deterministic reranking, citation-ready context packing, and deterministic
+answer generation. API routes, SSE streaming, and graph expansion hydration are
+still planned.
 
 ## Goal
 
@@ -133,6 +134,7 @@ initialize_run
     -> fuse_candidates
     -> rerank_candidates
     -> pack_context
+    -> generate_answer
 ```
 
 The graph starts a queued query run, persists `query.started`, reuses the Phase
@@ -176,9 +178,21 @@ the configured token budget and maximum record count.
 The service creates stable `PackedContextRecord` values with `ctx-0001` style
 context IDs and `c1` style citation IDs, persists them through
 `persist_query_context_pack`, and appends `context.packed`. The graph now
-returns context record and token counts. Successful Phase 6 execution still
-leaves the query run `running` so later phases can generate and stream the
-final answer.
+returns context record and token counts. Successful Phase 6 execution continues
+into the Phase 7 answer-generation node.
+
+## Implemented Phase 7 Answer Generation
+
+`src/atlas_rag/application/services/query_answering.py` adds deterministic
+answer generation and completion persistence. It loads the latest persisted
+context pack, reconstructs the provider-neutral `QueryContextPack`, invokes the
+`AnswerGenerator` protocol, and defaults to `DeterministicAnswerGenerator`.
+
+The service transitions the query run from `running` to `completed`, persists
+`answer_text` and structured `answer_citations`, and appends
+`query.completed`. If generation fails, it transitions the run to `failed` with
+bounded error details and a `query.failed` event. Phase 7 does not implement
+SSE transport yet, so `answer.delta` streaming remains planned.
 
 ## Architecture
 

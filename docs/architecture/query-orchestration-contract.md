@@ -96,13 +96,14 @@ initialize_run
     -> fuse_candidates
     -> rerank_candidates
     -> pack_context
+    -> generate_answer
 ```
 
 It uses `langgraph.graph.StateGraph` and stores only compact run state:
 tenant ID, query-run ID, selected retrieval index version, classification,
 linked entity IDs, enabled retrievers, candidate limits, counters, and bounded
-errors. After successful context packing it leaves the query run `running` so
-later nodes can perform graph expansion hydration and answer generation.
+errors. After successful answer generation it transitions the query run to
+`completed`; failed answer generation transitions it to `failed`.
 
 ## Classification
 
@@ -207,6 +208,18 @@ limits, and persists the result in `query_context_packs` plus
 within a pack. Phase 6 uses candidate previews as the initial context text;
 future source hydration can replace previews with full chunk, evidence, entity,
 and relationship records without changing the persistence contract.
+
+## Answer Generation
+
+Answer generation consumes only the packed context and policy metadata. It must
+not read arbitrary raw retrieval state or mutate canonical graph state.
+
+The implemented Phase 7 answer service loads the latest persisted context pack,
+reconstructs the provider-neutral application contract, calls an injected
+`AnswerGenerator`, and defaults to the deterministic answer generator. It
+persists `answer_text` and structured citation metadata on `query_runs`, appends
+`query.completed`, and marks the run `completed`. When generation raises an
+error, the run is marked `failed` with bounded error details and `query.failed`.
 
 ## Streaming Events
 
