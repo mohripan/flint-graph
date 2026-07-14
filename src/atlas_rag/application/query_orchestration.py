@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Literal, Protocol, Self
+from collections.abc import Awaitable, Callable
+from typing import Any, Literal, Protocol, Self, runtime_checkable
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -39,10 +40,14 @@ QueryStreamEventType = Literal[
     "context.packed",
     "answer.delta",
     "answer.citation",
+    "support.checked",
+    "answer.abstained",
+    "answer.finalized",
     "query.completed",
     "query.failed",
     "query.cancelled",
 ]
+AnswerDeltaCallback = Callable[[str], Awaitable[None]]
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
@@ -375,6 +380,15 @@ class QueryReranker(Protocol):
 
 class AnswerGenerator(Protocol):
     async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer: ...
+
+
+@runtime_checkable
+class StreamingAnswerGenerator(Protocol):
+    async def stream_generate(
+        self,
+        request: AnswerGenerationRequest,
+        on_delta: AnswerDeltaCallback,
+    ) -> GeneratedAnswer: ...
 
 
 class SupportChecker(Protocol):

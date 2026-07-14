@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 4 are implemented.
+In progress. Phases 1 through 5 are implemented.
 
 Milestone 08 extends the Milestone 07 query orchestration path with grounded
 answer generation, deterministic citation repair, claim support checking,
@@ -58,9 +58,10 @@ and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
 
-Phases 1 through 4 do not emit new faithfulness SSE event types, stream live
-model tokens, or expose provenance endpoints. Later phases adapt the persisted
-claim rows into streaming events and provenance APIs.
+Phases 1 through 5 do not expose provenance endpoints. Phase 5 emits
+faithfulness-aware answer events and supports provider-backed provisional
+streaming, while later phases adapt the persisted claim rows into provenance
+APIs.
 
 ## Implemented Phase 2 Provider Wiring
 
@@ -123,10 +124,32 @@ resolved citation IDs for later provenance reads.
 and summary columns in the same transaction as the verified answer completion.
 Claim persistence replaces prior rows for the run, keeping retries idempotent.
 
+## Implemented Phase 5 Streaming And Events
+
+`src/atlas_rag/application/query_orchestration.py` now includes the
+faithfulness event types `support.checked`, `answer.abstained`, and
+`answer.finalized`, plus an optional `StreamingAnswerGenerator` protocol for
+providers that can emit provisional draft deltas.
+
+`src/atlas_rag/application/services/query_answering.py` records provisional
+`answer.delta` events with `provisional = true` when a generator implements the
+streaming protocol. After verification, it emits the authoritative sequence:
+final `answer.delta` with `provisional = false`, one `answer.citation` per
+surviving citation, `support.checked`, optional `answer.abstained`,
+`answer.finalized`, and then `query.completed`.
+
+`OllamaAnswerGenerator` implements `stream_generate` by consuming Ollama
+streaming JSONL responses from `/api/generate`, forwarding each `response`
+fragment as a provisional delta, and validating the assembled structured draft
+before the existing citation repair, support checking, abstention, and
+persistence stages run.
+
 ## Expected Invariants
 
 - Every surviving repaired citation maps to a packed context record.
 - Unknown citation markers are dropped and recorded rather than trusted.
 - Support checking is separate from answer generation.
 - Deterministic support and abstention logic run without live model services.
+- Persisted query events remain monotonic per run across provisional and final
+  answer events.
 - Provider-specific SDK objects do not leak into application contracts.

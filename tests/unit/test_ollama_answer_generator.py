@@ -142,6 +142,52 @@ async def test_ollama_answer_generator_reports_insufficient_context() -> None:
 
 
 @pytest.mark.anyio
+async def test_ollama_answer_generator_streams_deltas_and_returns_final_draft() -> None:
+    requests: list[httpx.Request] = []
+    lines = [
+        json.dumps({"response": '{"insufficient_context":false,', "done": False}),
+        json.dumps({"response": '"claims":[{"text":"Acme Corporation is ', "done": False}),
+        json.dumps({"response": 'headquartered in Berlin.","citations":["c1"]}]}', "done": False}),
+        json.dumps({"response": "", "done": True, "model": "llama3.2"}),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            content="\n".join(lines),
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://ollama") as http_client:
+        generator = OllamaAnswerGenerator(
+            model="llama3.2",
+            timeout_seconds=12,
+            temperature=0.0,
+            max_tokens=256,
+            http_client=http_client,
+        )
+        deltas: list[str] = []
+
+        async def on_delta(text: str) -> None:
+            deltas.append(text)
+
+        answer = await generator.stream_generate(_request(), on_delta)
+
+    payload = json.loads(requests[0].content)
+    assert payload["stream"] is True
+    assert deltas == [
+        '{"insufficient_context":false,',
+        '"claims":[{"text":"Acme Corporation is ',
+        'headquartered in Berlin.","citations":["c1"]}]}',
+    ]
+    assert answer.text == "Acme Corporation is headquartered in Berlin. [c1]"
+    assert [citation.citation_id for citation in answer.citations] == ["c1"]
+    assert answer.metadata["provider"] == "ollama"
+
+
+@pytest.mark.anyio
 async def test_ollama_answer_generator_rejects_malformed_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"response": '{"claims":"not a list"}'}, request=request)

@@ -241,6 +241,8 @@ async def test_query_run_api_streams_execution_and_persists_inspection_records(
         "context.packed",
         "answer.delta",
         "answer.citation",
+        "support.checked",
+        "answer.finalized",
         "query.completed",
     ], event_types
 

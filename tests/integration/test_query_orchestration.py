@@ -351,6 +351,8 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
         "answer.citation",
         "answer.citation",
         "answer.citation",
+        "support.checked",
+        "answer.finalized",
         "query.completed",
     ]
     assert all(row.fusion_score is not None for row in rows)
@@ -486,9 +488,9 @@ async def test_query_retrieval_graph_fuses_duplicate_candidates_and_reranks(
     assert state.context_pack_record_count == 2
     assert state.answer_citation_count == 2
     assert [event.event_type for event in events][-4:] == [
-        "answer.delta",
         "answer.citation",
-        "answer.citation",
+        "support.checked",
+        "answer.finalized",
         "query.completed",
     ]
     assert [row.dedupe_key for row in ranked_rows] == [
@@ -595,8 +597,8 @@ async def test_query_retrieval_graph_packs_ranked_context_with_budget(
     packed_event = next(event for event in events if event.event_type == "context.packed")
     assert packed_event.payload["token_count"] == 6
     assert [event.event_type for event in events][-3:] == [
-        "answer.delta",
-        "answer.citation",
+        "support.checked",
+        "answer.finalized",
         "query.completed",
     ]
     assert events[-1].event_type == "query.completed"

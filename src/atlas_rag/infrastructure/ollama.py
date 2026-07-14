@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -13,6 +14,7 @@ from atlas_rag.application.embeddings import (
 from atlas_rag.application.extraction_proposals import ExtractionBatch, ExtractionBatchRequest
 from atlas_rag.application.query_orchestration import (
     AnswerCitation,
+    AnswerDeltaCallback,
     AnswerGenerationRequest,
     GeneratedAnswer,
 )
@@ -195,60 +197,111 @@ class OllamaAnswerGenerator:
             draft = _OllamaAnswerDraft.model_validate_json(response_text)
         except ValueError as exc:
             raise ValueError("Ollama answer response did not match the expected schema.") from exc
+        return _answer_from_ollama_draft(request, payload, self._model, draft)
 
-        if draft.insufficient_context or not draft.claims:
-            return GeneratedAnswer(
-                text="The available context is insufficient to answer this query.",
-                insufficient_context=True,
-                metadata={
-                    "provider": "ollama",
-                    "model": payload.get("model", self._model),
-                    "raw_citation_markers": [],
-                    "draft_claims": [],
+    async def stream_generate(
+        self,
+        request: AnswerGenerationRequest,
+        on_delta: AnswerDeltaCallback,
+    ) -> GeneratedAnswer:
+        response_parts: list[str] = []
+        final_payload: dict[str, Any] = {}
+        async with self._http_client.stream(
+            "POST",
+            "/api/generate",
+            json={
+                "model": self._model,
+                "prompt": _build_answer_generation_prompt(request),
+                "stream": True,
+                "format": _answer_generation_schema(),
+                "options": {
+                    "temperature": self._temperature,
+                    "num_predict": self._max_tokens,
                 },
-            )
-
-        records_by_citation = {
-            record.citation_id: record for record in request.context_pack.records
-        }
-        answer_parts: list[str] = []
-        citations_by_id: dict[str, AnswerCitation] = {}
-        raw_markers: list[str] = []
-        draft_claims: list[dict[str, Any]] = []
-
-        for index, claim in enumerate(draft.claims):
-            raw_markers.extend(claim.citations)
-            draft_claims.append(
-                {
-                    "claim_index": index,
-                    "text": claim.text,
-                    "raw_citation_markers": claim.citations,
-                }
-            )
-            markers = [f"[{citation_id}]" for citation_id in claim.citations]
-            answer_parts.append(f"{claim.text} {' '.join(markers)}".strip())
-            for citation_id in claim.citations:
-                record = records_by_citation.get(citation_id)
-                if record is None or citation_id in citations_by_id:
+            },
+            timeout=self._timeout_seconds,
+        ) as response:
+            _raise_for_status(response)
+            async for line in response.aiter_lines():
+                if not line.strip():
                     continue
-                citations_by_id[citation_id] = AnswerCitation(
-                    citation_id=record.citation_id,
-                    context_id=record.context_id,
-                    marker=f"[{record.citation_id}]",
-                    source_ids=record.source_ids,
-                )
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Ollama streamed an invalid JSON line.") from exc
+                response_text = payload.get("response")
+                if isinstance(response_text, str) and response_text:
+                    response_parts.append(response_text)
+                    await on_delta(response_text)
+                if payload.get("done") is True:
+                    final_payload = payload
 
+        try:
+            draft = _OllamaAnswerDraft.model_validate_json("".join(response_parts))
+        except ValueError as exc:
+            raise ValueError("Ollama streamed answer did not match the expected schema.") from exc
+        return _answer_from_ollama_draft(request, final_payload, self._model, draft)
+
+
+def _answer_from_ollama_draft(
+    request: AnswerGenerationRequest,
+    payload: dict[str, Any],
+    model: str,
+    draft: _OllamaAnswerDraft,
+) -> GeneratedAnswer:
+    if draft.insufficient_context or not draft.claims:
         return GeneratedAnswer(
-            text=" ".join(answer_parts),
-            citations=list(citations_by_id.values()),
-            insufficient_context=False,
+            text="The available context is insufficient to answer this query.",
+            insufficient_context=True,
             metadata={
                 "provider": "ollama",
-                "model": payload.get("model", self._model),
-                "raw_citation_markers": raw_markers,
-                "draft_claims": draft_claims,
+                "model": payload.get("model", model),
+                "raw_citation_markers": [],
+                "draft_claims": [],
             },
         )
+
+    records_by_citation = {
+        record.citation_id: record for record in request.context_pack.records
+    }
+    answer_parts: list[str] = []
+    citations_by_id: dict[str, AnswerCitation] = {}
+    raw_markers: list[str] = []
+    draft_claims: list[dict[str, Any]] = []
+
+    for index, claim in enumerate(draft.claims):
+        raw_markers.extend(claim.citations)
+        draft_claims.append(
+            {
+                "claim_index": index,
+                "text": claim.text,
+                "raw_citation_markers": claim.citations,
+            }
+        )
+        markers = [f"[{citation_id}]" for citation_id in claim.citations]
+        answer_parts.append(f"{claim.text} {' '.join(markers)}".strip())
+        for citation_id in claim.citations:
+            record = records_by_citation.get(citation_id)
+            if record is None or citation_id in citations_by_id:
+                continue
+            citations_by_id[citation_id] = AnswerCitation(
+                citation_id=record.citation_id,
+                context_id=record.context_id,
+                marker=f"[{record.citation_id}]",
+                source_ids=record.source_ids,
+            )
+
+    return GeneratedAnswer(
+        text=" ".join(answer_parts),
+        citations=list(citations_by_id.values()),
+        insufficient_context=False,
+        metadata={
+            "provider": "ollama",
+            "model": payload.get("model", model),
+            "raw_citation_markers": raw_markers,
+            "draft_claims": draft_claims,
+        },
+    )
 
 
 def _build_proposal_extraction_prompt(request: ExtractionBatchRequest) -> str:

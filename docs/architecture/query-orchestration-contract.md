@@ -217,10 +217,10 @@ not read arbitrary raw retrieval state or mutate canonical graph state.
 The implemented Phase 7 answer service loads the latest persisted context pack,
 reconstructs the provider-neutral application contract, calls an injected
 `AnswerGenerator`, and defaults to the deterministic answer generator. It
-appends `answer.delta` and `answer.citation` events, persists `answer_text` and
-structured citation metadata on `query_runs`, appends `query.completed`, and
-marks the run `completed`. When generation raises an error, the run is marked
-`failed` with bounded error details and `query.failed`.
+appends answer, citation, faithfulness, and finalized events, persists
+`answer_text` and structured citation metadata on `query_runs`, appends
+`query.completed`, and marks the run `completed`. When generation raises an
+error, the run is marked `failed` with bounded error details and `query.failed`.
 
 ## Query APIs
 
@@ -257,6 +257,9 @@ SSE event types include:
 - `context.packed`;
 - `answer.delta`;
 - `answer.citation`;
+- `support.checked`;
+- `answer.abstained`;
+- `answer.finalized`;
 - `query.completed`;
 - `query.failed`;
 - `query.cancelled`.

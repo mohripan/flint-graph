@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -12,6 +13,7 @@ from atlas_rag.application.query_orchestration import (
     AnswerGenerator,
     DeterministicAnswerGenerator,
     PackedContextRecord,
+    StreamingAnswerGenerator,
     SupportChecker,
 )
 from atlas_rag.application.query_orchestration import (
@@ -62,14 +64,23 @@ async def generate_query_answer(
             query_run_id=query_run_id,
         )
         model = generator or DeterministicAnswerGenerator()
-        draft_answer = await model.generate(
-            AnswerGenerationRequest(
-                tenant_id=tenant_id,
-                query=run.query_text,
-                retrieval_index_version_id=run.retrieval_index_version_id,
-                context_pack=context_pack,
-            )
+        generation_request = AnswerGenerationRequest(
+            tenant_id=tenant_id,
+            query=run.query_text,
+            retrieval_index_version_id=run.retrieval_index_version_id,
+            context_pack=context_pack,
         )
+        if isinstance(model, StreamingAnswerGenerator):
+            draft_answer = await model.stream_generate(
+                generation_request,
+                _provisional_delta_recorder(
+                    session=session,
+                    tenant_id=tenant_id,
+                    query_run_id=query_run_id,
+                ),
+            )
+        else:
+            draft_answer = await model.generate(generation_request)
         verification = await verify_generated_answer(
             tenant_id=tenant_id,
             query=run.query_text,
@@ -102,6 +113,7 @@ async def generate_query_answer(
                 "text": answer.text,
                 "char_count": len(answer.text),
                 "insufficient_context": answer.insufficient_context,
+                "provisional": False,
                 "faithfulness": faithfulness,
             },
         )
@@ -113,6 +125,45 @@ async def generate_query_answer(
                 event_type="answer.citation",
                 payload=citation,
             )
+        await append_query_run_event(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            event_type="support.checked",
+            payload={
+                "supported_claim_count": verification.report.supported_claim_count,
+                "unsupported_claim_count": verification.report.unsupported_claim_count,
+                "support_method": verification.report.support_method,
+                "abstained": verification.report.abstained,
+            },
+        )
+        if verification.report.abstained:
+            await append_query_run_event(
+                session,
+                tenant_id=tenant_id,
+                query_run_id=query_run_id,
+                event_type="answer.abstained",
+                payload={
+                    "reason": verification.report.abstain_reason,
+                    "supported_claim_count": verification.report.supported_claim_count,
+                    "unsupported_claim_count": verification.report.unsupported_claim_count,
+                },
+            )
+        await append_query_run_event(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            event_type="answer.finalized",
+            payload={
+                "answer_text": answer.text,
+                "answer_citations": answer_citations,
+                "answer_char_count": len(answer.text),
+                "answer_citation_count": len(answer.citations),
+                "insufficient_context": answer.insufficient_context,
+                "faithfulness": faithfulness,
+                "answer_provider": answer_provider,
+            },
+        )
         await transition_query_run(
             session,
             tenant_id=tenant_id,
@@ -167,6 +218,31 @@ def _answer_provider(answer: object) -> str:
         if isinstance(provider, str) and provider:
             return provider
     return "unknown"
+
+
+def _provisional_delta_recorder(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    query_run_id: UUID,
+) -> Callable[[str], Awaitable[None]]:
+    async def record_delta(text: str) -> None:
+        if not text:
+            return
+        await append_query_run_event(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            event_type="answer.delta",
+            payload={
+                "text": text,
+                "char_count": len(text),
+                "insufficient_context": False,
+                "provisional": True,
+            },
+        )
+
+    return record_delta
 
 
 async def _load_latest_context_pack(
