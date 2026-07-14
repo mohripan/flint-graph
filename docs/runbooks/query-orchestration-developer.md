@@ -91,10 +91,31 @@ for a later phase.
 During Phase 3, classification and entity-link decisions are populated through
 `atlas_rag.application.services.query_planning`.
 
+During Phase 4, the compact LangGraph runtime is available through
+`atlas_rag.application.services.query_orchestration.run_query_retrieval_graph`.
+It starts the query run, classifies the query, links entities, plans retrievers,
+runs configured retrievers in parallel, persists raw candidates, and records
+retrieval progress events. Successful retrieval currently leaves the run
+`running` for later fusion, reranking, context packing, and answer generation.
+Runtime OpenSearch, Neo4j, and PostgreSQL retriever adapters are still planned;
+tests inject protocol-compatible retrievers.
+
 Inspect linked entities:
 
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, mention_text, status, canonical_entity_id, score, method from query_run_linked_entities order by created_at desc limit 50;"
+```
+
+Inspect Phase 4 retrieval progress:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select sequence, event_type, payload from query_run_events where query_run_id = '<query-run-id>' order by sequence;"
+```
+
+Inspect raw persisted retrieval candidates for a run:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select source, candidate_type, dedupe_key, rank, raw_score, normalized_score from query_run_candidates where query_run_id = '<query-run-id>' order by source, rank;"
 ```
 
 ## API Checks

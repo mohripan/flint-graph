@@ -2,11 +2,13 @@
 
 ## Status
 
-In progress. Phases 1 through 3 are implemented: application-level query
+In progress. Phases 1 through 4 are implemented: application-level query
 contracts, provider-neutral protocols, deterministic classifier/reranker/answer
 generator, query orchestration settings, the PostgreSQL query-run ledger, and
-deterministic query classification/entity linking services. The LangGraph
-runtime, API routes, and SSE streaming are still planned.
+deterministic query classification/entity linking services, plus the first
+LangGraph query orchestration runtime for parallel retrieval. API routes, SSE
+streaming, fusion, reranking, context packing, and answer generation are still
+planned.
 
 ## Goal
 
@@ -117,15 +119,43 @@ to one entity, ambiguous when they resolve to multiple entities, and rejected
 when no tenant-scoped match exists. Foreign tenant aliases and entities are not
 considered.
 
+## Implemented Phase 4 LangGraph Retrieval Orchestration
+
+`src/atlas_rag/application/services/query_orchestration.py` adds the first
+LangGraph-backed query state machine. The implemented graph runs:
+
+```text
+initialize_run
+    -> classify_query
+    -> link_entities
+    -> plan_retrieval
+    -> retrieve_parallel
+```
+
+The graph starts a queued query run, persists `query.started`, reuses the Phase
+3 classification and entity-linking services, derives enabled retrievers from
+the structured retrieval plan, and runs configured lexical, vector, and graph
+retrievers concurrently. Retriever adapters are injected through small
+application protocols so runtime infrastructure can be added without coupling
+LangGraph nodes to OpenSearch, Neo4j, or provider SDK objects.
+
+`retrieve_parallel` persists raw candidate summaries with
+`persist_query_candidate` and appends `retrieval.started`,
+`retrieval.progress`, and `retrieval.completed` events. Graph retrieval is
+conservative: it is skipped unless accepted entity links are available. A
+required retriever failure transitions the run to `failed` with bounded error
+metadata; successful retrieval leaves the run `running` for later fusion,
+reranking, context packing, and answer-generation phases.
+
 ## Architecture
 
 PostgreSQL remains authoritative for AtlasRAG control-plane state. Milestone 07
 adds query-run records, query events, linked-entity decisions, candidate
 summaries, context-pack manifests, answer metadata, and bounded failure details.
 
-LangGraph coordinates the query runtime. Its graph state should stay compact and
-carry IDs, decisions, counters, and summaries. Source text and graph records are
-loaded inside nodes from PostgreSQL and from existing retrieval services.
+LangGraph coordinates the query runtime. Its graph state stays compact and
+carries IDs, decisions, counters, and summaries. Source text and graph records
+are loaded inside nodes from PostgreSQL and from existing retrieval services.
 
 Milestone 06 services remain the retrieval substrate:
 

@@ -85,6 +85,23 @@ LangGraph state is the runtime state machine payload. It should contain:
 Graph state must not become a bulk transport for large chunk text, raw provider
 responses, credentials, or SDK objects.
 
+The implemented Phase 4 graph is intentionally small:
+
+```text
+initialize_run
+    -> classify_query
+    -> link_entities
+    -> plan_retrieval
+    -> retrieve_parallel
+```
+
+It uses `langgraph.graph.StateGraph` and stores only compact run state:
+tenant ID, query-run ID, selected retrieval index version, classification,
+linked entity IDs, enabled retrievers, candidate limits, counters, and bounded
+errors. On successful retrieval it leaves the query run `running` so later
+nodes can perform fusion, graph expansion, reranking, context packing, and
+answer generation.
+
 ## Classification
 
 The classifier returns a structured result:
@@ -135,6 +152,17 @@ All retrievers return candidate records with:
 
 Lexical and vector candidates come from Milestone 06 services. Graph candidates
 come from bounded PostgreSQL canonical graph traversal.
+
+The Phase 4 orchestration service accepts retriever implementations through
+application-level protocols for lexical, vector, and graph retrieval. The graph
+invokes the enabled retrievers concurrently and persists each returned
+`QueryCandidate` into `query_run_candidates` with the original source, rank,
+scores, source IDs, and compact metadata.
+
+Graph retrieval is only enabled when entity linking produced at least one
+accepted canonical entity ID. If a configured strategy marks partial retrieval
+as disallowed, any retriever failure transitions the run to `failed` and stores
+bounded retriever error details.
 
 ## Fusion And Reranking
 
