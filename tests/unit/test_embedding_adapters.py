@@ -8,8 +8,31 @@ from atlas_rag.application.embeddings import (
     EmbeddingInput,
     EmbeddingModel,
 )
+from atlas_rag.config import Settings
+from atlas_rag.infrastructure.embedding_factory import create_embedding_model
 from atlas_rag.infrastructure.embeddings import OpenAICompatibleEmbeddingModel
 from atlas_rag.infrastructure.ollama import OllamaEmbeddingModel
+
+
+def test_embedding_factory_builds_ollama_model_in_local_env() -> None:
+    settings = Settings(_env_file=None, env="local", anthropic_api_key="sk-test")
+
+    model = create_embedding_model(settings, http_client=httpx.AsyncClient())
+
+    assert isinstance(model, OllamaEmbeddingModel)
+
+
+def test_embedding_factory_builds_openai_model_in_production_env() -> None:
+    settings = Settings(
+        _env_file=None,
+        env="production",
+        anthropic_api_key="sk-test",
+        embedding_openai_api_key="sk-emb",
+    )
+
+    model = create_embedding_model(settings, http_client=httpx.AsyncClient())
+
+    assert isinstance(model, OpenAICompatibleEmbeddingModel)
 
 
 @pytest.mark.anyio

@@ -5,6 +5,19 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_DETERMINISTIC_EMBEDDING_MODEL = "deterministic-test"
+_DETERMINISTIC_EMBEDDING_DIMENSIONS = 384
+# Default real embedding model + dimensions per provider. Dimensions are intrinsic to the
+# model, so switching providers/models requires a new retrieval index version + backfill.
+_REAL_EMBEDDING_MODELS: dict[str, str] = {
+    "ollama": "nomic-embed-text",
+    "openai_compatible": "text-embedding-3-small",
+}
+_REAL_EMBEDDING_DIMENSIONS: dict[str, int] = {
+    "ollama": 768,
+    "openai_compatible": 1536,
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -64,11 +77,13 @@ class Settings(BaseSettings):
     extraction_timeout_seconds: int = Field(default=180, ge=1)
 
     indexing_mode: Literal["disabled", "optional", "required"] = "optional"
-    embedding_provider: Literal["deterministic", "ollama", "openai_compatible"] = (
-        "deterministic"
-    )
-    embedding_model: str = "deterministic-test"
-    embedding_dimensions: int = Field(default=384, ge=1)
+    # Left unset (None) so the default resolves by env (see _resolve_env_provider_defaults):
+    # test -> deterministic, local -> ollama, staging/production -> openai_compatible.
+    # Explicit values always win. embedding_model/dimensions follow the resolved provider
+    # unless the operator sets them explicitly.
+    embedding_provider: Literal["deterministic", "ollama", "openai_compatible"] | None = None
+    embedding_model: str = _DETERMINISTIC_EMBEDDING_MODEL
+    embedding_dimensions: int = Field(default=_DETERMINISTIC_EMBEDDING_DIMENSIONS, ge=1)
     embedding_batch_size: int = Field(default=32, ge=1, le=512)
     embedding_timeout_seconds: int = Field(default=60, ge=1)
     embedding_ollama_base_url: str = "http://host.docker.internal:11434"
@@ -81,7 +96,7 @@ class Settings(BaseSettings):
     query_classifier_provider: Literal["deterministic", "ollama"] = "deterministic"
     query_reranker_provider: Literal["deterministic", "ollama"] = "deterministic"
     # Left unset (None) so defaults resolve by env: test -> deterministic,
-    # otherwise -> anthropic. Explicit values always win. See _resolve_model_providers.
+    # otherwise -> anthropic. Explicit values always win. See _resolve_env_provider_defaults.
     query_answer_provider: Literal["deterministic", "ollama", "anthropic"] | None = None
     query_answer_model: str = "llama3.2"
     query_answer_timeout_seconds: int = Field(default=180, ge=1)
@@ -133,6 +148,39 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def _resolve_env_provider_defaults(self) -> Self:
+        # Env-aware defaults: test stays fully deterministic (offline, no keys); other
+        # environments default to real providers. Explicit settings always win. This runs
+        # before _validate_resolution_thresholds so credential checks see resolved providers.
+        answer_support_default: Literal["deterministic", "anthropic"] = (
+            "deterministic" if self.env == "test" else "anthropic"
+        )
+        if self.query_answer_provider is None:
+            self.query_answer_provider = answer_support_default
+        if self.query_support_provider is None:
+            self.query_support_provider = answer_support_default
+
+        embedding_provider = self.embedding_provider
+        if embedding_provider is None:
+            if self.env == "test":
+                embedding_provider = "deterministic"
+            elif self.env == "local":
+                embedding_provider = "ollama"
+            else:
+                embedding_provider = "openai_compatible"
+            self.embedding_provider = embedding_provider
+
+        # Follow the resolved real provider's model/dimensions only when they are still the
+        # deterministic sentinels (operator did not choose them explicitly). Changing the
+        # embedding model requires a new retrieval index version + backfill.
+        if embedding_provider != "deterministic":
+            if self.embedding_model == _DETERMINISTIC_EMBEDDING_MODEL:
+                self.embedding_model = _REAL_EMBEDDING_MODELS[embedding_provider]
+            if self.embedding_dimensions == _DETERMINISTIC_EMBEDDING_DIMENSIONS:
+                self.embedding_dimensions = _REAL_EMBEDDING_DIMENSIONS[embedding_provider]
+        return self
+
+    @model_validator(mode="after")
     def _validate_resolution_thresholds(self) -> Self:
         if self.entity_resolution_review_threshold > self.entity_resolution_auto_threshold:
             raise ValueError(
@@ -153,18 +201,6 @@ class Settings(BaseSettings):
             raise ValueError(
                 "query_default_candidate_limit must be <= query_max_candidate_limit"
             )
-        return self
-
-    @model_validator(mode="after")
-    def _resolve_model_providers(self) -> Self:
-        resolved: Literal["deterministic", "anthropic"] = (
-            "deterministic" if self.env == "test" else "anthropic"
-        )
-        if self.query_answer_provider is None:
-            self.query_answer_provider = resolved
-        if self.query_support_provider is None:
-            self.query_support_provider = resolved
-
         uses_anthropic = "anthropic" in (
             self.query_answer_provider,
             self.query_support_provider,

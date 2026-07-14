@@ -1,7 +1,14 @@
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
 from atlas_rag.config import Settings
+
+
+def _settings(**overrides: Any) -> Settings:
+    # Ignore any developer .env so env-aware provider resolution is deterministic in tests.
+    return Settings(_env_file=None, **overrides)
 
 
 def test_settings_accept_default_retrieval_indexing_configuration() -> None:
@@ -72,21 +79,21 @@ def test_settings_reject_openai_compatible_provider_without_api_key() -> None:
 
 
 def test_model_providers_resolve_to_deterministic_in_test_env() -> None:
-    settings = Settings(env="test")
+    settings = _settings(env="test")
 
     assert settings.query_answer_provider == "deterministic"
     assert settings.query_support_provider == "deterministic"
 
 
 def test_model_providers_resolve_to_anthropic_outside_test_env() -> None:
-    settings = Settings(env="local", anthropic_api_key="sk-test")
+    settings = _settings(env="local", anthropic_api_key="sk-test")
 
     assert settings.query_answer_provider == "anthropic"
     assert settings.query_support_provider == "anthropic"
 
 
 def test_explicit_model_provider_overrides_env_default() -> None:
-    settings = Settings(
+    settings = _settings(
         env="local",
         query_answer_provider="deterministic",
         query_support_provider="deterministic",
@@ -100,13 +107,58 @@ def test_anthropic_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     with pytest.raises(ValidationError, match="anthropic_api_key"):
-        Settings(env="local")
+        _settings(env="local")
 
 
 def test_anthropic_provider_accepts_env_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env")
 
-    settings = Settings(env="production")
+    settings = _settings(env="production", embedding_openai_api_key="sk-emb")
 
     assert settings.query_answer_provider == "anthropic"
     assert settings.anthropic_api_key is None
+
+
+def test_embedding_provider_resolves_to_ollama_in_local_env() -> None:
+    settings = _settings(env="local", anthropic_api_key="sk-test")
+
+    assert settings.embedding_provider == "ollama"
+    assert settings.embedding_model == "nomic-embed-text"
+    assert settings.embedding_dimensions == 768
+
+
+def test_embedding_provider_resolves_to_openai_in_production_env() -> None:
+    settings = _settings(
+        env="production",
+        anthropic_api_key="sk-test",
+        embedding_openai_api_key="sk-emb",
+    )
+
+    assert settings.embedding_provider == "openai_compatible"
+    assert settings.embedding_model == "text-embedding-3-small"
+    assert settings.embedding_dimensions == 1536
+
+
+def test_explicit_embedding_provider_overrides_env_default() -> None:
+    settings = _settings(
+        env="local",
+        anthropic_api_key="sk-test",
+        embedding_provider="deterministic",
+    )
+
+    assert settings.embedding_provider == "deterministic"
+    assert settings.embedding_model == "deterministic-test"
+    assert settings.embedding_dimensions == 384
+
+
+def test_explicit_embedding_model_and_dimensions_are_preserved() -> None:
+    settings = _settings(
+        env="local",
+        anthropic_api_key="sk-test",
+        embedding_provider="ollama",
+        embedding_model="mxbai-embed-large",
+        embedding_dimensions=1024,
+    )
+
+    assert settings.embedding_model == "mxbai-embed-large"
+    assert settings.embedding_dimensions == 1024
