@@ -1,0 +1,12 @@
+name: acme-smoke
+version: 1
+tenant: eval-acme
+corpus_dir: corpus/
+description: >
+  Small hand-labeled golden set over a fixed 6-document corpus, covering factoid,
+  multi-hop, entity, and abstain-expected queries. Relevance is labeled at document
+  granularity: relevant_chunk_ids and must_cite_sources hold source-document external_ids
+  (equal to the corpus filename stem), and relevant_entity_ids hold canonical entity names.
+  The evaluator maps each retrieved chunk/entity/citation back to those stable identifiers,
+  so labels do not depend on pipeline-assigned chunk IDs or entity UUIDs. Ingest each corpus
+  file into tenant eval-acme with external_id set to the filename stem. See README.md.

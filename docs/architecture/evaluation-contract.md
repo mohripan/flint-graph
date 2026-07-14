@@ -59,7 +59,13 @@ description: >
 | `must_cite_sources` | string[] | Source IDs the answer must cite, when applicable. |
 | `notes` | string | Optional human note (why this case exists). |
 
-IDs refer to the deterministically-ingested corpus and are stable across runs.
+**Relevance-unit convention (v1).** Pipeline-assigned chunk IDs and canonical entity UUIDs
+are not stable across ingestions, so labels are recorded at a stable granularity:
+`relevant_chunk_ids` and `must_cite_sources` hold **source-document `external_id`s** (relevance
+scored at document granularity), and `relevant_entity_ids` holds **canonical entity names**. The
+evaluator maps each retrieved chunk, linked entity, and answer citation back to those stable
+identifiers before scoring. The reference dataset `evals/datasets/acme-smoke` uses the corpus
+filename stem as each document's `external_id`.
 
 ## Metrics
 
