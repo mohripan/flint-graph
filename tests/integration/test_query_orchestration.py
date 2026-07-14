@@ -29,6 +29,8 @@ from atlas_rag.domain.enums import (
 from atlas_rag.infrastructure.db.models import (
     CanonicalEntity,
     EntityAlias,
+    QueryContextPack,
+    QueryContextPackRecord,
     QueryRunCandidate,
     QueryRunEvent,
     Tenant,
@@ -343,6 +345,7 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
         "retrieval.completed",
         "fusion.completed",
         "rerank.completed",
+        "context.packed",
     ]
     assert all(row.fusion_score is not None for row in rows)
     assert [row.rerank_rank for row in rows if row.rerank_rank is not None] == [1, 2, 3]
@@ -474,9 +477,11 @@ async def test_query_retrieval_graph_fuses_duplicate_candidates_and_reranks(
     assert state.retrieved_candidate_count == 3
     assert state.fused_candidate_count == 2
     assert state.reranked_candidate_count == 2
-    assert [event.event_type for event in events][-2:] == [
+    assert state.context_pack_record_count == 2
+    assert [event.event_type for event in events][-3:] == [
         "fusion.completed",
         "rerank.completed",
+        "context.packed",
     ]
     assert [row.dedupe_key for row in ranked_rows] == [
         "lexical:chunk:chunk-acme",
@@ -487,6 +492,99 @@ async def test_query_retrieval_graph_fuses_duplicate_candidates_and_reranks(
     duplicate_rows = [row for row in rows if row.source_ids["chunk_id"] == "chunk-acme"]
     assert len(duplicate_rows) == 2
     assert {row.fusion_score for row in duplicate_rows} == {ranked_rows[0].fusion_score}
+
+
+async def test_query_retrieval_graph_packs_ranked_context_with_budget(
+    db_session: AsyncSession,
+) -> None:
+    tenant = await _tenant(db_session)
+    run_id, index_id = await _query_run(
+        db_session,
+        tenant,
+        "Where is Acme Corporation headquartered in Berlin?",
+    )
+    retrievers = FakeRetrievers(
+        lexical_results=[
+            _candidate(
+                tenant_id=tenant.id,
+                index_id=index_id,
+                source="lexical",
+                candidate_id="lexical:chunk:chunk-acme",
+                rank=1,
+                normalized_score=0.8,
+                source_ids={"chunk_id": "chunk-acme"},
+                text_preview="Acme Corporation is headquartered in Berlin.",
+            )
+        ],
+        vector_results=[
+            _candidate(
+                tenant_id=tenant.id,
+                index_id=index_id,
+                source="vector",
+                candidate_id="vector:chunk:chunk-paris",
+                rank=1,
+                normalized_score=1.0,
+                source_ids={"chunk_id": "chunk-paris"},
+                text_preview="Quarterly revenue increased in Paris.",
+            ),
+            _candidate(
+                tenant_id=tenant.id,
+                index_id=index_id,
+                source="vector",
+                candidate_id="vector:chunk:chunk-empty",
+                rank=2,
+                normalized_score=0.7,
+                source_ids={"chunk_id": "chunk-empty"},
+                text_preview="",
+            ),
+        ],
+    )
+
+    state = await run_query_retrieval_graph(
+        db_session,
+        tenant_id=tenant.id,
+        query_run_id=run_id,
+        retrievers=QueryRetrieverBundle(
+            lexical=retrievers,
+            vector=retrievers,
+            graph=retrievers,
+        ),
+        context_token_budget=6,
+        context_max_records=5,
+    )
+
+    pack = await db_session.scalar(
+        select(QueryContextPack).where(QueryContextPack.query_run_id == run_id)
+    )
+    records = list(
+        await db_session.scalars(
+            select(QueryContextPackRecord)
+            .where(QueryContextPackRecord.query_run_id == run_id)
+            .order_by(QueryContextPackRecord.citation_id)
+        )
+    )
+    events = list(
+        await db_session.scalars(
+            select(QueryRunEvent)
+            .where(QueryRunEvent.query_run_id == run_id)
+            .order_by(QueryRunEvent.sequence)
+        )
+    )
+
+    assert state.status == QueryRunStatus.RUNNING
+    assert state.context_pack_record_count == 1
+    assert state.context_token_count == 6
+    assert pack is not None
+    assert pack.token_budget == 6
+    assert pack.token_count == 6
+    assert pack.selected_candidate_ids == ["lexical:chunk:chunk-acme"]
+    assert records[0].context_id == "ctx-0001"
+    assert records[0].citation_id == "c1"
+    assert records[0].candidate_id == "lexical:chunk:chunk-acme"
+    assert records[0].source_ids == {"chunk_id": "chunk-acme"}
+    assert records[0].text == "Acme Corporation is headquartered in Berlin."
+    assert events[-1].event_type == "context.packed"
+    assert events[-1].payload["token_count"] == 6
 
 
 async def test_query_retrieval_graph_fails_run_when_required_retriever_fails(

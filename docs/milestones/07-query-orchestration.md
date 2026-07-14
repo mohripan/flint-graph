@@ -2,13 +2,13 @@
 
 ## Status
 
-In progress. Phases 1 through 5 are implemented: application-level query
+In progress. Phases 1 through 6 are implemented: application-level query
 contracts, provider-neutral protocols, deterministic classifier/reranker/answer
 generator, query orchestration settings, the PostgreSQL query-run ledger, and
 deterministic query classification/entity linking services, plus the first
 LangGraph query orchestration runtime for parallel retrieval, candidate fusion,
-and deterministic reranking. API routes, SSE streaming, context packing, and
-answer generation are still planned.
+deterministic reranking, and citation-ready context packing. API routes, SSE
+streaming, graph expansion hydration, and answer generation are still planned.
 
 ## Goal
 
@@ -132,6 +132,7 @@ initialize_run
     -> retrieve_parallel
     -> fuse_candidates
     -> rerank_candidates
+    -> pack_context
 ```
 
 The graph starts a queued query run, persists `query.started`, reuses the Phase
@@ -161,9 +162,23 @@ rows. It appends `fusion.completed` with input, fused, and deduplicated counts.
 Reranking uses the provider-neutral `QueryReranker` protocol and defaults to
 `DeterministicQueryReranker`. It reranks the fused representative candidates,
 persists `rerank_score`, `rerank_rank`, and reasons on selected candidate rows,
-and appends `rerank.completed`. Successful Phase 5 execution still leaves the
-query run `running` so later phases can pack context and generate the final
-answer.
+and appends `rerank.completed`. Successful Phase 5 execution continues into
+the Phase 6 context-packing node.
+
+## Implemented Phase 6 Context Packing
+
+`src/atlas_rag/application/services/query_context_packing.py` adds deterministic
+context packing over reranked candidates. The packer loads tenant-scoped
+`query_run_candidates`, selects rows by `rerank_rank`, skips candidates without
+preview text, estimates tokens with a simple word-count heuristic, and enforces
+the configured token budget and maximum record count.
+
+The service creates stable `PackedContextRecord` values with `ctx-0001` style
+context IDs and `c1` style citation IDs, persists them through
+`persist_query_context_pack`, and appends `context.packed`. The graph now
+returns context record and token counts. Successful Phase 6 execution still
+leaves the query run `running` so later phases can generate and stream the
+final answer.
 
 ## Architecture
 

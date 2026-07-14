@@ -102,8 +102,14 @@ reranking. `atlas_rag.application.services.query_fusion` groups duplicate
 candidates by candidate type plus source IDs, writes `fusion_score`, reranks
 fused representatives through the provider-neutral reranker protocol, writes
 `rerank_score` and `rerank_rank`, and appends `fusion.completed` plus
-`rerank.completed`. Successful execution currently leaves the run `running` for
-later context packing and answer generation.
+`rerank.completed`.
+
+During Phase 6, `atlas_rag.application.services.query_context_packing` packs
+reranked candidate previews into persisted context records. It enforces token
+budget and max-record limits, skips candidates without preview text, writes
+`query_context_packs` and `query_context_pack_records`, and appends
+`context.packed`. Successful execution currently leaves the run `running` for
+later answer generation and streaming.
 Runtime OpenSearch, Neo4j, and PostgreSQL retriever adapters are still planned;
 tests inject protocol-compatible retrievers.
 
@@ -129,6 +135,18 @@ Inspect Phase 5 fusion and rerank scores:
 
 ```powershell
 docker compose exec postgres psql -U atlas -d atlas -c "select source, dedupe_key, fusion_score, rerank_score, rerank_rank, reasons from query_run_candidates where query_run_id = '<query-run-id>' order by coalesce(rerank_rank, 999999), source, rank;"
+```
+
+Inspect Phase 6 context packs:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select pack_id, pack_version, token_budget, token_count, selected_candidate_ids from query_context_packs where query_run_id = '<query-run-id>' order by pack_version;"
+```
+
+Inspect Phase 6 context records:
+
+```powershell
+docker compose exec postgres psql -U atlas -d atlas -c "select context_id, citation_id, candidate_id, token_count, source_ids from query_context_pack_records where query_run_id = '<query-run-id>' order by citation_id;"
 ```
 
 ## API Checks

@@ -95,13 +95,14 @@ initialize_run
     -> retrieve_parallel
     -> fuse_candidates
     -> rerank_candidates
+    -> pack_context
 ```
 
 It uses `langgraph.graph.StateGraph` and stores only compact run state:
 tenant ID, query-run ID, selected retrieval index version, classification,
 linked entity IDs, enabled retrievers, candidate limits, counters, and bounded
-errors. On successful retrieval it leaves the query run `running` so later
-nodes can perform graph expansion, context packing, and answer generation.
+errors. After successful context packing it leaves the query run `running` so
+later nodes can perform graph expansion hydration and answer generation.
 
 ## Classification
 
@@ -198,6 +199,14 @@ relationships for generation. The packer must:
 - reject foreign tenant records.
 
 The answer generator can only use the packed context and policy metadata.
+
+The implemented Phase 6 packer selects reranked candidates in rank order,
+requires non-empty preview text, enforces token budget and maximum record
+limits, and persists the result in `query_context_packs` plus
+`query_context_pack_records`. Context IDs and citation IDs are deterministic
+within a pack. Phase 6 uses candidate previews as the initial context text;
+future source hydration can replace previews with full chunk, evidence, entity,
+and relationship records without changing the persistence contract.
 
 ## Streaming Events
 
