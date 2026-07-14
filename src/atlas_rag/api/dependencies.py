@@ -8,8 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.embeddings import EmbeddingModel
+from atlas_rag.application.query_orchestration import AnswerGenerator
 from atlas_rag.config import Settings, get_settings
 from atlas_rag.domain.errors import NotFoundError
+from atlas_rag.infrastructure.answer_generator_factory import (
+    answer_generator_base_url,
+    create_answer_generator,
+)
 from atlas_rag.infrastructure.db.models import Tenant
 from atlas_rag.infrastructure.db.session import get_session
 from atlas_rag.infrastructure.embedding_factory import (
@@ -87,6 +92,14 @@ async def get_embedding_model(settings: SettingsDep) -> AsyncIterator[EmbeddingM
 
 
 EmbeddingModelDep = Annotated[EmbeddingModel, Depends(get_embedding_model)]
+
+
+async def get_answer_generator(settings: SettingsDep) -> AsyncIterator[AnswerGenerator]:
+    async with httpx.AsyncClient(base_url=answer_generator_base_url(settings)) as http_client:
+        yield create_answer_generator(settings, http_client=http_client)
+
+
+AnswerGeneratorDep = Annotated[AnswerGenerator, Depends(get_answer_generator)]
 
 
 async def get_index_backfill_workflow_starter(

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from atlas_rag.api.dependencies import (
+    AnswerGeneratorDep,
     EmbeddingModelDep,
     Neo4jClientDep,
     OpenSearchClientDep,
@@ -26,7 +27,7 @@ from atlas_rag.api.schemas import (
     QueryRunResponse,
 )
 from atlas_rag.application.embeddings import EmbeddingBatchRequest, EmbeddingInput
-from atlas_rag.application.query_orchestration import QueryCandidate
+from atlas_rag.application.query_orchestration import AnswerGenerator, QueryCandidate
 from atlas_rag.application.services.lexical_projection import build_lexical_search_body
 from atlas_rag.application.services.query_orchestration import (
     QueryRetrieverBundle,
@@ -122,6 +123,7 @@ async def stream_query_run_events_endpoint(
     opensearch_client: OpenSearchClientDep,
     neo4j_client: Neo4jClientDep,
     embedding_model: EmbeddingModelDep,
+    answer_generator: AnswerGeneratorDep,
     poll_interval_seconds: float = Query(default=0.05, ge=0.01, le=5.0),
 ) -> StreamingResponse:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
@@ -154,6 +156,7 @@ async def stream_query_run_events_endpoint(
         rerank_max_results=settings.query_max_candidate_limit,
         context_token_budget=settings.query_context_token_budget,
         context_max_records=settings.query_max_context_records,
+        answer_generator=answer_generator,
         poll_interval_seconds=poll_interval_seconds,
     )
     return StreamingResponse(
@@ -315,6 +318,7 @@ async def _stream_query_events(
     rerank_max_results: int,
     context_token_budget: int,
     context_max_records: int,
+    answer_generator: AnswerGenerator,
     poll_interval_seconds: float,
 ) -> AsyncIterator[str]:
     if initial_status != QueryRunStatus.QUEUED:
@@ -337,6 +341,7 @@ async def _stream_query_events(
             rerank_max_results=rerank_max_results,
             context_token_budget=context_token_budget,
             context_max_records=context_max_records,
+            answer_generator=answer_generator,
             queue=queue,
         )
     )
@@ -360,6 +365,7 @@ async def _execute_query_run(
     rerank_max_results: int,
     context_token_budget: int,
     context_max_records: int,
+    answer_generator: AnswerGenerator,
     queue: asyncio.Queue[str | None],
 ) -> None:
     async with session_factory() as execution_session:
@@ -387,6 +393,7 @@ async def _execute_query_run(
                 rerank_max_results=rerank_max_results,
                 context_token_budget=context_token_budget,
                 context_max_records=context_max_records,
+                answer_generator=answer_generator,
                 commit_after_node=True,
                 after_node_commit=emit_new_events,
             )

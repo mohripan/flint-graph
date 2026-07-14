@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phase 1 is implemented.
+In progress. Phases 1 and 2 are implemented.
 
 Milestone 08 extends the Milestone 07 query orchestration path with grounded
 answer generation, deterministic citation repair, claim support checking,
@@ -58,10 +58,32 @@ and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
 
-Phase 1 is intentionally application-only. It does not wire Ollama answer
-generation, alter the LangGraph node, add persistence columns, emit new SSE
-events, or expose provenance endpoints. Later phases adapt these contracts into
-the query runtime and database ledger.
+Phases 1 and 2 do not add persistence columns, emit new faithfulness SSE events,
+stream live model tokens, run support checking inside the query graph, or expose
+provenance endpoints. Later phases adapt these contracts into the query runtime
+and database ledger.
+
+## Implemented Phase 2 Provider Wiring
+
+`src/atlas_rag/infrastructure/ollama.py` now includes
+`OllamaAnswerGenerator`, a non-streaming answer provider that calls Ollama
+`/api/generate` with a citation-only prompt and structured JSON schema. The
+provider asks for `insufficient_context` plus claim text and citation IDs, then
+adapts the draft into the existing `GeneratedAnswer` contract. Raw citation
+markers and draft claims are retained in answer metadata for the later
+faithfulness pipeline.
+
+`src/atlas_rag/infrastructure/answer_generator_factory.py` adds
+`create_answer_generator`, mirroring the embedding factory. It returns the
+deterministic generator by default and the Ollama generator when
+`query_answer_provider = "ollama"`. It also adds `create_support_checker`,
+which returns the deterministic support checker and fails explicitly for the
+future Ollama support judge.
+
+`src/atlas_rag/api/dependencies.py` exposes an answer-generator dependency, and
+the SSE query execution path passes that generator into the LangGraph runtime.
+This makes `query_answer_provider = "ollama"` active for streamed API query
+runs while preserving deterministic defaults for tests and direct service calls.
 
 ## Expected Invariants
 

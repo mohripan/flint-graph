@@ -11,6 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 import atlas_rag.api.dependencies as dependencies
+from atlas_rag.application.query_orchestration import (
+    AnswerCitation,
+    AnswerGenerationRequest,
+    GeneratedAnswer,
+)
 from atlas_rag.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
@@ -84,6 +89,27 @@ class QueryNeo4jClient:
 
     async def close(self) -> None:
         return None
+
+
+class QueryAnswerGenerator:
+    def __init__(self) -> None:
+        self.requests: list[AnswerGenerationRequest] = []
+
+    async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer:
+        self.requests.append(request)
+        record = request.context_pack.records[0]
+        return GeneratedAnswer(
+            text="Provider-backed answer. [c1]",
+            citations=[
+                AnswerCitation(
+                    citation_id=record.citation_id,
+                    context_id=record.context_id,
+                    marker=f"[{record.citation_id}]",
+                    source_ids=record.source_ids,
+                )
+            ],
+            metadata={"provider": "test"},
+        )
 
 
 @pytest_asyncio.fixture
@@ -247,6 +273,49 @@ async def test_query_run_api_streams_execution_and_persists_inspection_records(
     assert [event["sequence"] for event in event_rows] == list(range(1, len(event_rows) + 1))
     assert opensearch.searches
     assert neo4j.calls
+
+
+@pytest.mark.asyncio
+async def test_query_run_api_stream_uses_answer_generator_dependency(
+    query_api_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        QueryOpenSearchClient,
+        QueryNeo4jClient,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    answer_generator = QueryAnswerGenerator()
+    app.dependency_overrides[dependencies.get_answer_generator] = lambda: answer_generator
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant_id = tenant.id
+
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant_id),
+        json={
+            "query": "Where is Acme Corporation headquartered?",
+            "retrieval_index_version_id": str(index_version_id),
+        },
+    )
+    assert created.status_code == 201
+    query_run_id = created.json()["id"]
+
+    stream = await client.get(
+        f"/v1/query-runs/{query_run_id}/events/stream",
+        headers=_headers(tenant_id),
+    )
+    assert stream.status_code == 200
+
+    inspected = await client.get(
+        f"/v1/query-runs/{query_run_id}",
+        headers=_headers(tenant_id),
+    )
+    assert inspected.status_code == 200
+    assert inspected.json()["answer_text"] == "Provider-backed answer. [c1]"
+    assert len(answer_generator.requests) == 1
+    assert answer_generator.requests[0].context_pack.records[0].citation_id == "c1"
 
 
 @pytest.mark.asyncio
