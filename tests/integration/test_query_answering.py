@@ -25,7 +25,7 @@ from atlas_rag.application.services.retrieval_index_versions import (
     create_retrieval_index_version,
 )
 from atlas_rag.domain.enums import QueryRunStatus, RetrievalIndexScope
-from atlas_rag.infrastructure.db.models import QueryRun, QueryRunEvent, Tenant
+from atlas_rag.infrastructure.db.models import QueryAnswerClaim, QueryRun, QueryRunEvent, Tenant
 
 
 class DraftAnswerGenerator:
@@ -88,6 +88,13 @@ async def test_generate_query_answer_persists_verified_answer_and_citations(
     )
 
     stored_run = await db_session.scalar(select(QueryRun).where(QueryRun.id == run.id))
+    claims = list(
+        await db_session.scalars(
+            select(QueryAnswerClaim)
+            .where(QueryAnswerClaim.query_run_id == run.id)
+            .order_by(QueryAnswerClaim.claim_index)
+        )
+    )
     events = list(
         await db_session.scalars(
             select(QueryRunEvent)
@@ -100,6 +107,12 @@ async def test_generate_query_answer_persists_verified_answer_and_citations(
     assert result.answer_citation_count == 1
     assert stored_run is not None
     assert stored_run.answer_text == "Acme Corporation is headquartered in Berlin. [c1]"
+    assert stored_run.abstained is False
+    assert stored_run.abstain_reason is None
+    assert stored_run.supported_claim_count == 1
+    assert stored_run.unsupported_claim_count == 0
+    assert stored_run.support_method == "deterministic-lexical"
+    assert stored_run.answer_provider == "unknown"
     assert stored_run.answer_citations == [
         {
             "citation_id": "c1",
@@ -108,6 +121,14 @@ async def test_generate_query_answer_persists_verified_answer_and_citations(
             "source_ids": {"chunk_id": "chunk-acme"},
         }
     ]
+    assert len(claims) == 1
+    assert claims[0].tenant_id == tenant.id
+    assert claims[0].claim_index == 0
+    assert claims[0].text == "Acme Corporation is headquartered in Berlin."
+    assert claims[0].citation_ids == ["c1"]
+    assert claims[0].support_status == "supported"
+    assert claims[0].support_score == 1.0
+    assert claims[0].method == "deterministic-lexical"
     assert events[-2].event_type == "answer.citation"
     assert events[-1].event_type == "query.completed"
     assert events[-1].payload["faithfulness"]["supported_claim_count"] == 1

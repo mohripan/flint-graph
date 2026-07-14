@@ -7,10 +7,11 @@ from hashlib import sha256
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.query_orchestration import (
+    AnswerFaithfulnessReport,
     QueryCandidate,
     QueryEntityLink,
 )
@@ -25,6 +26,7 @@ from atlas_rag.domain.enums import (
 from atlas_rag.domain.errors import ConflictError, NotFoundError
 from atlas_rag.domain.transitions import can_transition_query_run
 from atlas_rag.infrastructure.db.models import (
+    QueryAnswerClaim,
     QueryContextPack,
     QueryContextPackRecord,
     QueryRun,
@@ -106,6 +108,12 @@ async def transition_query_run(
     payload: dict[str, Any],
     answer_text: str | None = None,
     answer_citations: list[dict[str, Any]] | None = None,
+    abstained: bool | None = None,
+    abstain_reason: str | None = None,
+    supported_claim_count: int | None = None,
+    unsupported_claim_count: int | None = None,
+    support_method: str | None = None,
+    answer_provider: str | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
     error_details: dict[str, Any] | None = None,
@@ -139,6 +147,15 @@ async def transition_query_run(
     if target_status == QueryRunStatus.COMPLETED:
         run.answer_text = answer_text
         run.answer_citations = list(answer_citations or [])
+        if abstained is not None:
+            run.abstained = abstained
+        run.abstain_reason = abstain_reason
+        if supported_claim_count is not None:
+            run.supported_claim_count = supported_claim_count
+        if unsupported_claim_count is not None:
+            run.unsupported_claim_count = unsupported_claim_count
+        run.support_method = support_method
+        run.answer_provider = answer_provider
         run.error_code = None
         run.error_message = None
         run.error_details = {}
@@ -246,6 +263,39 @@ async def persist_query_entity_link(
     session.add(row)
     await session.flush()
     return row
+
+
+async def persist_query_answer_claims(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    query_run_id: UUID,
+    report: AnswerFaithfulnessReport,
+) -> list[QueryAnswerClaim]:
+    await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
+    await session.execute(
+        delete(QueryAnswerClaim).where(
+            QueryAnswerClaim.tenant_id == tenant_id,
+            QueryAnswerClaim.query_run_id == query_run_id,
+        )
+    )
+    rows: list[QueryAnswerClaim] = []
+    for claim in sorted(report.claims, key=lambda item: item.claim_index):
+        row = QueryAnswerClaim(
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            claim_index=claim.claim_index,
+            text=claim.text,
+            citation_ids=list(claim.citation_ids),
+            support_status=claim.support_status,
+            support_score=claim.support_score,
+            support_reason=claim.support_reason,
+            method=claim.method,
+        )
+        session.add(row)
+        rows.append(row)
+    await session.flush()
+    return rows
 
 
 async def persist_query_candidate(

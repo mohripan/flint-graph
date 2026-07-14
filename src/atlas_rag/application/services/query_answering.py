@@ -25,6 +25,7 @@ from atlas_rag.application.services.query_faithfulness import (
 from atlas_rag.application.services.query_runs import (
     append_query_run_event,
     get_query_run,
+    persist_query_answer_claims,
     transition_query_run,
 )
 from atlas_rag.domain.enums import QueryRunStatus
@@ -82,9 +83,16 @@ async def generate_query_answer(
         )
         answer = verification.answer
         faithfulness = faithfulness_summary(verification.report)
+        answer_provider = _answer_provider(draft_answer)
         answer_citations = [
             citation.model_dump(mode="json") for citation in answer.citations
         ]
+        await persist_query_answer_claims(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            report=verification.report,
+        )
         await append_query_run_event(
             session,
             tenant_id=tenant_id,
@@ -119,6 +127,12 @@ async def generate_query_answer(
             },
             answer_text=answer.text,
             answer_citations=answer_citations,
+            abstained=verification.report.abstained,
+            abstain_reason=verification.report.abstain_reason,
+            supported_claim_count=verification.report.supported_claim_count,
+            unsupported_claim_count=verification.report.unsupported_claim_count,
+            support_method=verification.report.support_method,
+            answer_provider=answer_provider,
         )
         return QueryAnswerResult(
             status=QueryRunStatus.COMPLETED,
@@ -144,6 +158,15 @@ async def generate_query_answer(
             error_details={"errors": [error]},
         )
         return QueryAnswerResult(status=QueryRunStatus.FAILED, errors=[error])
+
+
+def _answer_provider(answer: object) -> str:
+    metadata = getattr(answer, "metadata", {})
+    if isinstance(metadata, dict):
+        provider = metadata.get("provider")
+        if isinstance(provider, str) and provider:
+            return provider
+    return "unknown"
 
 
 async def _load_latest_context_pack(

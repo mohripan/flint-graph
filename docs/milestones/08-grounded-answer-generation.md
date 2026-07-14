@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 3 are implemented.
+In progress. Phases 1 through 4 are implemented.
 
 Milestone 08 extends the Milestone 07 query orchestration path with grounded
 answer generation, deterministic citation repair, claim support checking,
@@ -58,10 +58,9 @@ and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
 
-Phases 1 through 3 do not add persistence columns, emit new faithfulness SSE
-event types, stream live model tokens, persist per-claim support rows, or expose
-provenance endpoints. Later phases adapt the verified report into the query
-ledger and provenance APIs.
+Phases 1 through 4 do not emit new faithfulness SSE event types, stream live
+model tokens, or expose provenance endpoints. Later phases adapt the persisted
+claim rows into streaming events and provenance APIs.
 
 ## Implemented Phase 2 Provider Wiring
 
@@ -106,6 +105,23 @@ no citations and completes the run.
 The LangGraph and API stream paths now pass the configured support checker and
 threshold settings into answer generation. The deterministic generator remains
 compatible through the legacy fallback path.
+
+## Implemented Phase 4 Persistence
+
+`migrations/versions/0011_answer_faithfulness.py` extends the query ledger with
+faithfulness summary columns on `query_runs` and a `query_answer_claims` table.
+Each completed query run can now store whether it abstained, the abstention
+reason, supported and unsupported claim counts, the support method, and the
+answer provider.
+
+`query_answer_claims` stores one row per checked answer claim with resolved
+`citation_ids`, support status, support score, reason, and method. Source text
+remains in the context-pack records; claim rows store compact claim text and
+resolved citation IDs for later provenance reads.
+
+`src/atlas_rag/application/services/query_answering.py` now persists claim rows
+and summary columns in the same transaction as the verified answer completion.
+Claim persistence replaces prior rows for the run, keeping retries idempotent.
 
 ## Expected Invariants
 

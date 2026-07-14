@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -404,6 +405,12 @@ class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     answer_citations: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, nullable=False, default=list
     )
+    abstained: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    abstain_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    supported_claim_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unsupported_claim_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    support_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    answer_provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
     candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     context_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -422,6 +429,43 @@ class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="QueryRunEvent.sequence",
     )
+    answer_claims: Mapped[list["QueryAnswerClaim"]] = relationship(
+        back_populates="query_run",
+        cascade="all, delete-orphan",
+        order_by="QueryAnswerClaim.claim_index",
+    )
+
+
+class QueryAnswerClaim(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "query_answer_claims"
+    __table_args__ = (
+        UniqueConstraint(
+            "query_run_id",
+            "claim_index",
+            name="uq_query_answer_claims_run_index",
+        ),
+        Index("ix_query_answer_claims_run_index", "query_run_id", "claim_index"),
+        Index("ix_query_answer_claims_tenant_status", "tenant_id", "support_status"),
+    )
+
+    query_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    claim_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    citation_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    support_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    support_score: Mapped[float] = mapped_column(Float, nullable=False)
+    support_reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    method: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    query_run: Mapped[QueryRun] = relationship(back_populates="answer_claims")
 
 
 class QueryRunEvent(UUIDPrimaryKeyMixin, Base):
