@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 05 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, and a resolved knowledge graph with reviewable, reversible merges.
+AtlasRAG is an early GraphRAG platform. Through Milestone 06 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, and rebuildable retrieval indexes.
 
 Implemented path:
 
@@ -16,9 +16,11 @@ API intake -> immutable raw object in MinIO
     -> per-tenant staged resolution (auto attach / review / new entity)
     -> aggregate relationships
     -> project resolved graph into Neo4j
+    -> index chunks into PostgreSQL embeddings + Neo4j vectors + OpenSearch lexical records
+    -> primitive lexical/vector/neighborhood retrieval APIs
 ```
 
-PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, and the resolved graph. Neo4j is an idempotent, rebuildable projection. MinIO stores immutable raw and derived artifacts. The API serves the entity, review-queue, merge/unmerge, and audit endpoints; dedicated extraction inspection endpoints are deferred.
+PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, and backfill state. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, and graph-neighborhood endpoints; dedicated extraction inspection endpoints are deferred.
 
 Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
@@ -69,6 +71,7 @@ Docker Compose exposes:
 - PostgreSQL host port: `localhost:55432`
 - Temporal gRPC host port: `localhost:7233`
 - Neo4j Bolt host port: `localhost:7687`
+- OpenSearch: `http://localhost:9200`
 
 The `temporal` compose service uses `temporalio/temporal:latest` with `server start-dev --ip 0.0.0.0 --namespace default`. Temporal's development server includes a Web UI by default.
 
@@ -115,6 +118,23 @@ Milestone 05 provenance-rich extraction:
 - `migrations/versions/0006_provenance_extraction.py` and `0007_staged_resolution_state.py`: provenance and staged-resolution schema.
 - `docs/milestones/05-provenance-rich-extraction.md`, `docs/adr/0005-staged-extraction-proposals-before-canonical-resolution.md`, `docs/architecture/extraction-proposal-contract.md`, `docs/runbooks/provenance-extraction-*.md`.
 
+Milestone 06 retrieval indexes:
+
+- `src/atlas_rag/application/embeddings.py`: provider-neutral embedding contract and deterministic model.
+- `src/atlas_rag/infrastructure/embedding_factory.py`: shared embedding model construction.
+- `src/atlas_rag/infrastructure/embeddings.py`, `ollama.py`: embedding adapters.
+- `src/atlas_rag/application/services/retrieval_index_versions.py`: index-version transitions.
+- `src/atlas_rag/application/services/indexing.py`: document-version indexing, coverage, and projection replay.
+- `src/atlas_rag/application/services/index_backfill.py`: backfill job state and eligibility.
+- `src/atlas_rag/application/services/retrieval.py`: primitive retrieval API service layer.
+- `src/atlas_rag/application/services/lexical_projection.py` and `vector_projection.py`: projection record/query builders.
+- `src/atlas_rag/api/routes/retrieval.py`: index, backfill, lexical/vector search, and neighborhood endpoints.
+- `src/atlas_rag/workflows/indexing.py`, `backfill.py`: retrieval indexing and backfill workflows.
+- `src/atlas_rag/worker/activities/indexing.py`, `index_backfill.py`: worker activities.
+- `src/atlas_rag/processes/retrieval_index_reconcile.py`: projection reconcile command.
+- `migrations/versions/0008_retrieval_index_ledger.py`, `0009_document_index_coverage.py`, and `migrations/neo4j/0002_chunk_vector_indexes.cypher`: retrieval schema.
+- `docs/milestones/06-retrieval-indexes.md`, `docs/adr/0006-rebuildable-retrieval-indexes.md`, `docs/architecture/retrieval-index-contract.md`, `docs/runbooks/retrieval-index-*.md`.
+
 ## Current Invariants
 
 - A document belongs to one tenant.
@@ -129,6 +149,10 @@ Milestone 05 provenance-rich extraction:
 - Model output is staged and evidence-verified before it can affect canonical graph state.
 - Accepted staged entities, relations, and claims retain at least one verified evidence span.
 - Canonical graph mutation happens in deterministic resolution services, not provider adapters.
+- Retrieval index versions are explicit and active per global or tenant scope.
+- Chunk embeddings are tied to chunk hashes and retrieval index versions.
+- Neo4j and OpenSearch retrieval records are rebuildable from PostgreSQL.
+- Primitive retrieval APIs always apply tenant filters.
 
 ## Temporal Notes
 
@@ -138,6 +162,10 @@ Milestone 05 provenance-rich extraction:
 - Workflow memo stores `trace_context` from outbox headers.
 - Workflow start uses duplicate-safe Temporal policies so retrying the relay does not create duplicate workflows.
 - Cancellation dispatch uses the same workflow ID and calls Temporal workflow cancellation.
+- Indexing workflow name: `IndexDocumentVersionWorkflow`.
+- Backfill workflow name: `IndexBackfillWorkflow`.
+- Indexing workflow ID: `index-document-version-{document_version_id}-{retrieval_index_version_id}`.
+- Backfill workflow ID: `index-backfill-{job_id}`.
 
 ## Known Limitations
 
@@ -148,6 +176,7 @@ Milestone 05 provenance-rich extraction:
 - Trace context is captured and carried into Temporal memo, but automatic distributed span continuation inside workflows and activities is not complete.
 - The local Temporal dev server is not production Temporal.
 - The compose Temporal service currently uses the `latest` image tag, which is convenient for early local development but should be pinned before production-like environments.
+- OpenSearch near-real-time indexing may require refresh or polling before a just-indexed chunk appears in search.
 
 ## Before Ending A Change
 

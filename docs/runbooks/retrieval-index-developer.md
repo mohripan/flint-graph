@@ -24,8 +24,7 @@ document versions.
 
 ## Local Services
 
-Milestone 06 should add OpenSearch to Docker Compose alongside existing
-services:
+Milestone 06 adds OpenSearch to Docker Compose alongside existing services:
 
 - API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
@@ -278,7 +277,7 @@ Lexical search:
 ```powershell
 curl.exe -sS -X POST http://localhost:8000/v1/search/lexical `
   -H "X-Tenant-ID: <tenant-id>" -H "Content-Type: application/json" `
-  -d '{"query":"acme","limit":5,"filters":{"source_type":"upload"}}'
+  -d '{"query":"acme","limit":5,"filters":{"document_version_id":"<document-version-id>"}}'
 ```
 
 Vector search:

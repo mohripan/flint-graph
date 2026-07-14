@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1 through 7 are implemented.
+Complete. Phases 1 through 8 are implemented and end-to-end validated.
 
 Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
@@ -134,6 +134,17 @@ Completed in Phase 7:
 - API-side backfill job creation with duplicate-safe Temporal workflow start;
 - PostgreSQL-authoritative bounded neighborhood traversal over active canonical
   relationships.
+
+Completed in Phase 8:
+
+- README, handoff, ADR, milestone, runbook, QA guide, and notes updates for the
+  completed retrieval-index milestone boundary;
+- Docker Compose end-to-end smoke through API intake, outbox relay, Temporal
+  ingestion/indexing workflows, PostgreSQL coverage, Neo4j vector projection,
+  OpenSearch lexical projection, primitive retrieval APIs, API-started
+  backfill, and reconcile replay;
+- final automated verification across tests, lint, typing, Alembic SQL
+  generation, and Compose configuration.
 
 ## Datastore Roles
 

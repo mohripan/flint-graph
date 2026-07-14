@@ -1,10 +1,10 @@
 # AtlasRAG
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, and builds a resolved knowledge graph with reviewable, reversible merges. PostgreSQL is the system of record; Neo4j is an idempotent projection of the resolved graph.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, and maintains rebuildable retrieval indexes. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 ## Why these milestones come first
 
-The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, and a safe asynchronous dispatch path before retrieval and graph mutation are introduced. LangGraph will later orchestrate query execution; it will not replace the ingestion control plane.
+The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, a safe asynchronous dispatch path, canonical graph mutation, and retrieval primitives before query-time orchestration is introduced. LangGraph will later orchestrate query execution; it will not replace the ingestion or indexing control planes.
 
 ## Requirements
 
@@ -172,7 +172,7 @@ make check
 
 ## Current milestone boundary
 
-Milestone 05 refactors the extraction-to-resolution boundary so canonical resolution consumes provenance-rich staged proposals with verified evidence spans instead of the Milestone 04 transitional mention/claim bridge. Retrieval, embeddings, vector indexes, query-time orchestration, and dedicated extraction inspection APIs remain later work.
+Milestone 06 adds provider-neutral embeddings, versioned retrieval index state, Neo4j vector projection, OpenSearch lexical projection, restartable indexing/backfill workflows, reconcile replay, and primitive retrieval APIs. Query planning, retriever orchestration, fusion, reranking, context packing, answer synthesis, SSE query streaming, and dedicated extraction inspection APIs remain later work.
 
 ## Security status
 
@@ -187,6 +187,7 @@ Milestone notes:
 - Content pipeline: `docs/milestones/03-content-pipeline.md`
 - Knowledge graph: `docs/milestones/04-knowledge-graph.md`
 - Provenance-rich extraction: `docs/milestones/05-provenance-rich-extraction.md`
+- Retrieval indexes and backfills: `docs/milestones/06-retrieval-indexes.md`
 - Local dispatch runbook: `docs/runbooks/durable-ingestion-dispatch.md`
 - Content pipeline developer runbook: `docs/runbooks/content-pipeline-developer.md`
 - Content pipeline QA guide: `docs/runbooks/content-pipeline-qa-guide.md`
@@ -194,3 +195,6 @@ Milestone notes:
 - Knowledge graph QA guide: `docs/runbooks/knowledge-graph-qa-guide.md`
 - Knowledge graph contract: `docs/architecture/knowledge-graph-contract.md`
 - Extraction proposal contract: `docs/architecture/extraction-proposal-contract.md`
+- Retrieval index contract: `docs/architecture/retrieval-index-contract.md`
+- Retrieval index developer runbook: `docs/runbooks/retrieval-index-developer.md`
+- Retrieval index QA guide: `docs/runbooks/retrieval-index-qa-guide.md`

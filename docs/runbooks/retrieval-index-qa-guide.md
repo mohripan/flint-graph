@@ -2,8 +2,8 @@
 
 ## Status
 
-Planned for Milestone 06. This guide describes the intended manual validation
-flow once retrieval indexing is implemented.
+Implemented in Milestone 06. This guide describes the manual validation flow
+for retrieval indexing and primitive retrieval APIs.
 
 ## Audience
 
@@ -64,7 +64,7 @@ curl.exe -sS "http://localhost:8000/v1/ingestion-jobs/$($upload.ingestion_job_id
   -H "X-Tenant-ID: $($tenant.id)" | ConvertFrom-Json
 ```
 
-Expected after Milestone 06 implementation:
+Expected:
 
 - ingestion reaches `completed`;
 - an indexing workflow runs for the document version;
@@ -78,8 +78,9 @@ Expected after Milestone 06 implementation:
 List index versions:
 
 ```powershell
-curl.exe -sS http://localhost:8000/v1/index-versions `
-  -H "X-Tenant-ID: $($tenant.id)" | ConvertFrom-Json
+$versions = @(curl.exe -sS http://localhost:8000/v1/index-versions `
+  -H "X-Tenant-ID: $($tenant.id)" | ConvertFrom-Json)
+$versions
 ```
 
 Expected:
@@ -134,8 +135,8 @@ Expected:
 Fetch entities:
 
 ```powershell
-$entities = curl.exe -sS http://localhost:8000/v1/entities `
-  -H "X-Tenant-ID: $($tenant.id)" | ConvertFrom-Json
+$entities = @(curl.exe -sS http://localhost:8000/v1/entities `
+  -H "X-Tenant-ID: $($tenant.id)" | ConvertFrom-Json)
 ```
 
 Traverse one entity:
@@ -158,7 +159,7 @@ Start a scoped backfill:
 ```powershell
 $backfill = curl.exe -sS -X POST http://localhost:8000/v1/index-backfills `
   -H "X-Tenant-ID: $($tenant.id)" -H "Content-Type: application/json" `
-  -d "{\"document_version_id\":\"$($upload.document_version_id)\"}" | ConvertFrom-Json
+  -d "{\"retrieval_index_version_id\":\"$($versions[0].id)\",\"document_version_id\":\"$($upload.document_version_id)\"}" | ConvertFrom-Json
 ```
 
 Poll it:
