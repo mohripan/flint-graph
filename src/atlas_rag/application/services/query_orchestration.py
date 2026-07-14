@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal, NotRequired, Protocol, Required, TypedDict
 from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
@@ -91,8 +91,26 @@ class QueryRetrievalGraphResult:
 
 
 class _GraphState(TypedDict, total=False):
-    query_run_id: UUID
-    tenant_id: UUID
+    query_run_id: Required[UUID]
+    tenant_id: Required[UUID]
+    enabled_retrievers: Required[list[RetrieverName]]
+    linked_entity_ids: Required[list[UUID]]
+    retrieved_candidate_count: Required[int]
+    fused_candidate_count: Required[int]
+    reranked_candidate_count: Required[int]
+    context_pack_record_count: Required[int]
+    context_token_count: Required[int]
+    errors: Required[list[dict[str, Any]]]
+    query: NotRequired[str]
+    retrieval_index_version_id: NotRequired[UUID]
+    status: NotRequired[QueryRunStatus]
+    classification: NotRequired[QueryClassification]
+    classification_label: NotRequired[str]
+    candidate_limits: NotRequired[dict[str, int]]
+    allow_partial_retrieval: NotRequired[bool]
+
+
+class _GraphStateUpdate(TypedDict, total=False):
     query: str
     retrieval_index_version_id: UUID
     status: QueryRunStatus
@@ -173,7 +191,7 @@ def _build_retrieval_graph(
 ) -> Any:
     builder = StateGraph(_GraphState)
 
-    async def initialize_run(state: _GraphState) -> _GraphState:
+    async def initialize_run(state: _GraphState) -> _GraphStateUpdate:
         run = await transition_query_run(
             session,
             tenant_id=state["tenant_id"],
@@ -188,7 +206,7 @@ def _build_retrieval_graph(
             "status": run.status,
         }
 
-    async def classify(state: _GraphState) -> _GraphState:
+    async def classify(state: _GraphState) -> _GraphStateUpdate:
         classification = await classify_query_run(
             session,
             tenant_id=state["tenant_id"],
@@ -199,7 +217,7 @@ def _build_retrieval_graph(
             "classification_label": classification.label,
         }
 
-    async def link_entities(state: _GraphState) -> _GraphState:
+    async def link_entities(state: _GraphState) -> _GraphStateUpdate:
         links = await link_query_entities(
             session,
             tenant_id=state["tenant_id"],
@@ -212,8 +230,8 @@ def _build_retrieval_graph(
         ]
         return {"linked_entity_ids": accepted}
 
-    async def plan_retrieval(state: _GraphState) -> _GraphState:
-        classification = state["classification"]
+    async def plan_retrieval(state: _GraphState) -> _GraphStateUpdate:
+        classification = _require_classification(state)
         enabled = list(classification.retrieval_plan.enabled_retrievers)
         if "graph" in enabled and not state.get("linked_entity_ids"):
             enabled.remove("graph")
@@ -226,7 +244,7 @@ def _build_retrieval_graph(
             "allow_partial_retrieval": classification.retrieval_plan.allow_partial_retrieval,
         }
 
-    async def retrieve_parallel(state: _GraphState) -> _GraphState:
+    async def retrieve_parallel(state: _GraphState) -> _GraphStateUpdate:
         enabled = state.get("enabled_retrievers", [])
         await append_query_run_event(
             session,
@@ -323,18 +341,19 @@ def _build_retrieval_graph(
             "errors": errors,
         }
 
-    async def fuse_candidates(state: _GraphState) -> _GraphState:
+    async def fuse_candidates(state: _GraphState) -> _GraphStateUpdate:
         if state.get("status") == QueryRunStatus.FAILED:
             return {}
+        classification = _require_classification(state)
         result = await fuse_query_candidates(
             session,
             tenant_id=state["tenant_id"],
             query_run_id=state["query_run_id"],
-            classification=state["classification"],
+            classification=classification,
         )
         return {"fused_candidate_count": result.fused_candidate_count}
 
-    async def rerank_candidates(state: _GraphState) -> _GraphState:
+    async def rerank_candidates(state: _GraphState) -> _GraphStateUpdate:
         if state.get("status") == QueryRunStatus.FAILED:
             return {}
         result = await rerank_fused_query_candidates(
@@ -346,7 +365,7 @@ def _build_retrieval_graph(
         )
         return {"reranked_candidate_count": result.reranked_candidate_count}
 
-    async def pack_context(state: _GraphState) -> _GraphState:
+    async def pack_context(state: _GraphState) -> _GraphStateUpdate:
         if state.get("status") == QueryRunStatus.FAILED:
             return {}
         result = await pack_query_context(
@@ -390,14 +409,16 @@ async def _retrieve_source(
     graph_depth: int,
 ) -> list[QueryCandidate]:
     limit = state.get("candidate_limits", {}).get(source, 10)
+    query = _require_query(state)
+    retrieval_index_version_id = _require_retrieval_index_version_id(state)
     if source == "lexical":
         if retrievers.lexical is None:
             raise RuntimeError("lexical retriever is not configured")
         return await retrievers.lexical.retrieve_lexical(
             session,
             tenant_id=state["tenant_id"],
-            query=state["query"],
-            retrieval_index_version_id=state["retrieval_index_version_id"],
+            query=query,
+            retrieval_index_version_id=retrieval_index_version_id,
             limit=limit,
         )
     if source == "vector":
@@ -406,8 +427,8 @@ async def _retrieve_source(
         return await retrievers.vector.retrieve_vector(
             session,
             tenant_id=state["tenant_id"],
-            query=state["query"],
-            retrieval_index_version_id=state["retrieval_index_version_id"],
+            query=query,
+            retrieval_index_version_id=retrieval_index_version_id,
             limit=limit,
         )
     if retrievers.graph is None:
@@ -415,9 +436,30 @@ async def _retrieve_source(
     return await retrievers.graph.retrieve_graph(
         session,
         tenant_id=state["tenant_id"],
-        query=state["query"],
-        retrieval_index_version_id=state["retrieval_index_version_id"],
+        query=query,
+        retrieval_index_version_id=retrieval_index_version_id,
         linked_entity_ids=state.get("linked_entity_ids", []),
         depth=graph_depth,
         limit=limit,
     )
+
+
+def _require_query(state: _GraphState) -> str:
+    query = state.get("query")
+    if query is None:
+        raise RuntimeError("query is missing from graph state")
+    return query
+
+
+def _require_retrieval_index_version_id(state: _GraphState) -> UUID:
+    retrieval_index_version_id = state.get("retrieval_index_version_id")
+    if retrieval_index_version_id is None:
+        raise RuntimeError("retrieval_index_version_id is missing from graph state")
+    return retrieval_index_version_id
+
+
+def _require_classification(state: _GraphState) -> QueryClassification:
+    classification = state.get("classification")
+    if classification is None:
+        raise RuntimeError("classification is missing from graph state")
+    return classification
