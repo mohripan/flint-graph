@@ -119,6 +119,10 @@ async def get_support_checker(settings: SettingsDep) -> AsyncIterator[SupportChe
         ) as anthropic_client:
             yield create_support_checker(settings, anthropic_client=anthropic_client)
         return
+    if settings.query_support_provider == "ollama":
+        async with httpx.AsyncClient(base_url=answer_generator_base_url(settings)) as http_client:
+            yield create_support_checker(settings, http_client=http_client)
+        return
     yield create_support_checker(settings)
 
 

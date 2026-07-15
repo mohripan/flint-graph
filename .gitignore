@@ -10,3 +10,4 @@ notes/
 # Virtual environments
 .venv
 .env
+.superpowers/*

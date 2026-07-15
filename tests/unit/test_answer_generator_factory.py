@@ -1,9 +1,9 @@
 import httpx
-import pytest
 
 from atlas_rag.application.query_faithfulness import DeterministicSupportChecker
 from atlas_rag.application.query_orchestration import DeterministicAnswerGenerator
 from atlas_rag.config import Settings
+from atlas_rag.infrastructure import ollama
 from atlas_rag.infrastructure.answer_generator_factory import (
     create_answer_generator,
     create_support_checker,
@@ -45,11 +45,12 @@ def test_support_checker_factory_defaults_to_deterministic() -> None:
     assert isinstance(checker, DeterministicSupportChecker)
 
 
-def test_support_checker_factory_rejects_unimplemented_ollama_judge() -> None:
+def test_support_checker_factory_creates_ollama_checker() -> None:
     settings = Settings(query_support_provider="ollama")
 
-    with pytest.raises(RuntimeError, match="Ollama support checker is not implemented"):
-        create_support_checker(settings)
+    checker = create_support_checker(settings, http_client=httpx.AsyncClient())
+
+    assert isinstance(checker, ollama.OllamaSupportChecker)
 
 
 def test_answer_generator_factory_creates_anthropic_generator() -> None:

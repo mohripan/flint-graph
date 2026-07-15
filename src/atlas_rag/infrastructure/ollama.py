@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,10 +14,19 @@ from atlas_rag.application.embeddings import (
 from atlas_rag.application.extraction_proposals import ExtractionBatch, ExtractionBatchRequest
 from atlas_rag.application.query_orchestration import (
     AnswerCitation,
+    AnswerClaim,
     AnswerDeltaCallback,
     AnswerGenerationRequest,
     GeneratedAnswer,
+    SupportCheckRequest,
+    SupportCheckResult,
+    SupportStatus,
 )
+
+OLLAMA_PROVIDER = "ollama"
+OLLAMA_SUPPORT_METHOD = "ollama-entailment"
+
+_SUPPORT_STATUSES: frozenset[str] = frozenset(("supported", "partial", "unsupported"))
 
 
 class _OllamaDraftClaim(BaseModel):
@@ -32,6 +41,21 @@ class _OllamaAnswerDraft(BaseModel):
 
     insufficient_context: bool
     claims: list[_OllamaDraftClaim] = Field(default_factory=list, max_length=100)
+
+
+class _OllamaSupportJudgement(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    claim_index: int = Field(ge=0)
+    support_status: str = Field(min_length=1, max_length=50)
+    support_score: float
+    reason: str = Field(default="", max_length=4000)
+
+
+class _OllamaSupportDraft(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    judgements: list[_OllamaSupportJudgement] = Field(default_factory=list, max_length=100)
 
 
 class OllamaExtractionClient:
@@ -243,6 +267,63 @@ class OllamaAnswerGenerator:
         return _answer_from_ollama_draft(request, final_payload, self._model, draft)
 
 
+class OllamaSupportChecker:
+    def __init__(
+        self,
+        *,
+        model: str,
+        timeout_seconds: int,
+        temperature: float,
+        max_tokens: int,
+        http_client: httpx.AsyncClient | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        self._model = model
+        self._timeout_seconds = timeout_seconds
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._http_client = http_client or httpx.AsyncClient(
+            base_url=base_url or "http://localhost:11434"
+        )
+
+    async def check(self, request: SupportCheckRequest) -> SupportCheckResult:
+        if not request.claims:
+            return SupportCheckResult(
+                claims=[],
+                method=OLLAMA_SUPPORT_METHOD,
+                metadata={"provider": OLLAMA_PROVIDER, "model": self._model},
+            )
+
+        response = await self._http_client.post(
+            "/api/generate",
+            json={
+                "model": self._model,
+                "prompt": _build_support_check_prompt(request),
+                "stream": False,
+                "format": _support_check_schema(),
+                "options": {
+                    "temperature": self._temperature,
+                    "num_predict": self._max_tokens,
+                },
+            },
+            timeout=self._timeout_seconds,
+        )
+        _raise_for_status(response)
+        payload = response.json()
+        response_text = payload.get("response")
+        if not isinstance(response_text, str):
+            raise ValueError("Ollama response did not include a string 'response' field.")
+        try:
+            draft = _OllamaSupportDraft.model_validate_json(response_text)
+        except ValueError as exc:
+            raise ValueError("Ollama support response did not match the expected schema.") from exc
+        return _support_result_from_ollama_draft(
+            request,
+            model=str(payload.get("model", self._model)),
+            draft=draft,
+        )
+
+
 def _answer_from_ollama_draft(
     request: AnswerGenerationRequest,
     payload: dict[str, Any],
@@ -353,6 +434,34 @@ def _build_answer_generation_prompt(request: AnswerGenerationRequest) -> str:
             context,
         ]
     )
+
+
+def _build_support_check_prompt(request: SupportCheckRequest) -> str:
+    records_by_citation = {
+        record.citation_id: record for record in request.context_pack.records
+    }
+    lines = [
+        "Judge whether each claim is supported by the context records it cites.",
+        "Return only JSON that satisfies the response schema supplied in the format parameter.",
+        "Rules:",
+        "- Judge each claim only against the cited context text provided for it.",
+        "- supported means the cited context fully entails the claim.",
+        "- partial means the cited context supports part of the claim.",
+        "- unsupported means the cited context does not support the claim.",
+        "- Return exactly one judgement per claim, keyed by claim_index.",
+        "Query:",
+        request.query,
+        "Claims to judge:",
+    ]
+    for claim in request.claims:
+        cited = " ".join(
+            records_by_citation[citation_id].text
+            for citation_id in claim.citation_ids
+            if citation_id in records_by_citation
+        )
+        lines.append(f"- claim_index {claim.claim_index}: {claim.text}")
+        lines.append(f"  cited context: {cited}" if cited else "  cited context: (none)")
+    return "\n".join(lines)
 
 
 def _proposal_extraction_schema() -> dict[str, Any]:
@@ -466,6 +575,86 @@ def _answer_generation_schema() -> dict[str, Any]:
         },
         "required": ["insufficient_context", "claims"],
     }
+
+
+def _support_check_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "judgements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "claim_index": {"type": "integer"},
+                        "support_status": {
+                            "type": "string",
+                            "enum": ["supported", "partial", "unsupported"],
+                        },
+                        "support_score": {"type": "number"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": [
+                        "claim_index",
+                        "support_status",
+                        "support_score",
+                        "reason",
+                    ],
+                },
+            },
+        },
+        "required": ["judgements"],
+    }
+
+
+def _support_result_from_ollama_draft(
+    request: SupportCheckRequest,
+    *,
+    model: str,
+    draft: _OllamaSupportDraft,
+) -> SupportCheckResult:
+    judgements_by_index = {judgement.claim_index: judgement for judgement in draft.judgements}
+    claims: list[AnswerClaim] = []
+
+    for claim in request.claims:
+        judgement = judgements_by_index.get(claim.claim_index)
+        if judgement is None:
+            status: SupportStatus = "unsupported"
+            score = 0.0
+            reason = "no judgement returned for this claim"
+        else:
+            status = _coerce_status(judgement.support_status)
+            score = _clamp_score(judgement.support_score)
+            reason = judgement.reason.strip() or f"ollama judge marked the claim {status}"
+
+        claims.append(
+            AnswerClaim(
+                claim_index=claim.claim_index,
+                text=claim.text,
+                citation_ids=claim.citation_ids,
+                support_status=status,
+                support_score=score,
+                support_reason=reason[:1000],
+                method=OLLAMA_SUPPORT_METHOD,
+            )
+        )
+
+    return SupportCheckResult(
+        claims=claims,
+        method=OLLAMA_SUPPORT_METHOD,
+        metadata={"provider": OLLAMA_PROVIDER, "model": model},
+    )
+
+
+def _coerce_status(status: str) -> SupportStatus:
+    normalized = status.strip().casefold()
+    if normalized in _SUPPORT_STATUSES:
+        return cast(SupportStatus, normalized)
+    return "unsupported"
+
+
+def _clamp_score(score: float) -> float:
+    return max(0.0, min(1.0, float(score)))
 
 
 def _parse_vector(value: Any) -> list[float]:

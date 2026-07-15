@@ -15,7 +15,7 @@ from atlas_rag.infrastructure.anthropic import (
     AnthropicAnswerGenerator,
     AnthropicSupportChecker,
 )
-from atlas_rag.infrastructure.ollama import OllamaAnswerGenerator
+from atlas_rag.infrastructure.ollama import OllamaAnswerGenerator, OllamaSupportChecker
 
 
 def create_answer_generator(
@@ -53,6 +53,7 @@ def create_answer_generator(
 def create_support_checker(
     settings: Settings,
     *,
+    http_client: httpx.AsyncClient | None = None,
     anthropic_client: Any | None = None,
 ) -> SupportChecker:
     provider = settings.query_support_provider
@@ -66,7 +67,16 @@ def create_support_checker(
             client=anthropic_client,
         )
     if provider == "ollama":
-        raise RuntimeError("Ollama support checker is not implemented yet.")
+        if http_client is None:
+            raise RuntimeError("the ollama support checker requires an http client")
+        return OllamaSupportChecker(
+            model=settings.query_support_model,
+            timeout_seconds=settings.query_answer_timeout_seconds,
+            temperature=settings.query_answer_temperature,
+            max_tokens=settings.query_answer_max_tokens,
+            http_client=http_client,
+            base_url=settings.ollama_base_url,
+        )
     return DeterministicSupportChecker()
 
 
