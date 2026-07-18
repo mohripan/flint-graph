@@ -181,6 +181,7 @@ async def _load_recent_document_statuses(
             & (DocumentIndexCoverage.retrieval_index_version_id == index_version.id),
         )
         .where(Document.tenant_id == tenant_id)
+        .where(Document.deleted_at.is_(None))
         .where(
             DocumentVersion.status.notin_(
                 [DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED]

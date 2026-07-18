@@ -25,15 +25,17 @@ from atlas_rag.application.services.vector_projection import (
 )
 from atlas_rag.domain.enums import (
     DocumentIndexCoverageStatus,
+    DocumentVersionStatus,
     RetrievalIndexScope,
     RetrievalIndexVersionStatus,
 )
-from atlas_rag.domain.errors import NotFoundError
+from atlas_rag.domain.errors import ConflictError, NotFoundError
 from atlas_rag.infrastructure.db.models import (
     ChunkEmbedding,
     Document,
     DocumentChunk,
     DocumentIndexCoverage,
+    DocumentVersion,
     RetrievalIndexVersion,
 )
 from atlas_rag.infrastructure.opensearch import build_upsert_chunks_bulk_body
@@ -41,6 +43,12 @@ from atlas_rag.infrastructure.opensearch import build_upsert_chunks_bulk_body
 
 class SupportsOpenSearchBulk(Protocol):
     async def bulk(self, *, body: str) -> None: ...
+
+
+_INDEXABLE_DOCUMENT_VERSION_STATUSES = {
+    DocumentVersionStatus.PENDING,
+    DocumentVersionStatus.ACTIVE,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +136,12 @@ async def plan_document_indexing(
         tenant_id=tenant_id,
         retrieval_index_version_id=retrieval_index_version_id,
     )
+    await _require_indexable_document_version(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        document_version_id=document_version_id,
+    )
     chunk_count = await _chunk_count(
         session,
         tenant_id=tenant_id,
@@ -157,6 +171,12 @@ async def begin_document_indexing(
     retrieval_index_version_id: UUID,
     chunk_count: int,
 ) -> DocumentIndexCoverage:
+    await _require_indexable_document_version(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        document_version_id=document_version_id,
+    )
     coverage = await _load_coverage(
         session,
         document_version_id=document_version_id,
@@ -198,6 +218,12 @@ async def complete_document_indexing(
         document_version_id=document_version_id,
         retrieval_index_version_id=retrieval_index_version_id,
     )
+    await _require_indexable_document_version(
+        session,
+        tenant_id=tenant_id,
+        document_id=coverage.document_id,
+        document_version_id=document_version_id,
+    )
     coverage.status = DocumentIndexCoverageStatus.COMPLETED
     coverage.completed_at = datetime.now(UTC)
     coverage.error_code = None
@@ -221,6 +247,8 @@ async def fail_document_indexing(
         document_version_id=document_version_id,
         retrieval_index_version_id=retrieval_index_version_id,
     )
+    if coverage.status == DocumentIndexCoverageStatus.CANCELLED:
+        return coverage
     coverage.status = DocumentIndexCoverageStatus.FAILED
     coverage.completed_at = datetime.now(UTC)
     coverage.error_code = error_code
@@ -256,6 +284,12 @@ async def index_document_version_batch(
     neo4j_client: SupportsCypher,
     opensearch_client: SupportsOpenSearchBulk,
 ) -> IndexingBatchResult:
+    await _require_indexable_document_version(
+        session,
+        tenant_id=request.tenant_id,
+        document_id=request.document_id,
+        document_version_id=request.document_version_id,
+    )
     index_version = await _load_index_version(
         session,
         tenant_id=request.tenant_id,
@@ -365,6 +399,38 @@ async def index_document_version_batch(
         vector_count=len(vector_records),
         lexical_count=len(lexical_records),
     )
+
+
+async def _require_indexable_document_version(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    document_id: UUID,
+    document_version_id: UUID,
+) -> DocumentVersion:
+    row = await session.execute(
+        select(DocumentVersion, Document)
+        .join(Document, Document.id == DocumentVersion.document_id)
+        .where(
+            Document.tenant_id == tenant_id,
+            Document.id == document_id,
+            DocumentVersion.id == document_version_id,
+        )
+        .with_for_update()
+    )
+    version_and_document = row.one_or_none()
+    if version_and_document is None:
+        raise NotFoundError(f"Document version '{document_version_id}' was not found.")
+    version = cast(DocumentVersion, version_and_document[0])
+    document = cast(Document, version_and_document[1])
+    if document.deleted_at is not None:
+        raise ConflictError(f"Document '{document_id}' has been deleted.")
+    if version.status not in _INDEXABLE_DOCUMENT_VERSION_STATUSES:
+        raise ConflictError(
+            f"Cannot index document version '{document_version_id}' in "
+            f"'{version.status}' status."
+        )
+    return version
 
 
 async def _load_index_version(

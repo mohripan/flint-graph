@@ -14,6 +14,7 @@ from atlas_rag.domain.enums import (
     AliasSource,
     CandidateOutcome,
     CandidateTargetKind,
+    DocumentVersionStatus,
     EntityStatus,
     ExtractionRunStatus,
     MergeCandidateStatus,
@@ -26,6 +27,7 @@ from atlas_rag.domain.enums import (
 from atlas_rag.domain.errors import NotFoundError
 from atlas_rag.infrastructure.db.models import (
     CanonicalEntity,
+    DocumentVersion,
     EntityAlias,
     EntityRelationship,
     EntityResolutionCandidate,
@@ -60,9 +62,11 @@ async def resolve_pending_staged_entities(
             await session.execute(
                 select(ExtractionRun.id)
                 .join(ExtractedEntity, ExtractedEntity.extraction_run_id == ExtractionRun.id)
+                .join(DocumentVersion, DocumentVersion.id == ExtractionRun.document_version_id)
                 .where(
                     ExtractionRun.tenant_id == tenant_id,
                     ExtractionRun.status == ExtractionRunStatus.READY,
+                    DocumentVersion.status == DocumentVersionStatus.ACTIVE,
                     ExtractedEntity.status == StagedProposalStatus.ACCEPTED,
                     ExtractedEntity.resolution_status == StagedResolutionStatus.PENDING,
                 )
@@ -274,6 +278,8 @@ async def rebuild_staged_relationships(session: AsyncSession, *, tenant_id: UUID
                     ExtractedEntity.resolution_status == StagedResolutionStatus.RESOLVED,
                     ExtractedEntity.resolved_canonical_entity_id.is_not(None),
                 )
+                .join(DocumentVersion, DocumentVersion.id == ExtractedEntity.document_version_id)
+                .where(DocumentVersion.status == DocumentVersionStatus.ACTIVE)
             )
         )
         .scalars()
@@ -283,9 +289,12 @@ async def rebuild_staged_relationships(session: AsyncSession, *, tenant_id: UUID
 
     relations = (
         await session.execute(
-            select(ExtractedRelation).where(
+            select(ExtractedRelation)
+            .join(DocumentVersion, DocumentVersion.id == ExtractedRelation.document_version_id)
+            .where(
                 ExtractedRelation.tenant_id == tenant_id,
                 ExtractedRelation.status == StagedProposalStatus.ACCEPTED,
+                DocumentVersion.status == DocumentVersionStatus.ACTIVE,
             )
         )
     ).scalars()
@@ -309,9 +318,12 @@ async def rebuild_staged_relationships(session: AsyncSession, *, tenant_id: UUID
 
     claims = (
         await session.execute(
-            select(ExtractedClaim).where(
+            select(ExtractedClaim)
+            .join(DocumentVersion, DocumentVersion.id == ExtractedClaim.document_version_id)
+            .where(
                 ExtractedClaim.tenant_id == tenant_id,
                 ExtractedClaim.status == StagedProposalStatus.ACCEPTED,
+                DocumentVersion.status == DocumentVersionStatus.ACTIVE,
                 ExtractedClaim.object_extracted_entity_id.is_not(None),
             )
         )

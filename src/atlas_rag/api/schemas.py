@@ -506,6 +506,10 @@ class QueryCitationProvenanceResponse(BaseModel):
     token_count: int
     source_ids: dict[str, str]
     metadata: dict[str, Any]
+    source_document_id: UUID | None
+    source_document_version_id: UUID | None
+    source_document_version_status: DocumentVersionStatus | None
+    source_active: bool | None
     claims: list[QueryCitationClaimProvenanceResponse]
 
 

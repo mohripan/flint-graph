@@ -198,7 +198,10 @@ async def _eligible_backfill_documents(
         await session.execute(
             select(DocumentVersion, Document)
             .join(Document, Document.id == DocumentVersion.document_id)
-            .where(DocumentVersion.status == DocumentVersionStatus.ACTIVE)
+            .where(
+                Document.deleted_at.is_(None),
+                DocumentVersion.status == DocumentVersionStatus.ACTIVE,
+            )
             .order_by(
                 Document.created_at,
                 Document.title,

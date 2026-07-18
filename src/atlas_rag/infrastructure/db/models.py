@@ -88,6 +88,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source_type: Mapped[SourceType] = mapped_column(enum_column(SourceType, 32), nullable=False)
     source_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     versions: Mapped[list["DocumentVersion"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"

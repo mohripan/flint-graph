@@ -13,6 +13,10 @@ from atlas_rag.application.services.document_versions import (
     fail_document_version,
 )
 from atlas_rag.application.services.documents import create_document
+from atlas_rag.application.services.indexing import (
+    begin_document_indexing,
+    complete_document_indexing,
+)
 from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
 from atlas_rag.application.services.job_cancellation import cancel_ingestion_job
 from atlas_rag.application.services.job_transitions import transition_ingestion_job
@@ -31,7 +35,9 @@ from atlas_rag.domain.enums import (
     RetrievalIndexScope,
     SourceType,
 )
+from atlas_rag.domain.errors import ConflictError
 from atlas_rag.infrastructure.db.models import (
+    Document,
     DocumentChunk,
     DocumentIndexCoverage,
     DocumentLifecycleEvent,
@@ -246,6 +252,130 @@ async def test_deleting_document_marks_versions_deleted_and_creates_cleanup_work
     assert cleanup is not None
     assert cleanup.status == DocumentProjectionCleanupStatus.PENDING
     assert cleanup.stale_reason == "document_deleted"
+
+
+async def test_deleting_document_marks_document_deleted_and_blocks_new_jobs(
+    db_session: AsyncSession,
+) -> None:
+    tenant_id, version_ids = await _create_document_with_jobs(
+        db_session,
+        tenant_name="Lifecycle Tombstone Tenant",
+        document_external_id="lifecycle-tombstone",
+        job_keys=["tombstone-v1"],
+    )
+    version = await db_session.get(DocumentVersion, version_ids[0])
+    assert version is not None
+
+    await delete_document(
+        db_session,
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        reason="delete should be terminal",
+    )
+
+    document = await db_session.get(Document, version.document_id)
+    assert document is not None
+    assert document.deleted_at is not None
+    try:
+        await create_ingestion_job(
+            db_session,
+            tenant_id=tenant_id,
+            document_id=version.document_id,
+            idempotency_key="tombstone-v2",
+        )
+    except ConflictError:
+        pass
+    else:
+        raise AssertionError("deleted documents must not accept new ingestion jobs")
+
+
+async def test_indexing_begin_rejects_deleted_document_version(
+    db_session: AsyncSession,
+) -> None:
+    tenant_id, version_ids = await _create_document_with_jobs(
+        db_session,
+        tenant_name="Lifecycle Index Begin Guard Tenant",
+        document_external_id="lifecycle-index-begin-guard",
+        job_keys=["index-begin-v1"],
+    )
+    version = await db_session.get(DocumentVersion, version_ids[0])
+    assert version is not None
+    index_version_id = await _create_active_index_coverage(
+        db_session,
+        tenant_id=tenant_id,
+        version=version,
+        chunk_count=0,
+    )
+    await delete_document(
+        db_session,
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        reason="index begin guard",
+    )
+
+    try:
+        await begin_document_indexing(
+            db_session,
+            tenant_id=tenant_id,
+            document_id=version.document_id,
+            document_version_id=version.id,
+            retrieval_index_version_id=index_version_id,
+            chunk_count=0,
+        )
+    except ConflictError:
+        pass
+    else:
+        raise AssertionError("deleted document versions must not begin indexing")
+
+
+async def test_indexing_completion_does_not_resurrect_cancelled_deleted_coverage(
+    db_session: AsyncSession,
+) -> None:
+    tenant_id, version_ids = await _create_document_with_jobs(
+        db_session,
+        tenant_name="Lifecycle Index Complete Guard Tenant",
+        document_external_id="lifecycle-index-complete-guard",
+        job_keys=["index-complete-v1"],
+    )
+    await activate_document_version(db_session, tenant_id=tenant_id, version_id=version_ids[0])
+    version = await db_session.get(DocumentVersion, version_ids[0])
+    assert version is not None
+    index_version_id = await _create_active_index_coverage(
+        db_session,
+        tenant_id=tenant_id,
+        version=version,
+        chunk_count=0,
+    )
+    coverage = await db_session.scalar(
+        select(DocumentIndexCoverage).where(
+            DocumentIndexCoverage.document_version_id == version.id,
+            DocumentIndexCoverage.retrieval_index_version_id == index_version_id,
+        )
+    )
+    assert coverage is not None
+    coverage.status = DocumentIndexCoverageStatus.RUNNING
+    await db_session.flush()
+
+    await delete_document(
+        db_session,
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        reason="index complete guard",
+    )
+
+    try:
+        await complete_document_indexing(
+            db_session,
+            tenant_id=tenant_id,
+            document_version_id=version.id,
+            retrieval_index_version_id=index_version_id,
+        )
+    except ConflictError:
+        pass
+    else:
+        raise AssertionError("late completion must not mark deleted coverage completed")
+    await db_session.refresh(coverage)
+    assert coverage.status == DocumentIndexCoverageStatus.CANCELLED
 
 
 async def test_projection_cleanup_deletes_vector_and_lexical_records(

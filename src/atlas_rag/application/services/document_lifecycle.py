@@ -65,6 +65,8 @@ async def delete_document(
     )
     if document is None:
         raise NotFoundError(f"Document '{document_id}' was not found.")
+    if document.deleted_at is None:
+        document.deleted_at = datetime.now(UTC)
 
     versions = list(
         await session.scalars(

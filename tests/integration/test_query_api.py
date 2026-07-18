@@ -522,6 +522,56 @@ async def test_query_run_api_returns_answer_provenance(
 
 
 @pytest.mark.asyncio
+async def test_query_run_provenance_marks_deleted_citation_source_inactive(
+    query_api_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        QueryOpenSearchClient,
+        QueryNeo4jClient,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
+        tenant_id = tenant.id
+
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant_id),
+        json={
+            "query": "Where is Acme Corporation headquartered?",
+            "retrieval_index_version_id": str(index_version_id),
+        },
+    )
+    query_run_id = created.json()["id"]
+    await client.get(
+        f"/v1/query-runs/{query_run_id}/events/stream",
+        headers=_headers(tenant_id),
+    )
+
+    async with session_factory() as session:
+        version = await session.get(
+            DocumentVersion,
+            UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        assert version is not None
+        version.status = DocumentVersionStatus.DELETED
+        await session.commit()
+
+    provenance = await client.get(
+        f"/v1/query-runs/{query_run_id}/provenance",
+        headers=_headers(tenant_id),
+    )
+
+    assert provenance.status_code == 200
+    citation = provenance.json()["citations"][0]
+    assert citation["source_document_id"] == "11111111-1111-4111-8111-111111111111"
+    assert citation["source_document_version_id"] == "22222222-2222-4222-8222-222222222222"
+    assert citation["source_document_version_status"] == "deleted"
+    assert citation["source_active"] is False
+
+
+@pytest.mark.asyncio
 async def test_query_run_api_resolves_single_citation_provenance(
     query_api_env: tuple[
         httpx.AsyncClient,

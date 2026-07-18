@@ -8,8 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.services.query_runs import get_query_run
+from atlas_rag.domain.enums import DocumentVersionStatus
 from atlas_rag.domain.errors import NotFoundError
 from atlas_rag.infrastructure.db.models import (
+    Document,
+    DocumentVersion,
     QueryAnswerClaim,
     QueryContextPack,
     QueryContextPackRecord,
@@ -37,6 +40,10 @@ class QueryCitationProvenance:
     token_count: int
     source_ids: dict[str, str]
     metadata: dict[str, Any]
+    source_document_id: UUID | None
+    source_document_version_id: UUID | None
+    source_document_version_status: DocumentVersionStatus | None
+    source_active: bool | None
     claims: list[QueryCitationClaimProvenance] = field(default_factory=list)
 
 
@@ -68,6 +75,14 @@ class QueryAnswerProvenance:
     citations: list[QueryCitationProvenance]
 
 
+@dataclass(frozen=True, slots=True)
+class _CitationSourceState:
+    document_id: UUID | None
+    document_version_id: UUID | None
+    document_version_status: DocumentVersionStatus | None
+    active: bool | None
+
+
 async def get_query_answer_provenance(
     session: AsyncSession,
     *,
@@ -85,6 +100,11 @@ async def get_query_answer_provenance(
         tenant_id=tenant_id,
         query_run_id=query_run_id,
     )
+    source_states = await _load_context_source_states(
+        session,
+        tenant_id=tenant_id,
+        records=list(records_by_citation.values()),
+    )
     claim_summaries_by_citation = _claim_summaries_by_citation(claims)
 
     claim_rows = [
@@ -101,6 +121,7 @@ async def get_query_answer_provenance(
                     query_run_id=query_run_id,
                     tenant_id=tenant_id,
                     record=records_by_citation[citation_id],
+                    source_state=source_states.get(records_by_citation[citation_id].id),
                     claims=claim_summaries_by_citation.get(citation_id, []),
                 )
                 for citation_id in claim.citation_ids
@@ -120,6 +141,7 @@ async def get_query_answer_provenance(
             query_run_id=query_run_id,
             tenant_id=tenant_id,
             record=records_by_citation[citation_id],
+            source_state=source_states.get(records_by_citation[citation_id].id),
             claims=claim_summaries_by_citation.get(citation_id, []),
         )
         for citation_id in citation_ids
@@ -163,10 +185,16 @@ async def get_query_citation_provenance(
         tenant_id=tenant_id,
         query_run_id=query_run_id,
     )
+    source_states = await _load_context_source_states(
+        session,
+        tenant_id=tenant_id,
+        records=[record],
+    )
     return _citation_provenance(
         query_run_id=query_run_id,
         tenant_id=tenant_id,
         record=record,
+        source_state=source_states.get(record.id),
         claims=_claim_summaries_by_citation(claims).get(citation_id, []),
     )
 
@@ -238,13 +266,83 @@ def _claim_summaries_by_citation(
     return summaries
 
 
+async def _load_context_source_states(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    records: list[QueryContextPackRecord],
+) -> dict[UUID, _CitationSourceState]:
+    identities = {
+        record.id: identity
+        for record in records
+        if (identity := _citation_source_identity(record)) is not None
+    }
+    if not identities:
+        return {}
+
+    version_ids = {identity[1] for identity in identities.values()}
+    rows = (
+        await session.execute(
+            select(DocumentVersion, Document)
+            .join(Document, Document.id == DocumentVersion.document_id)
+            .where(
+                Document.tenant_id == tenant_id,
+                DocumentVersion.id.in_(version_ids),
+            )
+        )
+    ).all()
+    versions_by_id = {version.id: (version, document) for version, document in rows}
+
+    states: dict[UUID, _CitationSourceState] = {}
+    for record_id, (document_id, document_version_id) in identities.items():
+        version_and_document = versions_by_id.get(document_version_id)
+        if version_and_document is None:
+            states[record_id] = _CitationSourceState(
+                document_id=document_id,
+                document_version_id=document_version_id,
+                document_version_status=None,
+                active=False,
+            )
+            continue
+        version, document = version_and_document
+        states[record_id] = _CitationSourceState(
+            document_id=document.id,
+            document_version_id=version.id,
+            document_version_status=version.status,
+            active=(
+                document.deleted_at is None
+                and version.status == DocumentVersionStatus.ACTIVE
+            ),
+        )
+    return states
+
+
+def _citation_source_identity(record: QueryContextPackRecord) -> tuple[UUID, UUID] | None:
+    document_id = record.metadata_.get("document_id")
+    document_version_id = record.metadata_.get("document_version_id")
+    if document_id is None or document_version_id is None:
+        return None
+    try:
+        return UUID(str(document_id)), UUID(str(document_version_id))
+    except ValueError:
+        return None
+
+
 def _citation_provenance(
     *,
     query_run_id: UUID,
     tenant_id: UUID,
     record: QueryContextPackRecord,
+    source_state: _CitationSourceState | None,
     claims: list[QueryCitationClaimProvenance],
 ) -> QueryCitationProvenance:
+    if source_state is None:
+        source_state = _CitationSourceState(
+            document_id=None,
+            document_version_id=None,
+            document_version_status=None,
+            active=None,
+        )
     return QueryCitationProvenance(
         query_run_id=query_run_id,
         tenant_id=tenant_id,
@@ -255,6 +353,10 @@ def _citation_provenance(
         token_count=record.token_count,
         source_ids={key: str(value) for key, value in record.source_ids.items()},
         metadata=dict(record.metadata_),
+        source_document_id=source_state.document_id,
+        source_document_version_id=source_state.document_version_id,
+        source_document_version_status=source_state.document_version_status,
+        source_active=source_state.active,
         claims=claims,
     )
 

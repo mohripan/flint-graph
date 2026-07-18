@@ -79,6 +79,8 @@ async def create_ingestion_job(
             )
             if document is None:
                 raise NotFoundError(f"Document '{document_id}' was not found.")
+            if document.deleted_at is not None:
+                raise ConflictError("Cannot create an ingestion job for a deleted document.")
 
             version_number = document.next_version_number
             document.next_version_number += 1

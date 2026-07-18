@@ -1,7 +1,10 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.services.staged_resolution import (
+    rebuild_staged_relationships,
     resolve_pending_staged_entities,
     resolve_staged_extraction_run,
 )
@@ -9,6 +12,7 @@ from atlas_rag.domain.enums import (
     AliasSource,
     CandidateOutcome,
     CandidateTargetKind,
+    DocumentVersionStatus,
     EntityStatus,
     EntityType,
     ExtractionRunStatus,
@@ -316,6 +320,134 @@ async def test_staged_resolution_rebuilds_relationship_support_without_inflation
     }
 
 
+async def test_staged_relationship_rebuild_ignores_inactive_document_versions(
+    db_session: AsyncSession,
+) -> None:
+    tenant, active_run = await _seed_run(db_session)
+    stale_run = await _seed_additional_run(db_session, tenant=tenant)
+    active_version = await db_session.get(DocumentVersion, active_run.document_version_id)
+    stale_version = await db_session.get(DocumentVersion, stale_run.document_version_id)
+    assert active_version is not None
+    assert stale_version is not None
+    active_version.status = DocumentVersionStatus.ACTIVE
+    stale_version.status = DocumentVersionStatus.DELETED
+
+    acme = CanonicalEntity(
+        tenant_id=tenant.id,
+        entity_type=EntityType.ORGANIZATION,
+        canonical_name="Acme",
+        normalized_name="acme",
+        status=EntityStatus.ACTIVE,
+        support_count=1,
+    )
+    berlin = CanonicalEntity(
+        tenant_id=tenant.id,
+        entity_type=EntityType.PLACE,
+        canonical_name="Berlin",
+        normalized_name="berlin",
+        status=EntityStatus.ACTIVE,
+        support_count=1,
+    )
+    db_session.add_all([acme, berlin])
+    await db_session.flush()
+
+    active_acme = await _resolved_extracted_entity(
+        db_session,
+        tenant=tenant,
+        run=active_run,
+        local_id="e1",
+        name="Acme",
+        normalized_name="acme",
+        entity_type=EntityType.ORGANIZATION,
+        canonical_id=acme.id,
+    )
+    active_berlin = await _resolved_extracted_entity(
+        db_session,
+        tenant=tenant,
+        run=active_run,
+        local_id="e2",
+        name="Berlin",
+        normalized_name="berlin",
+        entity_type=EntityType.PLACE,
+        canonical_id=berlin.id,
+    )
+    stale_acme = await _resolved_extracted_entity(
+        db_session,
+        tenant=tenant,
+        run=stale_run,
+        local_id="e1",
+        name="Acme",
+        normalized_name="acme",
+        entity_type=EntityType.ORGANIZATION,
+        canonical_id=acme.id,
+    )
+    stale_berlin = await _resolved_extracted_entity(
+        db_session,
+        tenant=tenant,
+        run=stale_run,
+        local_id="e2",
+        name="Berlin",
+        normalized_name="berlin",
+        entity_type=EntityType.PLACE,
+        canonical_id=berlin.id,
+    )
+    db_session.add_all(
+        [
+            ExtractedRelation(
+                tenant_id=tenant.id,
+                document_id=active_run.document_id,
+                document_version_id=active_run.document_version_id,
+                extraction_run_id=active_run.id,
+                stable_id="active-r1",
+                local_id="r1",
+                subject_extracted_entity_id=active_acme.id,
+                predicate="located_in",
+                object_extracted_entity_id=active_berlin.id,
+                confidence=0.9,
+                attributes={},
+                status=StagedProposalStatus.ACCEPTED,
+            ),
+            ExtractedRelation(
+                tenant_id=tenant.id,
+                document_id=stale_run.document_id,
+                document_version_id=stale_run.document_version_id,
+                extraction_run_id=stale_run.id,
+                stable_id="stale-r1",
+                local_id="r1",
+                subject_extracted_entity_id=stale_acme.id,
+                predicate="located_in",
+                object_extracted_entity_id=stale_berlin.id,
+                confidence=0.9,
+                attributes={},
+                status=StagedProposalStatus.ACCEPTED,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    await rebuild_staged_relationships(db_session, tenant_id=tenant.id)
+
+    relationship = await db_session.scalar(select(EntityRelationship))
+    assert relationship is not None
+    assert relationship.support_count == 1
+    assert relationship.provenance == [
+        {
+            "source": "staged_extracted_relation",
+            "extracted_relation_id": str(
+                
+                    await db_session.scalar(
+                        select(ExtractedRelation.id).where(
+                            ExtractedRelation.stable_id == "active-r1"
+                        )
+                    )
+                
+            ),
+            "extraction_run_id": str(active_run.id),
+            "document_version_id": str(active_run.document_version_id),
+        }
+    ]
+
+
 async def test_tenant_level_staged_resolution_drains_ready_runs(
     db_session: AsyncSession,
 ) -> None:
@@ -362,7 +494,11 @@ async def _seed_run(session: AsyncSession) -> tuple[Tenant, ExtractionRun]:
     )
     session.add(document)
     await session.flush()
-    version = DocumentVersion(document_id=document.id, version_number=1)
+    version = DocumentVersion(
+        document_id=document.id,
+        version_number=1,
+        status=DocumentVersionStatus.ACTIVE,
+    )
     session.add(version)
     await session.flush()
     run = ExtractionRun(
@@ -393,7 +529,11 @@ async def _seed_additional_run(
     )
     session.add(document)
     await session.flush()
-    version = DocumentVersion(document_id=document.id, version_number=1)
+    version = DocumentVersion(
+        document_id=document.id,
+        version_number=1,
+        status=DocumentVersionStatus.ACTIVE,
+    )
     session.add(version)
     await session.flush()
     run = ExtractionRun(
@@ -441,5 +581,31 @@ async def _extracted_entity(
         resolution_status=StagedResolutionStatus.PENDING,
     )
     session.add(entity)
+    await session.flush()
+    return entity
+
+
+async def _resolved_extracted_entity(
+    session: AsyncSession,
+    *,
+    tenant: Tenant,
+    run: ExtractionRun,
+    local_id: str,
+    name: str,
+    normalized_name: str,
+    entity_type: EntityType,
+    canonical_id: UUID,
+) -> ExtractedEntity:
+    entity = await _extracted_entity(
+        session,
+        tenant=tenant,
+        run=run,
+        local_id=local_id,
+        name=name,
+        normalized_name=normalized_name,
+        entity_type=entity_type,
+    )
+    entity.resolution_status = StagedResolutionStatus.RESOLVED
+    entity.resolved_canonical_entity_id = canonical_id
     await session.flush()
     return entity

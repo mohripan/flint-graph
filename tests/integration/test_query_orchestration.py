@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas_rag.application.query_orchestration import QueryCandidate
+from atlas_rag.application.services.query_context_packing import pack_query_context
 from atlas_rag.application.services.query_orchestration import (
     QueryRetrieverBundle,
     run_query_retrieval_graph,
@@ -21,14 +22,20 @@ from atlas_rag.application.services.retrieval_index_versions import (
 )
 from atlas_rag.domain.enums import (
     AliasSource,
+    DocumentVersionStatus,
     EntityStatus,
     EntityType,
     QueryRunStatus,
+    RelationshipStatus,
     RetrievalIndexScope,
+    SourceType,
 )
 from atlas_rag.infrastructure.db.models import (
     CanonicalEntity,
+    Document,
+    DocumentVersion,
     EntityAlias,
+    EntityRelationship,
     QueryContextPack,
     QueryContextPackRecord,
     QueryRun,
@@ -357,6 +364,147 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
     ]
     assert all(row.fusion_score is not None for row in rows)
     assert [row.rerank_rank for row in rows if row.rerank_rank is not None] == [1, 2, 3]
+
+
+async def test_context_packing_skips_chunk_candidate_deleted_after_retrieval(
+    db_session: AsyncSession,
+) -> None:
+    tenant = await _tenant(db_session, name="query-context-lifecycle")
+    run_id, index_id = await _query_run(db_session, tenant, "Where is deleted content?")
+    document = Document(
+        tenant_id=tenant.id,
+        title="Deleted Source",
+        source_type=SourceType.UPLOAD,
+        next_version_number=2,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    version = DocumentVersion(
+        document_id=document.id,
+        version_number=1,
+        status=DocumentVersionStatus.DELETED,
+        content_hash="sha256:deleted",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    db_session.add(
+        QueryRunCandidate(
+            query_run_id=run_id,
+            tenant_id=tenant.id,
+            retrieval_index_version_id=index_id,
+            source="lexical",
+            candidate_type="chunk",
+            source_ids={"chunk_id": "chunk-deleted"},
+            dedupe_key="lexical:chunk:chunk-deleted",
+            text_preview="Deleted content should not be packed.",
+            raw_score=1.0,
+            normalized_score=1.0,
+            rank=1,
+            fusion_score=1.0,
+            rerank_score=1.0,
+            rerank_rank=1,
+            metadata_={
+                "document_id": str(document.id),
+                "document_version_id": str(version.id),
+            },
+        )
+    )
+    await db_session.flush()
+
+    result = await pack_query_context(
+        db_session,
+        tenant_id=tenant.id,
+        query_run_id=run_id,
+        token_budget=100,
+        max_records=10,
+    )
+
+    assert result.record_count == 0
+    records = list(
+        await db_session.scalars(
+            select(QueryContextPackRecord).where(QueryContextPackRecord.query_run_id == run_id)
+        )
+    )
+    assert records == []
+
+
+async def test_context_packing_skips_graph_candidate_without_active_evidence(
+    db_session: AsyncSession,
+) -> None:
+    tenant = await _tenant(db_session, name="query-context-graph-lifecycle")
+    run_id, index_id = await _query_run(db_session, tenant, "How is stale graph connected?")
+    document = Document(
+        tenant_id=tenant.id,
+        title="Deleted Graph Source",
+        source_type=SourceType.UPLOAD,
+        next_version_number=2,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    version = DocumentVersion(
+        document_id=document.id,
+        version_number=1,
+        status=DocumentVersionStatus.DELETED,
+        content_hash="sha256:deleted-graph",
+    )
+    acme = CanonicalEntity(
+        tenant_id=tenant.id,
+        entity_type=EntityType.ORGANIZATION,
+        canonical_name="Acme",
+        normalized_name="acme",
+        status=EntityStatus.ACTIVE,
+        support_count=1,
+    )
+    berlin = CanonicalEntity(
+        tenant_id=tenant.id,
+        entity_type=EntityType.PLACE,
+        canonical_name="Berlin",
+        normalized_name="berlin",
+        status=EntityStatus.ACTIVE,
+        support_count=1,
+    )
+    db_session.add_all([version, acme, berlin])
+    await db_session.flush()
+    relationship = EntityRelationship(
+        tenant_id=tenant.id,
+        subject_entity_id=acme.id,
+        predicate="located_in",
+        object_entity_id=berlin.id,
+        support_count=1,
+        provenance=[{"document_version_id": str(version.id)}],
+        status=RelationshipStatus.ACTIVE,
+    )
+    db_session.add(relationship)
+    await db_session.flush()
+    db_session.add(
+        QueryRunCandidate(
+            query_run_id=run_id,
+            tenant_id=tenant.id,
+            retrieval_index_version_id=index_id,
+            source="graph",
+            candidate_type="relationship",
+            source_ids={"relationship_id": str(relationship.id)},
+            dedupe_key=f"graph:relationship:{relationship.id}",
+            text_preview="Acme located_in Berlin.",
+            raw_score=1.0,
+            normalized_score=1.0,
+            rank=1,
+            fusion_score=1.0,
+            rerank_score=1.0,
+            rerank_rank=1,
+        )
+    )
+    await db_session.flush()
+
+    result = await pack_query_context(
+        db_session,
+        tenant_id=tenant.id,
+        query_run_id=run_id,
+        token_budget=100,
+        max_records=10,
+    )
+
+    assert result.record_count == 0
 
 
 async def test_query_retrieval_graph_skips_graph_without_accepted_links(

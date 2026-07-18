@@ -8,6 +8,9 @@ Implemented behavior:
 
 - Document deletion is exposed at `DELETE /v1/documents/{document_id}`.
 - Deleted documents mark live document versions as `deleted`.
+- Deleted documents also receive a logical document tombstone (`deleted_at`),
+  so future ingestion jobs cannot create replacement versions for a deleted
+  logical document.
 - Activating a replacement version marks the previous active version
   `superseded`.
 - Deletion and replacement create durable lifecycle records in
@@ -25,6 +28,17 @@ Implemented behavior:
 - Primitive lexical/vector search and query streaming filter projection hits
   against active PostgreSQL document versions, so stale projection rows cannot
   be packed or cited while cleanup is pending.
+- Context packing revalidates chunk candidates and graph relationship
+  candidates against active PostgreSQL document-version support, closing the
+  delete-after-retrieval race.
+- Citation provenance for old query runs remains inspectable and includes the
+  current source document/document-version status plus an active/inactive flag.
+- Staged graph relationship rebuilds only use accepted staged evidence from
+  active document versions, so later rebuilds cannot reintroduce deleted or
+  superseded evidence.
+- Indexing plan, begin, batch, and completion paths reject deleted or otherwise
+  terminal document versions; late failure callbacks leave cancelled coverage
+  untouched.
 - Search readiness ignores deleted and superseded versions.
 - The frontend Documents page exposes document deletion, cleanup status, and
   cleanup retry controls.

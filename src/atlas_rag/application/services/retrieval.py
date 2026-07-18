@@ -384,6 +384,7 @@ async def filter_active_chunk_results(
             .join(Document, Document.id == DocumentVersion.document_id)
             .where(
                 Document.tenant_id == tenant_id,
+                Document.deleted_at.is_(None),
                 DocumentVersion.id.in_(version_ids),
                 DocumentVersion.status == DocumentVersionStatus.ACTIVE,
             )

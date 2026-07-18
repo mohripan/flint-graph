@@ -14,7 +14,13 @@ from atlas_rag.application.services.query_runs import (
     append_query_run_event,
     persist_query_context_pack,
 )
-from atlas_rag.infrastructure.db.models import QueryRunCandidate
+from atlas_rag.domain.enums import DocumentVersionStatus, RelationshipStatus
+from atlas_rag.infrastructure.db.models import (
+    Document,
+    DocumentVersion,
+    EntityRelationship,
+    QueryRunCandidate,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +59,24 @@ async def pack_query_context(
     records: list[PackedContextRecord] = []
     token_count = 0
     skipped_count = 0
+    active_document_version_ids = await _active_candidate_document_version_ids(
+        session,
+        tenant_id=tenant_id,
+        rows=rows,
+    )
+    active_relationship_ids = await _active_candidate_relationship_ids(
+        session,
+        tenant_id=tenant_id,
+        rows=rows,
+    )
     for row in rows:
+        if not _candidate_source_is_active(
+            row,
+            active_document_version_ids=active_document_version_ids,
+            active_relationship_ids=active_relationship_ids,
+        ):
+            skipped_count += 1
+            continue
         text = (row.text_preview or "").strip()
         candidate_tokens = _estimate_token_count(text)
         if not text or candidate_tokens <= 0:
@@ -76,6 +99,7 @@ async def pack_query_context(
                 token_count=candidate_tokens,
                 source_ids=dict(row.source_ids),
                 metadata={
+                    **dict(row.metadata_),
                     "source": row.source,
                     "candidate_type": row.candidate_type,
                     "rank": row.rank,
@@ -125,6 +149,141 @@ async def pack_query_context(
         token_count=token_count,
         skipped_candidate_count=skipped_count,
     )
+
+
+async def _active_candidate_document_version_ids(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    rows: list[QueryRunCandidate],
+) -> set[UUID]:
+    version_ids = {
+        version_id
+        for row in rows
+        if (version_id := _candidate_document_version_id(row)) is not None
+    }
+    if not version_ids:
+        return set()
+    return await _active_document_version_ids(
+        session,
+        tenant_id=tenant_id,
+        document_version_ids=version_ids,
+    )
+
+
+async def _active_candidate_relationship_ids(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    rows: list[QueryRunCandidate],
+) -> set[UUID]:
+    relationship_ids = {
+        relationship_id
+        for row in rows
+        if (relationship_id := _candidate_relationship_id(row)) is not None
+    }
+    if not relationship_ids:
+        return set()
+
+    relationships = list(
+        await session.scalars(
+            select(EntityRelationship).where(
+                EntityRelationship.tenant_id == tenant_id,
+                EntityRelationship.id.in_(relationship_ids),
+                EntityRelationship.status == RelationshipStatus.ACTIVE,
+            )
+        )
+    )
+    provenance_version_ids = {
+        version_id
+        for relationship in relationships
+        for item in relationship.provenance
+        if (version_id := _provenance_document_version_id(item)) is not None
+    }
+    active_version_ids = await _active_document_version_ids(
+        session,
+        tenant_id=tenant_id,
+        document_version_ids=provenance_version_ids,
+    )
+    active_relationship_ids: set[UUID] = set()
+    for relationship in relationships:
+        relationship_version_ids = {
+            version_id
+            for item in relationship.provenance
+            if (version_id := _provenance_document_version_id(item)) is not None
+        }
+        if not relationship_version_ids or relationship_version_ids & active_version_ids:
+            active_relationship_ids.add(relationship.id)
+    return active_relationship_ids
+
+
+async def _active_document_version_ids(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    document_version_ids: set[UUID],
+) -> set[UUID]:
+    if not document_version_ids:
+        return set()
+    return set(
+        await session.scalars(
+            select(DocumentVersion.id)
+            .join(Document, Document.id == DocumentVersion.document_id)
+            .where(
+                Document.tenant_id == tenant_id,
+                Document.deleted_at.is_(None),
+                DocumentVersion.id.in_(document_version_ids),
+                DocumentVersion.status == DocumentVersionStatus.ACTIVE,
+            )
+        )
+    )
+
+
+def _candidate_source_is_active(
+    row: QueryRunCandidate,
+    *,
+    active_document_version_ids: set[UUID],
+    active_relationship_ids: set[UUID],
+) -> bool:
+    relationship_id = _candidate_relationship_id(row)
+    if relationship_id is not None:
+        return relationship_id in active_relationship_ids
+    document_version_id = _candidate_document_version_id(row)
+    if document_version_id is None:
+        return True
+    return document_version_id in active_document_version_ids
+
+
+def _candidate_relationship_id(row: QueryRunCandidate) -> UUID | None:
+    if row.candidate_type != "relationship":
+        return None
+    value = row.source_ids.get("relationship_id")
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _candidate_document_version_id(row: QueryRunCandidate) -> UUID | None:
+    value = row.metadata_.get("document_version_id")
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _provenance_document_version_id(item: dict[str, object]) -> UUID | None:
+    value = item.get("document_version_id")
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
 
 
 def _estimate_token_count(text: str) -> int:
