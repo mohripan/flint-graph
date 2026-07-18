@@ -208,6 +208,7 @@ async def _add_active_document_version(
     tenant: Tenant,
 ) -> tuple[Document, DocumentVersion]:
     document = Document(
+        id=UUID("11111111-1111-4111-8111-111111111111"),
         tenant_id=tenant.id,
         title="Acme Brief",
         source_type=SourceType.UPLOAD,
@@ -217,6 +218,7 @@ async def _add_active_document_version(
     session.add(document)
     await session.flush()
     version = DocumentVersion(
+        id=UUID("22222222-2222-4222-8222-222222222222"),
         document_id=document.id,
         version_number=1,
         status=DocumentVersionStatus.ACTIVE,

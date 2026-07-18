@@ -190,7 +190,10 @@ async def _document_version(
     *,
     title: str,
 ) -> tuple[Document, DocumentVersion, DocumentChunk]:
+    document_id = UUID("11111111-1111-4111-8111-111111111111")
+    version_id = UUID("22222222-2222-4222-8222-222222222222")
     document = Document(
+        id=document_id,
         tenant_id=tenant.id,
         title=title,
         source_type=SourceType.UPLOAD,
@@ -200,6 +203,7 @@ async def _document_version(
     session.add(document)
     await session.flush()
     version = DocumentVersion(
+        id=version_id,
         document_id=document.id,
         version_number=1,
         status=DocumentVersionStatus.ACTIVE,
@@ -389,6 +393,8 @@ async def test_backfill_endpoint_creates_tenant_job_and_starts_workflow(
         _global_version, tenant_version = await _active_index_versions(session, tenant)
         await session.commit()
         tenant_id = tenant.id
+        index_version_id = tenant_version.id
+        index_version_id = tenant_version.id
         document_id = document.id
         version_id = version.id
         index_version_id = tenant_version.id
@@ -461,6 +467,70 @@ async def test_search_endpoints_select_tenant_index_and_apply_filters(
     assert neo4j.calls
     assert neo4j.calls[0][1]["tenant_id"] == str(tenant_id)
     assert neo4j.calls[0][1]["retrieval_index_version_id"] == str(index_version_id)
+
+
+async def test_search_endpoints_filter_deleted_and_superseded_projection_hits(
+    retrieval_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        CapturingOpenSearchClient,
+        CapturingNeo4jClient,
+        CapturingBackfillStarter,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j, _starter = retrieval_env
+    stale_document_id = UUID("11111111-1111-4111-8111-111111111111")
+    stale_version_id = UUID("22222222-2222-4222-8222-222222222222")
+    async with session_factory() as session:
+        tenant = await _tenant(session, "retrieval-search-stale")
+        document = Document(
+            id=stale_document_id,
+            tenant_id=tenant.id,
+            title="Stale Acme",
+            source_type=SourceType.UPLOAD,
+            source_uri="s3://atlas/stale-acme.txt",
+            next_version_number=2,
+        )
+        version = DocumentVersion(
+            id=stale_version_id,
+            document_id=document.id,
+            version_number=1,
+            status=DocumentVersionStatus.DELETED,
+            content_hash="sha256:stale-document",
+        )
+        session.add_all([document, version])
+        _global_version, _tenant_version = await _active_index_versions(session, tenant)
+        await session.commit()
+        tenant_id = tenant.id
+
+    lexical = await client.post(
+        "/v1/search/lexical",
+        headers=_headers(tenant_id),
+        json={"query": "Berlin office", "limit": 3},
+    )
+    vector = await client.post(
+        "/v1/search/vector",
+        headers=_headers(tenant_id),
+        json={"query": "Berlin office", "limit": 3},
+    )
+    assert lexical.status_code == 200
+    assert vector.status_code == 200
+    assert lexical.json()["results"] == []
+    assert vector.json()["results"] == []
+
+    async with session_factory() as session:
+        version = await session.get(DocumentVersion, stale_version_id)
+        assert version is not None
+        version.status = DocumentVersionStatus.SUPERSEDED
+        await session.commit()
+
+    superseded = await client.post(
+        "/v1/search/lexical",
+        headers=_headers(tenant_id),
+        json={"query": "Berlin office", "limit": 3},
+    )
+    assert superseded.status_code == 200
+    assert superseded.json()["results"] == []
 
 
 async def test_search_rejects_non_scalar_metadata_filters(

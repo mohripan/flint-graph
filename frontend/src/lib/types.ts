@@ -31,6 +31,38 @@ export interface DocumentIntakeResponse {
   created_at: string;
 }
 
+export interface DocumentDeleteResponse {
+  document_id: string;
+  deleted_version_ids: string[];
+  cleanup_count: number;
+}
+
+export type DocumentProjectionCleanupStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface DocumentProjectionCleanup {
+  id: string;
+  tenant_id: string;
+  document_id: string;
+  document_version_id: string;
+  retrieval_index_version_id: string;
+  status: DocumentProjectionCleanupStatus;
+  stale_reason: string;
+  chunk_count: number;
+  vector_count: number;
+  lexical_count: number;
+  attempt_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface IngestionJobResponse {
   id: string;
   tenant_id: string;

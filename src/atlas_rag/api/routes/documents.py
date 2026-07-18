@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Header, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, Header, Query, Response, UploadFile, status
 
 from atlas_rag.api.dependencies import (
     ObjectStoreDep,
@@ -12,11 +12,20 @@ from atlas_rag.api.dependencies import (
 )
 from atlas_rag.api.schemas import (
     DocumentCreate,
+    DocumentDeleteResponse,
     DocumentIntakeResponse,
+    DocumentLifecycleEventResponse,
+    DocumentProjectionCleanupResponse,
     DocumentResponse,
     IngestionJobEventResponse,
     IngestionJobResponse,
     URLIntakeCreate,
+)
+from atlas_rag.application.services.document_lifecycle import (
+    delete_document,
+    list_lifecycle_events,
+    list_projection_cleanups,
+    retry_projection_cleanups,
 )
 from atlas_rag.application.services.documents import create_document
 from atlas_rag.application.services.ingestion_jobs import (
@@ -160,6 +169,80 @@ async def create_document_from_url_endpoint(
     if not record.created:
         response.status_code = status.HTTP_200_OK
     return _intake_response(record)
+
+
+@router.delete("/documents/{document_id}", response_model=DocumentDeleteResponse)
+async def delete_document_endpoint(
+    document_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> DocumentDeleteResponse:
+    result = await delete_document(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        reason="api document delete",
+    )
+    return DocumentDeleteResponse(
+        document_id=result.document_id,
+        deleted_version_ids=result.deleted_version_ids,
+        cleanup_count=result.cleanup_count,
+    )
+
+
+@router.get(
+    "/documents/{document_id}/lifecycle-events",
+    response_model=list[DocumentLifecycleEventResponse],
+)
+async def list_document_lifecycle_events_endpoint(
+    document_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[DocumentLifecycleEventResponse]:
+    events = await list_lifecycle_events(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        limit=limit,
+    )
+    return [DocumentLifecycleEventResponse.model_validate(event) for event in events]
+
+
+@router.get(
+    "/documents/{document_id}/projection-cleanups",
+    response_model=list[DocumentProjectionCleanupResponse],
+)
+async def list_document_projection_cleanups_endpoint(
+    document_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[DocumentProjectionCleanupResponse]:
+    cleanups = await list_projection_cleanups(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        limit=limit,
+    )
+    return [DocumentProjectionCleanupResponse.model_validate(cleanup) for cleanup in cleanups]
+
+
+@router.post(
+    "/documents/{document_id}/projection-cleanups/retry",
+    response_model=list[DocumentProjectionCleanupResponse],
+)
+async def retry_document_projection_cleanups_endpoint(
+    document_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> list[DocumentProjectionCleanupResponse]:
+    cleanups = await retry_projection_cleanups(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+    )
+    return [DocumentProjectionCleanupResponse.model_validate(cleanup) for cleanup in cleanups]
 
 
 @router.post(

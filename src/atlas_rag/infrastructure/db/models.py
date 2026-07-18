@@ -31,6 +31,8 @@ from atlas_rag.domain.enums import (
     ClaimStatus,
     DocumentArtifactType,
     DocumentIndexCoverageStatus,
+    DocumentLifecycleEventType,
+    DocumentProjectionCleanupStatus,
     DocumentVersionStatus,
     EntityStatus,
     EntityType,
@@ -327,6 +329,88 @@ class DocumentIndexCoverage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     embedded_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     vector_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     lexical_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DocumentLifecycleEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "document_lifecycle_events"
+    __table_args__ = (
+        Index(
+            "ix_document_lifecycle_events_tenant_document_created",
+            "tenant_id",
+            "document_id",
+            "created_at",
+        ),
+        Index(
+            "ix_document_lifecycle_events_document_version",
+            "document_version_id",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    event_type: Mapped[DocumentLifecycleEventType] = mapped_column(
+        enum_column(DocumentLifecycleEventType, 64), nullable=False
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class DocumentProjectionCleanup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "document_projection_cleanups"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_version_id",
+            "retrieval_index_version_id",
+            "stale_reason",
+            name="uq_document_projection_cleanups_version_index_reason",
+        ),
+        Index(
+            "ix_document_projection_cleanups_tenant_status",
+            "tenant_id",
+            "status",
+        ),
+        Index(
+            "ix_document_projection_cleanups_document",
+            "document_id",
+            "created_at",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    retrieval_index_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("retrieval_index_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[DocumentProjectionCleanupStatus] = mapped_column(
+        enum_column(DocumentProjectionCleanupStatus, 32),
+        nullable=False,
+        default=DocumentProjectionCleanupStatus.PENDING,
+    )
+    stale_reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    vector_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lexical_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)

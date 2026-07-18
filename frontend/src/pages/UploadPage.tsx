@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useTrackedJobs, type TrackedJob } from "../lib/jobs";
-import type { SearchReadiness } from "../lib/types";
+import type { DocumentProjectionCleanup, SearchReadiness } from "../lib/types";
 import { useWorkspace } from "../lib/workspace";
 import { Button, Card, Spinner, StatusPill } from "../components/ui";
 
@@ -17,7 +17,11 @@ export function UploadPage() {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [readiness, setReadiness] = useState<SearchReadiness | null>(null);
+  const [cleanupsByDocument, setCleanupsByDocument] = useState<
+    Record<string, DocumentProjectionCleanup[]>
+  >({});
   const [busy, setBusy] = useState(false);
+  const [documentActionId, setDocumentActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,11 +34,29 @@ export function UploadPage() {
 
   const refreshReadiness = useCallback(async () => {
     try {
-      setReadiness(await api.getSearchReadiness(tenantId));
+      const nextReadiness = await api.getSearchReadiness(tenantId);
+      setReadiness(nextReadiness);
+      const documentIds = Array.from(
+        new Set([
+          ...nextReadiness.documents.map((doc) => doc.document_id),
+          ...jobs.map((job) => job.documentId),
+        ]),
+      );
+      const cleanupEntries = await Promise.all(
+        documentIds.map(async (documentId) => {
+          try {
+            return [documentId, await api.getProjectionCleanups(tenantId, documentId)] as const;
+          } catch {
+            return [documentId, []] as const;
+          }
+        }),
+      );
+      setCleanupsByDocument(Object.fromEntries(cleanupEntries));
     } catch {
       setReadiness(null);
+      setCleanupsByDocument({});
     }
-  }, [tenantId]);
+  }, [jobs, tenantId]);
 
   useEffect(() => {
     void refreshReadiness();
@@ -77,6 +99,37 @@ export function UploadPage() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function deleteDocument(documentId: string, title: string) {
+    if (!window.confirm(`Delete "${title}" from this workspace?`)) return;
+    setError(null);
+    setDocumentActionId(documentId);
+    try {
+      await api.deleteDocument(tenantId, documentId);
+      await refreshReadiness();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Document deletion failed.",
+      );
+    } finally {
+      setDocumentActionId(null);
+    }
+  }
+
+  async function retryCleanup(documentId: string) {
+    setError(null);
+    setDocumentActionId(documentId);
+    try {
+      await api.retryProjectionCleanups(tenantId, documentId);
+      await refreshReadiness();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Projection cleanup retry failed.",
+      );
+    } finally {
+      setDocumentActionId(null);
     }
   }
 
@@ -191,8 +244,20 @@ export function UploadPage() {
                             {doc.error_message}
                           </p>
                         )}
+                        <CleanupSummary cleanups={cleanupsByDocument[doc.document_id] ?? []} />
                       </div>
-                      <StatusPill status={statusForReadiness(doc.status)} />
+                      <div className="flex shrink-0 items-center gap-2">
+                        <StatusPill status={statusForReadiness(doc.status)} />
+                        {hasFailedCleanup(cleanupsByDocument[doc.document_id] ?? []) && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => retryCleanup(doc.document_id)}
+                            disabled={documentActionId === doc.document_id}
+                          >
+                            Retry cleanup
+                          </Button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -229,6 +294,7 @@ export function UploadPage() {
                         {job.error}
                       </p>
                     )}
+                    <CleanupSummary cleanups={cleanupsByDocument[job.documentId] ?? []} />
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <StatusPill status={job.status} />
@@ -240,16 +306,34 @@ export function UploadPage() {
                     {(job.status === "completed" ||
                       job.status === "failed" ||
                       job.status === "cancelled") && (
-                      <button
-                        onClick={() => remove(job.jobId)}
-                        className="text-slate-400 hover:text-slate-600"
-                        title="Remove from list"
-                        aria-label="Remove from list"
-                      >
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                          <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                        </svg>
-                      </button>
+                      <>
+                        {hasFailedCleanup(cleanupsByDocument[job.documentId] ?? []) && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => retryCleanup(job.documentId)}
+                            disabled={documentActionId === job.documentId}
+                          >
+                            Retry cleanup
+                          </Button>
+                        )}
+                        <Button
+                          variant="danger"
+                          onClick={() => deleteDocument(job.documentId, job.title)}
+                          disabled={documentActionId === job.documentId}
+                        >
+                          Delete
+                        </Button>
+                        <button
+                          onClick={() => remove(job.jobId)}
+                          className="text-slate-400 hover:text-slate-600"
+                          title="Remove from list"
+                          aria-label="Remove from list"
+                        >
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                            <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      </>
                     )}
                   </div>
                 </Card>
@@ -270,6 +354,37 @@ function statusForReadiness(status: string) {
   if (status === "cancelled") return "cancelled";
   if (status === "failed") return "failed";
   return "queued";
+}
+
+function hasFailedCleanup(cleanups: DocumentProjectionCleanup[]) {
+  return cleanups.some((cleanup) => cleanup.status === "failed");
+}
+
+function cleanupStatus(cleanups: DocumentProjectionCleanup[]) {
+  if (cleanups.some((cleanup) => cleanup.status === "failed")) return "failed";
+  if (cleanups.some((cleanup) => cleanup.status === "running")) return "running";
+  if (cleanups.some((cleanup) => cleanup.status === "pending")) return "queued";
+  if (cleanups.some((cleanup) => cleanup.status === "completed")) return "completed";
+  return null;
+}
+
+function CleanupSummary({ cleanups }: { cleanups: DocumentProjectionCleanup[] }) {
+  const status = cleanupStatus(cleanups);
+  if (!status) return null;
+  const pendingCount = cleanups.filter((cleanup) => cleanup.status === "pending").length;
+  const failedCount = cleanups.filter((cleanup) => cleanup.status === "failed").length;
+  const label =
+    failedCount > 0
+      ? `${failedCount} cleanup failed`
+      : pendingCount > 0
+        ? `${pendingCount} cleanup pending`
+        : "cleanup complete";
+  return (
+    <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+      <StatusPill status={status} />
+      <span>{label}</span>
+    </div>
+  );
 }
 
 const inputClass =

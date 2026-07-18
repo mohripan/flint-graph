@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from atlas_rag.domain.enums import (
     AliasSource,
     DocumentIndexCoverageStatus,
+    DocumentLifecycleEventType,
+    DocumentProjectionCleanupStatus,
     DocumentVersionStatus,
     EntityStatus,
     EntityType,
@@ -80,6 +82,48 @@ class DocumentIntakeResponse(BaseModel):
     object_uri: str
     content_hash: str
     created_at: datetime
+
+
+class DocumentDeleteResponse(BaseModel):
+    document_id: UUID
+    deleted_version_ids: list[UUID]
+    cleanup_count: int
+
+
+class DocumentLifecycleEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    document_id: UUID
+    document_version_id: UUID | None
+    event_type: DocumentLifecycleEventType
+    reason: str | None
+    payload: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentProjectionCleanupResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    document_id: UUID
+    document_version_id: UUID
+    retrieval_index_version_id: UUID
+    status: DocumentProjectionCleanupStatus
+    stale_reason: str
+    chunk_count: int
+    vector_count: int
+    lexical_count: int
+    attempt_count: int
+    started_at: datetime | None
+    completed_at: datetime | None
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
     
     
 class IngestionJobResponse(BaseModel):

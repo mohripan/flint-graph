@@ -155,6 +155,19 @@ class DocumentIndexCoverageStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class DocumentLifecycleEventType(StrEnum):
+    VERSION_SUPERSEDED = "version_superseded"
+    DOCUMENT_DELETED = "document_deleted"
+    CLEANUP_RETRIED = "cleanup_retried"
+
+
+class DocumentProjectionCleanupStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class IndexBackfillJobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"

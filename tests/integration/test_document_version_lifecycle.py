@@ -1,7 +1,12 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas_rag.application.services.document_lifecycle import (
+    delete_document,
+    run_projection_cleanup,
+)
 from atlas_rag.application.services.document_versions import (
     activate_document_version,
     cancel_document_version,
@@ -11,9 +16,47 @@ from atlas_rag.application.services.documents import create_document
 from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
 from atlas_rag.application.services.job_cancellation import cancel_ingestion_job
 from atlas_rag.application.services.job_transitions import transition_ingestion_job
+from atlas_rag.application.services.retrieval_index_versions import (
+    RetrievalIndexVersionSpec,
+    activate_retrieval_index_version,
+    create_retrieval_index_version,
+)
 from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import DocumentVersionStatus, IngestionJobStatus, SourceType
-from atlas_rag.infrastructure.db.models import DocumentVersion
+from atlas_rag.domain.enums import (
+    DocumentIndexCoverageStatus,
+    DocumentLifecycleEventType,
+    DocumentProjectionCleanupStatus,
+    DocumentVersionStatus,
+    IngestionJobStatus,
+    RetrievalIndexScope,
+    SourceType,
+)
+from atlas_rag.infrastructure.db.models import (
+    DocumentChunk,
+    DocumentIndexCoverage,
+    DocumentLifecycleEvent,
+    DocumentProjectionCleanup,
+    DocumentVersion,
+)
+
+
+class CapturingCypherClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def execute(
+        self, query: str, parameters: dict[str, object] | None = None
+    ) -> list[dict[str, object]]:
+        self.calls.append((query, parameters or {}))
+        return []
+
+
+class CapturingOpenSearchBulkClient:
+    def __init__(self) -> None:
+        self.bulk_bodies: list[str] = []
+
+    async def bulk(self, *, body: str) -> None:
+        self.bulk_bodies.append(body)
 
 
 async def _create_document_with_jobs(
@@ -44,6 +87,54 @@ async def _create_document_with_jobs(
     return tenant.id, version_ids
 
 
+def _index_spec(model: str = "lifecycle-v1") -> RetrievalIndexVersionSpec:
+    return RetrievalIndexVersionSpec(
+        embedding_provider="deterministic",
+        embedding_model=model,
+        vector_dimension=4,
+        embedding_config_hash=f"sha256:{model}",
+        chunking_schema_version="1",
+        chunking_config_hash="sha256:chunking",
+        lexical_schema_version="1",
+        neo4j_vector_index_name=f"atlas_chunks_{model.replace('-', '_')}",
+        neo4j_vector_property_name="embedding_v000001",
+        opensearch_index_name=f"atlas_chunks_{model.replace('-', '_')}",
+        opensearch_alias_name="atlas_chunks_active",
+        metadata={},
+    )
+
+
+async def _create_active_index_coverage(
+    db_session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    version: DocumentVersion,
+    chunk_count: int = 2,
+) -> UUID:
+    index_version = await create_retrieval_index_version(
+        db_session,
+        scope=RetrievalIndexScope.TENANT,
+        tenant_id=tenant_id,
+        spec=_index_spec(),
+    )
+    await activate_retrieval_index_version(db_session, version_id=index_version.id)
+    db_session.add(
+        DocumentIndexCoverage(
+            tenant_id=tenant_id,
+            document_id=version.document_id,
+            document_version_id=version.id,
+            retrieval_index_version_id=index_version.id,
+            status=DocumentIndexCoverageStatus.COMPLETED,
+            chunk_count=chunk_count,
+            embedded_count=chunk_count,
+            vector_count=chunk_count,
+            lexical_count=chunk_count,
+        )
+    )
+    await db_session.flush()
+    return index_version.id
+
+
 async def test_activating_new_version_supersedes_previous_active_version(
     db_session: AsyncSession,
 ) -> None:
@@ -63,6 +154,160 @@ async def test_activating_new_version_supersedes_previous_active_version(
     assert second is not None
     assert first.status == DocumentVersionStatus.SUPERSEDED
     assert second.status == DocumentVersionStatus.ACTIVE
+
+
+async def test_activating_replacement_creates_superseded_cleanup_work(
+    db_session: AsyncSession,
+) -> None:
+    tenant_id, version_ids = await _create_document_with_jobs(
+        db_session,
+        tenant_name="Lifecycle Replacement Cleanup Tenant",
+        document_external_id="lifecycle-replacement-cleanup",
+        job_keys=["cleanup-v1", "cleanup-v2"],
+    )
+    await activate_document_version(db_session, tenant_id=tenant_id, version_id=version_ids[0])
+    first = await db_session.get(DocumentVersion, version_ids[0])
+    assert first is not None
+    index_version_id = await _create_active_index_coverage(
+        db_session,
+        tenant_id=tenant_id,
+        version=first,
+        chunk_count=3,
+    )
+
+    await activate_document_version(db_session, tenant_id=tenant_id, version_id=version_ids[1])
+
+    event = await db_session.scalar(
+        select(DocumentLifecycleEvent).where(
+            DocumentLifecycleEvent.tenant_id == tenant_id,
+            DocumentLifecycleEvent.document_version_id == version_ids[0],
+            DocumentLifecycleEvent.event_type == DocumentLifecycleEventType.VERSION_SUPERSEDED,
+        )
+    )
+    cleanup = await db_session.scalar(
+        select(DocumentProjectionCleanup).where(
+            DocumentProjectionCleanup.tenant_id == tenant_id,
+            DocumentProjectionCleanup.document_version_id == version_ids[0],
+            DocumentProjectionCleanup.retrieval_index_version_id == index_version_id,
+        )
+    )
+    assert event is not None
+    assert cleanup is not None
+    assert cleanup.status == DocumentProjectionCleanupStatus.PENDING
+    assert cleanup.chunk_count == 3
+
+
+async def test_deleting_document_marks_versions_deleted_and_creates_cleanup_work(
+    db_session: AsyncSession,
+) -> None:
+    tenant_id, version_ids = await _create_document_with_jobs(
+        db_session,
+        tenant_name="Lifecycle Delete Cleanup Tenant",
+        document_external_id="lifecycle-delete-cleanup",
+        job_keys=["delete-v1"],
+    )
+    await activate_document_version(db_session, tenant_id=tenant_id, version_id=version_ids[0])
+    version = await db_session.get(DocumentVersion, version_ids[0])
+    assert version is not None
+    index_version_id = await _create_active_index_coverage(
+        db_session,
+        tenant_id=tenant_id,
+        version=version,
+        chunk_count=4,
+    )
+
+    deleted = await delete_document(
+        db_session,
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        reason="user requested deletion",
+    )
+
+    assert deleted.document_id == version.document_id
+    refreshed = await db_session.get(DocumentVersion, version_ids[0])
+    assert refreshed is not None
+    assert refreshed.status == DocumentVersionStatus.DELETED
+    event = await db_session.scalar(
+        select(DocumentLifecycleEvent).where(
+            DocumentLifecycleEvent.tenant_id == tenant_id,
+            DocumentLifecycleEvent.document_id == version.document_id,
+            DocumentLifecycleEvent.event_type == DocumentLifecycleEventType.DOCUMENT_DELETED,
+        )
+    )
+    cleanup = await db_session.scalar(
+        select(DocumentProjectionCleanup).where(
+            DocumentProjectionCleanup.tenant_id == tenant_id,
+            DocumentProjectionCleanup.document_version_id == version_ids[0],
+            DocumentProjectionCleanup.retrieval_index_version_id == index_version_id,
+        )
+    )
+    assert event is not None
+    assert event.reason == "user requested deletion"
+    assert cleanup is not None
+    assert cleanup.status == DocumentProjectionCleanupStatus.PENDING
+    assert cleanup.stale_reason == "document_deleted"
+
+
+async def test_projection_cleanup_deletes_vector_and_lexical_records(
+    db_session: AsyncSession,
+) -> None:
+    tenant_id, version_ids = await _create_document_with_jobs(
+        db_session,
+        tenant_name="Lifecycle Cleanup Execute Tenant",
+        document_external_id="lifecycle-cleanup-execute",
+        job_keys=["execute-v1"],
+    )
+    await activate_document_version(db_session, tenant_id=tenant_id, version_id=version_ids[0])
+    version = await db_session.get(DocumentVersion, version_ids[0])
+    assert version is not None
+    db_session.add(
+        DocumentChunk(
+            tenant_id=tenant_id,
+            document_id=version.document_id,
+            document_version_id=version.id,
+            chunk_id="chunk-000001",
+            chunk_index=0,
+            text="Acme cleanup text",
+            chunk_hash="sha256:chunk-cleanup",
+            metadata_={"source_type": "upload"},
+        )
+    )
+    await _create_active_index_coverage(
+        db_session,
+        tenant_id=tenant_id,
+        version=version,
+        chunk_count=1,
+    )
+    await delete_document(
+        db_session,
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        reason="cleanup execution test",
+    )
+    cleanup = await db_session.scalar(
+        select(DocumentProjectionCleanup).where(
+            DocumentProjectionCleanup.document_version_id == version.id
+        )
+    )
+    assert cleanup is not None
+    cypher_client = CapturingCypherClient()
+    opensearch_client = CapturingOpenSearchBulkClient()
+
+    completed = await run_projection_cleanup(
+        db_session,
+        cleanup_id=cleanup.id,
+        neo4j_client=cypher_client,
+        opensearch_client=opensearch_client,
+    )
+
+    assert completed.status == DocumentProjectionCleanupStatus.COMPLETED
+    assert completed.vector_count == 1
+    assert completed.lexical_count == 1
+    assert cypher_client.calls
+    assert "chunk-000001" in str(cypher_client.calls[0][1]["ids"])
+    assert opensearch_client.bulk_bodies
+    assert '"delete"' in opensearch_client.bulk_bodies[0]
+    assert "chunk-000001" in opensearch_client.bulk_bodies[0]
 
 
 async def test_failing_newer_version_does_not_disturb_current_active_version(

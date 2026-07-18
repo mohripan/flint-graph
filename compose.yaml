@@ -127,6 +127,33 @@ services:
       opensearch:
         condition: service_healthy
 
+  projection-cleanup:
+    build: .
+    command: ["python", "-m", "atlas_rag.processes.document_projection_cleanup"]
+    environment:
+      ATLAS_ENV: local
+      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
+      ATLAS_NEO4J_URI: bolt://neo4j:7687
+      ATLAS_NEO4J_USER: neo4j
+      ATLAS_NEO4J_PASSWORD: atlaspassword
+      ATLAS_NEO4J_DATABASE: neo4j
+      ATLAS_OPENSEARCH_URL: http://opensearch:9200
+      ATLAS_OTEL_ENABLED: "false"
+      ATLAS_EMBEDDING_PROVIDER: deterministic
+      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
+      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      neo4j:
+        condition: service_healthy
+      neo4j-migrate:
+        condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
+
   migrate:
     build: .
     command: ["alembic", "upgrade", "head"]

@@ -134,6 +134,7 @@ class Settings(BaseSettings):
     outbox_relay_batch_size: int = Field(default=10, ge=1, le=100)
     outbox_relay_poll_interval_seconds: float = Field(default=2.0, gt=0.0)
     outbox_relay_retry_delay_seconds: int = Field(default=30, ge=0)
+    projection_cleanup_poll_interval_seconds: float = Field(default=5.0, gt=0.0)
 
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"

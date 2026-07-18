@@ -56,6 +56,7 @@ from atlas_rag.application.services.retrieval import (
     VECTOR_SEARCH_CYPHER,
     EntityNeighborhood,
     RetrievalChunkResult,
+    filter_active_chunk_results,
     load_entity_neighborhood,
     resolve_index_version,
 )
@@ -270,15 +271,20 @@ class _LexicalQueryRetriever:
                 filters={"index_version_id": retrieval_index_version_id},
             ),
         )
+        chunks = await filter_active_chunk_results(
+            session,
+            tenant_id=tenant_id,
+            results=[_chunk_result_from_opensearch_hit(hit) for hit in hits],
+        )
         return [
             _chunk_candidate(
                 source="lexical",
                 tenant_id=tenant_id,
                 retrieval_index_version_id=retrieval_index_version_id,
-                chunk=_chunk_result_from_opensearch_hit(hit),
+                chunk=chunk,
                 rank=rank,
             )
-            for rank, hit in enumerate(hits, start=1)
+            for rank, chunk in enumerate(chunks, start=1)
         ]
 
 
@@ -332,15 +338,20 @@ class _VectorQueryRetriever:
                 "limit": limit,
             },
         )
+        chunks = await filter_active_chunk_results(
+            session,
+            tenant_id=tenant_id,
+            results=[_chunk_result_from_neo4j_row(row) for row in rows],
+        )
         return [
             _chunk_candidate(
                 source="vector",
                 tenant_id=tenant_id,
                 retrieval_index_version_id=retrieval_index_version_id,
-                chunk=_chunk_result_from_neo4j_row(row),
+                chunk=chunk,
                 rank=rank,
             )
-            for rank, row in enumerate(rows, start=1)
+            for rank, chunk in enumerate(chunks, start=1)
         ]
 
 

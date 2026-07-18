@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas_rag.application.services.document_lifecycle import record_superseded_version_cleanup
 from atlas_rag.domain.enums import DocumentVersionStatus
 from atlas_rag.domain.errors import ConflictError, NotFoundError
 from atlas_rag.infrastructure.db.models import Document, DocumentVersion
@@ -34,6 +35,12 @@ async def activate_document_version(
         active_version.status = DocumentVersionStatus.SUPERSEDED
 
     version.status = DocumentVersionStatus.ACTIVE
+    if active_versions:
+        await record_superseded_version_cleanup(
+            session,
+            tenant_id=tenant_id,
+            superseded_versions=active_versions,
+        )
     await session.flush()
     return version
 

@@ -19,6 +19,7 @@ from atlas_rag.application.services.indexing import select_active_retrieval_inde
 from atlas_rag.application.services.lexical_projection import build_lexical_search_body
 from atlas_rag.domain.enums import (
     DocumentIndexCoverageStatus,
+    DocumentVersionStatus,
     EntityStatus,
     RelationshipStatus,
     RetrievalIndexScope,
@@ -231,7 +232,11 @@ async def lexical_search(
     )
     return RetrievalSearchResult(
         index_version=index_version,
-        results=[_chunk_result_from_opensearch_hit(hit) for hit in hits],
+        results=await filter_active_chunk_results(
+            session,
+            tenant_id=tenant_id,
+            results=[_chunk_result_from_opensearch_hit(hit) for hit in hits],
+        ),
     )
 
 
@@ -285,7 +290,11 @@ async def vector_search(
     )
     return RetrievalSearchResult(
         index_version=index_version,
-        results=[_chunk_result_from_neo4j_row(row) for row in rows],
+        results=await filter_active_chunk_results(
+            session,
+            tenant_id=tenant_id,
+            results=[_chunk_result_from_neo4j_row(row) for row in rows],
+        ),
     )
 
 
@@ -358,6 +367,29 @@ async def load_entity_neighborhood(
         entities=entities,
         relationships=relationships,
     )
+
+
+async def filter_active_chunk_results(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    results: list[RetrievalChunkResult],
+) -> list[RetrievalChunkResult]:
+    if not results:
+        return []
+    version_ids = {result.document_version_id for result in results}
+    active_version_ids = set(
+        await session.scalars(
+            select(DocumentVersion.id)
+            .join(Document, Document.id == DocumentVersion.document_id)
+            .where(
+                Document.tenant_id == tenant_id,
+                DocumentVersion.id.in_(version_ids),
+                DocumentVersion.status == DocumentVersionStatus.ACTIVE,
+            )
+        )
+    )
+    return [result for result in results if result.document_version_id in active_version_ids]
 
 
 async def resolve_index_version(

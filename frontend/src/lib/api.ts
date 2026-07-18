@@ -1,6 +1,8 @@
 import type {
   AnswerProvenance,
+  DocumentDeleteResponse,
   DocumentIntakeResponse,
+  DocumentProjectionCleanup,
   IngestionJobResponse,
   ProblemDetail,
   QueryRunResponse,
@@ -127,6 +129,33 @@ export const api = {
     return jsonRequest<SearchReadiness>("/v1/search-readiness", {
       headers: tenantHeaders(tenantId),
     });
+  },
+
+  deleteDocument(tenantId: string, documentId: string): Promise<DocumentDeleteResponse> {
+    return jsonRequest<DocumentDeleteResponse>(`/v1/documents/${documentId}`, {
+      method: "DELETE",
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
+  getProjectionCleanups(
+    tenantId: string,
+    documentId: string,
+  ): Promise<DocumentProjectionCleanup[]> {
+    return jsonRequest<DocumentProjectionCleanup[]>(
+      `/v1/documents/${documentId}/projection-cleanups`,
+      { headers: tenantHeaders(tenantId) },
+    );
+  },
+
+  retryProjectionCleanups(
+    tenantId: string,
+    documentId: string,
+  ): Promise<DocumentProjectionCleanup[]> {
+    return jsonRequest<DocumentProjectionCleanup[]>(
+      `/v1/documents/${documentId}/projection-cleanups/retry`,
+      { method: "POST", headers: tenantHeaders(tenantId) },
+    );
   },
 
   cancelJob(tenantId: string, jobId: string): Promise<IngestionJobResponse> {

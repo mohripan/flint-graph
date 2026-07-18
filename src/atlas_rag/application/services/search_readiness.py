@@ -181,6 +181,11 @@ async def _load_recent_document_statuses(
             & (DocumentIndexCoverage.retrieval_index_version_id == index_version.id),
         )
         .where(Document.tenant_id == tenant_id)
+        .where(
+            DocumentVersion.status.notin_(
+                [DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED]
+            )
+        )
         .order_by(Document.updated_at.desc(), DocumentVersion.version_number.desc())
         .limit(limit)
     )
@@ -219,6 +224,10 @@ def _document_readiness_status(
         return "failed"
     if version_status == DocumentVersionStatus.CANCELLED:
         return "cancelled"
+    if version_status == DocumentVersionStatus.DELETED:
+        return "deleted"
+    if version_status == DocumentVersionStatus.SUPERSEDED:
+        return "superseded"
     if version_status == DocumentVersionStatus.PENDING:
         return "ingesting"
     if coverage is None:
