@@ -95,9 +95,9 @@ def test_compose_local_services_are_no_cost_by_default() -> None:
 
     for service_name in settings_services:
         environment = compose["services"][service_name]["environment"]
-        assert environment["ATLAS_QUERY_ANSWER_PROVIDER"] == "deterministic"
-        assert environment["ATLAS_QUERY_SUPPORT_PROVIDER"] == "deterministic"
-        assert environment["ATLAS_EMBEDDING_PROVIDER"] == "deterministic"
+        assert _compose_default(environment["ATLAS_QUERY_ANSWER_PROVIDER"]) == "deterministic"
+        assert _compose_default(environment["ATLAS_QUERY_SUPPORT_PROVIDER"]) == "deterministic"
+        assert _compose_default(environment["ATLAS_EMBEDDING_PROVIDER"]) == "deterministic"
 
 
 def test_env_example_is_no_cost_by_default() -> None:
@@ -106,3 +106,9 @@ def test_env_example_is_no_cost_by_default() -> None:
     assert "\nATLAS_EMBEDDING_PROVIDER=deterministic\n" in env_example
     assert "\nATLAS_QUERY_ANSWER_PROVIDER=deterministic\n" in env_example
     assert "\nATLAS_QUERY_SUPPORT_PROVIDER=deterministic\n" in env_example
+
+
+def _compose_default(value: str) -> str:
+    if value.startswith("${") and value.endswith("}") and ":-" in value:
+        return value.removesuffix("}").split(":-", maxsplit=1)[1]
+    return value

@@ -4,6 +4,7 @@ import type {
   IngestionJobResponse,
   ProblemDetail,
   QueryRunResponse,
+  SearchReadiness,
   Tenant,
 } from "./types";
 
@@ -122,6 +123,12 @@ export const api = {
     });
   },
 
+  getSearchReadiness(tenantId: string): Promise<SearchReadiness> {
+    return jsonRequest<SearchReadiness>("/v1/search-readiness", {
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
   cancelJob(tenantId: string, jobId: string): Promise<IngestionJobResponse> {
     return jsonRequest<IngestionJobResponse>(
       `/v1/ingestion-jobs/${jobId}/cancel`,
@@ -134,6 +141,12 @@ export const api = {
       method: "POST",
       headers: tenantHeaders(tenantId),
       json: { query, stream: true },
+    });
+  },
+
+  getQueryRun(tenantId: string, queryRunId: string): Promise<QueryRunResponse> {
+    return jsonRequest<QueryRunResponse>(`/v1/query-runs/${queryRunId}`, {
+      headers: tenantHeaders(tenantId),
     });
   },
 

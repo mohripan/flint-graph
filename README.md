@@ -21,6 +21,7 @@ docker compose up --build
 Then open:
 
 - API documentation: `http://localhost:8000/docs`
+- Frontend: run `cd frontend && npm run dev`, then open `http://localhost:5173`
 - MinIO console: `http://localhost:9001`
 - Grafana: `http://localhost:3000`
 - Temporal Web UI: `http://localhost:8233`
@@ -136,6 +137,16 @@ The resolved graph is visible in the Neo4j browser at `http://localhost:7474`. S
 
 ## Ask streamed, citation-bearing queries
 
+Before creating a query run, check workspace search readiness:
+
+```bash
+curl -sS http://localhost:8000/v1/search-readiness \
+  -H 'X-Tenant-ID: <tenant-id>'
+```
+
+The query API rejects requests with HTTP 409 until at least one document version
+has completed index coverage for the active retrieval index.
+
 Create a query run:
 
 ```bash
@@ -160,6 +171,10 @@ curl -sS http://localhost:8000/v1/query-runs/<query-run-id> \
 curl -sS http://localhost:8000/v1/query-runs/<query-run-id>/events \
   -H 'X-Tenant-ID: <tenant-id>'
 ```
+
+The query-run response includes `query_diagnostics`, a compact summary of
+retriever counts, failed retrievers, context packing, support decisions,
+abstention reason, and provider metadata.
 
 Inspect answer provenance:
 
@@ -195,6 +210,22 @@ Milestone 09 real-model defaults are env-aware: `ATLAS_ENV=test` stays determini
 offline; non-test environments default to real providers unless explicitly overridden. For a
 no-cost local query path, set `ATLAS_QUERY_ANSWER_PROVIDER=deterministic`,
 `ATLAS_QUERY_SUPPORT_PROVIDER=deterministic`, and `ATLAS_EMBEDDING_PROVIDER=deterministic`.
+
+Milestone 10 adds an explicit local Ollama path for no-cost real answers:
+
+```powershell
+ollama pull nomic-embed-text
+ollama pull llama3.2
+$env:ATLAS_EMBEDDING_PROVIDER = "ollama"
+$env:ATLAS_EMBEDDING_MODEL = "nomic-embed-text"
+$env:ATLAS_EMBEDDING_DIMENSIONS = "768"
+$env:ATLAS_QUERY_ANSWER_PROVIDER = "ollama"
+$env:ATLAS_QUERY_SUPPORT_PROVIDER = "ollama"
+docker compose up --build
+```
+
+See `docs/runbooks/local-ollama-rag.md` for the retrieval-index/backfill and
+discrete-math PDF smoke flow.
 
 ## Implemented invariants
 
@@ -235,7 +266,11 @@ no-cost local query path, set `ATLAS_QUERY_ANSWER_PROVIDER=deterministic`,
 
 ## Current milestone boundary
 
-Milestone 09 adds real-model provider defaults outside tests, Anthropic answer/support adapters, real embedding default resolution, a golden evaluation dataset, the `atlas-eval` CLI, baseline regression checks, offline PR quality gates, and secrets-gated live eval workflow scaffolding. Dedicated extraction inspection APIs remain later work.
+Milestone 10 adds local-first Ollama usability, tenant search readiness,
+query-run diagnostics, and frontend readiness/diagnostic UI. Production
+authentication, authorization, document diffing, deletion propagation,
+tombstones, graph invalidation, and replayable lifecycle semantics remain later
+work.
 
 ## Security status
 
@@ -270,7 +305,10 @@ Milestone notes:
 - Grounded answer developer runbook: `docs/runbooks/grounded-answer-generation-developer.md`
 - Grounded answer QA guide: `docs/runbooks/grounded-answer-generation-qa-guide.md`
 - Real models and evaluation: `docs/milestones/09-real-models-and-evaluation.md`
+- Local-first usable RAG: `docs/milestones/10-local-first-usable-rag.md`
 - Evaluation contract: `docs/architecture/evaluation-contract.md`
 - Real models developer runbook: `docs/runbooks/real-models-developer.md`
 - Evaluation developer runbook: `docs/runbooks/evaluation-developer.md`
 - Evaluation QA guide: `docs/runbooks/evaluation-qa-guide.md`
+- Local Ollama RAG runbook: `docs/runbooks/local-ollama-rag.md`
+- Frontend E2E QA guide: `docs/runbooks/frontend-e2e-qa-guide.md`

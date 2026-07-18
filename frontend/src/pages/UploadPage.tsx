@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useTrackedJobs, type TrackedJob } from "../lib/jobs";
+import type { SearchReadiness } from "../lib/types";
 import { useWorkspace } from "../lib/workspace";
 import { Button, Card, Spinner, StatusPill } from "../components/ui";
 
@@ -15,6 +16,7 @@ export function UploadPage() {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [readiness, setReadiness] = useState<SearchReadiness | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -25,6 +27,20 @@ export function UploadPage() {
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
+  const refreshReadiness = useCallback(async () => {
+    try {
+      setReadiness(await api.getSearchReadiness(tenantId));
+    } catch {
+      setReadiness(null);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void refreshReadiness();
+    const id = window.setInterval(() => void refreshReadiness(), 5000);
+    return () => window.clearInterval(id);
+  }, [refreshReadiness]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +68,7 @@ export function UploadPage() {
       };
       add(job);
       resetForm();
+      void refreshReadiness();
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -136,6 +153,57 @@ export function UploadPage() {
 
       <div>
         <h2 className="mb-3 text-sm font-semibold text-slate-700">
+          Search readiness
+        </h2>
+        <Card className="mb-6 p-4">
+          {readiness ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <StatusPill status={readiness.ready ? "completed" : "running"} />
+                <p className="text-xs text-slate-500">
+                  {readiness.completed_coverage_count} searchable ·{" "}
+                  {readiness.running_coverage_count} indexing ·{" "}
+                  {readiness.failed_coverage_count} failed
+                </p>
+              </div>
+              {readiness.active_index_version && (
+                <p className="text-xs text-slate-500">
+                  Index: {readiness.active_index_version.embedding_provider}/
+                  {readiness.active_index_version.embedding_model}
+                </p>
+              )}
+              {readiness.documents.length > 0 && (
+                <ul className="divide-y divide-slate-100">
+                  {readiness.documents.map((doc) => (
+                    <li
+                      key={doc.document_version_id}
+                      className="flex items-center justify-between gap-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {doc.title}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          v{doc.version_number} · {doc.chunk_count} chunks
+                        </p>
+                        {doc.error_message && (
+                          <p className="mt-1 truncate text-xs text-red-600">
+                            {doc.error_message}
+                          </p>
+                        )}
+                      </div>
+                      <StatusPill status={statusForReadiness(doc.status)} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Checking readiness…</p>
+          )}
+        </Card>
+
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">
           Your documents {jobs.length > 0 && `(${jobs.length})`}
         </h2>
         {jobs.length === 0 ? (
@@ -192,6 +260,16 @@ export function UploadPage() {
       </div>
     </div>
   );
+}
+
+function statusForReadiness(status: string) {
+  if (status === "searchable") return "completed";
+  if (status === "indexing" || status === "ingesting" || status === "ingested") {
+    return "running";
+  }
+  if (status === "cancelled") return "cancelled";
+  if (status === "failed") return "failed";
+  return "queued";
 }
 
 const inputClass =

@@ -20,9 +20,17 @@ services:
       ATLAS_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
       ATLAS_OTEL_EXPORTER_OTLP_INSECURE: "true"
       ATLAS_OPENSEARCH_URL: http://opensearch:9200
-      ATLAS_EMBEDDING_PROVIDER: deterministic
-      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
-      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+      ATLAS_EMBEDDING_PROVIDER: ${ATLAS_EMBEDDING_PROVIDER:-deterministic}
+      ATLAS_EMBEDDING_MODEL: ${ATLAS_EMBEDDING_MODEL:-deterministic-test}
+      ATLAS_EMBEDDING_DIMENSIONS: ${ATLAS_EMBEDDING_DIMENSIONS:-384}
+      ATLAS_QUERY_ANSWER_PROVIDER: ${ATLAS_QUERY_ANSWER_PROVIDER:-deterministic}
+      ATLAS_QUERY_ANSWER_MODEL: ${ATLAS_QUERY_ANSWER_MODEL:-llama3.2}
+      ATLAS_QUERY_SUPPORT_PROVIDER: ${ATLAS_QUERY_SUPPORT_PROVIDER:-deterministic}
+      ATLAS_QUERY_SUPPORT_MODEL: ${ATLAS_QUERY_SUPPORT_MODEL:-llama3.2}
+      ATLAS_QUERY_ANSWER_TIMEOUT_SECONDS: ${ATLAS_QUERY_ANSWER_TIMEOUT_SECONDS:-180}
+      ATLAS_QUERY_ANSWER_MAX_TOKENS: ${ATLAS_QUERY_ANSWER_MAX_TOKENS:-1024}
+      ATLAS_QUERY_CONTEXT_TOKEN_BUDGET: ${ATLAS_QUERY_CONTEXT_TOKEN_BUDGET:-4000}
+      ATLAS_QUERY_MAX_CONTEXT_RECORDS: ${ATLAS_QUERY_MAX_CONTEXT_RECORDS:-25}
     ports:
       - "8000:8000"
     depends_on:
@@ -49,9 +57,13 @@ services:
       ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
       ATLAS_TEMPORAL_ADDRESS: temporal:7233
       ATLAS_OTEL_ENABLED: "false"
-      ATLAS_EMBEDDING_PROVIDER: deterministic
-      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
-      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+      ATLAS_EMBEDDING_PROVIDER: ${ATLAS_EMBEDDING_PROVIDER:-deterministic}
+      ATLAS_EMBEDDING_MODEL: ${ATLAS_EMBEDDING_MODEL:-deterministic-test}
+      ATLAS_EMBEDDING_DIMENSIONS: ${ATLAS_EMBEDDING_DIMENSIONS:-384}
+      ATLAS_QUERY_ANSWER_PROVIDER: ${ATLAS_QUERY_ANSWER_PROVIDER:-deterministic}
+      ATLAS_QUERY_ANSWER_MODEL: ${ATLAS_QUERY_ANSWER_MODEL:-llama3.2}
+      ATLAS_QUERY_SUPPORT_PROVIDER: ${ATLAS_QUERY_SUPPORT_PROVIDER:-deterministic}
+      ATLAS_QUERY_SUPPORT_MODEL: ${ATLAS_QUERY_SUPPORT_MODEL:-llama3.2}
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,9 +104,13 @@ services:
       ATLAS_EXTRACTION_TIMEOUT_SECONDS: "180"
       ATLAS_OTEL_ENABLED: "false"
       ATLAS_OPENSEARCH_URL: http://opensearch:9200
-      ATLAS_EMBEDDING_PROVIDER: deterministic
-      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
-      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+      ATLAS_EMBEDDING_PROVIDER: ${ATLAS_EMBEDDING_PROVIDER:-deterministic}
+      ATLAS_EMBEDDING_MODEL: ${ATLAS_EMBEDDING_MODEL:-deterministic-test}
+      ATLAS_EMBEDDING_DIMENSIONS: ${ATLAS_EMBEDDING_DIMENSIONS:-384}
+      ATLAS_QUERY_ANSWER_PROVIDER: ${ATLAS_QUERY_ANSWER_PROVIDER:-deterministic}
+      ATLAS_QUERY_ANSWER_MODEL: ${ATLAS_QUERY_ANSWER_MODEL:-llama3.2}
+      ATLAS_QUERY_SUPPORT_PROVIDER: ${ATLAS_QUERY_SUPPORT_PROVIDER:-deterministic}
+      ATLAS_QUERY_SUPPORT_MODEL: ${ATLAS_QUERY_SUPPORT_MODEL:-llama3.2}
     depends_on:
       postgres:
         condition: service_healthy
@@ -183,9 +199,10 @@ services:
       - "7474:7474"
       - "7687:7687"
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p atlaspassword 'RETURN 1' || exit 1"]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD-SHELL", "cypher-shell -a bolt://localhost:7687 -u neo4j -p atlaspassword 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 20s
+      start_period: 60s
       retries: 30
     volumes:
       - neo4j_data:/data

@@ -61,7 +61,60 @@ export interface QueryRunResponse {
   status: QueryRunStatus;
   answer_text: string | null;
   answer_citations: Array<Record<string, unknown>>;
+  query_diagnostics: QueryDiagnostics;
   created_at: string;
+  updated_at: string;
+}
+
+export interface QueryDiagnostics {
+  retriever_candidate_counts?: Record<string, number>;
+  failed_retrievers?: string[];
+  retrieved_candidate_count?: number;
+  fused_candidate_count?: number;
+  reranked_candidate_count?: number;
+  context_record_count?: number;
+  context_token_count?: number;
+  skipped_context_count?: number;
+  citation_repair_counts?: Record<string, number>;
+  support_status_counts?: Record<string, number>;
+  abstention_reason?: string | null;
+  answer_provider?: string | null;
+  support_provider?: string | null;
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface SearchReadiness {
+  ready: boolean;
+  reason: string;
+  active_index_version: {
+    id: string;
+    embedding_provider: string;
+    embedding_model: string;
+    vector_dimension: number;
+    opensearch_index_name: string;
+    neo4j_vector_index_name: string;
+  } | null;
+  completed_coverage_count: number;
+  running_coverage_count: number;
+  failed_coverage_count: number;
+  cancelled_coverage_count: number;
+  documents: SearchReadinessDocument[];
+}
+
+export interface SearchReadinessDocument {
+  document_id: string;
+  document_version_id: string;
+  title: string;
+  version_number: number;
+  document_version_status: string;
+  status: "ingesting" | "ingested" | "indexing" | "searchable" | "failed" | "cancelled" | string;
+  coverage_status: string | null;
+  chunk_count: number;
+  embedded_count: number;
+  vector_count: number;
+  lexical_count: number;
+  error_code: string | null;
+  error_message: string | null;
   updated_at: string;
 }
 

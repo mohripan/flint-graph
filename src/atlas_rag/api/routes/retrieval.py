@@ -23,6 +23,7 @@ from atlas_rag.api.schemas import (
     RetrievalIndexVersionResponse,
     RetrievalSearchRequest,
     RetrievalSearchResponse,
+    SearchReadinessResponse,
 )
 from atlas_rag.application.services.retrieval import (
     create_tenant_index_backfill_job,
@@ -33,6 +34,7 @@ from atlas_rag.application.services.retrieval import (
     load_entity_neighborhood,
     vector_search,
 )
+from atlas_rag.application.services.search_readiness import get_search_readiness
 from atlas_rag.domain.enums import (
     DocumentIndexCoverageStatus,
     RetrievalIndexVersionStatus,
@@ -77,6 +79,20 @@ async def get_index_coverage(
         limit=limit,
     )
     return [DocumentIndexCoverageResponse.model_validate(row) for row in coverage]
+
+
+@router.get("/search-readiness", response_model=SearchReadinessResponse)
+async def get_tenant_search_readiness(
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    retrieval_index_version_id: UUID | None = None,
+) -> SearchReadinessResponse:
+    readiness = await get_search_readiness(
+        session,
+        tenant_id=tenant_id,
+        retrieval_index_version_id=retrieval_index_version_id,
+    )
+    return SearchReadinessResponse.model_validate(readiness)
 
 
 @router.post("/index-backfills", response_model=IndexBackfillJobResponse)

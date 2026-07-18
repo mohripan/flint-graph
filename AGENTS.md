@@ -181,6 +181,17 @@ Milestone 09 real models and evaluation:
 - `.github/workflows/live-eval.yml`: scheduled/manual secrets-gated live eval gate.
 - `docs/milestones/09-real-models-and-evaluation.md`, `docs/adr/0009-default-real-models-offline-safe.md`, `docs/adr/0010-evaluation-platform-and-quality-gates.md`, `docs/architecture/evaluation-contract.md`, `docs/runbooks/real-models-developer.md`, `docs/runbooks/evaluation-*.md`.
 
+Milestone 10 local-first usable RAG:
+
+- `src/atlas_rag/application/services/search_readiness.py`: tenant-scoped active-index search readiness summary.
+- `src/atlas_rag/infrastructure/ollama.py`: Ollama answer, embedding, extraction, and support-checking adapters.
+- `src/atlas_rag/application/services/query_runs.py`: persisted compact query diagnostics in query-run metadata.
+- `src/atlas_rag/api/routes/retrieval.py`: `/v1/search-readiness`.
+- `src/atlas_rag/api/routes/query.py`: query creation guard for searchable content.
+- `frontend/src/pages/AskPage.tsx`: readiness-gated Ask flow and diagnostics panel.
+- `frontend/src/pages/UploadPage.tsx`: backend readiness document status view.
+- `docs/milestones/10-local-first-usable-rag.md`, `docs/adr/0011-local-first-ollama-readiness-diagnostics.md`, `docs/runbooks/local-ollama-rag.md`, `docs/runbooks/frontend-e2e-qa-guide.md`.
+
 ## Current Invariants
 
 - A document belongs to one tenant.
@@ -210,6 +221,9 @@ Milestone 09 real models and evaluation:
 - Non-test real provider selections validate required credentials at startup.
 - Evaluation baselines are explicit reviewed files, never silently updated.
 - The PR quality gate uses deterministic recorded evaluations and requires no live model service.
+- Query creation requires at least one completed document-version coverage row for the selected active retrieval index.
+- Search readiness is derived from PostgreSQL index coverage, not Neo4j or OpenSearch projection state.
+- Query diagnostics are a compact derived summary persisted in query-run metadata; query events and provenance remain the detailed inspection source.
 
 ## Temporal Notes
 
@@ -239,6 +253,8 @@ Milestone 09 real models and evaluation:
 - Small local answer models can emit malformed or sparse draft claims; citation repair and support checking bound what reaches the persisted final answer.
 - Non-test defaults select Anthropic for answer/support, so no-cost local development should explicitly set deterministic or Ollama query providers when no Anthropic key is available.
 - The live eval workflow checks a live-captured recording file; capture automation is intentionally separate from the offline PR gate.
+- Switching the local embedding provider/model/dimension requires a compatible retrieval index version and backfill before documents become searchable.
+- The frontend stores the selected workspace and locally tracked upload jobs in `localStorage`; backend readiness is the durable searchable-document view.
 
 ## Before Ending A Change
 

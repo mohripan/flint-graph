@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from atlas_rag.domain.enums import (
     AliasSource,
     DocumentIndexCoverageStatus,
+    DocumentVersionStatus,
     EntityStatus,
     EntityType,
     IndexBackfillJobStatus,
@@ -266,6 +267,49 @@ class DocumentIndexCoverageResponse(BaseModel):
     updated_at: datetime
 
 
+class SearchReadinessIndexVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    embedding_provider: str
+    embedding_model: str
+    vector_dimension: int
+    opensearch_index_name: str
+    neo4j_vector_index_name: str
+
+
+class SearchReadinessDocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    document_id: UUID
+    document_version_id: UUID
+    title: str
+    version_number: int
+    document_version_status: DocumentVersionStatus
+    status: str
+    coverage_status: DocumentIndexCoverageStatus | None
+    chunk_count: int
+    embedded_count: int
+    vector_count: int
+    lexical_count: int
+    error_code: str | None
+    error_message: str | None
+    updated_at: datetime
+
+
+class SearchReadinessResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ready: bool
+    reason: str
+    active_index_version: SearchReadinessIndexVersionResponse | None
+    completed_coverage_count: int
+    running_coverage_count: int
+    failed_coverage_count: int
+    cancelled_coverage_count: int
+    documents: list[SearchReadinessDocumentResponse]
+
+
 class IndexBackfillCreateRequest(BaseModel):
     retrieval_index_version_id: UUID
     document_id: UUID | None = None
@@ -377,6 +421,7 @@ class QueryRunResponse(BaseModel):
     error_code: str | None
     error_message: str | None
     error_details: dict[str, Any]
+    query_diagnostics: dict[str, Any]
     metadata_: dict[str, Any] = Field(serialization_alias="metadata")
     created_at: datetime
     updated_at: datetime

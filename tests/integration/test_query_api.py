@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
@@ -11,19 +13,33 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 import atlas_rag.api.dependencies as dependencies
+from atlas_rag.api.routes import query as query_routes
 from atlas_rag.application.query_orchestration import (
     AnswerCitation,
     AnswerGenerationRequest,
     GeneratedAnswer,
 )
+from atlas_rag.application.services.query_orchestration import QueryRetrieverBundle
+from atlas_rag.application.services.query_runs import get_query_run, list_query_run_events
 from atlas_rag.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import RetrievalIndexScope
+from atlas_rag.domain.enums import (
+    DocumentIndexCoverageStatus,
+    DocumentVersionStatus,
+    QueryRunStatus,
+    RetrievalIndexScope,
+    SourceType,
+)
 from atlas_rag.infrastructure.db.base import Base
-from atlas_rag.infrastructure.db.models import Tenant
+from atlas_rag.infrastructure.db.models import (
+    Document,
+    DocumentIndexCoverage,
+    DocumentVersion,
+    Tenant,
+)
 from atlas_rag.infrastructure.db.session import get_session
 from atlas_rag.main import app
 
@@ -186,6 +202,51 @@ async def _tenant_with_active_index(session: AsyncSession) -> tuple[Tenant, UUID
     return tenant, active.id
 
 
+async def _add_active_document_version(
+    session: AsyncSession,
+    *,
+    tenant: Tenant,
+) -> tuple[Document, DocumentVersion]:
+    document = Document(
+        tenant_id=tenant.id,
+        title="Acme Brief",
+        source_type=SourceType.UPLOAD,
+        source_uri="s3://atlas/acme.txt",
+        next_version_number=2,
+    )
+    session.add(document)
+    await session.flush()
+    version = DocumentVersion(
+        document_id=document.id,
+        version_number=1,
+        status=DocumentVersionStatus.ACTIVE,
+        content_hash="sha256:document",
+    )
+    session.add(version)
+    await session.flush()
+    return document, version
+
+
+async def _tenant_with_searchable_content(session: AsyncSession) -> tuple[Tenant, UUID]:
+    tenant, index_version_id = await _tenant_with_active_index(session)
+    document, version = await _add_active_document_version(session, tenant=tenant)
+    session.add(
+        DocumentIndexCoverage(
+            tenant_id=tenant.id,
+            document_id=document.id,
+            document_version_id=version.id,
+            retrieval_index_version_id=index_version_id,
+            status=DocumentIndexCoverageStatus.COMPLETED,
+            chunk_count=1,
+            embedded_count=1,
+            vector_count=1,
+            lexical_count=1,
+        )
+    )
+    await session.commit()
+    return tenant, index_version_id
+
+
 def _sse_event_types(body: str) -> list[str]:
     return [
         line.removeprefix("event: ")
@@ -205,7 +266,7 @@ async def test_query_run_api_streams_execution_and_persists_inspection_records(
 ) -> None:
     client, session_factory, opensearch, neo4j = query_api_env
     async with session_factory() as session:
-        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
         tenant_id = tenant.id
 
     created = await client.post(
@@ -264,6 +325,19 @@ async def test_query_run_api_streams_execution_and_persists_inspection_records(
     ]
     assert inspected_body["candidate_count"] == 2
     assert inspected_body["context_token_count"] == 6
+    diagnostics = inspected_body["query_diagnostics"]
+    assert diagnostics["retriever_candidate_counts"] == {"lexical": 1, "vector": 1}
+    assert diagnostics["failed_retrievers"] == []
+    assert diagnostics["retrieved_candidate_count"] == 2
+    assert diagnostics["fused_candidate_count"] == 1
+    assert diagnostics["reranked_candidate_count"] == 1
+    assert diagnostics["context_record_count"] == 1
+    assert diagnostics["context_token_count"] == 6
+    assert diagnostics["skipped_context_count"] == 0
+    assert diagnostics["support_status_counts"] == {"supported": 1}
+    assert diagnostics["abstention_reason"] is None
+    assert diagnostics["answer_provider"] == "deterministic"
+    assert diagnostics["support_provider"] == "deterministic-lexical"
 
     events = await client.get(
         f"/v1/query-runs/{query_run_id}/events",
@@ -290,7 +364,7 @@ async def test_query_run_api_stream_uses_answer_generator_dependency(
     answer_generator = QueryAnswerGenerator()
     app.dependency_overrides[dependencies.get_answer_generator] = lambda: answer_generator
     async with session_factory() as session:
-        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
         tenant_id = tenant.id
 
     created = await client.post(
@@ -321,6 +395,72 @@ async def test_query_run_api_stream_uses_answer_generator_dependency(
 
 
 @pytest.mark.asyncio
+async def test_query_stream_cancellation_marks_run_cancelled(
+    query_api_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        QueryOpenSearchClient,
+        QueryNeo4jClient,
+    ],
+) -> None:
+    _client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
+        created = await query_routes.create_query_run(
+            session,
+            query_routes.QueryRunCreate(
+                tenant_id=tenant.id,
+                query_text="Where is Acme Corporation headquartered?",
+                retrieval_index_version_id=index_version_id,
+            ),
+        )
+        await session.commit()
+        tenant_id = tenant.id
+        query_run_id = created.id
+
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    task = asyncio.create_task(
+        query_routes._execute_query_run(
+            session_factory=session_factory,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            retrievers=QueryRetrieverBundle(),
+            graph_depth=1,
+            rerank_max_results=20,
+            context_token_budget=4000,
+            context_max_records=25,
+            answer_generator=None,
+            support_checker=None,
+            min_supported_claim_ratio=0.5,
+            min_context_relevance=0.0,
+            queue=queue,
+        )
+    )
+    first_event = await asyncio.wait_for(queue.get(), timeout=1.0)
+    assert first_event is not None
+    assert "event: query.started" in first_event
+
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+    async with session_factory() as session:
+        inspected = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
+        events = await list_query_run_events(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+        )
+
+    assert inspected.status == QueryRunStatus.CANCELLED
+    assert events[-1].event_type == "query.cancelled"
+    assert events[-1].payload == {
+        "stage": "query_api_stream",
+        "reason": "stream_disconnected",
+    }
+
+
+@pytest.mark.asyncio
 async def test_query_run_api_returns_answer_provenance(
     query_api_env: tuple[
         httpx.AsyncClient,
@@ -331,7 +471,7 @@ async def test_query_run_api_returns_answer_provenance(
 ) -> None:
     client, session_factory, _opensearch, _neo4j = query_api_env
     async with session_factory() as session:
-        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
         tenant_id = tenant.id
 
     created = await client.post(
@@ -390,7 +530,7 @@ async def test_query_run_api_resolves_single_citation_provenance(
 ) -> None:
     client, session_factory, _opensearch, _neo4j = query_api_env
     async with session_factory() as session:
-        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
         tenant_id = tenant.id
 
     created = await client.post(
@@ -441,7 +581,7 @@ async def test_query_run_inspection_preserves_tenant_boundary(
 ) -> None:
     client, session_factory, _opensearch, _neo4j = query_api_env
     async with session_factory() as session:
-        tenant, index_version_id = await _tenant_with_active_index(session)
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
         other = Tenant(name="query-api-other")
         session.add(other)
         await session.commit()
@@ -473,3 +613,37 @@ async def test_query_run_inspection_preserves_tenant_boundary(
     assert foreign.status_code == 404
     assert foreign_provenance.status_code == 404
     assert foreign_citation.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_query_run_creation_rejects_active_index_without_searchable_content(
+    query_api_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        QueryOpenSearchClient,
+        QueryNeo4jClient,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_active_index(session)
+        await _add_active_document_version(session, tenant=tenant)
+        await session.commit()
+        tenant_id = tenant.id
+
+    response = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant_id),
+        json={
+            "query": "Where is Acme Corporation headquartered?",
+            "retrieval_index_version_id": str(index_version_id),
+        },
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["detail"] == (
+        "No searchable document content is available for the active retrieval index."
+    )
+    assert body["errors"][0]["reason"] == "no_completed_coverage"
+    assert body["errors"][0]["active_index_version_id"] == str(index_version_id)

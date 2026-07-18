@@ -301,6 +301,78 @@ async def test_index_versions_and_coverage_are_tenant_scoped(
     assert rows[0]["chunk_count"] == 1
 
 
+async def test_search_readiness_summarizes_active_index_coverage(
+    retrieval_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        CapturingOpenSearchClient,
+        CapturingNeo4jClient,
+        CapturingBackfillStarter,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j, _starter = retrieval_env
+    async with session_factory() as session:
+        tenant = await _tenant(session, "retrieval-readiness")
+        document, version, _chunk = await _document_version(session, tenant, title="Acme")
+        _global_version, tenant_version = await _active_index_versions(session, tenant)
+        session.add(
+            DocumentIndexCoverage(
+                tenant_id=tenant.id,
+                document_id=document.id,
+                document_version_id=version.id,
+                retrieval_index_version_id=tenant_version.id,
+                status=DocumentIndexCoverageStatus.COMPLETED,
+                chunk_count=1,
+                embedded_count=1,
+                vector_count=1,
+                lexical_count=1,
+            )
+        )
+        await session.commit()
+        tenant_id = tenant.id
+
+    response = await client.get("/v1/search-readiness", headers=_headers(tenant_id))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["reason"] == "searchable"
+    assert body["active_index_version"]["id"] == str(tenant_version.id)
+    assert body["completed_coverage_count"] == 1
+    assert body["running_coverage_count"] == 0
+    assert body["failed_coverage_count"] == 0
+    assert body["documents"][0]["document_id"] == str(document.id)
+    assert body["documents"][0]["document_version_id"] == str(version.id)
+    assert body["documents"][0]["title"] == "Acme"
+    assert body["documents"][0]["status"] == "searchable"
+
+
+async def test_search_readiness_reports_no_active_index(
+    retrieval_env: tuple[
+        httpx.AsyncClient,
+        async_sessionmaker[AsyncSession],
+        CapturingOpenSearchClient,
+        CapturingNeo4jClient,
+        CapturingBackfillStarter,
+    ],
+) -> None:
+    client, session_factory, _opensearch, _neo4j, _starter = retrieval_env
+    async with session_factory() as session:
+        tenant = await _tenant(session, "retrieval-readiness-empty")
+        await session.commit()
+        tenant_id = tenant.id
+
+    response = await client.get("/v1/search-readiness", headers=_headers(tenant_id))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is False
+    assert body["reason"] == "no_active_index"
+    assert body["active_index_version"] is None
+    assert body["completed_coverage_count"] == 0
+    assert body["documents"] == []
+
+
 async def test_backfill_endpoint_creates_tenant_job_and_starts_workflow(
     retrieval_env: tuple[
         httpx.AsyncClient,

@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { streamQueryRun } from "../lib/stream";
-import type { AnswerProvenance, QueryRunEvent } from "../lib/types";
+import type { AnswerProvenance, QueryDiagnostics, QueryRunEvent, SearchReadiness } from "../lib/types";
 import { useWorkspace } from "../lib/workspace";
 import { Button, Card, Spinner } from "../components/ui";
 import { ProgressTrail } from "../components/ProgressTrail";
@@ -29,14 +29,34 @@ export function AskPage() {
   const [finalText, setFinalText] = useState<string | null>(null);
   const [abstainReason, setAbstainReason] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<AnswerProvenance | null>(null);
+  const [readiness, setReadiness] = useState<SearchReadiness | null>(null);
+  const [diagnostics, setDiagnostics] = useState<QueryDiagnostics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
+  const refreshReadiness = useCallback(async () => {
+    try {
+      setReadiness(await api.getSearchReadiness(tenantId));
+    } catch {
+      setReadiness(null);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void refreshReadiness();
+    const id = window.setInterval(() => void refreshReadiness(), 5000);
+    return () => window.clearInterval(id);
+  }, [refreshReadiness]);
+
   const ask = useCallback(async () => {
     const q = input.trim();
     if (!q || phase === "streaming") return;
+    if (readiness && !readiness.ready) {
+      setError(readinessMessage(readiness));
+      return;
+    }
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -49,6 +69,7 @@ export function AskPage() {
     setFinalText(null);
     setAbstainReason(null);
     setProvenance(null);
+    setDiagnostics(null);
     setError(null);
 
     let completed = false;
@@ -71,6 +92,8 @@ export function AskPage() {
         setError("The query could not be answered. Please try again.");
         return;
       }
+      const inspected = await api.getQueryRun(tenantId, run.id);
+      setDiagnostics(inspected.query_diagnostics);
 
       // Pull authoritative citations + support once the run is complete.
       if (completed) {
@@ -83,6 +106,7 @@ export function AskPage() {
           /* provenance is best-effort; the streamed answer still shows */
         }
       }
+      await refreshReadiness();
       setPhase("done");
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -118,7 +142,7 @@ export function AskPage() {
         }
       }
     }
-  }, [input, phase, tenantId]);
+  }, [input, phase, readiness, refreshReadiness, tenantId]);
 
   const answerText = finalText ?? streamedText;
   const showAnswer = phase !== "idle";
@@ -131,6 +155,8 @@ export function AskPage() {
           Answers are drawn only from the documents in your workspace, with sources.
         </p>
       </div>
+
+      <ReadinessBanner readiness={readiness} />
 
       {/* Composer */}
       <Card className="p-4">
@@ -149,7 +175,10 @@ export function AskPage() {
             Press <kbd className="rounded border border-slate-300 px-1">⌘/Ctrl</kbd> +{" "}
             <kbd className="rounded border border-slate-300 px-1">Enter</kbd> to ask
           </span>
-          <Button onClick={ask} disabled={phase === "streaming" || !input.trim()}>
+          <Button
+            onClick={ask}
+            disabled={phase === "streaming" || !input.trim() || readiness?.ready === false}
+          >
             {phase === "streaming" && <Spinner className="h-4 w-4" />}
             {phase === "streaming" ? "Thinking…" : "Ask"}
           </Button>
@@ -181,6 +210,10 @@ export function AskPage() {
                 </p>
                 <p className="text-sm text-amber-700">{abstainReason}</p>
               </Card>
+            )}
+
+            {diagnostics && (
+              <DiagnosticsPanel diagnostics={diagnostics} />
             )}
 
             {answerText && (
@@ -216,6 +249,87 @@ export function AskPage() {
       </p>
     </div>
   );
+}
+
+function ReadinessBanner({ readiness }: { readiness: SearchReadiness | null }) {
+  if (!readiness) {
+    return (
+      <Card className="border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+        Checking workspace search readiness…
+      </Card>
+    );
+  }
+  if (readiness.ready) {
+    return (
+      <Card className="border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        {readiness.completed_coverage_count} document version
+        {readiness.completed_coverage_count === 1 ? " is" : "s are"} searchable.
+      </Card>
+    );
+  }
+  return (
+    <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+      {readinessMessage(readiness)}
+    </Card>
+  );
+}
+
+function DiagnosticsPanel({ diagnostics }: { diagnostics: QueryDiagnostics }) {
+  const retrievers = diagnostics.retriever_candidate_counts ?? {};
+  const support = diagnostics.support_status_counts ?? {};
+  return (
+    <Card className="border-slate-200 bg-white p-5">
+      <p className="mb-3 text-sm font-semibold text-slate-800">Run diagnostics</p>
+      <div className="grid gap-3 text-xs text-slate-600 sm:grid-cols-2">
+        <Metric label="Retrieved" value={diagnostics.retrieved_candidate_count ?? 0} />
+        <Metric label="Context records" value={diagnostics.context_record_count ?? 0} />
+        <Metric label="Fused" value={diagnostics.fused_candidate_count ?? 0} />
+        <Metric label="Reranked" value={diagnostics.reranked_candidate_count ?? 0} />
+        <Metric label="Skipped context" value={diagnostics.skipped_context_count ?? 0} />
+        <Metric label="Tokens" value={diagnostics.context_token_count ?? 0} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        {Object.entries(retrievers).map(([name, count]) => (
+          <span key={name} className="rounded bg-slate-100 px-2 py-1 text-slate-600">
+            {name}: {count}
+          </span>
+        ))}
+        {Object.entries(support).map(([name, count]) => (
+          <span key={name} className="rounded bg-emerald-50 px-2 py-1 text-emerald-700">
+            {name}: {count}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Answer: {diagnostics.answer_provider ?? "unknown"} · Support:{" "}
+        {diagnostics.support_provider ?? "unknown"}
+      </p>
+    </Card>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded border border-slate-100 px-3 py-2">
+      <p className="text-slate-400">{label}</p>
+      <p className="text-base font-semibold text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function readinessMessage(readiness: SearchReadiness): string {
+  switch (readiness.reason) {
+    case "no_active_index":
+      return "No active retrieval index is available yet.";
+    case "no_documents":
+      return "Add a document before asking a question.";
+    case "indexing_in_progress":
+      return "Documents are still being indexed. Questions will be available once indexing completes.";
+    case "indexing_failed":
+      return "Indexing failed for the current documents. Check the Documents page for details.";
+    default:
+      return "No searchable document content is available yet.";
+  }
 }
 
 // Renders answer text, turning [c1]-style markers into interactive chips.

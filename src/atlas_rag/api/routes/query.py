@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
@@ -58,8 +59,9 @@ from atlas_rag.application.services.retrieval import (
     load_entity_neighborhood,
     resolve_index_version,
 )
+from atlas_rag.application.services.search_readiness import require_searchable_content
 from atlas_rag.domain.enums import QueryRunStatus
-from atlas_rag.domain.errors import BadRequestError
+from atlas_rag.domain.errors import BadRequestError, ConflictError
 from atlas_rag.infrastructure.db.models import QueryRunEvent
 
 router = APIRouter(prefix="/v1", tags=["query"])
@@ -90,6 +92,24 @@ async def create_query_run_endpoint(
         tenant_id=tenant_id,
         retrieval_index_version_id=payload.retrieval_index_version_id,
     )
+    readiness = await require_searchable_content(
+        session,
+        tenant_id=tenant_id,
+        retrieval_index_version_id=index_version.id,
+    )
+    if not readiness.ready:
+        raise ConflictError(
+            "No searchable document content is available for the active retrieval index.",
+            errors=[
+                {
+                    "reason": readiness.reason,
+                    "active_index_version_id": str(index_version.id),
+                    "completed_coverage_count": readiness.completed_coverage_count,
+                    "running_coverage_count": readiness.running_coverage_count,
+                    "failed_coverage_count": readiness.failed_coverage_count,
+                }
+            ],
+        )
     run = await create_query_run(
         session,
         QueryRunCreate(
@@ -409,7 +429,22 @@ async def _stream_query_events(
                 break
             yield item
     finally:
-        await task
+        cancellation_marker: asyncio.Task[None] | None = None
+        if not task.done():
+            task.cancel()
+            cancellation_marker = asyncio.create_task(
+                _mark_query_cancelled_with_new_session(
+                    session_factory=session_factory,
+                    tenant_id=tenant_id,
+                    query_run_id=query_run_id,
+                    delay_seconds=1.0,
+                )
+            )
+        with suppress(asyncio.CancelledError):
+            await asyncio.shield(task)
+        if cancellation_marker is not None:
+            with suppress(asyncio.CancelledError):
+                await asyncio.shield(cancellation_marker)
 
 
 async def _execute_query_run(
@@ -472,6 +507,16 @@ async def _execute_query_run(
             )
             await execution_session.commit()
             await emit_new_events()
+        except asyncio.CancelledError:
+            await execution_session.rollback()
+            await _mark_query_cancelled(
+                execution_session,
+                tenant_id=tenant_id,
+                query_run_id=query_run_id,
+            )
+            await execution_session.commit()
+            await emit_new_events()
+            raise
         finally:
             await queue.put(None)
 
@@ -502,6 +547,43 @@ async def _mark_query_failed(
         error_message="Query execution failed.",
         error_details={"errors": [error]},
     )
+
+
+async def _mark_query_cancelled(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    query_run_id: UUID,
+) -> None:
+    run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
+    if run.status in _TERMINAL_QUERY_STATUSES:
+        return
+    await transition_query_run(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
+        target_status=QueryRunStatus.CANCELLED,
+        event_type="query.cancelled",
+        payload={"stage": "query_api_stream", "reason": "stream_disconnected"},
+    )
+
+
+async def _mark_query_cancelled_with_new_session(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    tenant_id: UUID,
+    query_run_id: UUID,
+    delay_seconds: float = 0.0,
+) -> None:
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+    async with session_factory() as session:
+        await _mark_query_cancelled(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+        )
+        await session.commit()
 
 
 async def _load_events_after(

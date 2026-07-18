@@ -214,6 +214,33 @@ async def list_query_run_events(
     )
 
 
+async def persist_query_diagnostics(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    query_run_id: UUID,
+) -> dict[str, Any]:
+    run = await _load_query_run_for_update(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
+    )
+    events = list(
+        await session.scalars(
+            select(QueryRunEvent)
+            .where(
+                QueryRunEvent.tenant_id == tenant_id,
+                QueryRunEvent.query_run_id == query_run_id,
+            )
+            .order_by(QueryRunEvent.sequence)
+        )
+    )
+    diagnostics = _build_query_diagnostics(run, events)
+    run.metadata_ = {**run.metadata_, "diagnostics": diagnostics}
+    await session.flush()
+    return diagnostics
+
+
 async def record_query_classification(
     session: AsyncSession,
     *,
@@ -480,3 +507,67 @@ def _validate_json_size(name: str, value: Any) -> None:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
     if len(encoded) > _MAX_JSON_BYTES:
         raise ConflictError(f"{name} exceeds {_MAX_JSON_BYTES} bytes.")
+
+
+def _build_query_diagnostics(
+    run: QueryRun,
+    events: list[QueryRunEvent],
+) -> dict[str, Any]:
+    retriever_candidate_counts: dict[str, int] = {}
+    failed_retrievers: list[str] = []
+    retrieved_candidate_count = 0
+    fused_candidate_count = 0
+    reranked_candidate_count = 0
+    context_record_count = 0
+    context_token_count = run.context_token_count
+    skipped_context_count = 0
+    answer_provider = run.answer_provider
+
+    for event in events:
+        payload = event.payload
+        if event.event_type == "retrieval.progress":
+            source = payload.get("source")
+            if isinstance(source, str) and payload.get("status") == "completed":
+                retriever_candidate_counts[source] = int(payload.get("candidate_count") or 0)
+            if isinstance(source, str) and payload.get("status") == "failed":
+                failed_retrievers.append(source)
+        elif event.event_type == "retrieval.completed":
+            retrieved_candidate_count = int(payload.get("candidate_count") or 0)
+            raw_failed = payload.get("failed_retrievers")
+            if isinstance(raw_failed, list):
+                failed_retrievers = [item for item in raw_failed if isinstance(item, str)]
+        elif event.event_type == "fusion.completed":
+            fused_candidate_count = int(payload.get("fused_candidate_count") or 0)
+        elif event.event_type == "rerank.completed":
+            reranked_candidate_count = int(payload.get("candidate_count") or 0)
+        elif event.event_type == "context.packed":
+            context_record_count = int(payload.get("record_count") or 0)
+            context_token_count = int(payload.get("token_count") or 0)
+            skipped_context_count = int(payload.get("skipped_candidate_count") or 0)
+        elif event.event_type == "answer.finalized":
+            provider = payload.get("answer_provider")
+            if isinstance(provider, str) and provider:
+                answer_provider = provider
+
+    support_status_counts: dict[str, int] = {}
+    if run.supported_claim_count:
+        support_status_counts["supported"] = run.supported_claim_count
+    if run.unsupported_claim_count:
+        support_status_counts["unsupported"] = run.unsupported_claim_count
+
+    return {
+        "retriever_candidate_counts": retriever_candidate_counts,
+        "failed_retrievers": failed_retrievers,
+        "retrieved_candidate_count": retrieved_candidate_count,
+        "fused_candidate_count": fused_candidate_count,
+        "reranked_candidate_count": reranked_candidate_count,
+        "context_record_count": context_record_count,
+        "context_token_count": context_token_count,
+        "skipped_context_count": skipped_context_count,
+        "citation_repair_counts": {},
+        "support_status_counts": support_status_counts,
+        "abstention_reason": run.abstain_reason,
+        "answer_provider": answer_provider,
+        "support_provider": run.support_method,
+        "model_metadata": {},
+    }

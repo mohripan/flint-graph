@@ -506,7 +506,10 @@ class DeterministicAnswerGenerator:
             return GeneratedAnswer(
                 text="The available context is insufficient to answer this query.",
                 insufficient_context=True,
-                metadata={"algorithm": "deterministic-first-context-sentence"},
+                metadata={
+                    "provider": "deterministic",
+                    "algorithm": "deterministic-first-context-sentence",
+                },
             )
 
         first_record = request.context_pack.records[0]
@@ -523,7 +526,10 @@ class DeterministicAnswerGenerator:
         return GeneratedAnswer(
             text=f"{sentence} [{first_record.citation_id}]",
             citations=citations,
-            metadata={"algorithm": "deterministic-first-context-sentence"},
+            metadata={
+                "provider": "deterministic",
+                "algorithm": "deterministic-first-context-sentence",
+            },
         )
 
 

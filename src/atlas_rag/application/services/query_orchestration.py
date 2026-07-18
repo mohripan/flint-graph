@@ -26,6 +26,7 @@ from atlas_rag.application.services.query_planning import classify_query_run, li
 from atlas_rag.application.services.query_runs import (
     append_query_run_event,
     persist_query_candidate,
+    persist_query_diagnostics,
     transition_query_run,
 )
 from atlas_rag.domain.enums import QueryRunStatus
@@ -189,6 +190,11 @@ async def run_query_retrieval_graph(
             "answer_citation_count": 0,
             "insufficient_context": False,
         }
+    )
+    await persist_query_diagnostics(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
     )
     return QueryRetrievalGraphResult(
         query_run_id=query_run_id,

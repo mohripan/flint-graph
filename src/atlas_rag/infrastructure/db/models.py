@@ -435,6 +435,11 @@ class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         order_by="QueryAnswerClaim.claim_index",
     )
 
+    @property
+    def query_diagnostics(self) -> dict[str, Any]:
+        diagnostics = self.metadata_.get("diagnostics")
+        return diagnostics if isinstance(diagnostics, dict) else {}
+
 
 class QueryAnswerClaim(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "query_answer_claims"
