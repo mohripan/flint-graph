@@ -7,7 +7,7 @@ Accepted for Milestone 07.
 ## Context
 
 Milestone 06 created rebuildable retrieval indexes and primitive retrieval APIs:
-lexical search, vector search, and bounded graph neighborhoods. AtlasRAG now
+lexical search, vector search, and bounded graph neighborhoods. FlintGraph now
 needs an end-to-end query path that can plan retrieval, combine multiple context
 sources, and produce grounded answers with citations.
 
@@ -18,7 +18,7 @@ test doubles, tenant scoping, and bounded failure behavior.
 ## Decision
 
 Milestone 07 will use LangGraph for query orchestration and PostgreSQL for
-AtlasRAG query-run traceability.
+FlintGraph query-run traceability.
 
 The LangGraph state machine will:
 
@@ -34,7 +34,7 @@ The LangGraph state machine will:
 
 PostgreSQL will store query runs, stream events, linked-entity decisions,
 candidate summaries, context-pack manifests, answer metadata, and bounded error
-details. LangGraph coordinates execution but does not replace AtlasRAG's
+details. LangGraph coordinates execution but does not replace FlintGraph's
 control-plane ledger.
 
 Provider-specific model integrations will sit behind application protocols for

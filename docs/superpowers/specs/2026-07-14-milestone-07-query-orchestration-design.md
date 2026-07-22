@@ -17,7 +17,7 @@ answer.
 PostgreSQL remains authoritative for query-run traces, selected plans, linked
 entities, candidate summaries, packed context manifests, answer metadata, and
 bounded failures. LangGraph coordinates the runtime flow; it does not replace
-the AtlasRAG control-plane ledger.
+the FlintGraph control-plane ledger.
 
 ## Architecture
 

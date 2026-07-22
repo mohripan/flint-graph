@@ -2,7 +2,7 @@
 
 ## Status
 
-Milestone 04 is complete. After a document is ingested, AtlasRAG resolves the extracted entities into canonical entities, aggregates relationships, records reviewable merge decisions, and projects the resolved graph into Neo4j.
+Milestone 04 is complete. After a document is ingested, FlintGraph resolves the extracted entities into canonical entities, aggregates relationships, records reviewable merge decisions, and projects the resolved graph into Neo4j.
 
 ## Audience
 
@@ -19,14 +19,14 @@ docker compose up --build
 Useful pages:
 
 - API docs: `http://localhost:8000/docs`
-- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `atlaspassword`)
+- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `flintgraphpassword`)
 - Temporal Web UI: `http://localhost:8233`
 - MinIO console: `http://localhost:9001`
 
 For clearer entity extraction, run Ollama with a stronger local model and point the worker at it:
 
 ```env
-ATLAS_OLLAMA_MODEL=llama3.2:latest
+FLINT_GRAPH_OLLAMA_MODEL=llama3.2:latest
 ```
 
 ## Step 1: Create A Tenant
@@ -89,7 +89,7 @@ What to expect:
 Database check:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select canonical_name, entity_type, support_count from canonical_entities order by support_count desc;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select canonical_name, entity_type, support_count from canonical_entities order by support_count desc;"
 ```
 
 ## Step 4: Inspect An Entity
@@ -171,7 +171,7 @@ Every attach, merge, and split (unmerge) is recorded with its source (`auto` or 
 
 ## Note On Model Quality
 
-Small local models produce noisy triples (reversed direction, vague or literal objects). AtlasRAG faithfully persists what the model returns; triple quality improves with a stronger extraction model. Entity resolution and merge review operate correctly regardless.
+Small local models produce noisy triples (reversed direction, vague or literal objects). FlintGraph faithfully persists what the model returns; triple quality improves with a stronger extraction model. Entity resolution and merge review operate correctly regardless.
 
 ## Clean Reset
 

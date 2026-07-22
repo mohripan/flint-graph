@@ -28,7 +28,7 @@ packed context
 
 ## Implemented Phase 1 Contracts
 
-`src/atlas_rag/application/query_orchestration.py` now defines the
+`src/flint_graph/application/query_orchestration.py` now defines the
 provider-neutral answer-faithfulness boundary:
 
 - `AnswerDraft` for unverified provider output and raw citation markers;
@@ -40,7 +40,7 @@ provider-neutral answer-faithfulness boundary:
 - the `SupportChecker` protocol for deterministic and provider-backed support
   judges.
 
-`src/atlas_rag/application/query_faithfulness.py` adds persistence-free Phase 1
+`src/flint_graph/application/query_faithfulness.py` adds persistence-free Phase 1
 helpers:
 
 - `repair_claim_citations` normalizes markers such as `c1`, `[C1]`, and `(c1)`,
@@ -53,7 +53,7 @@ helpers:
   checks for insufficient context, low supported-claim ratio, weak context
   relevance, and dropped citations.
 
-`src/atlas_rag/config.py` adds safe defaults for the upcoming answer-generation
+`src/flint_graph/config.py` adds safe defaults for the upcoming answer-generation
 and support-checking providers. `deterministic` remains the default path.
 
 ## Current Boundaries
@@ -64,7 +64,7 @@ manual verification notes.
 
 ## Implemented Phase 2 Provider Wiring
 
-`src/atlas_rag/infrastructure/ollama.py` now includes
+`src/flint_graph/infrastructure/ollama.py` now includes
 `OllamaAnswerGenerator`, a non-streaming answer provider that calls Ollama
 `/api/generate` with a citation-only prompt and structured JSON schema. The
 provider asks for `insufficient_context` plus claim text and citation IDs, then
@@ -72,21 +72,21 @@ adapts the draft into the existing `GeneratedAnswer` contract. Raw citation
 markers and draft claims are retained in answer metadata for the later
 faithfulness pipeline.
 
-`src/atlas_rag/infrastructure/answer_generator_factory.py` adds
+`src/flint_graph/infrastructure/answer_generator_factory.py` adds
 `create_answer_generator`, mirroring the embedding factory. It returns the
 deterministic generator by default and the Ollama generator when
 `query_answer_provider = "ollama"`. It also adds `create_support_checker`,
 which returns the deterministic support checker and fails explicitly for the
 future Ollama support judge.
 
-`src/atlas_rag/api/dependencies.py` exposes an answer-generator dependency, and
+`src/flint_graph/api/dependencies.py` exposes an answer-generator dependency, and
 the SSE query execution path passes that generator into the LangGraph runtime.
 This makes `query_answer_provider = "ollama"` active for streamed API query
 runs while preserving deterministic defaults for tests and direct service calls.
 
 ## Implemented Phase 3 Faithfulness Pipeline
 
-`src/atlas_rag/application/services/query_faithfulness.py` adds the runtime
+`src/flint_graph/application/services/query_faithfulness.py` adds the runtime
 verification pipeline:
 
 - reads structured draft claims from answer metadata when providers supply them;
@@ -96,7 +96,7 @@ verification pipeline:
 - applies the abstention policy;
 - returns a verified `GeneratedAnswer` plus an `AnswerFaithfulnessReport`.
 
-`src/atlas_rag/application/services/query_answering.py` now verifies generated
+`src/flint_graph/application/services/query_answering.py` now verifies generated
 drafts before appending answer events and completing a query run. The persisted
 `answer_text` and `answer_citations` are the verified answer, not the raw
 provider draft. Abstention returns the standard insufficient-context answer with
@@ -119,18 +119,18 @@ answer provider.
 remains in the context-pack records; claim rows store compact claim text and
 resolved citation IDs for later provenance reads.
 
-`src/atlas_rag/application/services/query_answering.py` now persists claim rows
+`src/flint_graph/application/services/query_answering.py` now persists claim rows
 and summary columns in the same transaction as the verified answer completion.
 Claim persistence replaces prior rows for the run, keeping retries idempotent.
 
 ## Implemented Phase 5 Streaming And Events
 
-`src/atlas_rag/application/query_orchestration.py` now includes the
+`src/flint_graph/application/query_orchestration.py` now includes the
 faithfulness event types `support.checked`, `answer.abstained`, and
 `answer.finalized`, plus an optional `StreamingAnswerGenerator` protocol for
 providers that can emit provisional draft deltas.
 
-`src/atlas_rag/application/services/query_answering.py` records provisional
+`src/flint_graph/application/services/query_answering.py` records provisional
 `answer.delta` events with `provisional = true` when a generator implements the
 streaming protocol. After verification, it emits the authoritative sequence:
 final `answer.delta` with `provisional = false`, one `answer.citation` per
@@ -145,7 +145,7 @@ persistence stages run.
 
 ## Implemented Phase 6 Provenance APIs
 
-`src/atlas_rag/application/services/query_provenance.py` reads the authoritative
+`src/flint_graph/application/services/query_provenance.py` reads the authoritative
 PostgreSQL state for a query run and assembles the answer-to-source chain from
 existing records. It combines the completed `query_runs` answer summary,
 `query_answer_claims` support decisions, and the latest

@@ -3,15 +3,15 @@ import json
 import httpx
 import pytest
 
-from atlas_rag.application.embeddings import (
+from flint_graph.application.embeddings import (
     EmbeddingBatchRequest,
     EmbeddingInput,
     EmbeddingModel,
 )
-from atlas_rag.config import Settings
-from atlas_rag.infrastructure.embedding_factory import create_embedding_model
-from atlas_rag.infrastructure.embeddings import OpenAICompatibleEmbeddingModel
-from atlas_rag.infrastructure.ollama import OllamaEmbeddingModel
+from flint_graph.config import Settings
+from flint_graph.infrastructure.embedding_factory import create_embedding_model
+from flint_graph.infrastructure.embeddings import OpenAICompatibleEmbeddingModel
+from flint_graph.infrastructure.ollama import OllamaEmbeddingModel
 
 
 def test_embedding_factory_builds_ollama_model_in_local_env() -> None:

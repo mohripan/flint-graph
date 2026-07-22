@@ -2,9 +2,9 @@
 
 ## Purpose
 
-AtlasRAG extraction turns stored document chunks into staged, evidence-backed knowledge proposals. This contract defines the boundary between model output and canonical graph resolution.
+FlintGraph extraction turns stored document chunks into staged, evidence-backed knowledge proposals. This contract defines the boundary between model output and canonical graph resolution.
 
-The model proposes. AtlasRAG verifies and persists. Canonical resolution decides.
+The model proposes. FlintGraph verifies and persists. Canonical resolution decides.
 
 ## Inputs
 
@@ -78,7 +78,7 @@ Validation is provider-independent and deterministic.
 
 ## Evidence Resolution
 
-Model-proposed offsets are never trusted. AtlasRAG resolves evidence locally:
+Model-proposed offsets are never trusted. FlintGraph resolves evidence locally:
 
 ```text
 chunk id + exact quote + optional start hint

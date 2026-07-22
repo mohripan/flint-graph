@@ -4,13 +4,13 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from atlas_rag.application.services.lexical_projection import (
+from flint_graph.application.services.lexical_projection import (
     LexicalChunkRecord,
     build_lexical_search_body,
     build_opensearch_chunk_document,
     opensearch_chunk_document_id,
 )
-from atlas_rag.infrastructure.opensearch import (
+from flint_graph.infrastructure.opensearch import (
     OpenSearchClient,
     build_chunk_index_mapping,
     build_delete_chunks_bulk_body,
@@ -33,7 +33,7 @@ def _record(*, text: str = "Acme Corporation is headquartered in Berlin.") -> Le
         heading_path=["Acme Corporation", "Overview"],
         page_start=1,
         page_end=2,
-        source_uri="s3://atlas/raw.txt",
+        source_uri="s3://flint-graph/raw.txt",
         metadata={"source_type": "upload", "external_id": "acme-brief"},
     )
 
@@ -82,7 +82,7 @@ def test_bulk_upsert_and_delete_payloads_use_stable_document_ids() -> None:
     index_version_id = uuid4()
 
     upsert_body = build_upsert_chunks_bulk_body(
-        index_name="atlas_chunks_v000001",
+        index_name="flint_graph_chunks_v000001",
         records=[record],
         index_version_id=index_version_id,
     )
@@ -90,7 +90,7 @@ def test_bulk_upsert_and_delete_payloads_use_stable_document_ids() -> None:
 
     assert upsert_lines[0] == {
         "index": {
-            "_index": "atlas_chunks_v000001",
+            "_index": "flint_graph_chunks_v000001",
             "_id": opensearch_chunk_document_id(record),
         }
     }
@@ -98,14 +98,14 @@ def test_bulk_upsert_and_delete_payloads_use_stable_document_ids() -> None:
     assert upsert_lines[1]["text"] == record.text
 
     delete_body = build_delete_chunks_bulk_body(
-        index_name="atlas_chunks_v000001",
+        index_name="flint_graph_chunks_v000001",
         records=[record],
     )
     delete_lines = [json.loads(line) for line in delete_body.strip().splitlines()]
     assert delete_lines == [
         {
             "delete": {
-                "_index": "atlas_chunks_v000001",
+                "_index": "flint_graph_chunks_v000001",
                 "_id": opensearch_chunk_document_id(record),
             }
         }
@@ -167,24 +167,24 @@ async def test_opensearch_client_sends_mapping_alias_bulk_and_search_requests() 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://opensearch") as http_client:
         client = OpenSearchClient(http_client=http_client, base_url="http://opensearch")
-        await client.create_index(index_name="atlas_chunks_v000001", mapping={"settings": {}})
+        await client.create_index(index_name="flint_graph_chunks_v000001", mapping={"settings": {}})
         await client.point_alias(
-            alias_name="atlas_chunks_active",
-            index_name="atlas_chunks_v000001",
-            previous_index_names=["atlas_chunks_v000000"],
+            alias_name="flint_graph_chunks_active",
+            index_name="flint_graph_chunks_v000001",
+            previous_index_names=["flint_graph_chunks_v000000"],
         )
         await client.bulk(body='{"index":{}}\n{"field":"value"}\n')
         result = await client.search(
-            index_name="atlas_chunks_active",
+            index_name="flint_graph_chunks_active",
             body={"query": {"match_all": {}}},
         )
 
     assert [request.method for request in requests] == ["PUT", "POST", "POST", "POST"]
     assert [request.url.path for request in requests] == [
-        "/atlas_chunks_v000001",
+        "/flint_graph_chunks_v000001",
         "/_aliases",
         "/_bulk",
-        "/atlas_chunks_active/_search",
+        "/flint_graph_chunks_active/_search",
     ]
     bulk_request = requests[2]
     assert bulk_request.headers["content-type"] == "application/x-ndjson"
@@ -201,4 +201,4 @@ async def test_opensearch_client_includes_error_body() -> None:
         client = OpenSearchClient(http_client=http_client, base_url="http://opensearch")
 
         with pytest.raises(httpx.HTTPStatusError, match="cluster unavailable"):
-            await client.create_index(index_name="atlas_chunks_v000001", mapping={})
+            await client.create_index(index_name="flint_graph_chunks_v000001", mapping={})

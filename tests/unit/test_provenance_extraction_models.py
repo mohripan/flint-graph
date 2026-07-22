@@ -1,7 +1,7 @@
 from sqlalchemy import UniqueConstraint
 
-from atlas_rag.infrastructure.db.base import Base
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.base import Base
+from flint_graph.infrastructure.db.models import (
     EntityResolutionCandidate,
     EvidenceSpan,
     ExtractedEntity,

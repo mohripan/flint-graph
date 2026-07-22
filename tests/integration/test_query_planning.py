@@ -1,18 +1,18 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.query_planning import (
+from flint_graph.application.services.query_planning import (
     classify_query_run,
     link_query_entities,
 )
-from atlas_rag.application.services.query_runs import QueryRunCreate, create_query_run
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.query_runs import QueryRunCreate, create_query_run
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import AliasSource, EntityStatus, EntityType, RetrievalIndexScope
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.domain.enums import AliasSource, EntityStatus, EntityType, RetrievalIndexScope
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     EntityAlias,
     QueryRunEvent,
@@ -37,10 +37,10 @@ def _index_spec(model: str = "deterministic-query-planning") -> RetrievalIndexVe
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name=f"atlas_chunks_{model}",
+        neo4j_vector_index_name=f"flint_graph_chunks_{model}",
         neo4j_vector_property_name="embedding",
-        opensearch_index_name=f"atlas_chunks_{model}",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name=f"flint_graph_chunks_{model}",
+        opensearch_alias_name="flint_graph_chunks_active",
     )
 
 

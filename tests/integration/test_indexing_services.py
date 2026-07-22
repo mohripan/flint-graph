@@ -3,13 +3,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.embeddings import (
+from flint_graph.application.embeddings import (
     EmbeddingBatchRequest,
     EmbeddingBatchResult,
     EmbeddingModel,
     EmbeddingVector,
 )
-from atlas_rag.application.services.indexing import (
+from flint_graph.application.services.indexing import (
     IndexingBatchRequest,
     begin_document_indexing,
     complete_document_indexing,
@@ -18,18 +18,18 @@ from atlas_rag.application.services.indexing import (
     plan_document_indexing,
     select_active_retrieval_index_version,
 )
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     DocumentVersionStatus,
     RetrievalIndexScope,
     SourceType,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     ChunkEmbedding,
     Document,
     DocumentChunk,
@@ -92,7 +92,7 @@ async def _seed_indexable_document(
         tenant_id=tenant.id,
         title="Indexing Doc",
         source_type=SourceType.UPLOAD,
-        source_uri="s3://atlas/source.md",
+        source_uri="s3://flint-graph/source.md",
         next_version_number=2,
     )
     session.add(document)
@@ -125,7 +125,7 @@ async def _seed_indexable_document(
                 document_version_id=version.id,
                 chunk_id="chunk-000002",
                 chunk_index=1,
-                text="AtlasRAG stores retrieval projections outside PostgreSQL.",
+                text="FlintGraph stores retrieval projections outside PostgreSQL.",
                 chunk_hash="sha256:chunk-2",
                 page_start=2,
                 page_end=3,
@@ -146,8 +146,8 @@ async def _seed_indexable_document(
             lexical_schema_version="1",
             neo4j_vector_index_name="chunk_embedding_test",
             neo4j_vector_property_name="embedding",
-            opensearch_index_name="atlas_chunks_v000001",
-            opensearch_alias_name="atlas_chunks_active",
+            opensearch_index_name="flint_graph_chunks_v000001",
+            opensearch_alias_name="flint_graph_chunks_active",
         ),
     )
     await activate_retrieval_index_version(session, version_id=index_version.id)
@@ -174,8 +174,8 @@ async def test_select_active_retrieval_index_version_prefers_tenant_scope(
             lexical_schema_version="1",
             neo4j_vector_index_name="chunk_embedding_global",
             neo4j_vector_property_name="embedding",
-            opensearch_index_name="atlas_chunks_global",
-            opensearch_alias_name="atlas_chunks_active",
+            opensearch_index_name="flint_graph_chunks_global",
+            opensearch_alias_name="flint_graph_chunks_active",
         ),
     )
     await activate_retrieval_index_version(db_session, version_id=global_index_version.id)

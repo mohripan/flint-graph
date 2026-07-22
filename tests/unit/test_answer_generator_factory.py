@@ -1,18 +1,18 @@
 import httpx
 
-from atlas_rag.application.query_faithfulness import DeterministicSupportChecker
-from atlas_rag.application.query_orchestration import DeterministicAnswerGenerator
-from atlas_rag.config import Settings
-from atlas_rag.infrastructure import ollama
-from atlas_rag.infrastructure.answer_generator_factory import (
+from flint_graph.application.query_faithfulness import DeterministicSupportChecker
+from flint_graph.application.query_orchestration import DeterministicAnswerGenerator
+from flint_graph.config import Settings
+from flint_graph.infrastructure import ollama
+from flint_graph.infrastructure.answer_generator_factory import (
     create_answer_generator,
     create_support_checker,
 )
-from atlas_rag.infrastructure.anthropic import (
+from flint_graph.infrastructure.anthropic import (
     AnthropicAnswerGenerator,
     AnthropicSupportChecker,
 )
-from atlas_rag.infrastructure.ollama import OllamaAnswerGenerator
+from flint_graph.infrastructure.ollama import OllamaAnswerGenerator
 
 
 def test_answer_generator_factory_defaults_to_deterministic() -> None:

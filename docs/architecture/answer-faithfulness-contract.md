@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The answer faithfulness contract defines how AtlasRAG turns a packed context into
+The answer faithfulness contract defines how FlintGraph turns a packed context into
 a grounded, cited, and inspectable answer. It sits above the Milestone 07 query
 orchestration contract and refines its final `generate_answer` stage. It applies
 once context packing has produced a `QueryContextPack` for a query run.
@@ -25,7 +25,7 @@ provider SDK object leaks into application contracts.
 ## Application Contracts
 
 New provider-neutral models live alongside the Milestone 07 contracts in
-`atlas_rag.application.query_orchestration`:
+`flint_graph.application.query_orchestration`:
 
 - `AnswerDraft` — unverified provider output: text, raw citation markers,
   `insufficient_context`, bounded metadata.

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.evaluation import (
+from flint_graph.evaluation import (
     DatasetMetadata,
     ExperimentReport,
     GoldenDataset,

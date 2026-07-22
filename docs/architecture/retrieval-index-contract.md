@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AtlasRAG retrieval indexes turn authoritative PostgreSQL chunks and graph state
+FlintGraph retrieval indexes turn authoritative PostgreSQL chunks and graph state
 into queryable lexical, vector, and graph-traversal primitives.
 
 Milestone 06 defines the index contract. Milestone 07 will use it for query
@@ -36,7 +36,7 @@ The application depends on a provider-neutral asynchronous embedding protocol.
 The protocol accepts bounded batches of text plus model/config metadata and
 returns vectors, dimensions, and provider metadata.
 
-The Phase 1 application contract lives in `atlas_rag.application.embeddings`.
+The Phase 1 application contract lives in `flint_graph.application.embeddings`.
 It defines `EmbeddingInput`, `EmbeddingBatchRequest`, `EmbeddingVector`,
 `EmbeddingBatchResult`, and the `EmbeddingModel` protocol. Requests validate
 unique input IDs, bounded batch size, provider name, model name, and vector
@@ -205,8 +205,8 @@ page, status, and other metadata fields are mapped for exact filters.
 Search requests must always include a tenant filter.
 
 Phase 3 implements the lexical projection contract in
-`atlas_rag.application.services.lexical_projection` and
-`atlas_rag.infrastructure.opensearch`. OpenSearch document IDs are stable by
+`flint_graph.application.services.lexical_projection` and
+`flint_graph.infrastructure.opensearch`. OpenSearch document IDs are stable by
 tenant, document version, and chunk ID. Bulk upsert and delete operations use
 NDJSON actions with those stable IDs so retries replace or remove the same
 records.

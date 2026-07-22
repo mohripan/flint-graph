@@ -22,7 +22,7 @@ evals/
 ## Run The Offline Gate
 
 ```powershell
-uv run atlas-eval run `
+uv run flint-graph-eval run `
   --dataset evals/datasets/acme-smoke `
   --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl `
   --experiment evals/experiments/acme-smoke.yaml `
@@ -41,13 +41,13 @@ make eval-gate
 Only update a baseline when the metric movement is intentional.
 
 ```powershell
-uv run atlas-eval run `
+uv run flint-graph-eval run `
   --dataset evals/datasets/acme-smoke `
   --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl `
   --report evals/reports/acme-smoke/deterministic-latest.json `
   --config-name deterministic
 
-uv run atlas-eval baseline update `
+uv run flint-graph-eval baseline update `
   --report evals/reports/acme-smoke/deterministic-latest.json `
   --baseline evals/reports/acme-smoke/baselines.json
 ```
@@ -57,7 +57,7 @@ Review the baseline diff. Baselines never move automatically.
 ## Compare Configurations
 
 ```powershell
-uv run atlas-eval compare `
+uv run flint-graph-eval compare `
   --dataset evals/datasets/acme-smoke `
   --evaluations deterministic=evals/reports/acme-smoke/deterministic-recorded.jsonl `
   --evaluations candidate=evals/reports/acme-smoke/deterministic-recorded.jsonl `
@@ -73,4 +73,4 @@ difference is which recorded evaluator file each named configuration points at.
 1. Add or edit corpus files under `evals/datasets/<name>/corpus/`.
 2. Add labeled query rows to `queries.jsonl`.
 3. Capture or author a recorded evaluation file for each gated config.
-4. Run `atlas-eval run` and update baselines only when the new expected behavior is reviewed.
+4. Run `flint-graph-eval run` and update baselines only when the new expected behavior is reviewed.

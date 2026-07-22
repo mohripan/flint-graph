@@ -3,13 +3,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from atlas_rag.application.services.graph_projection import TenantGraph, project_tenant_graph
-from atlas_rag.config import Settings
-from atlas_rag.infrastructure.neo4j import Neo4jClient, create_neo4j_client
+from flint_graph.application.services.graph_projection import TenantGraph, project_tenant_graph
+from flint_graph.config import Settings
+from flint_graph.infrastructure.neo4j import Neo4jClient, create_neo4j_client
 
 pytestmark = pytest.mark.skipif(
-    not os.getenv("ATLAS_NEO4J_INTEGRATION"),
-    reason="Set ATLAS_NEO4J_INTEGRATION=1 with a running Neo4j to run this test.",
+    not os.getenv("FLINT_GRAPH_NEO4J_INTEGRATION"),
+    reason="Set FLINT_GRAPH_NEO4J_INTEGRATION=1 with a running Neo4j to run this test.",
 )
 
 

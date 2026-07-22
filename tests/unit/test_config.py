@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.config import Settings
+from flint_graph.config import Settings
 
 
 def _settings(**overrides: Any) -> Settings:

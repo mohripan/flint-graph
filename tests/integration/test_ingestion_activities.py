@@ -4,8 +4,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.chunking import ChunkingConfig
-from atlas_rag.application.extraction_proposals import (
+from flint_graph.application.chunking import ChunkingConfig
+from flint_graph.application.extraction_proposals import (
     EvidenceProposal,
     ExtractedClaimProposal,
     ExtractedEntityProposal,
@@ -13,15 +13,15 @@ from atlas_rag.application.extraction_proposals import (
     ExtractionBatch,
     ExtractionBatchRequest,
 )
-from atlas_rag.application.outbox_contracts import IngestionJobQueuedPayload
-from atlas_rag.application.parsing import BoundedParserRunner, ParserLimits
-from atlas_rag.application.services.documents import create_document
-from atlas_rag.application.services.extraction import ExtractionServiceConfig
-from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
-from atlas_rag.application.services.intake import create_upload_intake
-from atlas_rag.application.services.staged_resolution import resolve_pending_staged_entities
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import (
+from flint_graph.application.outbox_contracts import IngestionJobQueuedPayload
+from flint_graph.application.parsing import BoundedParserRunner, ParserLimits
+from flint_graph.application.services.documents import create_document
+from flint_graph.application.services.extraction import ExtractionServiceConfig
+from flint_graph.application.services.ingestion_jobs import create_ingestion_job
+from flint_graph.application.services.intake import create_upload_intake
+from flint_graph.application.services.staged_resolution import resolve_pending_staged_entities
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.domain.enums import (
     DocumentVersionStatus,
     EntityStatus,
     EntityType,
@@ -30,7 +30,7 @@ from atlas_rag.domain.enums import (
     SourceType,
     StagedResolutionStatus,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     DocumentArtifact,
     DocumentChunk,
@@ -43,8 +43,8 @@ from atlas_rag.infrastructure.db.models import (
     IngestionJob,
     IngestionJobEvent,
 )
-from atlas_rag.infrastructure.object_store import ObjectInfo
-from atlas_rag.worker.activities.ingestion import (
+from flint_graph.infrastructure.object_store import ObjectInfo
+from flint_graph.worker.activities.ingestion import (
     _proposal_model_from_settings,
     mark_ingestion_job_completed_for_payload,
     mark_ingestion_job_failed_for_payload,
@@ -155,13 +155,13 @@ async def _create_upload_payload(
     *,
     store: FakeObjectStore,
     idempotency_key: str,
-    data: bytes = b"# Pipeline\n\nAtlasRAG parses and chunks content.",
+    data: bytes = b"# Pipeline\n\nFlintGraph parses and chunks content.",
 ) -> IngestionJobQueuedPayload:
     tenant = await create_tenant(db_session, name=f"Pipeline Tenant {idempotency_key}")
     intake = await create_upload_intake(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         title="Pipeline",
         external_id=f"pipeline-{idempotency_key}",
@@ -306,8 +306,8 @@ async def test_ingestion_activity_helpers_mark_job_failed(
 
 
 def test_ingestion_activity_supports_deterministic_provenance_provider() -> None:
-    from atlas_rag.application.extraction_proposals import DeterministicExtractionModel
-    from atlas_rag.config import Settings
+    from flint_graph.application.extraction_proposals import DeterministicExtractionModel
+    from flint_graph.config import Settings
 
     settings = Settings(llm_provider="deterministic")
 
@@ -340,7 +340,7 @@ async def test_ingestion_pipeline_persists_provenance_extracts_candidates_and_re
         db_session,
         payload,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
@@ -416,7 +416,7 @@ async def test_ingestion_pipeline_optional_extraction_failure_still_completes(
         db_session,
         payload,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
@@ -454,7 +454,7 @@ async def test_ingestion_pipeline_persists_exception_type_for_blank_error_messag
         db_session,
         payload,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
@@ -497,7 +497,7 @@ async def test_ingestion_pipeline_optional_local_validation_failure_still_comple
         db_session,
         payload,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
@@ -533,7 +533,7 @@ async def test_ingestion_pipeline_required_extraction_failure_fails_version(
             db_session,
             payload,
             object_store=store,
-            bucket="atlas-rag",
+            bucket="flint-graph",
             parser_runner=_parser_runner(),
             chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
             extraction_config=ExtractionServiceConfig(mode="required", model="gemma3:1b"),
@@ -585,7 +585,7 @@ async def test_ingestion_pipeline_rejects_raw_content_hash_mismatch(
             db_session,
             payload,
             object_store=store,
-            bucket="atlas-rag",
+            bucket="flint-graph",
             parser_runner=_parser_runner(),
             chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
             extraction_config=ExtractionServiceConfig(enabled=False),

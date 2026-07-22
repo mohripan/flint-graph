@@ -1,5 +1,5 @@
-from atlas_rag.domain.enums import IngestionJobStatus
-from atlas_rag.domain.transitions import can_transition_job
+from flint_graph.domain.enums import IngestionJobStatus
+from flint_graph.domain.transitions import can_transition_job
 
 
 def test_job_transition_rules_are_terminal_after_completion() -> None:

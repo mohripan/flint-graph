@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-AtlasRAG is an early GraphRAG platform. Through Milestone 09 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, and an offline evaluation quality gate.
+FlintGraph is an early GraphRAG platform. Through Milestone 09 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, and an offline evaluation quality gate.
 
 Implemented path:
 
@@ -44,7 +44,7 @@ uv sync --all-groups
 uv run pytest
 uv run ruff check .
 uv run mypy
-uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
+uv run flint-graph-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 uv run alembic upgrade head --sql
 docker compose config
 docker compose up --build
@@ -73,7 +73,7 @@ Docker Compose exposes:
 - API docs: `http://localhost:8000/docs`
 - Temporal Web UI: `http://localhost:8233`
 - Grafana: `http://localhost:3000`
-- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `atlaspassword`)
+- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `flintgraphpassword`)
 - PostgreSQL host port: `localhost:55432`
 - Temporal gRPC host port: `localhost:7233`
 - Neo4j Bolt host port: `localhost:7687`
@@ -83,18 +83,18 @@ The `temporal` compose service uses `temporalio/temporal:latest` with `server st
 
 ## Key Files
 
-- `src/atlas_rag/api/routes/documents.py`: document, ingestion job, cancellation, and job event endpoints.
-- `src/atlas_rag/application/services/ingestion_jobs.py`: transactional document-version/job/event/outbox creation.
-- `src/atlas_rag/application/services/job_transitions.py`: explicit job state transition rules.
-- `src/atlas_rag/application/services/job_cancellation.py`: API-side cancellation and cancellation outbox creation.
-- `src/atlas_rag/application/services/outbox.py`: outbox append helper and trace-context capture.
-- `src/atlas_rag/application/services/outbox_relay.py`: pending outbox polling and Temporal dispatch.
-- `src/atlas_rag/infrastructure/temporal.py`: Temporal client adapter.
-- `src/atlas_rag/workflows/ingestion.py`: `IngestDocumentWorkflow`.
-- `src/atlas_rag/worker/activities/ingestion.py`: worker activities that mutate job state.
-- `src/atlas_rag/processes/outbox_relay.py`: long-running relay process.
-- `src/atlas_rag/processes/ingestion_worker.py`: long-running Temporal worker.
-- `src/atlas_rag/infrastructure/db/models.py`: SQLAlchemy models.
+- `src/flint_graph/api/routes/documents.py`: document, ingestion job, cancellation, and job event endpoints.
+- `src/flint_graph/application/services/ingestion_jobs.py`: transactional document-version/job/event/outbox creation.
+- `src/flint_graph/application/services/job_transitions.py`: explicit job state transition rules.
+- `src/flint_graph/application/services/job_cancellation.py`: API-side cancellation and cancellation outbox creation.
+- `src/flint_graph/application/services/outbox.py`: outbox append helper and trace-context capture.
+- `src/flint_graph/application/services/outbox_relay.py`: pending outbox polling and Temporal dispatch.
+- `src/flint_graph/infrastructure/temporal.py`: Temporal client adapter.
+- `src/flint_graph/workflows/ingestion.py`: `IngestDocumentWorkflow`.
+- `src/flint_graph/worker/activities/ingestion.py`: worker activities that mutate job state.
+- `src/flint_graph/processes/outbox_relay.py`: long-running relay process.
+- `src/flint_graph/processes/ingestion_worker.py`: long-running Temporal worker.
+- `src/flint_graph/infrastructure/db/models.py`: SQLAlchemy models.
 - `migrations/versions/0002_outbox_messages.py`: outbox migration.
 - `docs/runbooks/durable-ingestion-dispatch.md`: durable dispatch runbook.
 - `docs/architecture/object-storage-contract.md`: future object-storage contract.
@@ -102,78 +102,78 @@ The `temporal` compose service uses `temporalio/temporal:latest` with `server st
 
 Milestone 04 knowledge graph:
 
-- `src/atlas_rag/application/entity_resolution/`: pure normalization and scoring.
-- `src/atlas_rag/application/services/candidate_generation.py`: pg_trgm blocking.
-- `src/atlas_rag/application/services/resolution.py`: banded resolution + advisory lock + relationship aggregation.
-- `src/atlas_rag/application/services/entity_merge.py`: soft merge with undo log + unmerge.
-- `src/atlas_rag/application/services/review.py`: review-queue decisions.
-- `src/atlas_rag/application/services/graph_projection.py`: Neo4j projection/reconcile.
-- `src/atlas_rag/workflows/resolution.py` and `src/atlas_rag/worker/activities/resolution.py`: per-tenant resolution workflow/activities.
-- `src/atlas_rag/api/routes/graph.py`: entity, review, merge/unmerge, and audit endpoints.
-- `src/atlas_rag/infrastructure/neo4j.py` and `neo4j_migrations.py`: Neo4j client and Cypher migration runner.
+- `src/flint_graph/application/entity_resolution/`: pure normalization and scoring.
+- `src/flint_graph/application/services/candidate_generation.py`: pg_trgm blocking.
+- `src/flint_graph/application/services/resolution.py`: banded resolution + advisory lock + relationship aggregation.
+- `src/flint_graph/application/services/entity_merge.py`: soft merge with undo log + unmerge.
+- `src/flint_graph/application/services/review.py`: review-queue decisions.
+- `src/flint_graph/application/services/graph_projection.py`: Neo4j projection/reconcile.
+- `src/flint_graph/workflows/resolution.py` and `src/flint_graph/worker/activities/resolution.py`: per-tenant resolution workflow/activities.
+- `src/flint_graph/api/routes/graph.py`: entity, review, merge/unmerge, and audit endpoints.
+- `src/flint_graph/infrastructure/neo4j.py` and `neo4j_migrations.py`: Neo4j client and Cypher migration runner.
 - `migrations/versions/0005_knowledge_graph.py` and `migrations/neo4j/`: graph schema.
 - `docs/milestones/04-knowledge-graph.md`, `docs/adr/0004-postgres-authoritative-resolution-neo4j-projection.md`, `docs/architecture/knowledge-graph-contract.md`, `docs/runbooks/knowledge-graph-*.md`.
 Milestone 05 provenance-rich extraction:
 
-- `src/atlas_rag/application/extraction_proposals.py`: provider-neutral proposal models and deterministic provider.
-- `src/atlas_rag/application/extraction_evidence.py`: exact quote evidence resolver.
-- `src/atlas_rag/application/services/provenance_extraction.py`: transactional extraction run, invocation, evidence, staged-record, and manifest persistence.
-- `src/atlas_rag/application/services/proposal_candidate_generation.py`: non-destructive proposal candidate generation.
-- `src/atlas_rag/application/services/staged_resolution.py`: canonical resolution over staged proposals.
-- `src/atlas_rag/infrastructure/ollama.py`: Ollama proposal adapter at the infrastructure edge.
+- `src/flint_graph/application/extraction_proposals.py`: provider-neutral proposal models and deterministic provider.
+- `src/flint_graph/application/extraction_evidence.py`: exact quote evidence resolver.
+- `src/flint_graph/application/services/provenance_extraction.py`: transactional extraction run, invocation, evidence, staged-record, and manifest persistence.
+- `src/flint_graph/application/services/proposal_candidate_generation.py`: non-destructive proposal candidate generation.
+- `src/flint_graph/application/services/staged_resolution.py`: canonical resolution over staged proposals.
+- `src/flint_graph/infrastructure/ollama.py`: Ollama proposal adapter at the infrastructure edge.
 - `migrations/versions/0006_provenance_extraction.py` and `0007_staged_resolution_state.py`: provenance and staged-resolution schema.
 - `docs/milestones/05-provenance-rich-extraction.md`, `docs/adr/0005-staged-extraction-proposals-before-canonical-resolution.md`, `docs/architecture/extraction-proposal-contract.md`, `docs/runbooks/provenance-extraction-*.md`.
 
 Milestone 06 retrieval indexes:
 
-- `src/atlas_rag/application/embeddings.py`: provider-neutral embedding contract and deterministic model.
-- `src/atlas_rag/infrastructure/embedding_factory.py`: shared embedding model construction.
-- `src/atlas_rag/infrastructure/embeddings.py`, `ollama.py`: embedding adapters.
-- `src/atlas_rag/application/services/retrieval_index_versions.py`: index-version transitions.
-- `src/atlas_rag/application/services/indexing.py`: document-version indexing, coverage, and projection replay.
-- `src/atlas_rag/application/services/index_backfill.py`: backfill job state and eligibility.
-- `src/atlas_rag/application/services/retrieval.py`: primitive retrieval API service layer.
-- `src/atlas_rag/application/services/lexical_projection.py` and `vector_projection.py`: projection record/query builders.
-- `src/atlas_rag/api/routes/retrieval.py`: index, backfill, lexical/vector search, and neighborhood endpoints.
-- `src/atlas_rag/workflows/indexing.py`, `backfill.py`: retrieval indexing and backfill workflows.
-- `src/atlas_rag/worker/activities/indexing.py`, `index_backfill.py`: worker activities.
-- `src/atlas_rag/processes/retrieval_index_reconcile.py`: projection reconcile command.
+- `src/flint_graph/application/embeddings.py`: provider-neutral embedding contract and deterministic model.
+- `src/flint_graph/infrastructure/embedding_factory.py`: shared embedding model construction.
+- `src/flint_graph/infrastructure/embeddings.py`, `ollama.py`: embedding adapters.
+- `src/flint_graph/application/services/retrieval_index_versions.py`: index-version transitions.
+- `src/flint_graph/application/services/indexing.py`: document-version indexing, coverage, and projection replay.
+- `src/flint_graph/application/services/index_backfill.py`: backfill job state and eligibility.
+- `src/flint_graph/application/services/retrieval.py`: primitive retrieval API service layer.
+- `src/flint_graph/application/services/lexical_projection.py` and `vector_projection.py`: projection record/query builders.
+- `src/flint_graph/api/routes/retrieval.py`: index, backfill, lexical/vector search, and neighborhood endpoints.
+- `src/flint_graph/workflows/indexing.py`, `backfill.py`: retrieval indexing and backfill workflows.
+- `src/flint_graph/worker/activities/indexing.py`, `index_backfill.py`: worker activities.
+- `src/flint_graph/processes/retrieval_index_reconcile.py`: projection reconcile command.
 - `migrations/versions/0008_retrieval_index_ledger.py`, `0009_document_index_coverage.py`, and `migrations/neo4j/0002_chunk_vector_indexes.cypher`: retrieval schema.
 - `docs/milestones/06-retrieval-indexes.md`, `docs/adr/0006-rebuildable-retrieval-indexes.md`, `docs/architecture/retrieval-index-contract.md`, `docs/runbooks/retrieval-index-*.md`.
 
 Milestone 07 query orchestration:
 
-- `src/atlas_rag/application/query_orchestration.py`: provider-neutral query contracts and deterministic providers.
-- `src/atlas_rag/application/services/query_runs.py`: query-run ledger and event persistence.
-- `src/atlas_rag/application/services/query_planning.py`: deterministic classification and entity linking.
-- `src/atlas_rag/application/services/query_orchestration.py`: LangGraph query runtime.
-- `src/atlas_rag/application/services/query_fusion.py`: candidate fusion and reranking persistence.
-- `src/atlas_rag/application/services/query_context_packing.py`: citation-ready context packs.
-- `src/atlas_rag/application/services/query_answering.py`: answer events, citations, and completion.
-- `src/atlas_rag/api/routes/query.py`: query-run, event replay, and SSE streaming endpoints.
+- `src/flint_graph/application/query_orchestration.py`: provider-neutral query contracts and deterministic providers.
+- `src/flint_graph/application/services/query_runs.py`: query-run ledger and event persistence.
+- `src/flint_graph/application/services/query_planning.py`: deterministic classification and entity linking.
+- `src/flint_graph/application/services/query_orchestration.py`: LangGraph query runtime.
+- `src/flint_graph/application/services/query_fusion.py`: candidate fusion and reranking persistence.
+- `src/flint_graph/application/services/query_context_packing.py`: citation-ready context packs.
+- `src/flint_graph/application/services/query_answering.py`: answer events, citations, and completion.
+- `src/flint_graph/api/routes/query.py`: query-run, event replay, and SSE streaming endpoints.
 - `migrations/versions/0010_query_run_ledger.py`: query-run schema.
 - `tests/fixtures/query_orchestration_eval_cases.json`: deterministic query eval fixtures.
 - `docs/milestones/07-query-orchestration.md`, `docs/adr/0007-langgraph-query-orchestration.md`, `docs/architecture/query-orchestration-contract.md`, `docs/runbooks/query-orchestration-*.md`.
 
 Milestone 08 grounded answer generation:
 
-- `src/atlas_rag/application/query_faithfulness.py`: citation repair, deterministic support checking, and abstention policy helpers.
-- `src/atlas_rag/application/services/query_faithfulness.py`: draft-to-verified-answer runtime pipeline.
-- `src/atlas_rag/application/services/query_answering.py`: verified answer event emission, answer-claim persistence, and completion.
-- `src/atlas_rag/application/services/query_provenance.py`: tenant-scoped answer and citation provenance readers.
-- `src/atlas_rag/infrastructure/ollama.py`: Ollama answer generation and streaming adapter.
-- `src/atlas_rag/infrastructure/answer_generator_factory.py`: answer generator and support checker provider selection.
-- `src/atlas_rag/api/routes/query.py`: query-run, event replay, SSE streaming, provenance, and citation endpoints.
+- `src/flint_graph/application/query_faithfulness.py`: citation repair, deterministic support checking, and abstention policy helpers.
+- `src/flint_graph/application/services/query_faithfulness.py`: draft-to-verified-answer runtime pipeline.
+- `src/flint_graph/application/services/query_answering.py`: verified answer event emission, answer-claim persistence, and completion.
+- `src/flint_graph/application/services/query_provenance.py`: tenant-scoped answer and citation provenance readers.
+- `src/flint_graph/infrastructure/ollama.py`: Ollama answer generation and streaming adapter.
+- `src/flint_graph/infrastructure/answer_generator_factory.py`: answer generator and support checker provider selection.
+- `src/flint_graph/api/routes/query.py`: query-run, event replay, SSE streaming, provenance, and citation endpoints.
 - `migrations/versions/0011_answer_faithfulness.py`: query-run faithfulness columns and `query_answer_claims`.
 - `tests/fixtures/query_orchestration_eval_cases.json`: deterministic query and faithfulness eval fixtures.
 - `docs/milestones/08-grounded-answer-generation.md`, `docs/adr/0008-grounded-answer-generation-and-faithfulness.md`, `docs/architecture/answer-faithfulness-contract.md`, `docs/runbooks/grounded-answer-generation-*.md`.
 
 Milestone 09 real models and evaluation:
 
-- `src/atlas_rag/infrastructure/anthropic.py`: Anthropic answer generation, streaming, and support checking adapters.
-- `src/atlas_rag/config.py`: env-aware provider defaults and credential validation.
-- `src/atlas_rag/evaluation/`: dataset loading, metrics, experiment runner, reports, baselines, recorded evaluators, and comparisons.
-- `src/atlas_rag/cli/eval.py`: `atlas-eval` CLI for offline scoring, comparisons, and baseline updates.
+- `src/flint_graph/infrastructure/anthropic.py`: Anthropic answer generation, streaming, and support checking adapters.
+- `src/flint_graph/config.py`: env-aware provider defaults and credential validation.
+- `src/flint_graph/evaluation/`: dataset loading, metrics, experiment runner, reports, baselines, recorded evaluators, and comparisons.
+- `src/flint_graph/cli/eval.py`: `flint-graph-eval` CLI for offline scoring, comparisons, and baseline updates.
 - `evals/datasets/acme-smoke/`: fixed golden corpus and labeled queries.
 - `evals/experiments/acme-smoke.yaml`: offline/live experiment thresholds.
 - `evals/reports/acme-smoke/`: deterministic recorded eval fixture and accepted baselines.
@@ -183,11 +183,11 @@ Milestone 09 real models and evaluation:
 
 Milestone 10 local-first usable RAG:
 
-- `src/atlas_rag/application/services/search_readiness.py`: tenant-scoped active-index search readiness summary.
-- `src/atlas_rag/infrastructure/ollama.py`: Ollama answer, embedding, extraction, and support-checking adapters.
-- `src/atlas_rag/application/services/query_runs.py`: persisted compact query diagnostics in query-run metadata.
-- `src/atlas_rag/api/routes/retrieval.py`: `/v1/search-readiness`.
-- `src/atlas_rag/api/routes/query.py`: query creation guard for searchable content.
+- `src/flint_graph/application/services/search_readiness.py`: tenant-scoped active-index search readiness summary.
+- `src/flint_graph/infrastructure/ollama.py`: Ollama answer, embedding, extraction, and support-checking adapters.
+- `src/flint_graph/application/services/query_runs.py`: persisted compact query diagnostics in query-run metadata.
+- `src/flint_graph/api/routes/retrieval.py`: `/v1/search-readiness`.
+- `src/flint_graph/api/routes/query.py`: query creation guard for searchable content.
 - `frontend/src/pages/AskPage.tsx`: readiness-gated Ask flow and diagnostics panel.
 - `frontend/src/pages/UploadPage.tsx`: backend readiness document status view.
 - `docs/milestones/10-local-first-usable-rag.md`, `docs/adr/0011-local-first-ollama-readiness-diagnostics.md`, `docs/runbooks/local-ollama-rag.md`, `docs/runbooks/frontend-e2e-qa-guide.md`.
@@ -228,7 +228,7 @@ Milestone 10 local-first usable RAG:
 ## Temporal Notes
 
 - Workflow name: `IngestDocumentWorkflow`.
-- Task queue: configured by `ATLAS_TEMPORAL_TASK_QUEUE`, default `ingestion`.
+- Task queue: configured by `FLINT_GRAPH_TEMPORAL_TASK_QUEUE`, default `ingestion`.
 - Workflow ID: `ingestion-job-{job_id}`.
 - Workflow memo stores `trace_context` from outbox headers.
 - Workflow start uses duplicate-safe Temporal policies so retrying the relay does not create duplicate workflows.
@@ -264,7 +264,7 @@ Run the narrowest meaningful verification, and prefer the full set when behavior
 uv run pytest
 uv run ruff check .
 uv run mypy
-uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
+uv run flint-graph-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 uv run alembic upgrade head --sql
 docker compose config
 ```

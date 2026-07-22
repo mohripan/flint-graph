@@ -13,7 +13,7 @@ def test_make_check_runs_offline_eval_gate() -> None:
 
     assert ".PHONY:" in makefile and "eval-gate" in makefile
     assert "eval-gate:" in makefile
-    assert "uv run atlas-eval run" in makefile
+    assert "uv run flint-graph-eval run" in makefile
     assert "--dataset evals/datasets/acme-smoke" in makefile
     assert "--evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl" in makefile
     assert "--experiment evals/experiments/acme-smoke.yaml" in makefile
@@ -25,7 +25,7 @@ def test_repository_offline_eval_gate_fixture_passes() -> None:
     command = [
         "uv",
         "run",
-        "atlas-eval",
+        "flint-graph-eval",
         "run",
         "--dataset",
         "evals/datasets/acme-smoke",
@@ -68,7 +68,7 @@ def test_ci_workflows_define_offline_and_secrets_gated_live_eval() -> None:
         for step in job.get("steps", [])
     )
     assert "uv run pytest" in pr_commands
-    assert "uv run atlas-eval run" in pr_commands
+    assert "uv run flint-graph-eval run" in pr_commands
     assert "ANTHROPIC_API_KEY" not in pr_commands
 
     live_commands = "\n".join(
@@ -85,7 +85,7 @@ def test_ci_workflows_define_offline_and_secrets_gated_live_eval() -> None:
     assert "schedule" in live_workflow["on"]
     assert "workflow_dispatch" in live_workflow["on"]
     assert "ANTHROPIC_API_KEY" in live_env
-    assert "uv run atlas-eval run" in live_commands
+    assert "uv run flint-graph-eval run" in live_commands
     assert "live-claude" in live_commands
 
 
@@ -95,17 +95,20 @@ def test_compose_local_services_are_no_cost_by_default() -> None:
 
     for service_name in settings_services:
         environment = compose["services"][service_name]["environment"]
-        assert _compose_default(environment["ATLAS_QUERY_ANSWER_PROVIDER"]) == "deterministic"
-        assert _compose_default(environment["ATLAS_QUERY_SUPPORT_PROVIDER"]) == "deterministic"
-        assert _compose_default(environment["ATLAS_EMBEDDING_PROVIDER"]) == "deterministic"
+        assert _compose_default(environment["FLINT_GRAPH_QUERY_ANSWER_PROVIDER"]) == "deterministic"
+        assert (
+            _compose_default(environment["FLINT_GRAPH_QUERY_SUPPORT_PROVIDER"])
+            == "deterministic"
+        )
+        assert _compose_default(environment["FLINT_GRAPH_EMBEDDING_PROVIDER"]) == "deterministic"
 
 
 def test_env_example_is_no_cost_by_default() -> None:
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
 
-    assert "\nATLAS_EMBEDDING_PROVIDER=deterministic\n" in env_example
-    assert "\nATLAS_QUERY_ANSWER_PROVIDER=deterministic\n" in env_example
-    assert "\nATLAS_QUERY_SUPPORT_PROVIDER=deterministic\n" in env_example
+    assert "\nFLINT_GRAPH_EMBEDDING_PROVIDER=deterministic\n" in env_example
+    assert "\nFLINT_GRAPH_QUERY_ANSWER_PROVIDER=deterministic\n" in env_example
+    assert "\nFLINT_GRAPH_QUERY_SUPPORT_PROVIDER=deterministic\n" in env_example
 
 
 def _compose_default(value: str) -> str:

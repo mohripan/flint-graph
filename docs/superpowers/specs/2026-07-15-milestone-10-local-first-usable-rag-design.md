@@ -3,7 +3,7 @@
 ## Status
 
 Approved planning design. Locked direction: Approach A, a local-first usability
-milestone that makes AtlasRAG usable end to end with Ollama before the larger
+milestone that makes FlintGraph usable end to end with Ollama before the larger
 incremental change-lifecycle work begins.
 
 ## Summary
@@ -66,8 +66,8 @@ invalidation, schema migrations, re-embedding, and replayable indexing.
 
 - Local provider path:
   Add an `OllamaSupportChecker` behind the existing `SupportChecker` protocol.
-  `ATLAS_QUERY_ANSWER_PROVIDER=ollama` and
-  `ATLAS_QUERY_SUPPORT_PROVIDER=ollama` must both be valid. Ollama embeddings
+  `FLINT_GRAPH_QUERY_ANSWER_PROVIDER=ollama` and
+  `FLINT_GRAPH_QUERY_SUPPORT_PROVIDER=ollama` must both be valid. Ollama embeddings
   should remain the local real-embedding path, with deterministic embeddings
   preserved for tests.
 
@@ -194,7 +194,7 @@ Regression commands:
 uv run pytest
 uv run ruff check .
 uv run mypy
-uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
+uv run flint-graph-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 uv run alembic upgrade head --sql
 docker compose config
 cd frontend

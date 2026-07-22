@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from atlas_rag.application.proposal_candidates import (
+from flint_graph.application.proposal_candidates import (
     ProposalCandidateEntity,
     score_proposal_candidate,
 )
-from atlas_rag.domain.enums import CandidateOutcome, EntityType
+from flint_graph.domain.enums import CandidateOutcome, EntityType
 
 
 def test_scores_alias_exact_candidate_as_auto_with_explainable_features() -> None:

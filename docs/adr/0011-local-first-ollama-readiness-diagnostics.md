@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Through Milestone 09, AtlasRAG could ingest, index, retrieve, orchestrate, and
+Through Milestone 09, FlintGraph could ingest, index, retrieve, orchestrate, and
 faithfulness-check answers, but the end-user path was too opaque. A user could
 upload a document and ask a question before indexing was complete, then receive
 an insufficient-context answer without knowing whether ingestion, indexing,
@@ -19,7 +19,7 @@ the product-oriented local answer path.
 
 ## Decision
 
-AtlasRAG keeps deterministic providers as the offline default and supports an
+FlintGraph keeps deterministic providers as the offline default and supports an
 explicit local Ollama product path for embeddings, answer generation, and
 support checking.
 

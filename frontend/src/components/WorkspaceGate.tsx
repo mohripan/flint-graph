@@ -25,7 +25,7 @@ export function WorkspaceGate() {
       setError(
         err instanceof ApiError
           ? err.message
-          : "Could not reach the AtlasRAG API. Is the backend running?",
+          : "Could not reach the FlintGraph API. Is the backend running?",
       );
       setBusy(false);
     }
@@ -37,7 +37,7 @@ export function WorkspaceGate() {
         <div className="mb-6 flex items-center gap-3">
           <Logo />
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">AtlasRAG</h1>
+            <h1 className="text-lg font-semibold text-slate-900">FlintGraph</h1>
             <p className="text-sm text-slate-500">Ask questions about your documents</p>
           </div>
         </div>

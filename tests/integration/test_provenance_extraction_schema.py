@@ -1,13 +1,13 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     EntityType,
     ExtractionRunStatus,
     SourceType,
     StagedProposalStatus,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     Document,
     DocumentVersion,
     EvidenceSpan,

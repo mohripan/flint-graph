@@ -63,7 +63,7 @@ Database effect:
 Check:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, name, created_at from tenants order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, name, created_at from tenants order by created_at desc limit 5;"
 ```
 
 ## Step 2: Upload A Text File
@@ -72,9 +72,9 @@ Create a small test file:
 
 ```powershell
 @"
-# AtlasRAG QA Note
+# FlintGraph QA Note
 
-AtlasRAG stores raw source material, parses it, chunks it, and records lineage.
+FlintGraph stores raw source material, parses it, chunks it, and records lineage.
 "@ | Set-Content -Encoding utf8 .\qa-note.md
 ```
 
@@ -93,7 +93,7 @@ $upload
 
 What this does:
 
-- Sends a real file through the AtlasRAG API.
+- Sends a real file through the FlintGraph API.
 - The API writes the raw file to MinIO.
 - The API creates a document, document version, ingestion job, job event, and outbox message.
 
@@ -121,10 +121,10 @@ Response fields to note:
 Check the DB:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, title, source_type, source_uri from documents order by created_at desc limit 5;"
-docker compose exec postgres psql -U atlas -d atlas -c "select id, document_id, status, content_hash, object_uri from document_versions order by created_at desc limit 5;"
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, document_version_id from ingestion_jobs order by created_at desc limit 5;"
-docker compose exec postgres psql -U atlas -d atlas -c "select topic, aggregate_id, status, attempt_count, last_error from outbox_messages order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, title, source_type, source_uri from documents order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, document_id, status, content_hash, object_uri from document_versions order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, document_version_id from ingestion_jobs order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select topic, aggregate_id, status, attempt_count, last_error from outbox_messages order by created_at desc limit 5;"
 ```
 
 ## Step 3: Watch The Job Complete
@@ -159,10 +159,10 @@ Database effect during worker processing:
 Check:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, started_at, completed_at, error_code, error_message from ingestion_jobs order by created_at desc limit 5;"
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, content_hash, object_uri from document_versions order by created_at desc limit 5;"
-docker compose exec postgres psql -U atlas -d atlas -c "select artifact_type, object_uri, content_hash, schema_version from document_artifacts order by created_at desc limit 10;"
-docker compose exec postgres psql -U atlas -d atlas -c "select chunk_index, left(text, 80) as preview, heading_path, page_start, page_end from document_chunks order by created_at desc, chunk_index limit 10;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, started_at, completed_at, error_code, error_message from ingestion_jobs order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, content_hash, object_uri from document_versions order by created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select artifact_type, object_uri, content_hash, schema_version from document_artifacts order by created_at desc limit 10;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select chunk_index, left(text, 80) as preview, heading_path, page_start, page_end from document_chunks order by created_at desc, chunk_index limit 10;"
 ```
 
 ## Step 4: Inspect Temporal
@@ -246,9 +246,9 @@ Expected result:
 Set extraction optional and point Ollama to an unavailable host, then restart the API and worker:
 
 ```env
-ATLAS_EXTRACTION_ENABLED=true
-ATLAS_EXTRACTION_MODE=optional
-ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:59999
+FLINT_GRAPH_EXTRACTION_ENABLED=true
+FLINT_GRAPH_EXTRACTION_MODE=optional
+FLINT_GRAPH_OLLAMA_BASE_URL=http://host.docker.internal:59999
 ```
 
 Upload another small file.
@@ -269,9 +269,9 @@ What this proves:
 Set extraction required with the same unavailable Ollama URL:
 
 ```env
-ATLAS_EXTRACTION_ENABLED=true
-ATLAS_EXTRACTION_MODE=required
-ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:59999
+FLINT_GRAPH_EXTRACTION_ENABLED=true
+FLINT_GRAPH_EXTRACTION_MODE=required
+FLINT_GRAPH_OLLAMA_BASE_URL=http://host.docker.internal:59999
 ```
 
 Upload another small file.
@@ -328,7 +328,7 @@ Expected result:
 Check:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select document_id, version_number, status from document_versions order by document_id, version_number;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select document_id, version_number, status from document_versions order by document_id, version_number;"
 ```
 
 What this proves:

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The query orchestration contract defines how AtlasRAG turns a tenant-scoped user
+The query orchestration contract defines how FlintGraph turns a tenant-scoped user
 query into a grounded streaming answer. It sits above the Milestone 06 retrieval
 index contract.
 
@@ -22,7 +22,7 @@ A query request contains:
 ## Phase 1 Application Contracts
 
 The implemented application contract lives in
-`atlas_rag.application.query_orchestration`. It is provider-neutral and does
+`flint_graph.application.query_orchestration`. It is provider-neutral and does
 not depend on persistence, FastAPI, LangGraph, Ollama, or Docker.
 
 Current contract groups:

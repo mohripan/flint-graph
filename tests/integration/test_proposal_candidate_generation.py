@@ -1,10 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.proposal_candidate_generation import (
+from flint_graph.application.services.proposal_candidate_generation import (
     generate_proposal_candidates_for_run,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     AliasSource,
     CandidateOutcome,
     CandidateTargetKind,
@@ -15,7 +15,7 @@ from atlas_rag.domain.enums import (
     SourceType,
     StagedProposalStatus,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
     DocumentVersion,

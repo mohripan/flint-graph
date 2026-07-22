@@ -3,30 +3,30 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.document_lifecycle import (
+from flint_graph.application.services.document_lifecycle import (
     delete_document,
     run_projection_cleanup,
 )
-from atlas_rag.application.services.document_versions import (
+from flint_graph.application.services.document_versions import (
     activate_document_version,
     cancel_document_version,
     fail_document_version,
 )
-from atlas_rag.application.services.documents import create_document
-from atlas_rag.application.services.indexing import (
+from flint_graph.application.services.documents import create_document
+from flint_graph.application.services.indexing import (
     begin_document_indexing,
     complete_document_indexing,
 )
-from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
-from atlas_rag.application.services.job_cancellation import cancel_ingestion_job
-from atlas_rag.application.services.job_transitions import transition_ingestion_job
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.ingestion_jobs import create_ingestion_job
+from flint_graph.application.services.job_cancellation import cancel_ingestion_job
+from flint_graph.application.services.job_transitions import transition_ingestion_job
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import (
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     DocumentLifecycleEventType,
     DocumentProjectionCleanupStatus,
@@ -35,8 +35,8 @@ from atlas_rag.domain.enums import (
     RetrievalIndexScope,
     SourceType,
 )
-from atlas_rag.domain.errors import ConflictError
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.domain.errors import ConflictError
+from flint_graph.infrastructure.db.models import (
     Document,
     DocumentChunk,
     DocumentIndexCoverage,
@@ -102,10 +102,10 @@ def _index_spec(model: str = "lifecycle-v1") -> RetrievalIndexVersionSpec:
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name=f"atlas_chunks_{model.replace('-', '_')}",
+        neo4j_vector_index_name=f"flint_graph_chunks_{model.replace('-', '_')}",
         neo4j_vector_property_name="embedding_v000001",
-        opensearch_index_name=f"atlas_chunks_{model.replace('-', '_')}",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name=f"flint_graph_chunks_{model.replace('-', '_')}",
+        opensearch_alias_name="flint_graph_chunks_active",
         metadata={},
     )
 

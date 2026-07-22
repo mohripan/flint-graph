@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from atlas_rag.config import Settings
-from atlas_rag.infrastructure.neo4j import create_neo4j_client
-from atlas_rag.infrastructure.neo4j_migrations import apply_migrations, load_migrations
+from flint_graph.config import Settings
+from flint_graph.infrastructure.neo4j import create_neo4j_client
+from flint_graph.infrastructure.neo4j_migrations import apply_migrations, load_migrations
 
 pytestmark = pytest.mark.skipif(
-    not os.getenv("ATLAS_NEO4J_INTEGRATION"),
-    reason="Set ATLAS_NEO4J_INTEGRATION=1 with a running Neo4j to run this test.",
+    not os.getenv("FLINT_GRAPH_NEO4J_INTEGRATION"),
+    reason="Set FLINT_GRAPH_NEO4J_INTEGRATION=1 with a running Neo4j to run this test.",
 )
 
 REPO_MIGRATIONS_DIR = Path("migrations/neo4j")

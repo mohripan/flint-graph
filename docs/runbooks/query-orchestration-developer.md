@@ -40,16 +40,16 @@ that do not require live LLM services.
 The current environment variables are:
 
 ```text
-ATLAS_QUERY_ENABLED
-ATLAS_QUERY_CLASSIFIER_PROVIDER
-ATLAS_QUERY_RERANKER_PROVIDER
-ATLAS_QUERY_ANSWER_PROVIDER
-ATLAS_QUERY_DEFAULT_CANDIDATE_LIMIT
-ATLAS_QUERY_MAX_CANDIDATE_LIMIT
-ATLAS_QUERY_CONTEXT_TOKEN_BUDGET
-ATLAS_QUERY_MAX_CONTEXT_RECORDS
-ATLAS_QUERY_GRAPH_DEPTH
-ATLAS_QUERY_STREAM_HEARTBEAT_SECONDS
+FLINT_GRAPH_QUERY_ENABLED
+FLINT_GRAPH_QUERY_CLASSIFIER_PROVIDER
+FLINT_GRAPH_QUERY_RERANKER_PROVIDER
+FLINT_GRAPH_QUERY_ANSWER_PROVIDER
+FLINT_GRAPH_QUERY_DEFAULT_CANDIDATE_LIMIT
+FLINT_GRAPH_QUERY_MAX_CANDIDATE_LIMIT
+FLINT_GRAPH_QUERY_CONTEXT_TOKEN_BUDGET
+FLINT_GRAPH_QUERY_MAX_CONTEXT_RECORDS
+FLINT_GRAPH_QUERY_GRAPH_DEPTH
+FLINT_GRAPH_QUERY_STREAM_HEARTBEAT_SECONDS
 ```
 
 ## Database Checks
@@ -57,66 +57,66 @@ ATLAS_QUERY_STREAM_HEARTBEAT_SECONDS
 Implemented query-run tables:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "\dt *query*"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "\dt *query*"
 ```
 
 Inspect recent runs:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, tenant_id, status, classification_label, created_at, completed_at, error_code from query_runs order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, tenant_id, status, classification_label, created_at, completed_at, error_code from query_runs order by created_at desc limit 20;"
 ```
 
 Inspect stream events:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, sequence, event_type, created_at from query_run_events order by created_at desc, sequence desc limit 50;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select query_run_id, sequence, event_type, created_at from query_run_events order by created_at desc, sequence desc limit 50;"
 ```
 
 Inspect candidates:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, source, candidate_type, rank, fusion_score, rerank_score from query_run_candidates order by created_at desc limit 50;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select query_run_id, source, candidate_type, rank, fusion_score, rerank_score from query_run_candidates order by created_at desc limit 50;"
 ```
 
 Inspect context packs:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, pack_version, token_budget, token_count, created_at from query_context_packs order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select query_run_id, pack_version, token_budget, token_count, created_at from query_context_packs order by created_at desc limit 20;"
 ```
 
 During Phase 2, these tables are populated through
-`atlas_rag.application.services.query_runs`.
+`flint_graph.application.services.query_runs`.
 
 During Phase 3, classification and entity-link decisions are populated through
-`atlas_rag.application.services.query_planning`.
+`flint_graph.application.services.query_planning`.
 
 During Phase 4, the compact LangGraph runtime is available through
-`atlas_rag.application.services.query_orchestration.run_query_retrieval_graph`.
+`flint_graph.application.services.query_orchestration.run_query_retrieval_graph`.
 It starts the query run, classifies the query, links entities, plans retrievers,
 runs configured retrievers in parallel, persists raw candidates, and records
 retrieval progress events.
 
 During Phase 5, the same graph continues into deterministic fusion and
-reranking. `atlas_rag.application.services.query_fusion` groups duplicate
+reranking. `flint_graph.application.services.query_fusion` groups duplicate
 candidates by candidate type plus source IDs, writes `fusion_score`, reranks
 fused representatives through the provider-neutral reranker protocol, writes
 `rerank_score` and `rerank_rank`, and appends `fusion.completed` plus
 `rerank.completed`.
 
-During Phase 6, `atlas_rag.application.services.query_context_packing` packs
+During Phase 6, `flint_graph.application.services.query_context_packing` packs
 reranked candidate previews into persisted context records. It enforces token
 budget and max-record limits, skips candidates without preview text, writes
 `query_context_packs` and `query_context_pack_records`, and appends
 `context.packed`.
 
-During Phase 7, `atlas_rag.application.services.query_answering` loads the
+During Phase 7, `flint_graph.application.services.query_answering` loads the
 latest context pack, invokes the provider-neutral answer generator, persists
 `answer_text` and `answer_citations`, appends `answer.delta`,
 `answer.citation`, and `query.completed`, and marks the run `completed`. The
 default deterministic generator uses the first packed context sentence and
 citation.
 
-`atlas_rag.api.routes.query` exposes the public query-run and event APIs. The
+`flint_graph.api.routes.query` exposes the public query-run and event APIs. The
 SSE endpoint starts queued query runs, executes the graph, commits after node
 boundaries, and streams the same persisted event sequence that the inspection
 endpoint returns. API-edge retriever adapters call OpenSearch lexical search,
@@ -129,43 +129,43 @@ During Phase 8, deterministic eval fixtures live in
 Inspect linked entities:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, mention_text, status, canonical_entity_id, score, method from query_run_linked_entities order by created_at desc limit 50;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select query_run_id, mention_text, status, canonical_entity_id, score, method from query_run_linked_entities order by created_at desc limit 50;"
 ```
 
 Inspect Phase 4 retrieval progress:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select sequence, event_type, payload from query_run_events where query_run_id = '<query-run-id>' order by sequence;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select sequence, event_type, payload from query_run_events where query_run_id = '<query-run-id>' order by sequence;"
 ```
 
 Inspect raw persisted retrieval candidates for a run:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select source, candidate_type, dedupe_key, rank, raw_score, normalized_score from query_run_candidates where query_run_id = '<query-run-id>' order by source, rank;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select source, candidate_type, dedupe_key, rank, raw_score, normalized_score from query_run_candidates where query_run_id = '<query-run-id>' order by source, rank;"
 ```
 
 Inspect Phase 5 fusion and rerank scores:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select source, dedupe_key, fusion_score, rerank_score, rerank_rank, reasons from query_run_candidates where query_run_id = '<query-run-id>' order by coalesce(rerank_rank, 999999), source, rank;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select source, dedupe_key, fusion_score, rerank_score, rerank_rank, reasons from query_run_candidates where query_run_id = '<query-run-id>' order by coalesce(rerank_rank, 999999), source, rank;"
 ```
 
 Inspect Phase 6 context packs:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select pack_id, pack_version, token_budget, token_count, selected_candidate_ids from query_context_packs where query_run_id = '<query-run-id>' order by pack_version;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select pack_id, pack_version, token_budget, token_count, selected_candidate_ids from query_context_packs where query_run_id = '<query-run-id>' order by pack_version;"
 ```
 
 Inspect Phase 6 context records:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select context_id, citation_id, candidate_id, token_count, source_ids from query_context_pack_records where query_run_id = '<query-run-id>' order by citation_id;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select context_id, citation_id, candidate_id, token_count, source_ids from query_context_pack_records where query_run_id = '<query-run-id>' order by citation_id;"
 ```
 
 Inspect Phase 7 answers:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, answer_text, answer_citations, completed_at, error_code from query_runs where id = '<query-run-id>';"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, answer_text, answer_citations, completed_at, error_code from query_runs where id = '<query-run-id>';"
 ```
 
 ## API Checks

@@ -59,20 +59,20 @@ The metadata-first document endpoint is compatibility-only for this milestone. I
 Important worker settings:
 
 ```env
-ATLAS_OBJECT_STORE_ENDPOINT_URL=http://minio:9000
-ATLAS_OBJECT_STORE_BUCKET=atlas-rag
-ATLAS_PARSER_TIMEOUT_SECONDS=30
-ATLAS_PARSER_MAX_RAW_BYTES=10485760
-ATLAS_PARSER_MAX_NORMALIZED_BYTES=5242880
-ATLAS_PARSER_MAX_ELEMENTS=10000
-ATLAS_CHUNKING_MAX_CHUNK_CHARS=1200
-ATLAS_CHUNKING_OVERLAP_CHARS=120
-ATLAS_EXTRACTION_ENABLED=true
-ATLAS_EXTRACTION_MODE=optional
-ATLAS_LLM_PROVIDER=ollama
-ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:11434
-ATLAS_OLLAMA_MODEL=gemma3:1b
-ATLAS_EXTRACTION_TIMEOUT_SECONDS=180
+FLINT_GRAPH_OBJECT_STORE_ENDPOINT_URL=http://minio:9000
+FLINT_GRAPH_OBJECT_STORE_BUCKET=flint-graph
+FLINT_GRAPH_PARSER_TIMEOUT_SECONDS=30
+FLINT_GRAPH_PARSER_MAX_RAW_BYTES=10485760
+FLINT_GRAPH_PARSER_MAX_NORMALIZED_BYTES=5242880
+FLINT_GRAPH_PARSER_MAX_ELEMENTS=10000
+FLINT_GRAPH_CHUNKING_MAX_CHUNK_CHARS=1200
+FLINT_GRAPH_CHUNKING_OVERLAP_CHARS=120
+FLINT_GRAPH_EXTRACTION_ENABLED=true
+FLINT_GRAPH_EXTRACTION_MODE=optional
+FLINT_GRAPH_LLM_PROVIDER=ollama
+FLINT_GRAPH_OLLAMA_BASE_URL=http://host.docker.internal:11434
+FLINT_GRAPH_OLLAMA_MODEL=gemma3:1b
+FLINT_GRAPH_EXTRACTION_TIMEOUT_SECONDS=180
 ```
 
 Default extraction is optional. If Ollama is unavailable, ingestion can still complete and `extraction.json` records failure provenance.
@@ -89,7 +89,7 @@ $tenant = curl.exe -sS -X POST http://localhost:8000/v1/tenants `
 @"
 # Developer Smoke
 
-AtlasRAG should parse this markdown, chunk it, and record extraction provenance.
+FlintGraph should parse this markdown, chunk it, and record extraction provenance.
 "@ | Set-Content -Encoding utf8 .\developer-smoke.md
 
 $upload = curl.exe -sS -X POST http://localhost:8000/v1/documents/uploads `
@@ -112,25 +112,25 @@ curl.exe -sS "http://localhost:8000/v1/ingestion-jobs/$($upload.ingestion_job_id
 Latest job and version:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select j.id as job_id, j.status as job_status, v.id as version_id, v.status as version_status, j.error_code, j.error_message from ingestion_jobs j join document_versions v on v.id = j.document_version_id order by j.created_at desc limit 5;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select j.id as job_id, j.status as job_status, v.id as version_id, v.status as version_status, j.error_code, j.error_message from ingestion_jobs j join document_versions v on v.id = j.document_version_id order by j.created_at desc limit 5;"
 ```
 
 Job events:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select e.event_type, e.from_status, e.to_status, e.details from ingestion_job_events e join ingestion_jobs j on j.id = e.job_id order by e.created_at desc limit 10;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select e.event_type, e.from_status, e.to_status, e.details from ingestion_job_events e join ingestion_jobs j on j.id = e.job_id order by e.created_at desc limit 10;"
 ```
 
 Artifacts:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select artifact_type, schema_version, metadata, object_uri from document_artifacts order by created_at desc limit 10;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select artifact_type, schema_version, metadata, object_uri from document_artifacts order by created_at desc limit 10;"
 ```
 
 Chunks:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select chunk_index, left(text, 120) as preview, heading_path, source_element_ids from document_chunks order by created_at desc, chunk_index limit 10;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select chunk_index, left(text, 120) as preview, heading_path, source_element_ids from document_chunks order by created_at desc, chunk_index limit 10;"
 ```
 
 ## MinIO Checks
@@ -154,14 +154,14 @@ tenants/<tenant_id>/documents/<document_id>/versions/<version_id>/artifacts/extr
 
 Optional extraction failure:
 
-- Set `ATLAS_EXTRACTION_MODE=optional`.
-- Point `ATLAS_OLLAMA_BASE_URL` to an unavailable host.
+- Set `FLINT_GRAPH_EXTRACTION_MODE=optional`.
+- Point `FLINT_GRAPH_OLLAMA_BASE_URL` to an unavailable host.
 - Expected: job `completed`, version `active`, extraction artifact status `failed`.
 
 Required extraction failure:
 
-- Set `ATLAS_EXTRACTION_MODE=required`.
-- Point `ATLAS_OLLAMA_BASE_URL` to an unavailable host.
+- Set `FLINT_GRAPH_EXTRACTION_MODE=required`.
+- Point `FLINT_GRAPH_OLLAMA_BASE_URL` to an unavailable host.
 - Expected: job `failed`, version `failed`, extraction artifact status `failed`.
 
 Raw hash mismatch:

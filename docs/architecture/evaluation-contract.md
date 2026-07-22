@@ -1,8 +1,8 @@
 # Evaluation contract
 
 > Status: Accepted (Milestone 09). Defines the dataset schema, metric definitions, experiment
-> and report formats, and threshold/baseline semantics for the AtlasRAG evaluation platform.
-> Implementation target: `src/atlas_rag/evaluation/` + the `atlas-eval` CLI, with data under
+> and report formats, and threshold/baseline semantics for the FlintGraph evaluation platform.
+> Implementation target: `src/flint_graph/evaluation/` + the `flint-graph-eval` CLI, with data under
 > `evals/`. See ADR 0010.
 
 ## Principles
@@ -143,7 +143,7 @@ as a side-by-side table with metric and cost deltas.
 - `baselines.json` stores accepted aggregate metric values per (dataset, config).
 - A run fails when any thresholded metric regresses beyond its tolerance relative to the
   baseline (or a fixed floor, when `thresholds` sets `min`/`max` directly).
-- Baselines are updated only via an explicit `atlas-eval --update-baseline` action, reviewed in
+- Baselines are updated only via an explicit `flint-graph-eval --update-baseline` action, reviewed in
   the PR that changes them. Baselines never move silently.
 
 ## CI gates

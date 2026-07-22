@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     AnswerGenerationRequest,
     DeterministicAnswerGenerator,
     DeterministicQueryClassifier,
@@ -15,10 +15,10 @@ from atlas_rag.application.query_orchestration import (
     PackedContextRecord,
     QueryClassificationRequest,
 )
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     QueryContextPack as ApplicationQueryContextPack,
 )
-from atlas_rag.application.services.query_faithfulness import verify_generated_answer
+from flint_graph.application.services.query_faithfulness import verify_generated_answer
 
 _FIXTURE_PATH = Path("tests/fixtures/query_orchestration_eval_cases.json")
 _EVAL_CASES: list[dict[str, Any]] = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))

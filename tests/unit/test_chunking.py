@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from atlas_rag.application.chunking import ChunkingConfig, chunk_normalized_document
-from atlas_rag.application.parsing import (
+from flint_graph.application.chunking import ChunkingConfig, chunk_normalized_document
+from flint_graph.application.parsing import (
     NormalizedDocument,
     NormalizedElement,
     SourceFormat,
@@ -21,7 +21,7 @@ def _document(elements: list[NormalizedElement]) -> NormalizedDocument:
             content_hash=CONTENT_HASH,
         ),
         format=SourceFormat.MARKDOWN,
-        title="Atlas",
+        title="Acme",
         elements=elements,
     )
 
@@ -29,7 +29,7 @@ def _document(elements: list[NormalizedElement]) -> NormalizedDocument:
 def test_chunker_preserves_heading_context_and_structural_boundaries() -> None:
     artifact = _document(
         [
-            NormalizedElement(id="element-000001", type="heading", text="Atlas", level=1),
+            NormalizedElement(id="element-000001", type="heading", text="Acme", level=1),
             NormalizedElement(id="element-000002", type="paragraph", text="First paragraph."),
             NormalizedElement(id="element-000003", type="heading", text="Details", level=2),
             NormalizedElement(id="element-000004", type="list_item", text="First bullet"),
@@ -52,10 +52,10 @@ def test_chunker_preserves_heading_context_and_structural_boundaries() -> None:
         for chunk in manifest.chunks
     ]
     assert chunk_summaries == [
-        ("First paragraph.", ["Atlas"], ["element-000002"]),
+        ("First paragraph.", ["Acme"], ["element-000002"]),
         (
             "First bullet\n\nprint('stable')",
-            ["Atlas", "Details"],
+            ["Acme", "Details"],
             ["element-000004", "element-000005"],
         ),
     ]

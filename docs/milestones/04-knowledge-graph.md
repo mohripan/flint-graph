@@ -15,9 +15,9 @@ extraction proposals with verified evidence spans instead of the original
 Added Neo4j infrastructure and versioned graph migrations:
 
 - Docker Compose includes a `neo4j` service (5.26 community) and a `neo4j-migrate` one-shot service.
-- Settings expose `ATLAS_NEO4J_*` variables (URI, user, password, database, pool size, timeout).
-- `atlas_rag.infrastructure.neo4j` defines a thin async `Neo4jClient` and driver factory.
-- `atlas_rag.infrastructure.neo4j_migrations` runs versioned Cypher files from `migrations/neo4j/`, tracking applied versions as `(:_SchemaMigration)` nodes, and is idempotent.
+- Settings expose `FLINT_GRAPH_NEO4J_*` variables (URI, user, password, database, pool size, timeout).
+- `flint_graph.infrastructure.neo4j` defines a thin async `Neo4jClient` and driver factory.
+- `flint_graph.infrastructure.neo4j_migrations` runs versioned Cypher files from `migrations/neo4j/`, tracking applied versions as `(:_SchemaMigration)` nodes, and is idempotent.
 - Migration `0001_entity_constraints` creates the `Entity.id` uniqueness constraint and a `(tenant_id, type, normalized_name)` lookup index.
 
 ## Phase 2 Completed Behavior
@@ -43,7 +43,7 @@ Extended structured extraction to a claims-aware schema:
 
 Persisted mentions and claims from extraction:
 
-- `atlas_rag.application.entity_resolution.normalize_name` provides shared surface normalization (NFKC, casefold, punctuation and whitespace collapse).
+- `flint_graph.application.entity_resolution.normalize_name` provides shared surface normalization (NFKC, casefold, punctuation and whitespace collapse).
 - `persist_mentions_and_claims` derives `entity_mentions` (one per extracted entity, plus any claim subject not already present, typed `other`) and `claims` from a version's extraction facts.
 - A claim object links to an entity mention when its surface matches one; otherwise it is stored as an `object_literal`.
 - Mentions carry provenance: source extraction artifact id, prompt hash, response hash, and aggregated evidence chunk ids.
@@ -53,7 +53,7 @@ Persisted mentions and claims from extraction:
 
 Added deterministic candidate generation and scoring:
 
-- `atlas_rag.application.entity_resolution.scoring` provides pure similarity, feature, scoring, and banding functions with deterministic ordering.
+- `flint_graph.application.entity_resolution.scoring` provides pure similarity, feature, scoring, and banding functions with deterministic ordering.
 - `generate_candidates` blocks candidate entities by exact normalized name, exact alias, or `pg_trgm` similarity, constrained to the mention's entity type and active entities only.
 - Scoring combines name/alias similarity (dominant), type agreement, alias-exact, and shared-document co-occurrence into a `[0, 1]` score.
 - Settings expose configurable auto, review, and trigram thresholds and a candidate limit.

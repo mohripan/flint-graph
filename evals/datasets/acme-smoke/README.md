@@ -49,4 +49,4 @@ done
 ```
 
 Ingestion is idempotent on `(tenant, external_id, content)`, so re-running is safe. An
-automated ingestion + evaluation entrypoint (`atlas-eval`) arrives with the CLI phase.
+automated ingestion + evaluation entrypoint (`flint-graph-eval`) arrives with the CLI phase.

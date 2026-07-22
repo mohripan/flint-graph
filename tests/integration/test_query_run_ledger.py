@@ -4,13 +4,13 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     PackedContextRecord,
     QueryCandidate,
     QueryContextPack,
     QueryEntityLink,
 )
-from atlas_rag.application.services.query_runs import (
+from flint_graph.application.services.query_runs import (
     QueryRunCreate,
     append_query_run_event,
     create_query_run,
@@ -21,14 +21,14 @@ from atlas_rag.application.services.query_runs import (
     record_query_classification,
     transition_query_run,
 )
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import QueryRunStatus, RetrievalIndexScope
-from atlas_rag.domain.errors import ConflictError, NotFoundError
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.domain.enums import QueryRunStatus, RetrievalIndexScope
+from flint_graph.domain.errors import ConflictError, NotFoundError
+from flint_graph.infrastructure.db.models import (
     QueryContextPackRecord,
     QueryRunCandidate,
     QueryRunEvent,
@@ -52,10 +52,10 @@ def _index_spec(model: str = "deterministic-query") -> RetrievalIndexVersionSpec
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name="atlas_chunks_query",
+        neo4j_vector_index_name="flint_graph_chunks_query",
         neo4j_vector_property_name="embedding",
-        opensearch_index_name="atlas_chunks_query",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name="flint_graph_chunks_query",
+        opensearch_alias_name="flint_graph_chunks_active",
         metadata={"phase": 2},
     )
 

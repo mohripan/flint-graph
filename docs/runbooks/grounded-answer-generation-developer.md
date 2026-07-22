@@ -24,50 +24,50 @@ context.packed
 Deterministic providers remain the default path for local tests:
 
 ```text
-ATLAS_QUERY_ANSWER_PROVIDER=deterministic
-ATLAS_QUERY_SUPPORT_PROVIDER=deterministic
+FLINT_GRAPH_QUERY_ANSWER_PROVIDER=deterministic
+FLINT_GRAPH_QUERY_SUPPORT_PROVIDER=deterministic
 ```
 
 Ollama answer generation is opt-in:
 
 ```text
-ATLAS_QUERY_ANSWER_PROVIDER=ollama
-ATLAS_QUERY_ANSWER_MODEL=llama3.2
-ATLAS_QUERY_ANSWER_TIMEOUT_SECONDS=180
-ATLAS_QUERY_ANSWER_TEMPERATURE=0.0
-ATLAS_QUERY_ANSWER_MAX_TOKENS=1024
-ATLAS_QUERY_ANSWER_STREAM_TOKENS=true
+FLINT_GRAPH_QUERY_ANSWER_PROVIDER=ollama
+FLINT_GRAPH_QUERY_ANSWER_MODEL=llama3.2
+FLINT_GRAPH_QUERY_ANSWER_TIMEOUT_SECONDS=180
+FLINT_GRAPH_QUERY_ANSWER_TEMPERATURE=0.0
+FLINT_GRAPH_QUERY_ANSWER_MAX_TOKENS=1024
+FLINT_GRAPH_QUERY_ANSWER_STREAM_TOKENS=true
 ```
 
 Support thresholds:
 
 ```text
-ATLAS_QUERY_MIN_SUPPORTED_CLAIM_RATIO=0.5
-ATLAS_QUERY_MIN_CONTEXT_RELEVANCE=0.0
+FLINT_GRAPH_QUERY_MIN_SUPPORTED_CLAIM_RATIO=0.5
+FLINT_GRAPH_QUERY_MIN_CONTEXT_RELEVANCE=0.0
 ```
 
-`ATLAS_QUERY_SUPPORT_PROVIDER=ollama` is reserved for the future LLM support
+`FLINT_GRAPH_QUERY_SUPPORT_PROVIDER=ollama` is reserved for the future LLM support
 judge; the implemented provider is deterministic.
 
 ## Key Files
 
-- `src/atlas_rag/application/query_orchestration.py`: answer, claim,
+- `src/flint_graph/application/query_orchestration.py`: answer, claim,
   support-check, and stream-event contracts.
-- `src/atlas_rag/application/query_faithfulness.py`: pure citation repair,
+- `src/flint_graph/application/query_faithfulness.py`: pure citation repair,
   deterministic support checking, and abstention policy helpers.
-- `src/atlas_rag/application/services/query_faithfulness.py`: runtime
+- `src/flint_graph/application/services/query_faithfulness.py`: runtime
   draft-to-verified-answer pipeline.
-- `src/atlas_rag/application/services/query_answering.py`: answer generation,
+- `src/flint_graph/application/services/query_answering.py`: answer generation,
   verified event emission, persistence, and completion.
-- `src/atlas_rag/application/services/query_runs.py`: query-run transition and
+- `src/flint_graph/application/services/query_runs.py`: query-run transition and
   answer-claim persistence helpers.
-- `src/atlas_rag/application/services/query_provenance.py`: answer-to-source
+- `src/flint_graph/application/services/query_provenance.py`: answer-to-source
   provenance reader.
-- `src/atlas_rag/infrastructure/ollama.py`: Ollama answer generation and
+- `src/flint_graph/infrastructure/ollama.py`: Ollama answer generation and
   streaming adapter.
-- `src/atlas_rag/infrastructure/answer_generator_factory.py`: answer and
+- `src/flint_graph/infrastructure/answer_generator_factory.py`: answer and
   support provider selection.
-- `src/atlas_rag/api/routes/query.py`: query stream, replay, inspection, and
+- `src/flint_graph/api/routes/query.py`: query stream, replay, inspection, and
   provenance endpoints.
 - `migrations/versions/0011_answer_faithfulness.py`: answer faithfulness schema.
 
@@ -76,19 +76,19 @@ judge; the implemented provider is deterministic.
 Inspect answer summary columns:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, abstained, abstain_reason, supported_claim_count, unsupported_claim_count, support_method, answer_provider from query_runs order by created_at desc limit 10;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, abstained, abstain_reason, supported_claim_count, unsupported_claim_count, support_method, answer_provider from query_runs order by created_at desc limit 10;"
 ```
 
 Inspect persisted answer claims:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select query_run_id, claim_index, support_status, support_score, citation_ids, text from query_answer_claims order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select query_run_id, claim_index, support_status, support_score, citation_ids, text from query_answer_claims order by created_at desc limit 20;"
 ```
 
 Inspect answer events:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select sequence, event_type, payload from query_run_events where query_run_id = '<query-run-id>' order by sequence;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select sequence, event_type, payload from query_run_events where query_run_id = '<query-run-id>' order by sequence;"
 ```
 
 Expected successful answer tail:

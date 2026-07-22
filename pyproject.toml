@@ -1,5 +1,5 @@
 [project]
-name = "atlas-rag"
+name = "flint-graph"
 version = "0.1.0"
 description = "Production-grade GraphRAG platform"
 readme = "README.md"
@@ -40,14 +40,14 @@ dev = [
 ]
 
 [project.scripts]
-atlas-eval = "atlas_rag.cli.eval:main"
+flint-graph-eval = "flint_graph.cli.eval:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/atlas_rag"]
+packages = ["src/flint_graph"]
 
 [tool.pyright]
 include = ["src", "migrations", "tests"]
@@ -70,7 +70,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-packages = ["atlas_rag"]
+packages = ["flint_graph"]
 
 [[tool.mypy.overrides]]
 module = [

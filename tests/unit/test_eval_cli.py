@@ -4,8 +4,8 @@ import asyncio
 import json
 from pathlib import Path
 
-from atlas_rag.cli.eval import main
-from atlas_rag.evaluation import (
+from flint_graph.cli.eval import main
+from flint_graph.evaluation import (
     GoldenDataset,
     load_dataset,
     load_experiment,
@@ -13,7 +13,7 @@ from atlas_rag.evaluation import (
     recorded_evaluator,
     run_comparison,
 )
-from atlas_rag.evaluation.comparison import comparison_table
+from flint_graph.evaluation.comparison import comparison_table
 
 _GOOD = [
     {

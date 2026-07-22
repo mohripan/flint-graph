@@ -1,4 +1,4 @@
-# AtlasRAG
+# FlintGraph
 
 A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, and includes real-model defaults plus an offline evaluation quality gate. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
@@ -35,7 +35,7 @@ Then open:
 cp .env.example .env
 uv sync --all-groups
 uv run alembic upgrade head
-uv run uvicorn atlas_rag.main:app --reload
+uv run uvicorn flint_graph.main:app --reload
 ```
 
 In another shell, run Temporal locally and then start the outbox relay:
@@ -203,24 +203,24 @@ PowerShell, the direct commands are usually clearer:
 uv run ruff check .
 uv run mypy
 uv run pytest
-uv run atlas-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
+uv run flint-graph-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 ```
 
-Milestone 09 real-model defaults are env-aware: `ATLAS_ENV=test` stays deterministic and
+Milestone 09 real-model defaults are env-aware: `FLINT_GRAPH_ENV=test` stays deterministic and
 offline; non-test environments default to real providers unless explicitly overridden. For a
-no-cost local query path, set `ATLAS_QUERY_ANSWER_PROVIDER=deterministic`,
-`ATLAS_QUERY_SUPPORT_PROVIDER=deterministic`, and `ATLAS_EMBEDDING_PROVIDER=deterministic`.
+no-cost local query path, set `FLINT_GRAPH_QUERY_ANSWER_PROVIDER=deterministic`,
+`FLINT_GRAPH_QUERY_SUPPORT_PROVIDER=deterministic`, and `FLINT_GRAPH_EMBEDDING_PROVIDER=deterministic`.
 
 Milestone 10 adds an explicit local Ollama path for no-cost real answers:
 
 ```powershell
 ollama pull nomic-embed-text
 ollama pull llama3.2
-$env:ATLAS_EMBEDDING_PROVIDER = "ollama"
-$env:ATLAS_EMBEDDING_MODEL = "nomic-embed-text"
-$env:ATLAS_EMBEDDING_DIMENSIONS = "768"
-$env:ATLAS_QUERY_ANSWER_PROVIDER = "ollama"
-$env:ATLAS_QUERY_SUPPORT_PROVIDER = "ollama"
+$env:FLINT_GRAPH_EMBEDDING_PROVIDER = "ollama"
+$env:FLINT_GRAPH_EMBEDDING_MODEL = "nomic-embed-text"
+$env:FLINT_GRAPH_EMBEDDING_DIMENSIONS = "768"
+$env:FLINT_GRAPH_QUERY_ANSWER_PROVIDER = "ollama"
+$env:FLINT_GRAPH_QUERY_SUPPORT_PROVIDER = "ollama"
 docker compose up --build
 ```
 

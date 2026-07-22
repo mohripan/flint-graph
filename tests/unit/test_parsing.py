@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.application.parsing import (
+from flint_graph.application.parsing import (
     BoundedParserRunner,
     NormalizedDocument,
     NormalizedElement,
@@ -15,7 +15,7 @@ from atlas_rag.application.parsing import (
     SourceMetadata,
     detect_source_format,
 )
-from atlas_rag.application.parsing.parsers import parse_normalized_document
+from flint_graph.application.parsing.parsers import parse_normalized_document
 
 DOCUMENT_ID = UUID("11111111-1111-4111-8111-111111111111")
 VERSION_ID = UUID("22222222-2222-4222-8222-222222222222")
@@ -38,16 +38,15 @@ def _source_metadata(
 
 def _text_pdf_bytes() -> bytes:
     return base64.b64decode(
-        b"JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIg"
-        b"MCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBv"
-        b"YmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTQ0XSAvUmVz"
-        b"b3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2Jq"
-        b"CjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNh"
-        b"ID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNDQgPj4Kc3RyZWFtCkJUCi9GMSAyNCBUZgo1MCAx"
-        b"MDAgVGQKKEF0bGFzIFBERiB0ZXh0KSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAw"
-        b"MDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAw"
-        b"MDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI2MCAwMDAwMCBuIAowMDAwMDAwMzMwIDAwMDAwIG4gCnRyYWls"
-        b"ZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDIzCiUlRU9GCg=="
+        b"JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoK"
+        b"PDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUg"
+        b"L1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTQ0XSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8"
+        b"IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQg"
+        b"L1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGgg"
+        b"NDQgPj4Kc3RyZWFtCkJUCi9GMSAyNCBUZgo1MCAxMDAgVGQKKEZsaW50IFBERiB0ZXh0KSBUagpFVAplbmRzdHJl"
+        b"YW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAw"
+        b"MDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI2MCAwMDAwMCBuIAowMDAwMDAwMzMwIDAw"
+        b"MDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDIzCiUlRU9GCg=="
     )
 
 
@@ -157,7 +156,7 @@ def test_parse_text_based_pdf_extracts_page_text() -> None:
 
     assert artifact.format == SourceFormat.PDF
     assert [(element.type, element.text, element.page) for element in artifact.elements] == [
-        ("paragraph", "Atlas PDF text", 1)
+        ("paragraph", "Flint PDF text", 1)
     ]
 
 

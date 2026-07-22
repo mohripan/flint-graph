@@ -6,9 +6,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from atlas_rag.config import get_settings
-from atlas_rag.infrastructure.db import models  # noqa: F401
-from atlas_rag.infrastructure.db.base import Base
+from flint_graph.config import get_settings
+from flint_graph.infrastructure.db import models  # noqa: F401
+from flint_graph.infrastructure.db.base import Base
 
 config = context.config
 if config.config_file_name is not None:

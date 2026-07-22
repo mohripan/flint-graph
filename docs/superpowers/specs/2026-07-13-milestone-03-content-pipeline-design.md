@@ -65,7 +65,7 @@ s3://<bucket>/tenants/{tenant_id}/documents/{document_id}/versions/{version_id}/
 s3://<bucket>/tenants/{tenant_id}/documents/{document_id}/versions/{version_id}/artifacts/extraction.json
 ```
 
-The bucket and client settings will be exposed through `ATLAS_` environment variables and documented in `.env.example`.
+The bucket and client settings will be exposed through `FLINT_GRAPH_` environment variables and documented in `.env.example`.
 
 ## API Contract
 
@@ -107,7 +107,7 @@ Supported formats:
 
 Scanned PDF OCR is out of scope. Empty text extraction from a PDF is a controlled failure.
 
-Parser output is an Atlas-owned normalized artifact rather than a LangChain-native document object. LangChain and LangGraph can still be used above or behind Atlas interfaces, but durable ingestion contracts should not depend on framework-specific loader output.
+Parser output is a FlintGraph-owned normalized artifact rather than a LangChain-native document object. LangChain and LangGraph can still be used above or behind FlintGraph interfaces, but durable ingestion contracts should not depend on framework-specific loader output.
 
 Normalized artifact shape:
 
@@ -169,12 +169,12 @@ Extraction is configurable and uses Ollama first.
 Default settings should match `.env.example`:
 
 ```env
-ATLAS_EXTRACTION_ENABLED=true
-ATLAS_EXTRACTION_MODE=optional
-ATLAS_LLM_PROVIDER=ollama
-ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:11434
-ATLAS_OLLAMA_MODEL=gemma3:1b
-ATLAS_EXTRACTION_TIMEOUT_SECONDS=60
+FLINT_GRAPH_EXTRACTION_ENABLED=true
+FLINT_GRAPH_EXTRACTION_MODE=optional
+FLINT_GRAPH_LLM_PROVIDER=ollama
+FLINT_GRAPH_OLLAMA_BASE_URL=http://host.docker.internal:11434
+FLINT_GRAPH_OLLAMA_MODEL=gemma3:1b
+FLINT_GRAPH_EXTRACTION_TIMEOUT_SECONDS=60
 ```
 
 Modes:
@@ -257,4 +257,3 @@ docker compose config
 ```
 
 Phases that touch MinIO, Temporal, or Ollama should also include a real manual Docker Compose exercise.
-

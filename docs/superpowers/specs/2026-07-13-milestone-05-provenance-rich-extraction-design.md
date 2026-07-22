@@ -2,7 +2,7 @@
 
 ## Summary
 
-Milestone 05 replaces the current extraction-to-resolution bridge with staged, evidence-backed extraction proposals. The model produces provider-neutral structured output, AtlasRAG validates and verifies it against stored chunks, and deterministic resolution decides what reaches the canonical graph.
+Milestone 05 replaces the current extraction-to-resolution bridge with staged, evidence-backed extraction proposals. The model produces provider-neutral structured output, FlintGraph validates and verifies it against stored chunks, and deterministic resolution decides what reaches the canonical graph.
 
 This is Approach 2 from planning: staged extraction records become the direct input to canonical resolution. The current `entity_mentions` / `claims` bridge is superseded as the primary resolution path.
 

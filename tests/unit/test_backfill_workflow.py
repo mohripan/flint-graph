@@ -3,9 +3,9 @@ from typing import Any
 import pytest
 from temporalio.exceptions import CancelledError
 
-from atlas_rag.application.outbox_contracts import IndexBackfillPayload
-from atlas_rag.workflows import backfill
-from atlas_rag.workflows.backfill import (
+from flint_graph.application.outbox_contracts import IndexBackfillPayload
+from flint_graph.workflows import backfill
+from flint_graph.workflows.backfill import (
     COMPLETE_INDEX_BACKFILL_ACTIVITY,
     FAIL_INDEX_BACKFILL_ACTIVITY,
     INDEX_BACKFILL_WORKFLOW,

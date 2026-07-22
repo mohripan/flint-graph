@@ -1,6 +1,6 @@
 from sqlalchemy import UniqueConstraint
 
-from atlas_rag.infrastructure.db.models import IngestionJob, QueryAnswerClaim, QueryRun
+from flint_graph.infrastructure.db.models import IngestionJob, QueryAnswerClaim, QueryRun
 
 
 def test_ingestion_job_model_enforces_one_job_per_document_version() -> None:

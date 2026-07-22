@@ -3,13 +3,17 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.entity_resolution import CandidateEntity, name_similarity, normalize_name
-from atlas_rag.application.services.candidate_generation import load_candidate_entities
-from atlas_rag.application.services.resolution import (
+from flint_graph.application.entity_resolution import (
+    CandidateEntity,
+    name_similarity,
+    normalize_name,
+)
+from flint_graph.application.services.candidate_generation import load_candidate_entities
+from flint_graph.application.services.resolution import (
     ResolutionConfig,
     resolve_pending_mentions,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     ClaimStatus,
     EntityStatus,
     EntityType,
@@ -18,7 +22,7 @@ from atlas_rag.domain.enums import (
     MergeCandidateStatus,
     SourceType,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Claim,
     Document,
@@ -273,7 +277,7 @@ async def test_resolve_aggregates_claims_into_relationships(db_session: AsyncSes
     await db_session.commit()
 
     assert result.relationships_upserted == 1
-    from atlas_rag.infrastructure.db.models import EntityRelationship
+    from flint_graph.infrastructure.db.models import EntityRelationship
 
     relationship = await db_session.scalar(select(EntityRelationship))
     assert relationship is not None

@@ -6,27 +6,27 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     AnswerGenerationRequest,
     GeneratedAnswer,
     PackedContextRecord,
 )
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     QueryContextPack as ApplicationQueryContextPack,
 )
-from atlas_rag.application.services.query_answering import generate_query_answer
-from atlas_rag.application.services.query_runs import (
+from flint_graph.application.services.query_answering import generate_query_answer
+from flint_graph.application.services.query_runs import (
     QueryRunCreate,
     create_query_run,
     persist_query_context_pack,
 )
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import QueryRunStatus, RetrievalIndexScope
-from atlas_rag.infrastructure.db.models import QueryAnswerClaim, QueryRun, QueryRunEvent, Tenant
+from flint_graph.domain.enums import QueryRunStatus, RetrievalIndexScope
+from flint_graph.infrastructure.db.models import QueryAnswerClaim, QueryRun, QueryRunEvent, Tenant
 
 
 class DraftAnswerGenerator:
@@ -322,10 +322,10 @@ async def _active_index_id(session: AsyncSession, tenant_id: UUID) -> UUID:
             chunking_schema_version="1",
             chunking_config_hash="sha256:chunking",
             lexical_schema_version="1",
-            neo4j_vector_index_name="atlas_chunks_query_answering",
+            neo4j_vector_index_name="flint_graph_chunks_query_answering",
             neo4j_vector_property_name="embedding",
-            opensearch_index_name="atlas_chunks_query_answering",
-            opensearch_alias_name="atlas_chunks_active",
+            opensearch_index_name="flint_graph_chunks_query_answering",
+            opensearch_alias_name="flint_graph_chunks_active",
         ),
     )
     active = await activate_retrieval_index_version(session, version_id=version.id)

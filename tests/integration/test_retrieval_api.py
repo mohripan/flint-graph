@@ -9,13 +9,13 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-import atlas_rag.api.dependencies as dependencies
-from atlas_rag.application.services.retrieval_index_versions import (
+import flint_graph.api.dependencies as dependencies
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     DocumentVersionStatus,
     EntityStatus,
@@ -24,8 +24,8 @@ from atlas_rag.domain.enums import (
     RetrievalIndexScope,
     SourceType,
 )
-from atlas_rag.infrastructure.db.base import Base
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.base import Base
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
     DocumentChunk,
@@ -34,8 +34,8 @@ from atlas_rag.infrastructure.db.models import (
     EntityRelationship,
     Tenant,
 )
-from atlas_rag.infrastructure.db.session import get_session
-from atlas_rag.main import app
+from flint_graph.infrastructure.db.session import get_session
+from flint_graph.main import app
 
 
 class CapturingOpenSearchClient:
@@ -60,7 +60,7 @@ class CapturingOpenSearchClient:
                     "heading_path": ["Overview"],
                     "page_start": 1,
                     "page_end": 1,
-                    "source_uri": "s3://atlas/acme.txt",
+                    "source_uri": "s3://flint-graph/acme.txt",
                     "metadata": {"source_type": "upload"},
                 },
             }
@@ -169,10 +169,10 @@ def _spec(*, model: str) -> RetrievalIndexVersionSpec:
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name=f"atlas_chunks_{model.replace('-', '_')}",
+        neo4j_vector_index_name=f"flint_graph_chunks_{model.replace('-', '_')}",
         neo4j_vector_property_name="embedding_v000001",
-        opensearch_index_name=f"atlas_chunks_{model.replace('-', '_')}",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name=f"flint_graph_chunks_{model.replace('-', '_')}",
+        opensearch_alias_name="flint_graph_chunks_active",
         metadata={"model": model},
     )
 
@@ -197,7 +197,7 @@ async def _document_version(
         tenant_id=tenant.id,
         title=title,
         source_type=SourceType.UPLOAD,
-        source_uri="s3://atlas/acme.txt",
+        source_uri="s3://flint-graph/acme.txt",
         next_version_number=2,
     )
     session.add(document)
@@ -450,7 +450,7 @@ async def test_search_endpoints_select_tenant_index_and_apply_filters(
     assert lexical.status_code == 200
     assert lexical.json()["index_version_id"] == str(index_version_id)
     assert lexical.json()["results"][0]["score"] == 2.5
-    assert opensearch.searches[0][0] == "atlas_chunks_tenant_v1"
+    assert opensearch.searches[0][0] == "flint_graph_chunks_tenant_v1"
     filters = opensearch.searches[0][1]["query"]["bool"]["filter"]
     assert {"term": {"tenant_id": str(tenant_id)}} in filters
     assert {"term": {"index_version_id": str(index_version_id)}} in filters
@@ -488,7 +488,7 @@ async def test_search_endpoints_filter_deleted_and_superseded_projection_hits(
             tenant_id=tenant.id,
             title="Stale Acme",
             source_type=SourceType.UPLOAD,
-            source_uri="s3://atlas/stale-acme.txt",
+            source_uri="s3://flint-graph/stale-acme.txt",
             next_version_number=2,
         )
         version = DocumentVersion(

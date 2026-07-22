@@ -1,8 +1,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.entity_merge import merge_entities
-from atlas_rag.domain.enums import (
+from flint_graph.application.services.entity_merge import merge_entities
+from flint_graph.domain.enums import (
     AliasSource,
     EntityStatus,
     EntityType,
@@ -11,7 +11,7 @@ from atlas_rag.domain.enums import (
     RelationshipStatus,
     SourceType,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
     DocumentVersion,

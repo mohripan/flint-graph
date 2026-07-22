@@ -61,7 +61,7 @@ Excluded:
 
 ## Implemented Phase 1 Contracts
 
-`src/atlas_rag/application/query_orchestration.py` defines the current
+`src/flint_graph/application/query_orchestration.py` defines the current
 application contract boundary. It includes:
 
 - query classification requests, labels, retrieval plans, and strategy metadata;
@@ -81,7 +81,7 @@ leaking provider SDK objects into application services.
 ## Implemented Phase 2 Ledger
 
 `migrations/versions/0010_query_run_ledger.py` and
-`src/atlas_rag/infrastructure/db/models.py` add:
+`src/flint_graph/infrastructure/db/models.py` add:
 
 - `query_runs`;
 - `query_run_events`;
@@ -90,7 +90,7 @@ leaking provider SDK objects into application services.
 - `query_context_packs`;
 - `query_context_pack_records`.
 
-`src/atlas_rag/application/services/query_runs.py` provides the persistence
+`src/flint_graph/application/services/query_runs.py` provides the persistence
 boundary for creating tenant-scoped query runs, loading runs by tenant,
 transitioning run status, appending monotonic per-run events, recording
 classification summaries, and storing linked-entity, candidate, and context-pack
@@ -98,12 +98,12 @@ summaries. The service validates that query runs use an active retrieval index
 version visible to the tenant.
 
 Query-run state changes use `QueryRunStatus` and explicit transition rules in
-`atlas_rag.domain.transitions`. Foreign-tenant query-run reads return
+`flint_graph.domain.transitions`. Foreign-tenant query-run reads return
 `NotFoundError`.
 
 ## Implemented Phase 3 Classification And Linking
 
-`src/atlas_rag/application/services/query_planning.py` adds the deterministic
+`src/flint_graph/application/services/query_planning.py` adds the deterministic
 query planning service boundary:
 
 - `classify_query_run` loads a tenant-scoped query run, invokes the
@@ -121,7 +121,7 @@ considered.
 
 ## Implemented Phase 4 LangGraph Retrieval Orchestration
 
-`src/atlas_rag/application/services/query_orchestration.py` adds the first
+`src/flint_graph/application/services/query_orchestration.py` adds the first
 LangGraph-backed query state machine. The implemented graph runs:
 
 ```text
@@ -153,7 +153,7 @@ nodes.
 
 ## Implemented Phase 5 Fusion And Reranking
 
-`src/atlas_rag/application/services/query_fusion.py` adds deterministic
+`src/flint_graph/application/services/query_fusion.py` adds deterministic
 candidate fusion and persisted reranking. Fusion loads raw
 `query_run_candidates`, groups duplicates by candidate type plus source IDs,
 computes a weighted score from the classified retriever weights, normalized
@@ -168,7 +168,7 @@ the Phase 6 context-packing node.
 
 ## Implemented Phase 6 Context Packing
 
-`src/atlas_rag/application/services/query_context_packing.py` adds deterministic
+`src/flint_graph/application/services/query_context_packing.py` adds deterministic
 context packing over reranked candidates. The packer loads tenant-scoped
 `query_run_candidates`, selects rows by `rerank_rank`, skips candidates without
 preview text, estimates tokens with a simple word-count heuristic, and enforces
@@ -182,7 +182,7 @@ into the Phase 7 answer-generation node.
 
 ## Implemented Phase 7 Answer Generation And SSE APIs
 
-`src/atlas_rag/application/services/query_answering.py` adds deterministic
+`src/flint_graph/application/services/query_answering.py` adds deterministic
 answer generation and completion persistence. It loads the latest persisted
 context pack, reconstructs the provider-neutral `QueryContextPack`, invokes the
 `AnswerGenerator` protocol, and defaults to `DeterministicAnswerGenerator`.
@@ -193,7 +193,7 @@ structured `answer_citations`, and appends `query.completed`. If generation
 fails, it transitions the run to `failed` with bounded error details and a
 `query.failed` event.
 
-`src/atlas_rag/api/routes/query.py` exposes tenant-scoped query APIs:
+`src/flint_graph/api/routes/query.py` exposes tenant-scoped query APIs:
 
 - `POST /v1/query-runs` creates a queued query run against an explicit or
   resolved active retrieval index version.
@@ -224,7 +224,7 @@ recorded under `notes/milestone-07/`.
 
 ## Architecture
 
-PostgreSQL remains authoritative for AtlasRAG control-plane state. Milestone 07
+PostgreSQL remains authoritative for FlintGraph control-plane state. Milestone 07
 adds query-run records, query events, linked-entity decisions, candidate
 summaries, context-pack manifests, answer metadata, and bounded failure details.
 

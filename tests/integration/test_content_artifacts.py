@@ -5,18 +5,18 @@ from hashlib import sha256
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.chunking import ChunkingConfig
-from atlas_rag.application.parsing import (
+from flint_graph.application.chunking import ChunkingConfig
+from flint_graph.application.parsing import (
     NormalizedDocument,
     NormalizedElement,
     SourceFormat,
     SourceReference,
 )
-from atlas_rag.application.services.content_artifacts import persist_content_artifacts
-from atlas_rag.application.services.intake import create_upload_intake
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.infrastructure.db.models import DocumentArtifact, DocumentChunk
-from atlas_rag.infrastructure.object_store import ObjectInfo
+from flint_graph.application.services.content_artifacts import persist_content_artifacts
+from flint_graph.application.services.intake import create_upload_intake
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.infrastructure.db.models import DocumentArtifact, DocumentChunk
+from flint_graph.infrastructure.object_store import ObjectInfo
 
 
 class FakeObjectStore:
@@ -56,7 +56,7 @@ async def test_persist_content_artifacts_writes_objects_and_queryable_chunk_line
     intake = await create_upload_intake(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         title="Artifact Source",
         external_id="artifact-source",
@@ -84,7 +84,7 @@ async def test_persist_content_artifacts_writes_objects_and_queryable_chunk_line
     result = await persist_content_artifacts(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         document_id=intake.document.id,
         version_id=intake.version.id,

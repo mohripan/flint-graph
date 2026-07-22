@@ -144,9 +144,9 @@ Docker Compose includes:
 Manual process commands:
 
 ```powershell
-uv run uvicorn atlas_rag.main:app --reload
-uv run python -m atlas_rag.processes.outbox_relay
-uv run python -m atlas_rag.processes.ingestion_worker
+uv run uvicorn flint_graph.main:app --reload
+uv run python -m flint_graph.processes.outbox_relay
+uv run python -m flint_graph.processes.ingestion_worker
 ```
 
 ## Verification

@@ -2,12 +2,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.graph_projection import (
+from flint_graph.application.services.graph_projection import (
     load_tenant_graph,
     reconcile_tenant_graph,
 )
-from atlas_rag.domain.enums import EntityStatus, EntityType, RelationshipStatus
-from atlas_rag.infrastructure.db.models import CanonicalEntity, EntityRelationship, Tenant
+from flint_graph.domain.enums import EntityStatus, EntityType, RelationshipStatus
+from flint_graph.infrastructure.db.models import CanonicalEntity, EntityRelationship, Tenant
 
 
 class FakeCypherClient:

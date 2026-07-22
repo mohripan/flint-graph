@@ -3,9 +3,9 @@ from typing import Any
 import pytest
 from temporalio.exceptions import CancelledError
 
-from atlas_rag.application.outbox_contracts import IngestionJobQueuedPayload
-from atlas_rag.workflows import ingestion
-from atlas_rag.workflows.ingestion import (
+from flint_graph.application.outbox_contracts import IngestionJobQueuedPayload
+from flint_graph.workflows import ingestion
+from flint_graph.workflows.ingestion import (
     MARK_JOB_CANCELLED_ACTIVITY,
     MARK_JOB_COMPLETED_ACTIVITY,
     MARK_JOB_FAILED_ACTIVITY,
@@ -14,7 +14,7 @@ from atlas_rag.workflows.ingestion import (
     RUN_INGESTION_PIPELINE_ACTIVITY,
     IngestDocumentWorkflow,
 )
-from atlas_rag.workflows.resolution import ENQUEUE_TENANT_RESOLUTION_ACTIVITY
+from flint_graph.workflows.resolution import ENQUEUE_TENANT_RESOLUTION_ACTIVITY
 
 
 def _payload() -> IngestionJobQueuedPayload:

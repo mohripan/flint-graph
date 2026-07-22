@@ -6,7 +6,7 @@ Accepted.
 
 ## Decision
 
-AtlasRAG begins as one Python distribution with explicit domain, application, API, and infrastructure boundaries. It is deployed as independently scalable processes when needed, rather than split into separate repositories or network services immediately.
+FlintGraph begins as one Python distribution with explicit domain, application, API, and infrastructure boundaries. It is deployed as independently scalable processes when needed, rather than split into separate repositories or network services immediately.
 
 ## Why
 

@@ -4,20 +4,20 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.extraction import (
+from flint_graph.application.extraction import (
     ExtractedClaim,
     ExtractedDocumentFacts,
     ExtractedEntity,
 )
-from atlas_rag.application.services.mentions import persist_mentions_and_claims
-from atlas_rag.domain.enums import (
+from flint_graph.application.services.mentions import persist_mentions_and_claims
+from flint_graph.domain.enums import (
     DocumentArtifactType,
     EntityType,
     MentionResolutionStatus,
     SourceType,
 )
-from atlas_rag.domain.errors import NotFoundError
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.domain.errors import NotFoundError
+from flint_graph.infrastructure.db.models import (
     Claim,
     Document,
     DocumentArtifact,
@@ -86,7 +86,7 @@ async def test_persist_creates_mentions_and_links_claims(db_session: AsyncSessio
         document_id=document.id,
         document_version_id=version.id,
         artifact_type=DocumentArtifactType.EXTRACTION,
-        object_uri="s3://atlas-rag/x/artifacts/extraction.json",
+        object_uri="s3://flint-graph/x/artifacts/extraction.json",
         content_hash="sha256:abc",
         size_bytes=10,
         schema_version="2",

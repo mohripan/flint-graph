@@ -21,7 +21,7 @@ jobs:
         run: uv run pytest
       - name: Offline deterministic eval gate
         run: >
-          uv run atlas-eval run
+          uv run flint-graph-eval run
           --dataset evals/datasets/acme-smoke
           --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl
           --experiment evals/experiments/acme-smoke.yaml

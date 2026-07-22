@@ -6,7 +6,7 @@ Approved planning design.
 
 ## Summary
 
-Milestone 06 builds AtlasRAG's retrieval substrate. PostgreSQL remains
+Milestone 06 builds FlintGraph's retrieval substrate. PostgreSQL remains
 authoritative. Neo4j gains versioned vector indexes as a rebuildable projection.
 OpenSearch is introduced as the rebuildable lexical projection. A separate
 Temporal indexing workflow handles document-version indexing and backfills.

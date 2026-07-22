@@ -8,19 +8,19 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.query_orchestration import QueryCandidate
-from atlas_rag.application.services.query_context_packing import pack_query_context
-from atlas_rag.application.services.query_orchestration import (
+from flint_graph.application.query_orchestration import QueryCandidate
+from flint_graph.application.services.query_context_packing import pack_query_context
+from flint_graph.application.services.query_orchestration import (
     QueryRetrieverBundle,
     run_query_retrieval_graph,
 )
-from atlas_rag.application.services.query_runs import QueryRunCreate, create_query_run
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.query_runs import QueryRunCreate, create_query_run
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     AliasSource,
     DocumentVersionStatus,
     EntityStatus,
@@ -30,7 +30,7 @@ from atlas_rag.domain.enums import (
     RetrievalIndexScope,
     SourceType,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
     DocumentVersion,
@@ -156,10 +156,10 @@ def _index_spec(model: str = "deterministic-orchestration") -> RetrievalIndexVer
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name=f"atlas_chunks_{model}",
+        neo4j_vector_index_name=f"flint_graph_chunks_{model}",
         neo4j_vector_property_name="embedding",
-        opensearch_index_name=f"atlas_chunks_{model}",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name=f"flint_graph_chunks_{model}",
+        opensearch_alias_name="flint_graph_chunks_active",
     )
 
 

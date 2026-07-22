@@ -18,10 +18,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN useradd --create-home --uid 10001 atlas
+RUN useradd --create-home --uid 10001 flintgraph
 WORKDIR /app
-COPY --from=builder --chown=atlas:atlas /app /app
-USER atlas
+COPY --from=builder --chown=flintgraph:flintgraph /app /app
+USER flintgraph
 
 EXPOSE 8000
-CMD ["uvicorn", "atlas_rag.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "flint_graph.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -4,7 +4,7 @@
 
 Complete. Phases 1 through 8 are implemented and end-to-end validated.
 
-Milestone 06 builds the retrieval substrate for AtlasRAG. It introduces
+Milestone 06 builds the retrieval substrate for FlintGraph. It introduces
 provider-neutral embeddings, versioned retrieval indexes, Neo4j vector indexes,
 OpenSearch lexical indexes, metadata-filterable primitive search endpoints,
 graph traversal primitives, and restartable backfills.
@@ -231,7 +231,7 @@ Backfill eligibility includes:
 The checkpoint cursor stores the last document version attempted. Retrying a
 job resumes after that cursor while preserving processed and failed counters.
 
-Phase 6 also adds `python -m atlas_rag.processes.retrieval_index_reconcile`.
+Phase 6 also adds `python -m flint_graph.processes.retrieval_index_reconcile`.
 It scans completed coverage rows, reloads current chunk embeddings from
 PostgreSQL, and replays Neo4j/OpenSearch projections without calling the
 embedding provider. Missing embeddings fail reconcile so a backfill can repair

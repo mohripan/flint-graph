@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from atlas_rag.evaluation import load_dataset
+from flint_graph.evaluation import load_dataset
 
 _DATASET_DIR = Path(__file__).resolve().parents[2] / "evals" / "datasets" / "acme-smoke"
 

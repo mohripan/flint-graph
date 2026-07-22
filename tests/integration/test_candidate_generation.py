@@ -7,21 +7,21 @@ import pytest_asyncio
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from atlas_rag.application.services.candidate_generation import generate_candidates
-from atlas_rag.domain.enums import AliasSource, EntityStatus, EntityType
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.application.services.candidate_generation import generate_candidates
+from flint_graph.domain.enums import AliasSource, EntityStatus, EntityType
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     EntityAlias,
     Tenant,
 )
 
 pytestmark = pytest.mark.skipif(
-    not os.getenv("ATLAS_PG_INTEGRATION"),
-    reason="Set ATLAS_PG_INTEGRATION=1 with a running Postgres (pg_trgm) to run this test.",
+    not os.getenv("FLINT_GRAPH_PG_INTEGRATION"),
+    reason="Set FLINT_GRAPH_PG_INTEGRATION=1 with a running Postgres (pg_trgm) to run this test.",
 )
 
 PG_URL = os.getenv(
-    "ATLAS_PG_TEST_URL", "postgresql+asyncpg://atlas:atlas@localhost:55432/atlas"
+    "FLINT_GRAPH_PG_TEST_URL", "postgresql+asyncpg://flint_graph:flint_graph@localhost:55432/flint_graph"
 )
 
 

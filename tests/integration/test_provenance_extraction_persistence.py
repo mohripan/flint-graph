@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.extraction_proposals import (
+from flint_graph.application.extraction_proposals import (
     EvidenceProposal,
     ExtractedClaimProposal,
     ExtractedEntityProposal,
@@ -12,17 +12,17 @@ from atlas_rag.application.extraction_proposals import (
     ExtractionBatch,
     ExtractionInputChunk,
 )
-from atlas_rag.application.services.provenance_extraction import (
+from flint_graph.application.services.provenance_extraction import (
     ProvenanceExtractionMetadata,
     persist_provenance_extraction_run,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     EntityType,
     ExtractionRunStatus,
     SourceType,
     StagedProposalStatus,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     Document,
     DocumentVersion,
     EvidenceSpan,
@@ -37,7 +37,7 @@ from atlas_rag.infrastructure.db.models import (
     ExtractionRun,
     Tenant,
 )
-from atlas_rag.infrastructure.object_store import ObjectInfo
+from flint_graph.infrastructure.object_store import ObjectInfo
 
 
 class FakeObjectStore:
@@ -137,7 +137,7 @@ async def test_persist_provenance_extraction_run_records_staged_batch(
     result = await persist_provenance_extraction_run(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         document_id=document.id,
         version_id=version.id,
@@ -248,7 +248,7 @@ async def test_persist_provenance_extraction_run_reuses_ready_run_on_retry(
     first = await persist_provenance_extraction_run(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         document_id=document.id,
         version_id=version.id,
@@ -259,7 +259,7 @@ async def test_persist_provenance_extraction_run_reuses_ready_run_on_retry(
     second = await persist_provenance_extraction_run(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         document_id=document.id,
         version_id=version.id,

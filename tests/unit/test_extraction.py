@@ -3,22 +3,22 @@ import json
 import httpx
 import pytest
 
-from atlas_rag.application.extraction import (
+from flint_graph.application.extraction import (
     ExtractionValidationError,
     build_extraction_prompt,
     parse_extraction_response,
 )
-from atlas_rag.infrastructure.ollama import OllamaExtractionClient
+from flint_graph.infrastructure.ollama import OllamaExtractionClient
 
 
 def test_parse_extraction_response_validates_builtin_schema() -> None:
     payload = json.dumps(
         {
-            "title": "Atlas",
-            "summary": "AtlasRAG stores source content and derives chunks.",
+            "title": "Acme",
+            "summary": "FlintGraph stores source content and derives chunks.",
             "topics": ["content pipeline", "lineage"],
             "entities": [
-                {"name": "AtlasRAG", "type": "concept"},
+                {"name": "FlintGraph", "type": "concept"},
                 {"name": "OpenAI", "type": "organization"},
             ],
         }
@@ -26,8 +26,8 @@ def test_parse_extraction_response_validates_builtin_schema() -> None:
 
     extraction = parse_extraction_response(payload)
 
-    assert extraction.title == "Atlas"
-    assert extraction.summary == "AtlasRAG stores source content and derives chunks."
+    assert extraction.title == "Acme"
+    assert extraction.summary == "FlintGraph stores source content and derives chunks."
     assert extraction.topics == ["content pipeline", "lineage"]
     assert extraction.entities[1].type == "organization"
 
@@ -118,17 +118,17 @@ def test_parse_extraction_response_parses_claim_triples() -> None:
 def test_parse_extraction_response_v1_without_claims_is_backward_compatible() -> None:
     payload = json.dumps(
         {
-            "title": "Atlas",
-            "summary": "AtlasRAG stores source content and derives chunks.",
+            "title": "Acme",
+            "summary": "FlintGraph stores source content and derives chunks.",
             "topics": ["content pipeline"],
-            "entities": [{"name": "AtlasRAG", "type": "concept"}],
+            "entities": [{"name": "FlintGraph", "type": "concept"}],
         }
     )
 
     extraction = parse_extraction_response(payload)
 
     assert extraction.claims == []
-    assert extraction.entities[0].name == "AtlasRAG"
+    assert extraction.entities[0].name == "FlintGraph"
 
 
 def test_build_extraction_prompt_includes_claim_schema() -> None:
@@ -141,7 +141,7 @@ def test_build_extraction_prompt_includes_claim_schema() -> None:
 
 def test_build_extraction_prompt_is_deterministic_and_contains_schema() -> None:
     chunks = [
-        ("chunk-000001", "AtlasRAG stores content."),
+        ("chunk-000001", "FlintGraph stores content."),
         ("chunk-000002", "Chunks preserve lineage."),
     ]
 
@@ -150,7 +150,7 @@ def test_build_extraction_prompt_is_deterministic_and_contains_schema() -> None:
 
     assert first == second
     assert '"summary": "string"' in first
-    assert "[chunk-000001]\nAtlasRAG stores content." in first
+    assert "[chunk-000001]\nFlintGraph stores content." in first
     assert "[chunk-000002]\nChunks preserve lineage." in first
 
 

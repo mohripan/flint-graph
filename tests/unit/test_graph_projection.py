@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from atlas_rag.application.services.graph_projection import (
+from flint_graph.application.services.graph_projection import (
     PRUNE_NODES,
     PRUNE_RELATIONSHIPS,
     UPSERT_NODES,

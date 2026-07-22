@@ -5,21 +5,21 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.chunking import ChunkingConfig, chunk_normalized_document
-from atlas_rag.application.parsing import (
+from flint_graph.application.chunking import ChunkingConfig, chunk_normalized_document
+from flint_graph.application.parsing import (
     NormalizedDocument,
     NormalizedElement,
     SourceFormat,
     SourceReference,
 )
-from atlas_rag.application.services.extraction import (
+from flint_graph.application.services.extraction import (
     ExtractionServiceConfig,
     persist_extraction_artifact,
 )
-from atlas_rag.application.services.intake import create_upload_intake
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.infrastructure.db.models import DocumentArtifact
-from atlas_rag.infrastructure.object_store import ObjectInfo
+from flint_graph.application.services.intake import create_upload_intake
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.infrastructure.db.models import DocumentArtifact
+from flint_graph.infrastructure.object_store import ObjectInfo
 
 
 class FakeObjectStore:
@@ -84,9 +84,9 @@ async def test_persist_extraction_artifact_records_success_provenance(
         response=json.dumps(
             {
                 "title": "Extraction Source",
-                "summary": "AtlasRAG extracts structured facts.",
+                "summary": "FlintGraph extracts structured facts.",
                 "topics": ["extraction", "lineage"],
-                "entities": [{"name": "AtlasRAG", "type": "concept"}],
+                "entities": [{"name": "FlintGraph", "type": "concept"}],
             }
         )
     )
@@ -94,7 +94,7 @@ async def test_persist_extraction_artifact_records_success_provenance(
     result = await persist_extraction_artifact(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant_id,
         document_id=normalized.source.document_id,
         version_id=normalized.source.document_version_id,
@@ -120,7 +120,7 @@ async def test_persist_extraction_artifact_records_success_provenance(
     payload = json.loads(store.objects[artifact.object_uri])
     assert payload["schema_version"] == "2"
     assert payload["status"] == "succeeded"
-    assert payload["extraction"]["summary"] == "AtlasRAG extracts structured facts."
+    assert payload["extraction"]["summary"] == "FlintGraph extracts structured facts."
     assert payload["provenance"]["prompt_version"] == "builtin-graph-v2"
     assert client.prompts and "chunk-000001" in client.prompts[0]
 
@@ -138,7 +138,7 @@ async def test_optional_extraction_failure_records_non_blocking_failure_artifact
     result = await persist_extraction_artifact(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant_id,
         document_id=normalized.source.document_id,
         version_id=normalized.source.document_version_id,
@@ -174,7 +174,7 @@ async def test_required_extraction_failure_is_recorded_as_blocking(
     result = await persist_extraction_artifact(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant_id,
         document_id=normalized.source.document_id,
         version_id=normalized.source.document_version_id,
@@ -204,7 +204,7 @@ async def test_disabled_extraction_records_skipped_artifact_without_calling_clie
     result = await persist_extraction_artifact(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant_id,
         document_id=normalized.source.document_id,
         version_id=normalized.source.document_version_id,
@@ -234,12 +234,12 @@ async def _create_normalized_document(
     intake = await create_upload_intake(
         session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         title="Extraction Source",
         external_id="extraction-source",
         idempotency_key="extraction-source-v1",
-        data=b"# Extraction Source\n\nAtlasRAG extracts structured facts.",
+        data=b"# Extraction Source\n\nFlintGraph extracts structured facts.",
         content_type="text/markdown",
         original_filename="extraction.md",
     )
@@ -266,7 +266,7 @@ async def _create_normalized_document(
                 NormalizedElement(
                     id="element-000002",
                     type="paragraph",
-                    text="AtlasRAG extracts structured facts.",
+                    text="FlintGraph extracts structured facts.",
                 ),
             ],
         ),

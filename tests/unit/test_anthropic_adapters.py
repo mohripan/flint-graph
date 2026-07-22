@@ -8,14 +8,14 @@ from uuid import uuid4
 
 import pytest
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     AnswerGenerationRequest,
     PackedContextRecord,
     QueryContextPack,
     SupportCheckClaim,
     SupportCheckRequest,
 )
-from atlas_rag.infrastructure.anthropic import (
+from flint_graph.infrastructure.anthropic import (
     ANTHROPIC_SUPPORT_METHOD,
     AnthropicAnswerGenerator,
     AnthropicSupportChecker,

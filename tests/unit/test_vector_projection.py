@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from atlas_rag.application.services.vector_projection import (
+from flint_graph.application.services.vector_projection import (
     CREATE_VECTOR_INDEX_TEMPLATE,
     DELETE_CHUNK_VECTORS,
     UPSERT_CHUNK_VECTORS,

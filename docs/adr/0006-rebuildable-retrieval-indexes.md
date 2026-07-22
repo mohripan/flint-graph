@@ -11,7 +11,7 @@ staged extraction proposals, canonical graph state, and an idempotent Neo4j
 graph projection. Retrieval and query-time orchestration remain intentionally
 out of scope.
 
-AtlasRAG now needs searchable retrieval substrates before adding a LangGraph
+FlintGraph now needs searchable retrieval substrates before adding a LangGraph
 query planner. The proposed platform architecture includes Neo4j for graph and
 vector retrieval and OpenSearch for lexical retrieval. The existing codebase
 already treats PostgreSQL as authoritative and Neo4j as rebuildable, which is a

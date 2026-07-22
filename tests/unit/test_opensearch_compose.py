@@ -13,5 +13,5 @@ def test_compose_declares_opensearch_service_and_internal_url() -> None:
 
     for service_name in ["api", "ingestion-worker"]:
         environment = services[service_name]["environment"]
-        assert environment["ATLAS_OPENSEARCH_URL"] == "http://opensearch:9200"
+        assert environment["FLINT_GRAPH_OPENSEARCH_URL"] == "http://opensearch:9200"
         assert services[service_name]["depends_on"]["opensearch"]["condition"] == "service_healthy"

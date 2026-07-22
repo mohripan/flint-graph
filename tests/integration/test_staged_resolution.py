@@ -3,12 +3,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.staged_resolution import (
+from flint_graph.application.services.staged_resolution import (
     rebuild_staged_relationships,
     resolve_pending_staged_entities,
     resolve_staged_extraction_run,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     AliasSource,
     CandidateOutcome,
     CandidateTargetKind,
@@ -22,7 +22,7 @@ from atlas_rag.domain.enums import (
     StagedProposalStatus,
     StagedResolutionStatus,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
     DocumentVersion,

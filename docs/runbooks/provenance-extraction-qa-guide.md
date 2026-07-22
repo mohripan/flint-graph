@@ -22,14 +22,14 @@ The default local provider is Ollama. For repeatable smoke testing without a
 model call, start the worker with:
 
 ```powershell
-$env:ATLAS_LLM_PROVIDER = "deterministic"
+$env:FLINT_GRAPH_LLM_PROVIDER = "deterministic"
 docker compose up -d --build ingestion-worker
 ```
 
 Restore the default provider afterward:
 
 ```powershell
-Remove-Item Env:\ATLAS_LLM_PROVIDER -ErrorAction SilentlyContinue
+Remove-Item Env:\FLINT_GRAPH_LLM_PROVIDER -ErrorAction SilentlyContinue
 docker compose up -d --build ingestion-worker
 ```
 
@@ -89,13 +89,13 @@ Expected:
 Extraction runs should show provider, model, schema, status, counts, warnings, and errors:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, model_provider, model_name, accepted_entity_count, accepted_relation_count, accepted_claim_count, errors from extraction_runs where document_version_id = '$($upload.document_version_id)' order by created_at desc;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, model_provider, model_name, accepted_entity_count, accepted_relation_count, accepted_claim_count, errors from extraction_runs where document_version_id = '$($upload.document_version_id)' order by created_at desc;"
 ```
 
 Provider invocations should show request/response hashes, latency, and input/output sizes:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select status, request_hash, response_hash, latency_ms, input_char_count, output_char_count, error_message from extraction_invocations where extraction_run_id in (select id from extraction_runs where document_version_id = '$($upload.document_version_id)') order by created_at;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select status, request_hash, response_hash, latency_ms, input_char_count, output_char_count, error_message from extraction_invocations where extraction_run_id in (select id from extraction_runs where document_version_id = '$($upload.document_version_id)') order by created_at;"
 ```
 
 Evidence spans should show:
@@ -106,7 +106,7 @@ Evidence spans should show:
 - a quote that appears verbatim in the stored chunk text.
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select chunk_id, start_offset, end_offset, span_hash from evidence_spans where document_version_id = '$($upload.document_version_id)' order by created_at;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select chunk_id, start_offset, end_offset, span_hash from evidence_spans where document_version_id = '$($upload.document_version_id)' order by created_at;"
 ```
 
 Candidate records should show:
@@ -118,14 +118,14 @@ Candidate records should show:
 - status.
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select source_extracted_entity_id, target_kind, score, outcome, status, reasons from entity_resolution_candidates where document_version_id = '$($upload.document_version_id)' order by created_at;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select source_extracted_entity_id, target_kind, score, outcome, status, reasons from entity_resolution_candidates where document_version_id = '$($upload.document_version_id)' order by created_at;"
 ```
 
 Canonical entities and Neo4j projection should reflect accepted/resolved staged proposals, not raw model output.
 
 ```powershell
 curl.exe -sS "http://localhost:8000/v1/entities" -H "X-Tenant-ID: $($tenant.id)" | ConvertFrom-Json
-docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "MATCH (e:Entity {tenant_id: '$($tenant.id)'}) RETURN properties(e)"
+docker compose exec neo4j cypher-shell -u neo4j -p flintgraphpassword "MATCH (e:Entity {tenant_id: '$($tenant.id)'}) RETURN properties(e)"
 ```
 
 ## Negative Checks

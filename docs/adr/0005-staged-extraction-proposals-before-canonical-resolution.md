@@ -10,7 +10,7 @@ Milestone 04 proved the local GraphRAG control plane: extracted entities and cla
 
 The current model output can supply entity names, triples, and chunk IDs. It does not produce inspectable extraction runs, verified evidence spans, provider invocation records, stable staged proposal IDs, or proposal-level candidate records. The current `entity_mentions` and `claims` tables therefore mix two concerns: model-derived proposal staging and canonical resolution input.
 
-AtlasRAG needs a stronger trust boundary before query-time RAG is added. A model should propose facts, but AtlasRAG must verify evidence, assign durable identities, persist provenance, and decide deterministically what reaches the canonical graph.
+FlintGraph needs a stronger trust boundary before query-time RAG is added. A model should propose facts, but FlintGraph must verify evidence, assign durable identities, persist provenance, and decide deterministically what reaches the canonical graph.
 
 ## Decision
 

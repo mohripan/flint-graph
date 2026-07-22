@@ -3,12 +3,12 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.application.query_faithfulness import (
+from flint_graph.application.query_faithfulness import (
     DeterministicSupportChecker,
     evaluate_abstention,
     repair_claim_citations,
 )
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     AnswerDraft,
     AnswerFaithfulnessReport,
     PackedContextRecord,

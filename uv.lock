@@ -130,7 +130,7 @@ wheels = [
 ]
 
 [[package]]
-name = "atlas-rag"
+name = "flint-graph"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

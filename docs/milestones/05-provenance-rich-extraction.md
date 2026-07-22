@@ -31,7 +31,7 @@ stored chunks
     -> Neo4j projection
 ```
 
-The model proposes structured records. AtlasRAG validates, verifies evidence, assigns stable IDs, persists staged records, and only then runs deterministic candidate generation and resolution. A model never writes canonical entities, canonical relationships, merge decisions, or Neo4j records directly.
+The model proposes structured records. FlintGraph validates, verifies evidence, assigns stable IDs, persists staged records, and only then runs deterministic candidate generation and resolution. A model never writes canonical entities, canonical relationships, merge decisions, or Neo4j records directly.
 
 ## Scope
 
@@ -86,7 +86,7 @@ Batch-local references are deliberate. A provider only reasons over the chunks s
 
 ## Evidence Trust Boundary
 
-The model cannot author trusted offsets. For every evidence proposal, AtlasRAG:
+The model cannot author trusted offsets. For every evidence proposal, FlintGraph:
 
 1. verifies that the referenced chunk belongs to the current extraction input;
 2. searches the stored chunk text for the exact quote;

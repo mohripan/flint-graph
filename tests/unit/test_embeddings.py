@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.application.embeddings import (
+from flint_graph.application.embeddings import (
     DeterministicEmbeddingModel,
     EmbeddingBatchRequest,
     EmbeddingInput,

@@ -4,7 +4,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.application.extraction_proposals import (
+from flint_graph.application.extraction_proposals import (
     DeterministicExtractionModel,
     EvidenceProposal,
     ExtractedClaimProposal,
@@ -15,7 +15,7 @@ from atlas_rag.application.extraction_proposals import (
     ExtractionInputChunk,
     StructuredExtractionModel,
 )
-from atlas_rag.infrastructure.ollama import OllamaProposalExtractionModel
+from flint_graph.infrastructure.ollama import OllamaProposalExtractionModel
 
 
 def _evidence(chunk_id: str = "chunk-000001") -> list[EvidenceProposal]:

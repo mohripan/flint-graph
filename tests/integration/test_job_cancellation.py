@@ -3,15 +3,15 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.outbox_contracts import INGESTION_JOB_CANCELLED_TOPIC
-from atlas_rag.application.services.documents import create_document
-from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
-from atlas_rag.application.services.job_cancellation import cancel_ingestion_job
-from atlas_rag.application.services.job_transitions import transition_ingestion_job
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import IngestionJobStatus, SourceType
-from atlas_rag.domain.errors import ConflictError
-from atlas_rag.infrastructure.db.models import OutboxMessage
+from flint_graph.application.outbox_contracts import INGESTION_JOB_CANCELLED_TOPIC
+from flint_graph.application.services.documents import create_document
+from flint_graph.application.services.ingestion_jobs import create_ingestion_job
+from flint_graph.application.services.job_cancellation import cancel_ingestion_job
+from flint_graph.application.services.job_transitions import transition_ingestion_job
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.domain.enums import IngestionJobStatus, SourceType
+from flint_graph.domain.errors import ConflictError
+from flint_graph.infrastructure.db.models import OutboxMessage
 
 
 async def test_cancel_queued_ingestion_job_endpoint(client: httpx.AsyncClient) -> None:

@@ -1,9 +1,9 @@
 import os
 from collections.abc import AsyncIterator
 
-os.environ["ATLAS_ENV"] = "test"
-os.environ["ATLAS_OTEL_ENABLED"] = "false"
-os.environ["ATLAS_DATABASE_URL"] = "sqlite+aiosqlite://"
+os.environ["FLINT_GRAPH_ENV"] = "test"
+os.environ["FLINT_GRAPH_OTEL_ENABLED"] = "false"
+os.environ["FLINT_GRAPH_DATABASE_URL"] = "sqlite+aiosqlite://"
 
 from typing import Any
 
@@ -12,10 +12,10 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from atlas_rag.api.dependencies import get_neo4j_client
-from atlas_rag.infrastructure.db.base import Base
-from atlas_rag.infrastructure.db.session import get_session
-from atlas_rag.main import app
+from flint_graph.api.dependencies import get_neo4j_client
+from flint_graph.infrastructure.db.base import Base
+from flint_graph.infrastructure.db.session import get_session
+from flint_graph.main import app
 
 
 class FakeNeo4jClient:

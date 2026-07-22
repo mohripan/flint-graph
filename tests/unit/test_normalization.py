@@ -1,4 +1,4 @@
-from atlas_rag.application.entity_resolution import normalize_name
+from flint_graph.application.entity_resolution import normalize_name
 
 
 def test_normalize_casefolds_and_collapses_whitespace() -> None:

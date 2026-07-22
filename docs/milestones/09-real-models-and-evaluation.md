@@ -15,14 +15,14 @@ and the PR quality gate runs without network services or model credentials.
 
 ## Implemented Phase 1 Adapters
 
-`src/atlas_rag/infrastructure/anthropic.py` adds Anthropic answer generation, streaming answer
+`src/flint_graph/infrastructure/anthropic.py` adds Anthropic answer generation, streaming answer
 generation, and support checking behind the existing provider-neutral protocols. The adapters
 return `AnswerDraft`, `GeneratedAnswer`, and `SupportCheckResult` objects; SDK types stay at the
 infrastructure edge.
 
 ## Implemented Phase 2 Configuration
 
-`src/atlas_rag/config.py` resolves provider defaults by environment. Tests stay deterministic.
+`src/flint_graph/config.py` resolves provider defaults by environment. Tests stay deterministic.
 Local defaults to Ollama embeddings and Anthropic answer/support providers unless explicitly
 overridden. Staging and production default to OpenAI-compatible embeddings plus Anthropic
 answer/support providers. Missing credentials fail fast with clear validation errors.
@@ -36,7 +36,7 @@ provider, model, or dimension still requires a new retrieval index version and b
 
 ## Implemented Phase 4 Evaluation Core
 
-`src/atlas_rag/evaluation/` provides dataset loading, metric computation, experiment execution,
+`src/flint_graph/evaluation/` provides dataset loading, metric computation, experiment execution,
 report I/O, baseline comparison, and threshold checks. The core is provider-neutral and can
 score recorded evaluations or any injected query evaluator.
 
@@ -48,7 +48,7 @@ and canonical entity names rather than pipeline-assigned UUIDs.
 
 ## Implemented Phase 6 CLI And Comparisons
 
-`atlas-eval` scores recorded evaluations, writes reports, updates baselines explicitly, and
+`flint-graph-eval` scores recorded evaluations, writes reports, updates baselines explicitly, and
 compares multiple configurations side by side. Experiment definitions live under
 `evals/experiments/`; reports and accepted baselines live under `evals/reports/`.
 
@@ -83,10 +83,10 @@ Manual verification results are recorded in `notes/milestone-09/01-manual-verifi
 
 - `env=test` resolves answer, support, and embedding providers to deterministic values.
 - The full automated suite and `make eval-gate` run without live model services.
-- Selecting Anthropic providers without `ATLAS_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` fails
+- Selecting Anthropic providers without `FLINT_GRAPH_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` fails
   at startup.
 - Selecting `openai_compatible` embeddings without base URL and API key fails at startup.
-- Evaluation baselines move only through an explicit `atlas-eval baseline update` command.
+- Evaluation baselines move only through an explicit `flint-graph-eval baseline update` command.
 - The PR eval gate uses committed deterministic recorded evaluations.
 - The live eval workflow is scheduled/manual and secrets-gated; it is not part of PR CI.
 - Changing embedding model or dimensions requires a new retrieval index version and backfill.

@@ -1,6 +1,6 @@
 from sqlalchemy import Index, UniqueConstraint
 
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     ChunkEmbedding,
     DocumentIndexCoverage,
     RetrievalIndexVersion,

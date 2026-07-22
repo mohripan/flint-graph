@@ -97,7 +97,7 @@ async def test_validation_errors_use_problem_details(client: httpx.AsyncClient) 
     assert response.headers["x-request-id"] == request_id
     problem = response.json()
     assert problem["request_id"] == request_id
-    assert problem["type"] == "urn:atlas-rag:error:validation"
+    assert problem["type"] == "urn:flint-graph:error:validation"
 
 
 async def test_duplicate_document_external_id_returns_conflict(client: httpx.AsyncClient) -> None:
@@ -115,7 +115,7 @@ async def test_duplicate_document_external_id_returns_conflict(client: httpx.Asy
 
     assert first.status_code == 201
     assert second.status_code == 409
-    assert second.json()["type"] == "urn:atlas-rag:error:conflict"
+    assert second.json()["type"] == "urn:flint-graph:error:conflict"
 
 
 async def test_health_endpoints(client: httpx.AsyncClient) -> None:

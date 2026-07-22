@@ -1,8 +1,8 @@
 import pytest
 
-from atlas_rag.application.outbox_contracts import IngestionJobQueuedPayload
-from atlas_rag.config import Settings
-from atlas_rag.worker.activities.indexing import prepare_document_indexing_for_payload
+from flint_graph.application.outbox_contracts import IngestionJobQueuedPayload
+from flint_graph.config import Settings
+from flint_graph.worker.activities.indexing import prepare_document_indexing_for_payload
 
 
 def _payload() -> IngestionJobQueuedPayload:

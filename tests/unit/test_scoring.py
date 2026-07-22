@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from atlas_rag.application.entity_resolution import (
+from flint_graph.application.entity_resolution import (
     CandidateEntity,
     CandidateFeatures,
     MentionKey,
@@ -10,7 +10,7 @@ from atlas_rag.application.entity_resolution import (
     score_candidate,
     score_candidates,
 )
-from atlas_rag.domain.enums import EntityType, MergeCandidateBand
+from flint_graph.domain.enums import EntityType, MergeCandidateBand
 
 DOC = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 OTHER_DOC = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")

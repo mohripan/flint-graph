@@ -26,10 +26,10 @@ upload or URL intake
     -> Neo4j projection
 ```
 
-The local worker supports `ATLAS_LLM_PROVIDER=ollama` for live structured model
-calls and `ATLAS_LLM_PROVIDER=deterministic` for stable offline smoke tests.
+The local worker supports `FLINT_GRAPH_LLM_PROVIDER=ollama` for live structured model
+calls and `FLINT_GRAPH_LLM_PROVIDER=deterministic` for stable offline smoke tests.
 The Ollama adapter sends a simplified JSON Schema through the `format` request
-field and validates the response again with AtlasRAG's full Pydantic contract.
+field and validates the response again with FlintGraph's full Pydantic contract.
 The Docker Compose extraction timeout defaults to 180 seconds so small local
 models have enough time to produce structured output.
 
@@ -59,32 +59,32 @@ docker compose logs -f api
 Expected Milestone 05 tables:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "\dt *extraction*"
-docker compose exec postgres psql -U atlas -d atlas -c "\dt *evidence*"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "\dt *extraction*"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "\dt *evidence*"
 ```
 
 Recent extraction runs:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, document_version_id, status, schema_version, extractor_version, model_name, created_at from extraction_runs order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, document_version_id, status, schema_version, extractor_version, model_name, created_at from extraction_runs order by created_at desc limit 20;"
 ```
 
 Evidence spans:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select chunk_id, start_offset, end_offset, span_hash from evidence_spans order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select chunk_id, start_offset, end_offset, span_hash from evidence_spans order by created_at desc limit 20;"
 ```
 
 Candidate records:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select source_extracted_entity_id, target_kind, score, outcome, status from entity_resolution_candidates order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select source_extracted_entity_id, target_kind, score, outcome, status from entity_resolution_candidates order by created_at desc limit 20;"
 ```
 
 Resolved staged entities:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select name, resolution_status, resolved_canonical_entity_id from extracted_entities order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select name, resolution_status, resolved_canonical_entity_id from extracted_entities order by created_at desc limit 20;"
 ```
 
 ## Failure Modes

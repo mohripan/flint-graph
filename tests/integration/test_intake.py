@@ -5,14 +5,14 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.api.dependencies import get_object_store, get_url_fetcher
-from atlas_rag.application.services.intake import create_upload_intake
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import DocumentVersionStatus, SourceType
-from atlas_rag.infrastructure.db.models import Document, DocumentVersion, IngestionJob
-from atlas_rag.infrastructure.object_store import ObjectInfo
-from atlas_rag.infrastructure.url_fetcher import FetchedURL
-from atlas_rag.main import app
+from flint_graph.api.dependencies import get_object_store, get_url_fetcher
+from flint_graph.application.services.intake import create_upload_intake
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.domain.enums import DocumentVersionStatus, SourceType
+from flint_graph.infrastructure.db.models import Document, DocumentVersion, IngestionJob
+from flint_graph.infrastructure.object_store import ObjectInfo
+from flint_graph.infrastructure.url_fetcher import FetchedURL
+from flint_graph.main import app
 
 
 class FakeObjectStore:
@@ -63,7 +63,7 @@ async def test_upload_intake_materializes_raw_source_and_queues_job(
     store = FakeObjectStore()
     app.dependency_overrides[get_object_store] = lambda: store
     tenant_id = (await client.post("/v1/tenants", json={"name": "Upload Intake"})).json()["id"]
-    body = b"# Upload\n\nAtlasRAG intake."
+    body = b"# Upload\n\nFlintGraph intake."
     expected_hash = f"sha256:{sha256(body).hexdigest()}"
 
     response = await client.post(
@@ -81,7 +81,7 @@ async def test_upload_intake_materializes_raw_source_and_queues_job(
     assert payload["job_status"] == "queued"
     assert payload["content_hash"] == expected_hash
     assert payload["object_uri"].startswith(
-        f"s3://atlas-rag/tenants/{tenant_id}/documents/{payload['document_id']}/"
+        f"s3://flint-graph/tenants/{tenant_id}/documents/{payload['document_id']}/"
         f"versions/{payload['document_version_id']}/raw/source"
     )
     assert store.objects[payload["object_uri"]] == body
@@ -150,7 +150,7 @@ async def test_upload_intake_idempotency_reuse_with_different_bytes_returns_conf
 
     assert first.status_code == 201
     assert second.status_code == 409
-    assert second.json()["type"] == "urn:atlas-rag:error:conflict"
+    assert second.json()["type"] == "urn:flint-graph:error:conflict"
     assert store.put_count == 1
 
 
@@ -159,7 +159,7 @@ async def test_url_intake_fetches_and_materializes_raw_source(
 ) -> None:
     store = FakeObjectStore()
     fetcher = FakeURLFetcher(
-        {"https://example.test/page": (b"<html><body>Atlas</body></html>", "text/html")}
+        {"https://example.test/page": (b"<html><body>Acme</body></html>", "text/html")}
     )
     app.dependency_overrides[get_object_store] = lambda: store
     app.dependency_overrides[get_url_fetcher] = lambda: fetcher
@@ -180,7 +180,7 @@ async def test_url_intake_fetches_and_materializes_raw_source(
     assert fetcher.calls == ["https://example.test/page"]
     assert payload["source_type"] == "url"
     assert payload["source_uri"] == "https://example.test/page"
-    assert store.objects[payload["object_uri"]] == b"<html><body>Atlas</body></html>"
+    assert store.objects[payload["object_uri"]] == b"<html><body>Acme</body></html>"
     assert store.metadata[payload["object_uri"]]["source-url"] == "https://example.test/page"
     assert store.metadata[payload["object_uri"]]["source-type"] == "url"
 
@@ -212,7 +212,7 @@ async def test_upload_intake_persists_source_metadata_on_document_version(
     record = await create_upload_intake(
         db_session,
         object_store=store,
-        bucket="atlas-rag",
+        bucket="flint-graph",
         tenant_id=tenant.id,
         title="Persisted Upload",
         external_id="persisted-upload",

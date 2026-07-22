@@ -4,12 +4,12 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     AnswerGenerationRequest,
     PackedContextRecord,
     QueryContextPack,
 )
-from atlas_rag.infrastructure.ollama import OllamaAnswerGenerator
+from flint_graph.infrastructure.ollama import OllamaAnswerGenerator
 
 
 def _request() -> AnswerGenerationRequest:

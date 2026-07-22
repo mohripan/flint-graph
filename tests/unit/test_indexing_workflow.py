@@ -3,12 +3,12 @@ from typing import Any
 import pytest
 from temporalio.exceptions import CancelledError
 
-from atlas_rag.application.outbox_contracts import (
+from flint_graph.application.outbox_contracts import (
     IndexDocumentVersionPayload,
     IngestionJobQueuedPayload,
 )
-from atlas_rag.workflows import indexing, ingestion
-from atlas_rag.workflows.indexing import (
+from flint_graph.workflows import indexing, ingestion
+from flint_graph.workflows.indexing import (
     INDEX_DOCUMENT_BATCH_ACTIVITY,
     MARK_INDEXING_CANCELLED_ACTIVITY,
     MARK_INDEXING_COMPLETED_ACTIVITY,
@@ -16,7 +16,7 @@ from atlas_rag.workflows.indexing import (
     PLAN_DOCUMENT_INDEXING_ACTIVITY,
     IndexDocumentVersionWorkflow,
 )
-from atlas_rag.workflows.ingestion import (
+from flint_graph.workflows.ingestion import (
     ENQUEUE_DOCUMENT_INDEXING_ACTIVITY,
     MARK_JOB_COMPLETED_ACTIVITY,
     MARK_JOB_FAILED_ACTIVITY,
@@ -25,7 +25,7 @@ from atlas_rag.workflows.ingestion import (
     RUN_INGESTION_PIPELINE_ACTIVITY,
     IngestDocumentWorkflow,
 )
-from atlas_rag.workflows.resolution import ENQUEUE_TENANT_RESOLUTION_ACTIVITY
+from flint_graph.workflows.resolution import ENQUEUE_TENANT_RESOLUTION_ACTIVITY
 
 
 def _ingestion_payload() -> IngestionJobQueuedPayload:

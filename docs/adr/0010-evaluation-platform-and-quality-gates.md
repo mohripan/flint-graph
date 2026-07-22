@@ -27,7 +27,7 @@ a two-tier CI gate.
    query type). Datasets and reports are files under `evals/`; the schema is defined in
    `docs/architecture/evaluation-contract.md`.
 
-2. **An offline experiment harness** (`src/atlas_rag/evaluation/`, driven by an `atlas-eval`
+2. **An offline experiment harness** (`src/flint_graph/evaluation/`, driven by an `flint-graph-eval`
    CLI). It runs a dataset through the pipeline under a named configuration (which providers,
    which retrieval mode) against the fixed corpus and emits per-query results plus aggregate
    metrics: retrieval (recall@k, precision@k, MRR, nDCG@k), faithfulness (supported-claim

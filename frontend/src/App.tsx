@@ -40,7 +40,7 @@ export default function App() {
         <div className="flex items-center gap-3">
           <Logo className="h-9 w-9" />
           <div>
-            <p className="text-sm font-semibold leading-tight text-slate-900">AtlasRAG</p>
+            <p className="text-sm font-semibold leading-tight text-slate-900">FlintGraph</p>
             <p className="text-xs leading-tight text-slate-500">{workspace.name}</p>
           </div>
         </div>

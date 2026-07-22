@@ -1,6 +1,6 @@
 from typing import Any
 
-from atlas_rag.processes import retrieval_index_reconcile
+from flint_graph.processes import retrieval_index_reconcile
 
 
 class FakeClient:

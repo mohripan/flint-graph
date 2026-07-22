@@ -12,36 +12,36 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-import atlas_rag.api.dependencies as dependencies
-from atlas_rag.api.routes import query as query_routes
-from atlas_rag.application.query_orchestration import (
+import flint_graph.api.dependencies as dependencies
+from flint_graph.api.routes import query as query_routes
+from flint_graph.application.query_orchestration import (
     AnswerCitation,
     AnswerGenerationRequest,
     GeneratedAnswer,
 )
-from atlas_rag.application.services.query_orchestration import QueryRetrieverBundle
-from atlas_rag.application.services.query_runs import get_query_run, list_query_run_events
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.query_orchestration import QueryRetrieverBundle
+from flint_graph.application.services.query_runs import get_query_run, list_query_run_events
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     DocumentVersionStatus,
     QueryRunStatus,
     RetrievalIndexScope,
     SourceType,
 )
-from atlas_rag.infrastructure.db.base import Base
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.base import Base
+from flint_graph.infrastructure.db.models import (
     Document,
     DocumentIndexCoverage,
     DocumentVersion,
     Tenant,
 )
-from atlas_rag.infrastructure.db.session import get_session
-from atlas_rag.main import app
+from flint_graph.infrastructure.db.session import get_session
+from flint_graph.main import app
 
 
 class QueryOpenSearchClient:
@@ -66,7 +66,7 @@ class QueryOpenSearchClient:
                     "heading_path": ["Overview"],
                     "page_start": 1,
                     "page_end": 1,
-                    "source_uri": "s3://atlas/acme.txt",
+                    "source_uri": "s3://flint-graph/acme.txt",
                     "metadata": {"source_type": "upload"},
                 },
             }
@@ -180,10 +180,10 @@ def _index_spec() -> RetrievalIndexVersionSpec:
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name="atlas_chunks_query_api_v1",
+        neo4j_vector_index_name="flint_graph_chunks_query_api_v1",
         neo4j_vector_property_name="embedding",
-        opensearch_index_name="atlas_chunks_query_api_v1",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name="flint_graph_chunks_query_api_v1",
+        opensearch_alias_name="flint_graph_chunks_active",
     )
 
 
@@ -212,7 +212,7 @@ async def _add_active_document_version(
         tenant_id=tenant.id,
         title="Acme Brief",
         source_type=SourceType.UPLOAD,
-        source_uri="s3://atlas/acme.txt",
+        source_uri="s3://flint-graph/acme.txt",
         next_version_number=2,
     )
     session.add(document)

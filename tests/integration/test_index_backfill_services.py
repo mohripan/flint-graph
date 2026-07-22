@@ -2,20 +2,20 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.embeddings import (
+from flint_graph.application.embeddings import (
     EmbeddingBatchRequest,
     EmbeddingBatchResult,
     EmbeddingModel,
     EmbeddingVector,
 )
-from atlas_rag.application.services.index_backfill import (
+from flint_graph.application.services.index_backfill import (
     complete_backfill_document,
     create_index_backfill_job,
     fail_backfill_document,
     load_next_backfill_batch,
     mark_backfill_running,
 )
-from atlas_rag.application.services.indexing import (
+from flint_graph.application.services.indexing import (
     IndexingBatchRequest,
     begin_document_indexing,
     complete_document_indexing,
@@ -24,18 +24,18 @@ from atlas_rag.application.services.indexing import (
     reconcile_completed_index_projections,
     reconcile_document_index_projection,
 )
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     DocumentVersionStatus,
     IndexBackfillJobStatus,
     RetrievalIndexScope,
     SourceType,
 )
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.infrastructure.db.models import (
     ChunkEmbedding,
     Document,
     DocumentChunk,
@@ -138,8 +138,8 @@ async def _seed_backfill_fixture(
             lexical_schema_version="1",
             neo4j_vector_index_name="chunk_embedding_backfill",
             neo4j_vector_property_name="embedding",
-            opensearch_index_name="atlas_chunks_backfill",
-            opensearch_alias_name="atlas_chunks_active",
+            opensearch_index_name="flint_graph_chunks_backfill",
+            opensearch_alias_name="flint_graph_chunks_active",
         ),
     )
     await activate_retrieval_index_version(session, version_id=index_version.id)

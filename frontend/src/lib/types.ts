@@ -1,4 +1,4 @@
-// TypeScript mirrors of the AtlasRAG API contracts we consume.
+// TypeScript mirrors of the FlintGraph API contracts we consume.
 // Only the fields the UI reads are typed; unknown extras are tolerated.
 
 export interface Tenant {

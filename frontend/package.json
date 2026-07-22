@@ -1,9 +1,9 @@
 {
-  "name": "atlas-rag-frontend",
+  "name": "flint-graph-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Non-technical end-user UI for the AtlasRAG GraphRAG platform (Ask + Documents).",
+  "description": "Non-technical end-user UI for the FlintGraph GraphRAG platform (Ask + Documents).",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

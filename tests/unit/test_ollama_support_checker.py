@@ -4,13 +4,13 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     PackedContextRecord,
     QueryContextPack,
     SupportCheckClaim,
     SupportCheckRequest,
 )
-from atlas_rag.infrastructure import ollama
+from flint_graph.infrastructure import ollama
 
 
 def _checker_cls() -> type:

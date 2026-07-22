@@ -14,7 +14,7 @@ top packed context record and cites every packed record. The
 `query_answer_provider = "ollama"` setting exists but is not wired: no code reads
 it and no Ollama answer provider exists.
 
-Consequently AtlasRAG can retrieve and pack context but cannot produce a
+Consequently FlintGraph can retrieve and pack context but cannot produce a
 synthesized, trustworthy answer. It cannot say "I don't know", it has no defense
 against a model citing context it did not use, and it cannot show why an answer
 is grounded. Small local models (for example `gemma3:1b`, `llama3.2`) make this

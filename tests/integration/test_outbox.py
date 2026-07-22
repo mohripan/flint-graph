@@ -1,11 +1,11 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.documents import create_document
-from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import SourceType
-from atlas_rag.infrastructure.db import models
+from flint_graph.application.services.documents import create_document
+from flint_graph.application.services.ingestion_jobs import create_ingestion_job
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.domain.enums import SourceType
+from flint_graph.infrastructure.db import models
 
 
 async def test_creating_ingestion_job_appends_outbox_message(

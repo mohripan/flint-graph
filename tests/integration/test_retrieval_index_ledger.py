@@ -3,21 +3,21 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.retrieval_index_versions import (
+from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
     fail_retrieval_index_version,
 )
-from atlas_rag.domain.enums import (
+from flint_graph.domain.enums import (
     DocumentVersionStatus,
     IndexBackfillJobStatus,
     RetrievalIndexScope,
     RetrievalIndexVersionStatus,
     SourceType,
 )
-from atlas_rag.domain.errors import ConflictError, NotFoundError
-from atlas_rag.infrastructure.db.models import (
+from flint_graph.domain.errors import ConflictError, NotFoundError
+from flint_graph.infrastructure.db.models import (
     ChunkEmbedding,
     Document,
     DocumentChunk,
@@ -78,10 +78,10 @@ def _spec(*, model: str = "deterministic-test", dimensions: int = 4) -> Retrieva
         chunking_schema_version="1",
         chunking_config_hash="sha256:chunking",
         lexical_schema_version="1",
-        neo4j_vector_index_name=f"atlas_chunks_{dimensions}",
+        neo4j_vector_index_name=f"flint_graph_chunks_{dimensions}",
         neo4j_vector_property_name=f"embedding_v{dimensions}",
-        opensearch_index_name=f"atlas_chunks_v{dimensions:06d}",
-        opensearch_alias_name="atlas_chunks_active",
+        opensearch_index_name=f"flint_graph_chunks_v{dimensions:06d}",
+        opensearch_alias_name="flint_graph_chunks_active",
         metadata={"phase": 2},
     )
 

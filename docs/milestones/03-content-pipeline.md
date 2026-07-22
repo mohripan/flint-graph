@@ -9,11 +9,11 @@ Complete. Phases 1 through 8 are implemented.
 Implemented storage and configuration foundation:
 
 - Docker Compose includes MinIO and a `minio-init` bucket creation service.
-- Local bucket name is `atlas-rag`.
+- Local bucket name is `flint-graph`.
 - Host-local object-store endpoint is `http://localhost:9000`.
 - Container object-store endpoint is `http://minio:9000`.
-- Settings expose `ATLAS_OBJECT_STORE_*` variables for S3-compatible storage.
-- `atlas_rag.infrastructure.object_store` defines the object-store interface, S3 URI helpers, deterministic raw/artifact key generation, and an S3-compatible implementation.
+- Settings expose `FLINT_GRAPH_OBJECT_STORE_*` variables for S3-compatible storage.
+- `flint_graph.infrastructure.object_store` defines the object-store interface, S3 URI helpers, deterministic raw/artifact key generation, and an S3-compatible implementation.
 - Object URIs use internal `s3://<bucket>/<key>` references.
 
 ## Phase 2 Completed Behavior
@@ -50,7 +50,7 @@ Implemented document-version lifecycle semantics:
 Implemented parser contracts:
 
 - Format detection for plain text, Markdown, HTML, and PDF.
-- Atlas-owned normalized artifact models with schema version `1`.
+- FlintGraph-owned normalized artifact models with schema version `1`.
 - Parser errors for unsupported formats, decode failures, execution failures, and limit failures.
 - Plain text parser that emits paragraph elements.
 - Markdown parser that emits heading, paragraph, list item, and code block elements.
@@ -81,7 +81,7 @@ Phase 7 wires these chunking and lineage services into the Temporal worker.
 
 Implemented structured extraction and provenance services:
 
-- Settings expose `ATLAS_EXTRACTION_*`, `ATLAS_LLM_PROVIDER`, and `ATLAS_OLLAMA_*` variables.
+- Settings expose `FLINT_GRAPH_EXTRACTION_*`, `FLINT_GRAPH_LLM_PROVIDER`, and `FLINT_GRAPH_OLLAMA_*` variables.
 - `OllamaExtractionClient` calls Ollama's JSON generation API behind the application extraction protocol.
 - The built-in extraction schema validates `title`, `summary`, `topics`, and typed `entities`.
 - Extraction prompts are deterministic and include chunk IDs for provenance.
@@ -147,8 +147,8 @@ The milestone intentionally stops before embeddings, vector indexes, graph mutat
 Included:
 
 - MinIO-backed S3-compatible object storage.
-- Multipart upload through the AtlasRAG API.
-- URL materialization through the AtlasRAG API.
+- Multipart upload through the FlintGraph API.
+- URL materialization through the FlintGraph API.
 - Immutable raw source objects with size and `sha256:` hash metadata.
 - Parser interfaces for text, Markdown, HTML, and text-based PDF.
 - Bounded parser subprocess execution.
@@ -199,12 +199,12 @@ A completed job activates its version. A failed job fails its version. A cancell
 Extraction is on by default but optional by default:
 
 ```env
-ATLAS_EXTRACTION_ENABLED=true
-ATLAS_EXTRACTION_MODE=optional
-ATLAS_LLM_PROVIDER=ollama
-ATLAS_OLLAMA_BASE_URL=http://host.docker.internal:11434
-ATLAS_OLLAMA_MODEL=gemma3:1b
-ATLAS_EXTRACTION_TIMEOUT_SECONDS=180
+FLINT_GRAPH_EXTRACTION_ENABLED=true
+FLINT_GRAPH_EXTRACTION_MODE=optional
+FLINT_GRAPH_LLM_PROVIDER=ollama
+FLINT_GRAPH_OLLAMA_BASE_URL=http://host.docker.internal:11434
+FLINT_GRAPH_OLLAMA_MODEL=gemma3:1b
+FLINT_GRAPH_EXTRACTION_TIMEOUT_SECONDS=180
 ```
 
 If Ollama is unavailable in optional mode, the extraction failure is recorded and the document version can still activate.

@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from atlas_rag.infrastructure.neo4j_migrations import (
+from flint_graph.infrastructure.neo4j_migrations import (
     APPLIED_VERSIONS_QUERY,
     ENSURE_MIGRATION_CONSTRAINT,
     RECORD_MIGRATION_QUERY,

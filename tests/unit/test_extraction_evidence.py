@@ -1,10 +1,10 @@
 import pytest
 
-from atlas_rag.application.extraction_evidence import (
+from flint_graph.application.extraction_evidence import (
     EvidenceResolutionError,
     resolve_batch_evidence,
 )
-from atlas_rag.application.extraction_proposals import (
+from flint_graph.application.extraction_proposals import (
     EvidenceProposal,
     ExtractedEntityProposal,
     ExtractedRelationProposal,

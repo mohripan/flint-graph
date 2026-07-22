@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_orchestration import (
     AnswerGenerationRequest,
     DeterministicAnswerGenerator,
     DeterministicQueryClassifier,
@@ -191,7 +191,7 @@ async def test_deterministic_answer_generator_reports_insufficient_context() -> 
     answer = await generator.generate(
         AnswerGenerationRequest(
             tenant_id=uuid4(),
-            query="What is AtlasRAG?",
+            query="What is FlintGraph?",
             retrieval_index_version_id=uuid4(),
             context_pack=QueryContextPack(pack_id="pack-empty", token_budget=100),
         )

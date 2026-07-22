@@ -20,13 +20,13 @@ index version created for deterministic 384-dimensional embeddings.
 PowerShell:
 
 ```powershell
-$env:ATLAS_EMBEDDING_PROVIDER = "ollama"
-$env:ATLAS_EMBEDDING_MODEL = "nomic-embed-text"
-$env:ATLAS_EMBEDDING_DIMENSIONS = "768"
-$env:ATLAS_QUERY_ANSWER_PROVIDER = "ollama"
-$env:ATLAS_QUERY_SUPPORT_PROVIDER = "ollama"
-$env:ATLAS_QUERY_ANSWER_MODEL = "llama3.2"
-$env:ATLAS_QUERY_SUPPORT_MODEL = "llama3.2"
+$env:FLINT_GRAPH_EMBEDDING_PROVIDER = "ollama"
+$env:FLINT_GRAPH_EMBEDDING_MODEL = "nomic-embed-text"
+$env:FLINT_GRAPH_EMBEDDING_DIMENSIONS = "768"
+$env:FLINT_GRAPH_QUERY_ANSWER_PROVIDER = "ollama"
+$env:FLINT_GRAPH_QUERY_SUPPORT_PROVIDER = "ollama"
+$env:FLINT_GRAPH_QUERY_ANSWER_MODEL = "llama3.2"
+$env:FLINT_GRAPH_QUERY_SUPPORT_MODEL = "llama3.2"
 docker compose up --build
 ```
 
@@ -36,11 +36,11 @@ For CPU-constrained smoke tests, use a smaller installed local model and reduce
 the query context:
 
 ```powershell
-$env:ATLAS_QUERY_ANSWER_MODEL = "gemma3:270m"
-$env:ATLAS_QUERY_SUPPORT_MODEL = "gemma3:270m"
-$env:ATLAS_QUERY_ANSWER_MAX_TOKENS = "160"
-$env:ATLAS_QUERY_CONTEXT_TOKEN_BUDGET = "350"
-$env:ATLAS_QUERY_MAX_CONTEXT_RECORDS = "1"
+$env:FLINT_GRAPH_QUERY_ANSWER_MODEL = "gemma3:270m"
+$env:FLINT_GRAPH_QUERY_SUPPORT_MODEL = "gemma3:270m"
+$env:FLINT_GRAPH_QUERY_ANSWER_MAX_TOKENS = "160"
+$env:FLINT_GRAPH_QUERY_CONTEXT_TOKEN_BUDGET = "350"
+$env:FLINT_GRAPH_QUERY_MAX_CONTEXT_RECORDS = "1"
 ```
 
 ## Create a compatible active retrieval index
@@ -75,14 +75,14 @@ Manual flow:
 2. Upload a small markdown or text document first, such as `README.md`.
 3. Wait until the Documents page shows at least one searchable document.
 4. Ask:
-   - `What is AtlasRAG?`
+   - `What is FlintGraph?`
    - `What does the local Ollama setup do?`
 5. Confirm final answers include citations and source text.
 6. If an answer abstains, inspect the run diagnostics shown in the Ask page.
 
 The sample discrete-mathematics PDF is useful as a heavier parser/indexing test.
 On small local machines it can exceed the default parser timeout; increase
-`ATLAS_PARSER_TIMEOUT_SECONDS` before using it as the first smoke document.
+`FLINT_GRAPH_PARSER_TIMEOUT_SECONDS` before using it as the first smoke document.
 
 ## Expected failures
 

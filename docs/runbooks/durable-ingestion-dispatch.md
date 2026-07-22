@@ -56,19 +56,19 @@ uv run alembic upgrade head
 Run the API:
 
 ```powershell
-uv run uvicorn atlas_rag.main:app --reload
+uv run uvicorn flint_graph.main:app --reload
 ```
 
 Run the relay:
 
 ```powershell
-uv run python -m atlas_rag.processes.outbox_relay
+uv run python -m flint_graph.processes.outbox_relay
 ```
 
 Run the worker:
 
 ```powershell
-uv run python -m atlas_rag.processes.ingestion_worker
+uv run python -m flint_graph.processes.ingestion_worker
 ```
 
 ## Manual verification
@@ -140,7 +140,7 @@ In Temporal Web UI, inspect the workflow memo to correlate a workflow execution 
 
 - If messages stay `pending`, check the `outbox-relay` logs.
 - If `attempt_count` increases, inspect `last_error`.
-- If Temporal cannot be reached, verify `ATLAS_TEMPORAL_ADDRESS`.
+- If Temporal cannot be reached, verify `FLINT_GRAPH_TEMPORAL_ADDRESS`.
 - In Docker Compose, the relay uses `temporal:7233`; outside Docker, use `localhost:7233`.
 - If a workflow exists but the job remains `queued`, check `ingestion-worker` logs and verify it is using the `ingestion` task queue.
 - If cancellation status changes but Temporal does not cancel, check for a pending `ingestion.job_cancelled` outbox message.

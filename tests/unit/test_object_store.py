@@ -3,7 +3,7 @@ from uuid import UUID
 
 import pytest
 
-from atlas_rag.infrastructure.object_store import (
+from flint_graph.infrastructure.object_store import (
     S3ObjectStore,
     artifact_object_key,
     object_uri,
@@ -14,21 +14,21 @@ from atlas_rag.infrastructure.object_store import (
 
 def test_parse_object_uri_accepts_internal_s3_references() -> None:
     parsed = parse_object_uri(
-        "s3://atlas-rag/tenants/tenant-id/documents/document-id/versions/version-id/raw/source"
+        "s3://flint-graph/tenants/tenant-id/documents/document-id/versions/version-id/raw/source"
     )
 
-    assert parsed.bucket == "atlas-rag"
+    assert parsed.bucket == "flint-graph"
     assert parsed.key == "tenants/tenant-id/documents/document-id/versions/version-id/raw/source"
 
 
 @pytest.mark.parametrize(
     "uri",
     [
-        "https://atlas-rag/tenants/tenant-id/raw/source",
+        "https://flint-graph/tenants/tenant-id/raw/source",
         "s3://",
-        "s3://atlas-rag",
+        "s3://flint-graph",
         "s3:///tenants/tenant-id/raw/source",
-        "s3://atlas-rag//tenants/tenant-id/raw/source",
+        "s3://flint-graph//tenants/tenant-id/raw/source",
     ],
 )
 def test_parse_object_uri_rejects_unsupported_or_malformed_references(uri: str) -> None:
@@ -60,12 +60,12 @@ def test_object_key_generation_is_deterministic_and_version_scoped() -> None:
         "documents/22222222-2222-4222-8222-222222222222/"
         "versions/33333333-3333-4333-8333-333333333333/artifacts/normalized.json"
     )
-    assert object_uri("atlas-rag", raw_source_object_key(
+    assert object_uri("flint-graph", raw_source_object_key(
         tenant_id=tenant_id,
         document_id=document_id,
         version_id=version_id,
     )) == (
-        "s3://atlas-rag/tenants/11111111-1111-4111-8111-111111111111/"
+        "s3://flint-graph/tenants/11111111-1111-4111-8111-111111111111/"
         "documents/22222222-2222-4222-8222-222222222222/"
         "versions/33333333-3333-4333-8333-333333333333/raw/source"
     )
@@ -116,7 +116,7 @@ class FakeS3Client:
 async def test_s3_object_store_writes_reads_and_normalizes_metadata() -> None:
     client = FakeS3Client()
     store = S3ObjectStore(client)
-    uri = "s3://atlas-rag/tenants/t/documents/d/versions/v/raw/source"
+    uri = "s3://flint-graph/tenants/t/documents/d/versions/v/raw/source"
 
     await store.put_bytes(
         uri,
@@ -132,7 +132,7 @@ async def test_s3_object_store_writes_reads_and_normalizes_metadata() -> None:
 
     assert client.put_calls == [
         {
-            "Bucket": "atlas-rag",
+            "Bucket": "flint-graph",
             "Key": "tenants/t/documents/d/versions/v/raw/source",
             "Body": b"hello",
             "ContentType": "text/plain",

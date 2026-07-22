@@ -1,10 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// The AtlasRAG API does not send CORS headers, so we proxy same-origin requests
+// The FlintGraph API does not send CORS headers, so we proxy same-origin requests
 // from the dev server to the backend. The browser only ever talks to Vite.
-// Override the backend location with ATLAS_API_TARGET if it is not on :8000.
-const API_TARGET = process.env.ATLAS_API_TARGET ?? "http://localhost:8000";
+// Override the backend location with FLINT_GRAPH_API_TARGET if it is not on :8000.
+const API_TARGET = process.env.FLINT_GRAPH_API_TARGET ?? "http://localhost:8000";
 
 export default defineConfig({
   plugins: [react()],

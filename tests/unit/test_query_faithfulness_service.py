@@ -2,14 +2,14 @@ from uuid import uuid4
 
 import pytest
 
-from atlas_rag.application.query_faithfulness import DeterministicSupportChecker
-from atlas_rag.application.query_orchestration import (
+from flint_graph.application.query_faithfulness import DeterministicSupportChecker
+from flint_graph.application.query_orchestration import (
     AnswerCitation,
     GeneratedAnswer,
     PackedContextRecord,
     QueryContextPack,
 )
-from atlas_rag.application.services.query_faithfulness import (
+from flint_graph.application.services.query_faithfulness import (
     QueryFaithfulnessPolicy,
     verify_generated_answer,
 )

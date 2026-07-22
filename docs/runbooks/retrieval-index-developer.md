@@ -56,21 +56,21 @@ docker compose logs -f opensearch
 ## Phase 1 Configuration
 
 Phase 1 adds the embedding contract and settings but does not start indexing.
-Relevant environment variables use the `ATLAS_` prefix:
+Relevant environment variables use the `FLINT_GRAPH_` prefix:
 
-- `ATLAS_INDEXING_MODE`: `disabled`, `optional`, or `required`;
-- `ATLAS_EMBEDDING_PROVIDER`: `deterministic`, `ollama`, or
+- `FLINT_GRAPH_INDEXING_MODE`: `disabled`, `optional`, or `required`;
+- `FLINT_GRAPH_EMBEDDING_PROVIDER`: `deterministic`, `ollama`, or
   `openai_compatible`;
-- `ATLAS_EMBEDDING_MODEL`;
-- `ATLAS_EMBEDDING_DIMENSIONS`;
-- `ATLAS_EMBEDDING_BATCH_SIZE`;
-- `ATLAS_EMBEDDING_TIMEOUT_SECONDS`;
-- `ATLAS_EMBEDDING_OLLAMA_BASE_URL`;
-- `ATLAS_EMBEDDING_OPENAI_BASE_URL`;
-- `ATLAS_EMBEDDING_OPENAI_API_KEY`;
-- `ATLAS_ACTIVE_RETRIEVAL_INDEX_VERSION_ID`;
-- `ATLAS_INDEX_BACKFILL_BATCH_SIZE`;
-- `ATLAS_OPENSEARCH_URL`.
+- `FLINT_GRAPH_EMBEDDING_MODEL`;
+- `FLINT_GRAPH_EMBEDDING_DIMENSIONS`;
+- `FLINT_GRAPH_EMBEDDING_BATCH_SIZE`;
+- `FLINT_GRAPH_EMBEDDING_TIMEOUT_SECONDS`;
+- `FLINT_GRAPH_EMBEDDING_OLLAMA_BASE_URL`;
+- `FLINT_GRAPH_EMBEDDING_OPENAI_BASE_URL`;
+- `FLINT_GRAPH_EMBEDDING_OPENAI_API_KEY`;
+- `FLINT_GRAPH_ACTIVE_RETRIEVAL_INDEX_VERSION_ID`;
+- `FLINT_GRAPH_INDEX_BACKFILL_BATCH_SIZE`;
+- `FLINT_GRAPH_OPENSEARCH_URL`.
 
 The default provider is deterministic so unit and local contract tests do not
 require a live embedding service. `openai_compatible` requires both a base URL
@@ -81,45 +81,45 @@ and API key at settings validation time.
 Milestone 06 Phase 2 tables:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "\dt *retrieval*"
-docker compose exec postgres psql -U atlas -d atlas -c "\dt *embedding*"
-docker compose exec postgres psql -U atlas -d atlas -c "\dt *backfill*"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "\dt *retrieval*"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "\dt *embedding*"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "\dt *backfill*"
 ```
 
 Index versions:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, embedding_provider, embedding_model, vector_dimension, lexical_schema_version, created_at from retrieval_index_versions order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, embedding_provider, embedding_model, vector_dimension, lexical_schema_version, created_at from retrieval_index_versions order by created_at desc limit 20;"
 ```
 
 Chunk embedding coverage:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select retrieval_index_version_id, tenant_id, count(*) from chunk_embeddings group by retrieval_index_version_id, tenant_id order by count desc;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select retrieval_index_version_id, tenant_id, count(*) from chunk_embeddings group by retrieval_index_version_id, tenant_id order by count desc;"
 ```
 
 Backfill jobs:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, processed_count, failed_count, last_error from index_backfill_jobs order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, processed_count, failed_count, last_error from index_backfill_jobs order by created_at desc limit 20;"
 ```
 
 Backfill checkpoints:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select id, status, total_count, processed_count, failed_count, checkpoint, last_error from index_backfill_jobs order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select id, status, total_count, processed_count, failed_count, checkpoint, last_error from index_backfill_jobs order by created_at desc limit 20;"
 ```
 
 Document index coverage:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select document_version_id, retrieval_index_version_id, status, chunk_count, embedded_count, vector_count, lexical_count, error_code from document_index_coverages order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select document_version_id, retrieval_index_version_id, status, chunk_count, embedded_count, vector_count, lexical_count, error_code from document_index_coverages order by created_at desc limit 20;"
 ```
 
 Active-version invariant:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select scope, tenant_id, count(*) from retrieval_index_versions where status = 'active' group by scope, tenant_id;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select scope, tenant_id, count(*) from retrieval_index_versions where status = 'active' group by scope, tenant_id;"
 ```
 
 Expected:
@@ -139,7 +139,7 @@ must not be reused for the new chunk.
 ## Indexing Workflow Checks
 
 Phase 5 adds `IndexDocumentVersionWorkflow` and registers it in the ingestion
-worker. The workflow is started by ingestion according to `ATLAS_INDEXING_MODE`:
+worker. The workflow is started by ingestion according to `FLINT_GRAPH_INDEXING_MODE`:
 
 - `disabled`: no indexing workflow starts;
 - `optional`: ingestion completes, then the workflow starts as follow-up;
@@ -196,13 +196,13 @@ have matching `chunk_embeddings` rows for the target retrieval index version.
 Reconcile completed retrieval projections without re-embedding:
 
 ```powershell
-$env:ATLAS_DATABASE_URL='postgresql+asyncpg://atlas:atlas@localhost:55432/atlas'
-$env:ATLAS_NEO4J_URI='bolt://localhost:7687'
-$env:ATLAS_NEO4J_USER='neo4j'
-$env:ATLAS_NEO4J_PASSWORD='atlaspassword'
-$env:ATLAS_NEO4J_DATABASE='neo4j'
-$env:ATLAS_OPENSEARCH_URL='http://localhost:9200'
-uv run python -m atlas_rag.processes.retrieval_index_reconcile
+$env:FLINT_GRAPH_DATABASE_URL='postgresql+asyncpg://flint_graph:flint_graph@localhost:55432/flint_graph'
+$env:FLINT_GRAPH_NEO4J_URI='bolt://localhost:7687'
+$env:FLINT_GRAPH_NEO4J_USER='neo4j'
+$env:FLINT_GRAPH_NEO4J_PASSWORD='flintgraphpassword'
+$env:FLINT_GRAPH_NEO4J_DATABASE='neo4j'
+$env:FLINT_GRAPH_OPENSEARCH_URL='http://localhost:9200'
+uv run python -m flint_graph.processes.retrieval_index_reconcile
 ```
 
 Expected reconcile behavior:
@@ -228,7 +228,7 @@ curl.exe -sS http://localhost:9200/_cat/aliases?v
 Create a smoke-test index:
 
 ```powershell
-curl.exe -sS -X PUT http://localhost:9200/atlas_chunks_smoke `
+curl.exe -sS -X PUT http://localhost:9200/flint_graph_chunks_smoke `
   -H "Content-Type: application/json" `
   -d '{"settings":{"index":{"number_of_shards":1,"number_of_replicas":0}},"mappings":{"properties":{"tenant_id":{"type":"keyword"},"text":{"type":"text"}}}}'
 ```
@@ -236,7 +236,7 @@ curl.exe -sS -X PUT http://localhost:9200/atlas_chunks_smoke `
 Run a tenant-filtered lexical smoke query:
 
 ```powershell
-curl.exe -sS -X POST http://localhost:9200/atlas_chunks_active/_search `
+curl.exe -sS -X POST http://localhost:9200/flint_graph_chunks_active/_search `
   -H "Content-Type: application/json" `
   -d '{"query":{"bool":{"must":[{"match":{"text":"acme"}}],"filter":[{"term":{"tenant_id":"<tenant-id>"}}]}},"size":5}'
 ```
@@ -246,7 +246,7 @@ curl.exe -sS -X POST http://localhost:9200/atlas_chunks_active/_search `
 List Neo4j indexes:
 
 ```powershell
-docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "SHOW INDEXES YIELD name, type, labelsOrTypes, properties RETURN name, type, labelsOrTypes, properties"
+docker compose exec neo4j cypher-shell -u neo4j -p flintgraphpassword "SHOW INDEXES YIELD name, type, labelsOrTypes, properties RETURN name, type, labelsOrTypes, properties"
 ```
 
 Expected Phase 4 indexes include:
@@ -259,7 +259,7 @@ Expected Phase 4 indexes include:
 Check vector-bearing retrieval records:
 
 ```powershell
-docker compose exec neo4j cypher-shell -u neo4j -p atlaspassword "MATCH (c:Chunk {tenant_id: '<tenant-id>'}) RETURN c.id, c.chunk_id, c.retrieval_index_version_id, keys(c) LIMIT 20"
+docker compose exec neo4j cypher-shell -u neo4j -p flintgraphpassword "MATCH (c:Chunk {tenant_id: '<tenant-id>'}) RETURN c.id, c.chunk_id, c.retrieval_index_version_id, keys(c) LIMIT 20"
 ```
 
 ## API Checks

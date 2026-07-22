@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from temporalio import activity
+from temporalio.common import WorkflowIDConflictPolicy
+
+from flint_graph.application.services.graph_projection import (
+    load_tenant_graph,
+    project_tenant_graph,
+)
+from flint_graph.application.services.resolution import (
+    ResolutionConfig,
+    acquire_tenant_resolution_lock,
+    resolve_pending_mentions,
+)
+from flint_graph.application.services.staged_resolution import resolve_pending_staged_entities
+from flint_graph.config import Settings, get_settings
+from flint_graph.infrastructure.db.session import SessionFactory
+from flint_graph.infrastructure.neo4j import create_neo4j_client
+from flint_graph.infrastructure.temporal import connect_temporal
+from flint_graph.workflows.resolution import (
+    ENQUEUE_TENANT_RESOLUTION_ACTIVITY,
+    REQUEST_RESOLUTION_SIGNAL,
+    RESOLVE_ENTITIES_WORKFLOW,
+    RESOLVE_TENANT_ENTITIES_ACTIVITY,
+)
+
+
+def _resolution_config(settings: Settings) -> ResolutionConfig:
+    return ResolutionConfig(
+        auto_threshold=settings.entity_resolution_auto_threshold,
+        review_threshold=settings.entity_resolution_review_threshold,
+        trigram_threshold=settings.entity_resolution_trigram_threshold,
+        candidate_limit=settings.entity_resolution_candidate_limit,
+    )
+
+
+@activity.defn(name=RESOLVE_TENANT_ENTITIES_ACTIVITY)
+async def resolve_tenant_entities(tenant_id: str) -> int:
+    settings = get_settings()
+    config = _resolution_config(settings)
+    async with SessionFactory() as session:
+        try:
+            await acquire_tenant_resolution_lock(session, UUID(tenant_id))
+            result = await resolve_pending_mentions(
+                session, tenant_id=UUID(tenant_id), config=config
+            )
+            staged_result = await resolve_pending_staged_entities(
+                session, tenant_id=UUID(tenant_id)
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    # PostgreSQL is the system of record; project the committed graph into Neo4j.
+    # A projection failure retries the activity and re-projects idempotently.
+    await _project_tenant_graph(settings, UUID(tenant_id))
+    return result.mentions_processed + staged_result.source_entity_count
+
+
+async def _project_tenant_graph(settings: Settings, tenant_id: UUID) -> None:
+    async with SessionFactory() as session:
+        graph = await load_tenant_graph(session, tenant_id=tenant_id)
+    client = create_neo4j_client(settings)
+    try:
+        await project_tenant_graph(client, tenant_id=tenant_id, graph=graph)
+    finally:
+        await client.close()
+
+
+@activity.defn(name=ENQUEUE_TENANT_RESOLUTION_ACTIVITY)
+async def enqueue_tenant_resolution(tenant_id: str) -> None:
+    settings = get_settings()
+    client = await connect_temporal(settings)
+    await client.start_workflow(
+        RESOLVE_ENTITIES_WORKFLOW,
+        tenant_id,
+        id=f"entity-resolution-{tenant_id}",
+        task_queue=settings.temporal_task_queue,
+        id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
+        start_signal=REQUEST_RESOLUTION_SIGNAL,
+    )

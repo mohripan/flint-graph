@@ -1,36 +1,38 @@
+name: flint-graph
+
 services:
   api:
     build: .
     environment:
-      ATLAS_ENV: local
-      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
-      ATLAS_TEMPORAL_ADDRESS: temporal:7233
-      ATLAS_NEO4J_URI: bolt://neo4j:7687
-      ATLAS_NEO4J_USER: neo4j
-      ATLAS_NEO4J_PASSWORD: atlaspassword
-      ATLAS_NEO4J_DATABASE: neo4j
-      ATLAS_OBJECT_STORE_PROVIDER: s3
-      ATLAS_OBJECT_STORE_BUCKET: atlas-rag
-      ATLAS_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
-      ATLAS_OBJECT_STORE_REGION: us-east-1
-      ATLAS_OBJECT_STORE_ACCESS_KEY_ID: atlas
-      ATLAS_OBJECT_STORE_SECRET_ACCESS_KEY: atlas-secret
-      ATLAS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
-      ATLAS_OTEL_ENABLED: "true"
-      ATLAS_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
-      ATLAS_OTEL_EXPORTER_OTLP_INSECURE: "true"
-      ATLAS_OPENSEARCH_URL: http://opensearch:9200
-      ATLAS_EMBEDDING_PROVIDER: ${ATLAS_EMBEDDING_PROVIDER:-deterministic}
-      ATLAS_EMBEDDING_MODEL: ${ATLAS_EMBEDDING_MODEL:-deterministic-test}
-      ATLAS_EMBEDDING_DIMENSIONS: ${ATLAS_EMBEDDING_DIMENSIONS:-384}
-      ATLAS_QUERY_ANSWER_PROVIDER: ${ATLAS_QUERY_ANSWER_PROVIDER:-deterministic}
-      ATLAS_QUERY_ANSWER_MODEL: ${ATLAS_QUERY_ANSWER_MODEL:-llama3.2}
-      ATLAS_QUERY_SUPPORT_PROVIDER: ${ATLAS_QUERY_SUPPORT_PROVIDER:-deterministic}
-      ATLAS_QUERY_SUPPORT_MODEL: ${ATLAS_QUERY_SUPPORT_MODEL:-llama3.2}
-      ATLAS_QUERY_ANSWER_TIMEOUT_SECONDS: ${ATLAS_QUERY_ANSWER_TIMEOUT_SECONDS:-180}
-      ATLAS_QUERY_ANSWER_MAX_TOKENS: ${ATLAS_QUERY_ANSWER_MAX_TOKENS:-1024}
-      ATLAS_QUERY_CONTEXT_TOKEN_BUDGET: ${ATLAS_QUERY_CONTEXT_TOKEN_BUDGET:-4000}
-      ATLAS_QUERY_MAX_CONTEXT_RECORDS: ${ATLAS_QUERY_MAX_CONTEXT_RECORDS:-25}
+      FLINT_GRAPH_ENV: local
+      FLINT_GRAPH_DATABASE_URL: postgresql+asyncpg://flint_graph:flint_graph@postgres:5432/flint_graph
+      FLINT_GRAPH_TEMPORAL_ADDRESS: temporal:7233
+      FLINT_GRAPH_NEO4J_URI: bolt://neo4j:7687
+      FLINT_GRAPH_NEO4J_USER: neo4j
+      FLINT_GRAPH_NEO4J_PASSWORD: flintgraphpassword
+      FLINT_GRAPH_NEO4J_DATABASE: neo4j
+      FLINT_GRAPH_OBJECT_STORE_PROVIDER: s3
+      FLINT_GRAPH_OBJECT_STORE_BUCKET: flint-graph
+      FLINT_GRAPH_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+      FLINT_GRAPH_OBJECT_STORE_REGION: us-east-1
+      FLINT_GRAPH_OBJECT_STORE_ACCESS_KEY_ID: flint_graph
+      FLINT_GRAPH_OBJECT_STORE_SECRET_ACCESS_KEY: flint-graph-secret
+      FLINT_GRAPH_OBJECT_STORE_FORCE_PATH_STYLE: "true"
+      FLINT_GRAPH_OTEL_ENABLED: "true"
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_INSECURE: "true"
+      FLINT_GRAPH_OPENSEARCH_URL: http://opensearch:9200
+      FLINT_GRAPH_EMBEDDING_PROVIDER: ${FLINT_GRAPH_EMBEDDING_PROVIDER:-deterministic}
+      FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_EMBEDDING_MODEL:-deterministic-test}
+      FLINT_GRAPH_EMBEDDING_DIMENSIONS: ${FLINT_GRAPH_EMBEDDING_DIMENSIONS:-384}
+      FLINT_GRAPH_QUERY_ANSWER_PROVIDER: ${FLINT_GRAPH_QUERY_ANSWER_PROVIDER:-deterministic}
+      FLINT_GRAPH_QUERY_ANSWER_MODEL: ${FLINT_GRAPH_QUERY_ANSWER_MODEL:-llama3.2}
+      FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: ${FLINT_GRAPH_QUERY_SUPPORT_PROVIDER:-deterministic}
+      FLINT_GRAPH_QUERY_SUPPORT_MODEL: ${FLINT_GRAPH_QUERY_SUPPORT_MODEL:-llama3.2}
+      FLINT_GRAPH_QUERY_ANSWER_TIMEOUT_SECONDS: ${FLINT_GRAPH_QUERY_ANSWER_TIMEOUT_SECONDS:-180}
+      FLINT_GRAPH_QUERY_ANSWER_MAX_TOKENS: ${FLINT_GRAPH_QUERY_ANSWER_MAX_TOKENS:-1024}
+      FLINT_GRAPH_QUERY_CONTEXT_TOKEN_BUDGET: ${FLINT_GRAPH_QUERY_CONTEXT_TOKEN_BUDGET:-4000}
+      FLINT_GRAPH_QUERY_MAX_CONTEXT_RECORDS: ${FLINT_GRAPH_QUERY_MAX_CONTEXT_RECORDS:-25}
     ports:
       - "8000:8000"
     depends_on:
@@ -51,19 +53,19 @@ services:
 
   outbox-relay:
     build: .
-    command: ["python", "-m", "atlas_rag.processes.outbox_relay"]
+    command: ["python", "-m", "flint_graph.processes.outbox_relay"]
     environment:
-      ATLAS_ENV: local
-      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
-      ATLAS_TEMPORAL_ADDRESS: temporal:7233
-      ATLAS_OTEL_ENABLED: "false"
-      ATLAS_EMBEDDING_PROVIDER: ${ATLAS_EMBEDDING_PROVIDER:-deterministic}
-      ATLAS_EMBEDDING_MODEL: ${ATLAS_EMBEDDING_MODEL:-deterministic-test}
-      ATLAS_EMBEDDING_DIMENSIONS: ${ATLAS_EMBEDDING_DIMENSIONS:-384}
-      ATLAS_QUERY_ANSWER_PROVIDER: ${ATLAS_QUERY_ANSWER_PROVIDER:-deterministic}
-      ATLAS_QUERY_ANSWER_MODEL: ${ATLAS_QUERY_ANSWER_MODEL:-llama3.2}
-      ATLAS_QUERY_SUPPORT_PROVIDER: ${ATLAS_QUERY_SUPPORT_PROVIDER:-deterministic}
-      ATLAS_QUERY_SUPPORT_MODEL: ${ATLAS_QUERY_SUPPORT_MODEL:-llama3.2}
+      FLINT_GRAPH_ENV: local
+      FLINT_GRAPH_DATABASE_URL: postgresql+asyncpg://flint_graph:flint_graph@postgres:5432/flint_graph
+      FLINT_GRAPH_TEMPORAL_ADDRESS: temporal:7233
+      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_EMBEDDING_PROVIDER: ${FLINT_GRAPH_EMBEDDING_PROVIDER:-deterministic}
+      FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_EMBEDDING_MODEL:-deterministic-test}
+      FLINT_GRAPH_EMBEDDING_DIMENSIONS: ${FLINT_GRAPH_EMBEDDING_DIMENSIONS:-384}
+      FLINT_GRAPH_QUERY_ANSWER_PROVIDER: ${FLINT_GRAPH_QUERY_ANSWER_PROVIDER:-deterministic}
+      FLINT_GRAPH_QUERY_ANSWER_MODEL: ${FLINT_GRAPH_QUERY_ANSWER_MODEL:-llama3.2}
+      FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: ${FLINT_GRAPH_QUERY_SUPPORT_PROVIDER:-deterministic}
+      FLINT_GRAPH_QUERY_SUPPORT_MODEL: ${FLINT_GRAPH_QUERY_SUPPORT_MODEL:-llama3.2}
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,43 +76,43 @@ services:
 
   ingestion-worker:
     build: .
-    command: ["python", "-m", "atlas_rag.processes.ingestion_worker"]
+    command: ["python", "-m", "flint_graph.processes.ingestion_worker"]
     environment:
-      ATLAS_ENV: local
-      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
-      ATLAS_TEMPORAL_ADDRESS: temporal:7233
-      ATLAS_NEO4J_URI: bolt://neo4j:7687
-      ATLAS_NEO4J_USER: neo4j
-      ATLAS_NEO4J_PASSWORD: atlaspassword
-      ATLAS_NEO4J_DATABASE: neo4j
-      ATLAS_OBJECT_STORE_PROVIDER: s3
-      ATLAS_OBJECT_STORE_BUCKET: atlas-rag
-      ATLAS_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
-      ATLAS_OBJECT_STORE_REGION: us-east-1
-      ATLAS_OBJECT_STORE_ACCESS_KEY_ID: atlas
-      ATLAS_OBJECT_STORE_SECRET_ACCESS_KEY: atlas-secret
-      ATLAS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
-      ATLAS_PARSER_TIMEOUT_SECONDS: "30"
-      ATLAS_PARSER_MAX_RAW_BYTES: "10485760"
-      ATLAS_PARSER_MAX_NORMALIZED_BYTES: "5242880"
-      ATLAS_PARSER_MAX_ELEMENTS: "10000"
-      ATLAS_CHUNKING_MAX_CHUNK_CHARS: "1200"
-      ATLAS_CHUNKING_OVERLAP_CHARS: "120"
-      ATLAS_EXTRACTION_ENABLED: "true"
-      ATLAS_EXTRACTION_MODE: optional
-      ATLAS_LLM_PROVIDER: ${ATLAS_LLM_PROVIDER:-ollama}
-      ATLAS_OLLAMA_BASE_URL: http://host.docker.internal:11434
-      ATLAS_OLLAMA_MODEL: gemma3:1b
-      ATLAS_EXTRACTION_TIMEOUT_SECONDS: "180"
-      ATLAS_OTEL_ENABLED: "false"
-      ATLAS_OPENSEARCH_URL: http://opensearch:9200
-      ATLAS_EMBEDDING_PROVIDER: ${ATLAS_EMBEDDING_PROVIDER:-deterministic}
-      ATLAS_EMBEDDING_MODEL: ${ATLAS_EMBEDDING_MODEL:-deterministic-test}
-      ATLAS_EMBEDDING_DIMENSIONS: ${ATLAS_EMBEDDING_DIMENSIONS:-384}
-      ATLAS_QUERY_ANSWER_PROVIDER: ${ATLAS_QUERY_ANSWER_PROVIDER:-deterministic}
-      ATLAS_QUERY_ANSWER_MODEL: ${ATLAS_QUERY_ANSWER_MODEL:-llama3.2}
-      ATLAS_QUERY_SUPPORT_PROVIDER: ${ATLAS_QUERY_SUPPORT_PROVIDER:-deterministic}
-      ATLAS_QUERY_SUPPORT_MODEL: ${ATLAS_QUERY_SUPPORT_MODEL:-llama3.2}
+      FLINT_GRAPH_ENV: local
+      FLINT_GRAPH_DATABASE_URL: postgresql+asyncpg://flint_graph:flint_graph@postgres:5432/flint_graph
+      FLINT_GRAPH_TEMPORAL_ADDRESS: temporal:7233
+      FLINT_GRAPH_NEO4J_URI: bolt://neo4j:7687
+      FLINT_GRAPH_NEO4J_USER: neo4j
+      FLINT_GRAPH_NEO4J_PASSWORD: flintgraphpassword
+      FLINT_GRAPH_NEO4J_DATABASE: neo4j
+      FLINT_GRAPH_OBJECT_STORE_PROVIDER: s3
+      FLINT_GRAPH_OBJECT_STORE_BUCKET: flint-graph
+      FLINT_GRAPH_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+      FLINT_GRAPH_OBJECT_STORE_REGION: us-east-1
+      FLINT_GRAPH_OBJECT_STORE_ACCESS_KEY_ID: flint_graph
+      FLINT_GRAPH_OBJECT_STORE_SECRET_ACCESS_KEY: flint-graph-secret
+      FLINT_GRAPH_OBJECT_STORE_FORCE_PATH_STYLE: "true"
+      FLINT_GRAPH_PARSER_TIMEOUT_SECONDS: "30"
+      FLINT_GRAPH_PARSER_MAX_RAW_BYTES: "10485760"
+      FLINT_GRAPH_PARSER_MAX_NORMALIZED_BYTES: "5242880"
+      FLINT_GRAPH_PARSER_MAX_ELEMENTS: "10000"
+      FLINT_GRAPH_CHUNKING_MAX_CHUNK_CHARS: "1200"
+      FLINT_GRAPH_CHUNKING_OVERLAP_CHARS: "120"
+      FLINT_GRAPH_EXTRACTION_ENABLED: "true"
+      FLINT_GRAPH_EXTRACTION_MODE: optional
+      FLINT_GRAPH_LLM_PROVIDER: ${FLINT_GRAPH_LLM_PROVIDER:-ollama}
+      FLINT_GRAPH_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      FLINT_GRAPH_OLLAMA_MODEL: gemma3:1b
+      FLINT_GRAPH_EXTRACTION_TIMEOUT_SECONDS: "180"
+      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_OPENSEARCH_URL: http://opensearch:9200
+      FLINT_GRAPH_EMBEDDING_PROVIDER: ${FLINT_GRAPH_EMBEDDING_PROVIDER:-deterministic}
+      FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_EMBEDDING_MODEL:-deterministic-test}
+      FLINT_GRAPH_EMBEDDING_DIMENSIONS: ${FLINT_GRAPH_EMBEDDING_DIMENSIONS:-384}
+      FLINT_GRAPH_QUERY_ANSWER_PROVIDER: ${FLINT_GRAPH_QUERY_ANSWER_PROVIDER:-deterministic}
+      FLINT_GRAPH_QUERY_ANSWER_MODEL: ${FLINT_GRAPH_QUERY_ANSWER_MODEL:-llama3.2}
+      FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: ${FLINT_GRAPH_QUERY_SUPPORT_PROVIDER:-deterministic}
+      FLINT_GRAPH_QUERY_SUPPORT_MODEL: ${FLINT_GRAPH_QUERY_SUPPORT_MODEL:-llama3.2}
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,19 +131,19 @@ services:
 
   projection-cleanup:
     build: .
-    command: ["python", "-m", "atlas_rag.processes.document_projection_cleanup"]
+    command: ["python", "-m", "flint_graph.processes.document_projection_cleanup"]
     environment:
-      ATLAS_ENV: local
-      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
-      ATLAS_NEO4J_URI: bolt://neo4j:7687
-      ATLAS_NEO4J_USER: neo4j
-      ATLAS_NEO4J_PASSWORD: atlaspassword
-      ATLAS_NEO4J_DATABASE: neo4j
-      ATLAS_OPENSEARCH_URL: http://opensearch:9200
-      ATLAS_OTEL_ENABLED: "false"
-      ATLAS_EMBEDDING_PROVIDER: deterministic
-      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
-      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+      FLINT_GRAPH_ENV: local
+      FLINT_GRAPH_DATABASE_URL: postgresql+asyncpg://flint_graph:flint_graph@postgres:5432/flint_graph
+      FLINT_GRAPH_NEO4J_URI: bolt://neo4j:7687
+      FLINT_GRAPH_NEO4J_USER: neo4j
+      FLINT_GRAPH_NEO4J_PASSWORD: flintgraphpassword
+      FLINT_GRAPH_NEO4J_DATABASE: neo4j
+      FLINT_GRAPH_OPENSEARCH_URL: http://opensearch:9200
+      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_EMBEDDING_PROVIDER: deterministic
+      FLINT_GRAPH_QUERY_ANSWER_PROVIDER: deterministic
+      FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: deterministic
     depends_on:
       postgres:
         condition: service_healthy
@@ -158,11 +160,11 @@ services:
     build: .
     command: ["alembic", "upgrade", "head"]
     environment:
-      ATLAS_DATABASE_URL: postgresql+asyncpg://atlas:atlas@postgres:5432/atlas
-      ATLAS_OTEL_ENABLED: "false"
-      ATLAS_EMBEDDING_PROVIDER: deterministic
-      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
-      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+      FLINT_GRAPH_DATABASE_URL: postgresql+asyncpg://flint_graph:flint_graph@postgres:5432/flint_graph
+      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_EMBEDDING_PROVIDER: deterministic
+      FLINT_GRAPH_QUERY_ANSWER_PROVIDER: deterministic
+      FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: deterministic
     depends_on:
       postgres:
         condition: service_healthy
@@ -170,13 +172,13 @@ services:
   postgres:
     image: postgres:17.10-alpine
     environment:
-      POSTGRES_DB: atlas
-      POSTGRES_USER: atlas
-      POSTGRES_PASSWORD: atlas
+      POSTGRES_DB: flint_graph
+      POSTGRES_USER: flint_graph
+      POSTGRES_PASSWORD: flint_graph
     ports:
       - "55432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      test: ["CMD-SHELL", "pg_isready -U flint_graph -d flint_graph"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -187,8 +189,8 @@ services:
     image: minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: atlas
-      MINIO_ROOT_PASSWORD: atlas-secret
+      MINIO_ROOT_USER: flint_graph
+      MINIO_ROOT_PASSWORD: flint-graph-secret
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -205,7 +207,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "mc alias set local http://minio:9000 atlas atlas-secret && mc mb --ignore-existing local/atlas-rag",
+        "mc alias set local http://minio:9000 flint_graph flint-graph-secret && mc mb --ignore-existing local/flint-graph",
       ]
     depends_on:
       minio:
@@ -221,12 +223,12 @@ services:
   neo4j:
     image: neo4j:5.26-community
     environment:
-      NEO4J_AUTH: neo4j/atlaspassword
+      NEO4J_AUTH: neo4j/flintgraphpassword
     ports:
       - "7474:7474"
       - "7687:7687"
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -a bolt://localhost:7687 -u neo4j -p atlaspassword 'RETURN 1' || exit 1"]
+      test: ["CMD-SHELL", "cypher-shell -a bolt://localhost:7687 -u neo4j -p flintgraphpassword 'RETURN 1' || exit 1"]
       interval: 10s
       timeout: 20s
       start_period: 60s
@@ -236,16 +238,16 @@ services:
 
   neo4j-migrate:
     build: .
-    command: ["python", "-m", "atlas_rag.processes.neo4j_migrate"]
+    command: ["python", "-m", "flint_graph.processes.neo4j_migrate"]
     environment:
-      ATLAS_NEO4J_URI: bolt://neo4j:7687
-      ATLAS_NEO4J_USER: neo4j
-      ATLAS_NEO4J_PASSWORD: atlaspassword
-      ATLAS_NEO4J_DATABASE: neo4j
-      ATLAS_OTEL_ENABLED: "false"
-      ATLAS_EMBEDDING_PROVIDER: deterministic
-      ATLAS_QUERY_ANSWER_PROVIDER: deterministic
-      ATLAS_QUERY_SUPPORT_PROVIDER: deterministic
+      FLINT_GRAPH_NEO4J_URI: bolt://neo4j:7687
+      FLINT_GRAPH_NEO4J_USER: neo4j
+      FLINT_GRAPH_NEO4J_PASSWORD: flintgraphpassword
+      FLINT_GRAPH_NEO4J_DATABASE: neo4j
+      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_EMBEDDING_PROVIDER: deterministic
+      FLINT_GRAPH_QUERY_ANSWER_PROVIDER: deterministic
+      FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: deterministic
     depends_on:
       neo4j:
         condition: service_healthy
@@ -255,7 +257,7 @@ services:
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: atlasOpenSearch1!
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: FlintGraphOpenSearch1!
       OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
       - "9200:9200"

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AtlasRAG turns per-document extraction output into a resolved, provenance-backed knowledge graph. PostgreSQL is the system of record; Neo4j is an idempotent projection. This contract describes the canonical entities, aliases, relationships, scoring, banded decisions, and merge/review behavior introduced in Milestone 04 and fed by Milestone 05 staged extraction proposals.
+FlintGraph turns per-document extraction output into a resolved, provenance-backed knowledge graph. PostgreSQL is the system of record; Neo4j is an idempotent projection. This contract describes the canonical entities, aliases, relationships, scoring, banded decisions, and merge/review behavior introduced in Milestone 04 and fed by Milestone 05 staged extraction proposals.
 
 Milestone 05 superseded the Milestone 04 mention/claim extraction bridge with staged extraction proposals and verified evidence spans. The canonical graph posture in this contract remains valid; the upstream input model is now defined in `docs/architecture/extraction-proposal-contract.md`.
 
@@ -88,7 +88,7 @@ review <= score < auto         -> review queue
 score < review_threshold       -> new entity
 ```
 
-Defaults: auto `0.85`, review `0.6`, trigram `0.3`. Thresholds are configurable via `ATLAS_ENTITY_RESOLUTION_*` settings.
+Defaults: auto `0.85`, review `0.6`, trigram `0.3`. Thresholds are configurable via `FLINT_GRAPH_ENTITY_RESOLUTION_*` settings.
 
 ## Merge Decisions
 

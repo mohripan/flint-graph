@@ -27,7 +27,7 @@ docker compose logs -f ingestion-worker
 docker compose logs -f api
 ```
 
-- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `atlaspassword`)
+- Neo4j browser: `http://localhost:7474` (user `neo4j`, password `flintgraphpassword`)
 - Temporal Web UI: `http://localhost:8233`
 
 ## Resolution Path
@@ -50,14 +50,14 @@ Review, manual merge, and unmerge happen through the API and also project to Neo
 ## Configuration
 
 ```env
-ATLAS_NEO4J_URI=bolt://neo4j:7687
-ATLAS_NEO4J_USER=neo4j
-ATLAS_NEO4J_PASSWORD=atlaspassword
-ATLAS_NEO4J_DATABASE=neo4j
-ATLAS_ENTITY_RESOLUTION_AUTO_THRESHOLD=0.85
-ATLAS_ENTITY_RESOLUTION_REVIEW_THRESHOLD=0.6
-ATLAS_ENTITY_RESOLUTION_TRIGRAM_THRESHOLD=0.3
-ATLAS_ENTITY_RESOLUTION_CANDIDATE_LIMIT=20
+FLINT_GRAPH_NEO4J_URI=bolt://neo4j:7687
+FLINT_GRAPH_NEO4J_USER=neo4j
+FLINT_GRAPH_NEO4J_PASSWORD=flintgraphpassword
+FLINT_GRAPH_NEO4J_DATABASE=neo4j
+FLINT_GRAPH_ENTITY_RESOLUTION_AUTO_THRESHOLD=0.85
+FLINT_GRAPH_ENTITY_RESOLUTION_REVIEW_THRESHOLD=0.6
+FLINT_GRAPH_ENTITY_RESOLUTION_TRIGRAM_THRESHOLD=0.3
+FLINT_GRAPH_ENTITY_RESOLUTION_CANDIDATE_LIMIT=20
 ```
 
 Extraction defaults to `gemma3:1b` through Ollama. Small local models can produce sparse proposals; failed or rejected extraction output is recorded in provenance tables and does not directly mutate the canonical graph.
@@ -67,25 +67,25 @@ Extraction defaults to `gemma3:1b` through Ollama. Small local models can produc
 Entities and support counts:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select canonical_name, entity_type, status, support_count from canonical_entities order by support_count desc, canonical_name limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select canonical_name, entity_type, status, support_count from canonical_entities order by support_count desc, canonical_name limit 20;"
 ```
 
 Staged entities and resolution status:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select name, entity_type, resolution_status, resolved_canonical_entity_id from extracted_entities order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select name, entity_type, resolution_status, resolved_canonical_entity_id from extracted_entities order by created_at desc limit 20;"
 ```
 
 Relationships:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select subject_entity_id, predicate, object_entity_id, support_count from entity_relationships order by support_count desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select subject_entity_id, predicate, object_entity_id, support_count from entity_relationships order by support_count desc limit 20;"
 ```
 
 Merge decision audit:
 
 ```powershell
-docker compose exec postgres psql -U atlas -d atlas -c "select decision_type, source, actor, reason, created_at from merge_decisions order by created_at desc limit 20;"
+docker compose exec postgres psql -U flint_graph -d flint_graph -c "select decision_type, source, actor, reason, created_at from merge_decisions order by created_at desc limit 20;"
 ```
 
 ## Neo4j Checks
@@ -98,7 +98,7 @@ MATCH (s:Entity)-[r:RELATED]->(o:Entity) RETURN s.canonical_name, r.predicate, o
 The Neo4j graph must match active PostgreSQL rows for a tenant. If it drifts, rebuild it:
 
 ```powershell
-docker compose run --rm ingestion-worker python -m atlas_rag.processes.graph_reconcile
+docker compose run --rm ingestion-worker python -m flint_graph.processes.graph_reconcile
 ```
 
 ## Opt-In Integration Tests
@@ -107,11 +107,11 @@ Some tests require live infrastructure and are skipped by default:
 
 ```powershell
 # Neo4j (migration runner + projection)
-$env:ATLAS_NEO4J_INTEGRATION = "1"
+$env:FLINT_GRAPH_NEO4J_INTEGRATION = "1"
 uv run pytest tests/integration/test_neo4j_migrations_integration.py tests/integration/test_graph_projection_neo4j.py
 
 # PostgreSQL pg_trgm candidate generation
-$env:ATLAS_PG_INTEGRATION = "1"
+$env:FLINT_GRAPH_PG_INTEGRATION = "1"
 uv run pytest tests/integration/test_candidate_generation.py
 ```
 

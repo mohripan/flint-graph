@@ -114,7 +114,7 @@ export function AskPage() {
       setError(
         err instanceof ApiError
           ? err.message
-          : "Could not reach the AtlasRAG API. Is the backend running?",
+          : "Could not reach the FlintGraph API. Is the backend running?",
       );
     }
 

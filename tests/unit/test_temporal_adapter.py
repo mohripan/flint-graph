@@ -1,6 +1,6 @@
 from typing import Any
 
-from atlas_rag.infrastructure.temporal import TemporalIngestionWorkflowStarter
+from flint_graph.infrastructure.temporal import TemporalIngestionWorkflowStarter
 
 
 class FakeTemporalClient:
@@ -60,4 +60,4 @@ async def test_temporal_starter_cancels_workflow_by_id() -> None:
     )
 
     assert client.handles[0].workflow_id == "ingestion-job-job-id"
-    assert client.handles[0].cancel_calls == [{"reason": "AtlasRAG ingestion job cancelled"}]
+    assert client.handles[0].cancel_calls == [{"reason": "FlintGraph ingestion job cancelled"}]

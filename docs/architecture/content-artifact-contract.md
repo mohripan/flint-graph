@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AtlasRAG parser output is an Atlas-owned normalized artifact. It is not a LangChain loader object, a PDF library object, or an HTML parser object. Chunking consumes this contract directly, and extraction consumes chunk manifests rather than parser-specific objects.
+FlintGraph parser output is a FlintGraph-owned normalized artifact. It is not a LangChain loader object, a PDF library object, or an HTML parser object. Chunking consumes this contract directly, and extraction consumes chunk manifests rather than parser-specific objects.
 
 ## Supported Source Formats
 
@@ -129,11 +129,11 @@ Extraction artifacts use schema version `2` (Milestone 04) and are derived from 
     "summary": "Short summary.",
     "topics": ["content pipeline"],
     "entities": [
-      {"name": "AtlasRAG", "type": "concept"}
+      {"name": "FlintGraph", "type": "concept"}
     ],
     "claims": [
       {
-        "subject": "AtlasRAG",
+        "subject": "FlintGraph",
         "predicate": "stores",
         "object": "source content",
         "evidence_chunk_ids": ["chunk-000001"]

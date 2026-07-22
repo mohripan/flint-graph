@@ -4,13 +4,13 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas_rag.application.services.documents import create_document
-from atlas_rag.application.services.ingestion_jobs import create_ingestion_job
-from atlas_rag.application.services.job_cancellation import cancel_ingestion_job
-from atlas_rag.application.services.outbox_relay import relay_outbox_batch
-from atlas_rag.application.services.tenants import create_tenant
-from atlas_rag.domain.enums import OutboxMessageStatus, SourceType
-from atlas_rag.infrastructure.db.models import OutboxMessage
+from flint_graph.application.services.documents import create_document
+from flint_graph.application.services.ingestion_jobs import create_ingestion_job
+from flint_graph.application.services.job_cancellation import cancel_ingestion_job
+from flint_graph.application.services.outbox_relay import relay_outbox_batch
+from flint_graph.application.services.tenants import create_tenant
+from flint_graph.domain.enums import OutboxMessageStatus, SourceType
+from flint_graph.infrastructure.db.models import OutboxMessage
 
 
 class RecordingWorkflowStarter:
