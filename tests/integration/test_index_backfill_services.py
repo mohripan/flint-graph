@@ -61,7 +61,11 @@ class FakeNeo4jClient:
 
 class FakeOpenSearchClient:
     def __init__(self) -> None:
+        self.created_indices: list[tuple[str, dict[str, Any]]] = []
         self.bulk_bodies: list[str] = []
+
+    async def ensure_index(self, *, index_name: str, mapping: dict[str, Any]) -> None:
+        self.created_indices.append((index_name, mapping))
 
     async def bulk(self, *, body: str) -> None:
         self.bulk_bodies.append(body)

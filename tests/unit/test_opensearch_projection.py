@@ -167,6 +167,7 @@ async def test_opensearch_client_sends_mapping_alias_bulk_and_search_requests() 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://opensearch") as http_client:
         client = OpenSearchClient(http_client=http_client, base_url="http://opensearch")
+        await client.ensure_index(index_name="flint_graph_chunks_v000001", mapping={"settings": {}})
         await client.create_index(index_name="flint_graph_chunks_v000001", mapping={"settings": {}})
         await client.point_alias(
             alias_name="flint_graph_chunks_active",
@@ -179,16 +180,41 @@ async def test_opensearch_client_sends_mapping_alias_bulk_and_search_requests() 
             body={"query": {"match_all": {}}},
         )
 
-    assert [request.method for request in requests] == ["PUT", "POST", "POST", "POST"]
+    assert [request.method for request in requests] == ["PUT", "PUT", "POST", "POST", "POST"]
     assert [request.url.path for request in requests] == [
+        "/flint_graph_chunks_v000001",
         "/flint_graph_chunks_v000001",
         "/_aliases",
         "/_bulk",
         "/flint_graph_chunks_active/_search",
     ]
-    bulk_request = requests[2]
+    bulk_request = requests[3]
     assert bulk_request.headers["content-type"] == "application/x-ndjson"
     assert result == [{"id": "doc-1", "score": 1.7, "source": {"chunk_id": "chunk-000001"}}]
+
+
+@pytest.mark.anyio
+async def test_opensearch_client_ensure_index_ignores_existing_index() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            400,
+            json={
+                "error": {"type": "resource_already_exists_exception"},
+                "status": 400,
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://opensearch") as http_client:
+        client = OpenSearchClient(http_client=http_client, base_url="http://opensearch")
+
+        await client.ensure_index(index_name="flint_graph_chunks_v000001", mapping={})
+
+    assert [request.url.path for request in requests] == ["/flint_graph_chunks_v000001"]
 
 
 @pytest.mark.anyio

@@ -21,6 +21,7 @@ from flint_graph.application.services.lexical_projection import LexicalChunkReco
 from flint_graph.application.services.vector_projection import (
     SupportsCypher,
     VectorChunkRecord,
+    build_create_vector_index_cypher,
     project_chunk_vectors,
 )
 from flint_graph.domain.enums import (
@@ -38,10 +39,15 @@ from flint_graph.infrastructure.db.models import (
     DocumentVersion,
     RetrievalIndexVersion,
 )
-from flint_graph.infrastructure.opensearch import build_upsert_chunks_bulk_body
+from flint_graph.infrastructure.opensearch import (
+    build_chunk_index_mapping,
+    build_upsert_chunks_bulk_body,
+)
 
 
 class SupportsOpenSearchBulk(Protocol):
+    async def ensure_index(self, *, index_name: str, mapping: dict[str, Any]) -> None: ...
+
     async def bulk(self, *, body: str) -> None: ...
 
 
@@ -376,10 +382,22 @@ async def index_document_version_batch(
         )
 
     await session.flush()
+    await neo4j_client.execute(
+        build_create_vector_index_cypher(
+            index_name=index_version.neo4j_vector_index_name,
+            label="Chunk",
+            property_name=index_version.neo4j_vector_property_name,
+            dimensions=index_version.vector_dimension,
+        )
+    )
     await project_chunk_vectors(
         neo4j_client,
         records=vector_records,
         vector_property_name=index_version.neo4j_vector_property_name,
+    )
+    await opensearch_client.ensure_index(
+        index_name=index_version.opensearch_index_name,
+        mapping=build_chunk_index_mapping(),
     )
     await opensearch_client.bulk(
         body=build_upsert_chunks_bulk_body(

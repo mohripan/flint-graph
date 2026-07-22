@@ -75,7 +75,11 @@ class FakeNeo4jClient:
 
 class FakeOpenSearchClient:
     def __init__(self) -> None:
+        self.created_indices: list[tuple[str, dict[str, Any]]] = []
         self.bulk_bodies: list[str] = []
+
+    async def ensure_index(self, *, index_name: str, mapping: dict[str, Any]) -> None:
+        self.created_indices.append((index_name, mapping))
 
     async def bulk(self, *, body: str) -> None:
         self.bulk_bodies.append(body)
@@ -251,7 +255,17 @@ async def test_index_document_version_batch_persists_embeddings_and_updates_proj
     ]
     assert embeddings[0].vector == [1.0, 1.0, 1.0, 1.0]
     assert len(embedding_model.requests) == 1
-    assert len(neo4j_client.calls) == 1
+    assert len(neo4j_client.calls) == 2
+    create_index_query, create_index_params = neo4j_client.calls[0]
+    assert create_index_params == {}
+    assert create_index_query.startswith("CREATE VECTOR INDEX chunk_embedding_test IF NOT EXISTS")
+    assert "FOR (c:Chunk) ON (c.embedding)" in create_index_query
+    assert "`vector.dimensions`: 4" in create_index_query
+    assert len(opensearch_client.created_indices) == 1
+    created_index_name, created_index_mapping = opensearch_client.created_indices[0]
+    assert created_index_name == "flint_graph_chunks_v000001"
+    assert created_index_mapping["mappings"]["properties"]["tenant_id"]["type"] == "keyword"
+    assert created_index_mapping["mappings"]["properties"]["index_version_id"]["type"] == "keyword"
     assert "Acme Corporation" in opensearch_client.bulk_bodies[0]
     assert coverage.status == DocumentIndexCoverageStatus.COMPLETED
     assert coverage.chunk_count == 2

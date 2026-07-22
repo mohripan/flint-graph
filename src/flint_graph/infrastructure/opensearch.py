@@ -35,6 +35,12 @@ class OpenSearchClient:
         response = await self._http_client.put(f"/{index_name}", json=mapping)
         _raise_for_status(response)
 
+    async def ensure_index(self, *, index_name: str, mapping: dict[str, Any]) -> None:
+        response = await self._http_client.put(f"/{index_name}", json=mapping)
+        if response.status_code == 400 and _is_resource_already_exists(response):
+            return
+        _raise_for_status(response)
+
     async def point_alias(
         self,
         *,
@@ -174,3 +180,12 @@ def _raise_for_status(response: httpx.Response) -> None:
         f"{response.text[:500]}"
     )
     raise httpx.HTTPStatusError(message, request=response.request, response=response)
+
+
+def _is_resource_already_exists(response: httpx.Response) -> bool:
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    error = body.get("error") if isinstance(body, dict) else None
+    return isinstance(error, dict) and error.get("type") == "resource_already_exists_exception"
