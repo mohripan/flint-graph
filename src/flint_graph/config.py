@@ -43,6 +43,22 @@ class Settings(BaseSettings):
     service_name: str = "flint-graph-api"
     service_version: str = "0.1.0"
     log_level: str = "INFO"
+    public_base_url: str | None = None
+    allowed_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+    )
+    trusted_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "testserver", "test"]
+    )
+    require_tls: bool = False
+    max_upload_bytes: int | None = None
+    max_url_intake_bytes: int | None = None
+    allow_private_url_intake: bool | None = None
+    rate_limit_enabled: bool = False
+    rate_limit_backend: Literal["memory"] = "memory"
+    allow_in_memory_rate_limit: bool = False
+    rate_limit_requests: int = Field(default=60, ge=1)
+    rate_limit_window_seconds: int = Field(default=60, ge=1)
 
     database_url: str = "postgresql+asyncpg://flint_graph:flint_graph@localhost:5432/flint_graph"
     database_echo: bool = False
@@ -160,6 +176,13 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("allowed_origins", "trusted_hosts", mode="before")
+    @classmethod
+    def _split_csv_list(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
     @model_validator(mode="after")
     def _resolve_env_provider_defaults(self) -> Self:
         # Env-aware defaults: test stays fully deterministic (offline, no keys); other
@@ -191,6 +214,12 @@ class Settings(BaseSettings):
                 self.embedding_model = _REAL_EMBEDDING_MODELS[embedding_provider]
             if self.embedding_dimensions == _DETERMINISTIC_EMBEDDING_DIMENSIONS:
                 self.embedding_dimensions = _REAL_EMBEDDING_DIMENSIONS[embedding_provider]
+        if self.max_upload_bytes is None:
+            self.max_upload_bytes = self.intake_max_source_bytes
+        if self.max_url_intake_bytes is None:
+            self.max_url_intake_bytes = self.intake_max_source_bytes
+        if self.allow_private_url_intake is None:
+            self.allow_private_url_intake = self.env in {"local", "test"}
         return self
 
     @model_validator(mode="after")
@@ -209,6 +238,28 @@ class Settings(BaseSettings):
                 raise ValueError("oidc_issuer is required when auth_mode='oidc'")
             if not self.oidc_audience:
                 raise ValueError("oidc_audience is required when auth_mode='oidc'")
+        if self.env in {"staging", "production"}:
+            if not self.public_base_url:
+                raise ValueError("public_base_url is required in staging/production")
+            if not self.allowed_origins:
+                raise ValueError("allowed_origins is required in staging/production")
+            if not self.trusted_hosts:
+                raise ValueError("trusted_hosts is required in staging/production")
+            if not self.require_tls:
+                raise ValueError("require_tls must be enabled in staging/production")
+            if self.allow_private_url_intake:
+                raise ValueError("allow_private_url_intake is not allowed in staging/production")
+            if not self.rate_limit_enabled:
+                raise ValueError("rate_limit_enabled must be enabled in staging/production")
+            if self.rate_limit_backend == "memory" and not self.allow_in_memory_rate_limit:
+                raise ValueError(
+                    "rate_limit_backend='memory' is not allowed in staging/production "
+                    "unless allow_in_memory_rate_limit is explicitly enabled"
+                )
+            if self.object_store_access_key_id == "flint_graph":
+                raise ValueError("object_store_access_key_id must not use the local default")
+            if self.object_store_secret_access_key == "flint-graph-secret":
+                raise ValueError("object_store_secret_access_key must not use the local default")
         if self.entity_resolution_review_threshold > self.entity_resolution_auto_threshold:
             raise ValueError(
                 "entity_resolution_review_threshold must be <= entity_resolution_auto_threshold"

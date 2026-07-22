@@ -44,7 +44,7 @@ from flint_graph.application.services.intake import (
     create_url_intake,
 )
 from flint_graph.application.services.job_cancellation import cancel_ingestion_job
-from flint_graph.domain.errors import BadRequestError
+from flint_graph.domain.errors import PayloadTooLargeError
 
 router = APIRouter(prefix="/v1", tags=["documents"])
 
@@ -129,10 +129,11 @@ async def upload_document_endpoint(
     external_id: Annotated[str | None, Form(max_length=500)] = None,
     idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=200),
 ) -> DocumentIntakeResponse:
-    data = await file.read(settings.intake_max_source_bytes + 1)
+    max_upload_bytes = settings.max_upload_bytes or settings.intake_max_source_bytes
+    data = await file.read(max_upload_bytes + 1)
     await file.close()
-    if len(data) > settings.intake_max_source_bytes:
-        raise BadRequestError("Uploaded file exceeds the intake limit.")
+    if len(data) > max_upload_bytes:
+        raise PayloadTooLargeError("Uploaded file exceeds the intake limit.")
 
     record = await create_upload_intake(
         session,

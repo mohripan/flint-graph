@@ -1,7 +1,7 @@
 # Current Security Boundary
 
-FlintGraph now has an MVP identity boundary suitable for controlled internal
-evaluation with untrusted end users.
+FlintGraph now has a controlled deployment boundary suitable for a first
+public or internal-company deployment with untrusted authenticated users.
 
 Implemented boundary:
 
@@ -17,6 +17,15 @@ Implemented boundary:
   authorize that workspace against the current authenticated user before the
   route handler runs.
 - Role tiers are `viewer`, `member`, `admin`, and `owner`.
+- CORS and trusted-host validation are explicit in staging and production.
+- `FLINT_GRAPH_REQUIRE_TLS=true` enables HTTPS redirect middleware for deployed
+  profiles.
+- Upload and URL intake have configurable byte limits before work enters object
+  storage or background jobs.
+- URL intake blocks private, loopback, link-local, and multicast targets by
+  default to reduce SSRF risk.
+- Expensive endpoints are protected by a fixed-window rate limiter keyed by
+  user and workspace when enabled.
 
 Local-development boundary:
 
@@ -24,6 +33,8 @@ Local-development boundary:
   It is not real authentication.
 - `env=staging` and `env=production` reject dev auth unless
   `FLINT_GRAPH_ALLOW_UNSAFE_DEV_AUTH=true` is deliberately set.
+- Local URL intake permits private addresses so developers can test against
+  local fileservers.
 
 Still outside the boundary:
 
@@ -32,7 +43,5 @@ Still outside the boundary:
 - FlintGraph does not own password policy, MFA, account recovery, or IdP
   session controls.
 - Compose credentials and local service defaults are development-only.
-- Public deployment still needs TLS termination, production secrets, explicit
-  CORS policy, rate limiting, request/body limit review, audit-log hardening,
-  image pinning, backup/restore validation, and non-development Temporal and
-  object-storage posture.
+- Distributed rate limiting, audit export, image pinning policy, and
+  non-development Temporal/object-storage posture remain deployment-specific.

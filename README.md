@@ -1,6 +1,6 @@
 # FlintGraph
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, and adds an OIDC-backed workspace access boundary for MVP use. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, adds an OIDC-backed workspace access boundary for MVP use, and hardens the public API boundary for controlled deployments. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 ## Why these milestones come first
 
@@ -63,6 +63,25 @@ $env:FLINT_GRAPH_OIDC_AUDIENCE = "flintgraph-api"
 
 In staging and production, `auth_mode=dev` is rejected unless
 `FLINT_GRAPH_ALLOW_UNSAFE_DEV_AUTH=true` is explicitly set.
+
+## Deployment hardening
+
+Staging and production require explicit public exposure settings before the API
+will start:
+
+```powershell
+$env:FLINT_GRAPH_PUBLIC_BASE_URL = "https://api.example.com"
+$env:FLINT_GRAPH_ALLOWED_ORIGINS = "https://app.example.com"
+$env:FLINT_GRAPH_TRUSTED_HOSTS = "api.example.com"
+$env:FLINT_GRAPH_REQUIRE_TLS = "true"
+$env:FLINT_GRAPH_RATE_LIMIT_ENABLED = "true"
+```
+
+Uploads and URL intake are bounded by `FLINT_GRAPH_MAX_UPLOAD_BYTES` and
+`FLINT_GRAPH_MAX_URL_INTAKE_BYTES`. URL intake blocks private and local network
+targets outside local development unless `FLINT_GRAPH_ALLOW_PRIVATE_URL_INTAKE`
+is explicitly enabled. See `.env.production.example` and
+`docs/runbooks/deployment-hardening.md`.
 
 The frontend OIDC settings are:
 
@@ -299,21 +318,31 @@ discrete-math PDF smoke flow.
 32. Test and PR evaluation paths remain offline and deterministic.
 33. Real provider selection without required credentials fails fast.
 34. Evaluation baselines change only through an explicit reviewed update.
+35. Staging and production require explicit public URL, CORS origins, trusted
+    hosts, TLS, OIDC, non-default object-store credentials, and rate limiting.
+36. Oversized request bodies and uploads are rejected before durable intake
+    work is created.
+37. URL intake only fetches HTTP(S) resources and blocks private/local network
+    targets outside local development.
+38. Expensive public endpoints can be rate-limited by user and workspace.
 
 ## Current milestone boundary
 
-Milestone 12 adds OIDC authentication, PostgreSQL-backed workspace membership,
-role checks for tenant-scoped APIs, MVP setup/readiness actions, server-backed
-document lists, server-backed query history, and frontend auth/workspace/setup
-flows. The app is now shaped for controlled internal MVP use.
+Milestone 13 adds the controlled public API boundary around the Milestone 12
+authenticated workspace model. The API now fails closed in staging and
+production unless deployment exposure settings are explicit, request and intake
+sizes are bounded, URL intake is SSRF-aware, CORS and host validation are
+configured, TLS redirect behavior is enabled, and rate limiting is turned on.
 
 ## Security status
 
 `X-Tenant-ID` is still a workspace selector, not an identity proof. In OIDC mode
 the API authorizes that workspace against server-side membership before
-tenant-scoped handlers run. Public deployment still needs production secrets,
-TLS, CORS policy, rate limiting, request/body limit review, and hardened backing
-services. See `docs/architecture/security-boundary.md`.
+tenant-scoped handlers run. A controlled deployment still needs production
+secrets, private backing services, a reviewed ingress/proxy configuration,
+backup/restore practice, and deployment-specific rate-limit scaling decisions.
+See `docs/architecture/security-boundary.md` and
+`docs/runbooks/deployment-hardening.md`.
 
 ## Learning notes
 
@@ -347,9 +376,12 @@ Milestone notes:
 - Local-first usable RAG: `docs/milestones/10-local-first-usable-rag.md`
 - Document lifecycle correctness: `docs/milestones/11-document-lifecycle-correctness.md`
 - MVP bootstrap and access boundary: `docs/milestones/12-mvp-bootstrap-and-access-boundary.md`
+- Production exposure hardening: `docs/milestones/13-production-exposure-hardening.md`
 - Evaluation contract: `docs/architecture/evaluation-contract.md`
 - Real models developer runbook: `docs/runbooks/real-models-developer.md`
 - Evaluation developer runbook: `docs/runbooks/evaluation-developer.md`
 - Evaluation QA guide: `docs/runbooks/evaluation-qa-guide.md`
 - Local Ollama RAG runbook: `docs/runbooks/local-ollama-rag.md`
 - Frontend E2E QA guide: `docs/runbooks/frontend-e2e-qa-guide.md`
+- Deployment hardening runbook: `docs/runbooks/deployment-hardening.md`
+- Backup and restore runbook: `docs/runbooks/backup-restore.md`

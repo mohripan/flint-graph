@@ -201,7 +201,8 @@ ObjectStoreDep = Annotated[ObjectStore, Depends(get_object_store)]
 def get_url_fetcher(settings: SettingsDep) -> URLFetcher:
     return HTTPURLFetcher(
         timeout_seconds=settings.intake_url_timeout_seconds,
-        max_bytes=settings.intake_max_source_bytes,
+        max_bytes=settings.max_url_intake_bytes or settings.intake_max_source_bytes,
+        allow_private_addresses=bool(settings.allow_private_url_intake),
     )
 
 

@@ -24,6 +24,16 @@ class BadRequestError(DomainError):
         super().__init__(400, "Bad request", detail, "bad-request")
 
 
+class PayloadTooLargeError(DomainError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(413, "Payload too large", detail, "payload-too-large")
+
+
+class TooManyRequestsError(DomainError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(429, "Too many requests", detail, "too-many-requests")
+
+
 class UnauthorizedError(DomainError):
     def __init__(self, detail: str) -> None:
         super().__init__(401, "Unauthorized", detail, "unauthorized")

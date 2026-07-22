@@ -76,3 +76,8 @@ Operational notes:
   limits, request/body limits review, audit hardening, and non-development
   backing services.
 
+Supersession note: Milestone 13 implements the first controlled public API
+boundary for TLS, CORS, host validation, request and intake limits, URL-intake
+SSRF controls, and rate limiting. The remaining deployment-specific work is
+tracked in `docs/milestones/13-production-exposure-hardening.md` and
+`docs/runbooks/deployment-hardening.md`.

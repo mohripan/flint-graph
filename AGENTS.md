@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-FlintGraph is an early GraphRAG platform. Through Milestone 12 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, and an OIDC-backed workspace access boundary for MVP use.
+FlintGraph is an early GraphRAG platform. Through Milestone 13 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, an OIDC-backed workspace access boundary for MVP use, and controlled-deployment public API hardening.
 
 Implemented path:
 
@@ -23,6 +23,7 @@ API intake -> immutable raw object in MinIO
     -> persisted SSE events + inspectable query run + answer provenance
     -> offline golden-dataset eval gate + optional secrets-gated live eval
     -> OIDC-authenticated workspace users with role-scoped MVP setup and app flows
+    -> explicit CORS/trusted-host/TLS/request-limit/SSRF/rate-limit deployment boundary
 ```
 
 PostgreSQL is the system of record for the control plane, identity, workspace membership, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, answer metadata, answer claims, support decisions, and answer provenance. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. Evaluation datasets, recorded evaluations, reports, and baselines are file-based under `evals/`. The API serves workspace, document/job, graph, review, audit, setup/readiness, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, SSE query streaming, answer-provenance, and citation-provenance endpoints; dedicated extraction inspection endpoints are deferred.
@@ -242,11 +243,18 @@ Milestone 12 MVP bootstrap and access boundary:
 - Query diagnostics are a compact derived summary persisted in query-run metadata; query events and provenance remain the detailed inspection source.
 - OIDC mode requires a valid bearer token before tenant-scoped API access.
 - `env=staging` and `env=production` reject dev auth unless explicitly overridden.
+- `env=staging` and `env=production` require explicit public URL, CORS origins,
+  trusted hosts, TLS, non-default object-store credentials, and enabled rate
+  limiting.
 - Tenant-scoped dependencies authorize `X-Tenant-ID` against active workspace membership.
 - Workspace roles are ordered as viewer, member, admin, owner.
 - Graph review/merge mutations, document deletion/cleanup retry, and retrieval setup/backfill require admin or owner.
 - Document creation/upload/intake requires member, admin, or owner.
 - Server-backed workspace, document list, setup readiness, backfill list, and query history are available to the frontend.
+- URL intake blocks private/local network targets outside local/test unless
+  explicitly allowed.
+- Oversized uploads and body-bearing requests are rejected before persistence or
+  background work.
 
 ## Temporal Notes
 
