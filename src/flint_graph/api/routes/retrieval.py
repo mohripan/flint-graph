@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -10,6 +11,8 @@ from flint_graph.api.dependencies import (
     Neo4jClientDep,
     OpenSearchClientDep,
     SessionDep,
+    SettingsDep,
+    TenantAdminDep,
     TenantIdDep,
 )
 from flint_graph.api.schemas import (
@@ -31,9 +34,12 @@ from flint_graph.application.services.retrieval import (
     lexical_search,
     list_index_coverage,
     list_index_versions,
+    list_tenant_index_backfill_jobs,
     load_entity_neighborhood,
+    resolve_index_version,
     vector_search,
 )
+from flint_graph.application.services.retrieval_bootstrap import bootstrap_retrieval_index
 from flint_graph.application.services.search_readiness import get_search_readiness
 from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
@@ -41,6 +47,72 @@ from flint_graph.domain.enums import (
 )
 
 router = APIRouter(prefix="/v1", tags=["retrieval"])
+
+
+@router.get("/system-readiness")
+async def get_system_readiness_endpoint(
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> dict[str, Any]:
+    readiness = await get_search_readiness(session, tenant_id=tenant_id)
+    return {
+        "auth": {
+            "mode": settings.auth_mode,
+            "oidc_issuer": settings.oidc_issuer,
+        },
+        "embedding": {
+            "provider": settings.embedding_provider,
+            "model": settings.embedding_model,
+            "dimensions": settings.embedding_dimensions,
+        },
+        "query": {
+            "answer_provider": settings.query_answer_provider,
+            "answer_model": settings.query_answer_model,
+            "support_provider": settings.query_support_provider,
+            "support_model": settings.query_support_model,
+        },
+        "search_readiness": SearchReadinessResponse.model_validate(readiness).model_dump(
+            mode="json"
+        ),
+    }
+
+
+@router.post(
+    "/retrieval-index/bootstrap",
+    response_model=RetrievalIndexVersionResponse,
+)
+async def bootstrap_retrieval_index_endpoint(
+    _tenant_id: TenantAdminDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> RetrievalIndexVersionResponse:
+    version = await bootstrap_retrieval_index(session, settings=settings)
+    return RetrievalIndexVersionResponse.model_validate(version)
+
+
+@router.post(
+    "/retrieval-index/backfill-active",
+    response_model=IndexBackfillJobResponse,
+)
+async def backfill_active_retrieval_index_endpoint(
+    tenant_id: TenantAdminDep,
+    session: SessionDep,
+    starter: IndexBackfillWorkflowStarterDep,
+) -> IndexBackfillJobResponse:
+    index_version = await resolve_index_version(
+        session,
+        tenant_id=tenant_id,
+        retrieval_index_version_id=None,
+    )
+    job = await create_tenant_index_backfill_job(
+        session,
+        tenant_id=tenant_id,
+        retrieval_index_version_id=index_version.id,
+    )
+    await session.commit()
+    await starter.start_index_backfill_workflow(job_id=job.id)
+    return IndexBackfillJobResponse.model_validate(job)
 
 
 @router.get("/index-versions", response_model=list[RetrievalIndexVersionResponse])
@@ -98,7 +170,7 @@ async def get_tenant_search_readiness(
 @router.post("/index-backfills", response_model=IndexBackfillJobResponse)
 async def create_index_backfill(
     payload: IndexBackfillCreateRequest,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
     starter: IndexBackfillWorkflowStarterDep,
 ) -> IndexBackfillJobResponse:
@@ -112,6 +184,16 @@ async def create_index_backfill(
     await session.commit()
     await starter.start_index_backfill_workflow(job_id=job.id)
     return IndexBackfillJobResponse.model_validate(job)
+
+
+@router.get("/index-backfills", response_model=list[IndexBackfillJobResponse])
+async def list_index_backfills(
+    tenant_id: TenantAdminDep,
+    session: SessionDep,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[IndexBackfillJobResponse]:
+    jobs = await list_tenant_index_backfill_jobs(session, tenant_id=tenant_id, limit=limit)
+    return [IndexBackfillJobResponse.model_validate(job) for job in jobs]
 
 
 @router.get("/index-backfills/{job_id}", response_model=IndexBackfillJobResponse)

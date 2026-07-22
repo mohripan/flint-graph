@@ -22,3 +22,13 @@ class ConflictError(DomainError):
 class BadRequestError(DomainError):
     def __init__(self, detail: str) -> None:
         super().__init__(400, "Bad request", detail, "bad-request")
+
+
+class UnauthorizedError(DomainError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(401, "Unauthorized", detail, "unauthorized")
+
+
+class ForbiddenError(DomainError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(403, "Forbidden", detail, "forbidden")

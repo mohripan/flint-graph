@@ -28,6 +28,18 @@ class Settings(BaseSettings):
     )
 
     env: Literal["local", "test", "staging", "production"] = "local"
+    auth_mode: Literal["dev", "oidc"] = "dev"
+    allow_unsafe_dev_auth: bool = False
+    oidc_issuer: str | None = None
+    oidc_audience: str | None = None
+    oidc_jwks_url: str | None = None
+    oidc_email_claim: str = "email"
+    oidc_name_claim: str = "name"
+    oidc_groups_claim: str = "groups"
+    oidc_system_admin_group: str | None = None
+    dev_auth_subject: str = "dev-user"
+    dev_auth_email: str = "dev@example.local"
+    dev_auth_name: str = "Local Developer"
     service_name: str = "flint-graph-api"
     service_version: str = "0.1.0"
     log_level: str = "INFO"
@@ -183,6 +195,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_resolution_thresholds(self) -> Self:
+        if (
+            self.auth_mode == "dev"
+            and self.env in {"staging", "production"}
+            and not self.allow_unsafe_dev_auth
+        ):
+            raise ValueError(
+                "auth_mode='dev' is not allowed in staging/production unless "
+                "allow_unsafe_dev_auth is explicitly enabled"
+            )
+        if self.auth_mode == "oidc":
+            if not self.oidc_issuer:
+                raise ValueError("oidc_issuer is required when auth_mode='oidc'")
+            if not self.oidc_audience:
+                raise ValueError("oidc_audience is required when auth_mode='oidc'")
         if self.entity_resolution_review_threshold > self.entity_resolution_auto_threshold:
             raise ValueError(
                 "entity_resolution_review_threshold must be <= entity_resolution_auto_threshold"

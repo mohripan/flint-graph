@@ -21,6 +21,7 @@ from flint_graph.domain.enums import (
     RetrievalIndexScope,
     RetrievalIndexVersionStatus,
     SourceType,
+    WorkspaceRole,
 )
 
 
@@ -61,6 +62,21 @@ class DocumentResponse(BaseModel):
     created_at: datetime
 
 
+class DocumentListItemResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    title: str
+    source_type: SourceType
+    source_uri: str | None
+    external_id: str | None
+    deleted_at: datetime | None
+    latest_version_id: UUID | None
+    latest_version_number: int | None
+    latest_version_status: DocumentVersionStatus | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class URLIntakeCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     source_url: str = Field(min_length=1, max_length=4000)
@@ -82,6 +98,31 @@ class DocumentIntakeResponse(BaseModel):
     object_uri: str
     content_hash: str
     created_at: datetime
+
+
+class WorkspaceCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+
+
+class WorkspaceResponse(BaseModel):
+    id: UUID
+    name: str
+    role: WorkspaceRole
+
+
+class WorkspaceMemberCreate(BaseModel):
+    oidc_issuer: str | None = Field(default=None, max_length=500)
+    oidc_subject: str = Field(min_length=1, max_length=500)
+    email: str | None = Field(default=None, max_length=500)
+    display_name: str | None = Field(default=None, max_length=500)
+    role: WorkspaceRole
+
+
+class WorkspaceMemberResponse(BaseModel):
+    user_id: UUID
+    email: str | None
+    display_name: str | None
+    role: WorkspaceRole
 
 
 class DocumentDeleteResponse(BaseModel):

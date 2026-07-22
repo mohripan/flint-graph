@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api";
+import { useAuth } from "./lib/auth";
 import { useWorkspace } from "./lib/workspace";
-import { WorkspaceGate, Logo } from "./components/WorkspaceGate";
+import { AuthGate, WorkspaceGate, Logo } from "./components/WorkspaceGate";
 import { AskPage } from "./pages/AskPage";
 import { UploadPage } from "./pages/UploadPage";
+import { SetupPage } from "./pages/SetupPage";
 
-type Tab = "ask" | "documents";
+type Tab = "ask" | "documents" | "setup";
 
 export default function App() {
-  const { workspace, loading, reset } = useWorkspace();
+  const auth = useAuth();
+  const { workspace, workspaces, loading, reset, select } = useWorkspace();
   const [tab, setTab] = useState<Tab>("ask");
   const [healthy, setHealthy] = useState<boolean | null>(null);
 
@@ -26,8 +29,12 @@ export default function App() {
     };
   }, []);
 
-  if (loading) {
+  if (auth.loading || loading) {
     return <div className="flex min-h-full items-center justify-center" />;
+  }
+
+  if (!auth.authenticated) {
+    return <AuthGate />;
   }
 
   if (!workspace) {
@@ -47,14 +54,31 @@ export default function App() {
 
         <div className="flex items-center gap-4">
           <HealthDot healthy={healthy} />
-          <button
-            onClick={() => {
-              if (confirm("Switch workspace? Your current one stays on the server.")) reset();
+          <select
+            value={workspace.id}
+            onChange={(event) => {
+              const next = workspaces.find((item) => item.id === event.target.value);
+              if (next) select(next);
             }}
-            className="text-sm text-slate-500 hover:text-slate-700"
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-600"
           >
+            {workspaces.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <button onClick={reset} className="text-sm text-slate-500 hover:text-slate-700">
             Switch workspace
           </button>
+          {auth.mode === "oidc" && (
+            <button
+              onClick={() => void auth.signOut()}
+              className="text-sm text-slate-500 hover:text-slate-700"
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </header>
 
@@ -67,10 +91,11 @@ export default function App() {
             label="Documents"
             icon={<DocIcon />}
           />
+          <NavItem active={tab === "setup"} onClick={() => setTab("setup")} label="Setup" icon={<SetupIcon />} />
         </nav>
 
         <main className="min-h-0 flex-1 overflow-hidden bg-slate-50">
-          {tab === "ask" ? <AskPage /> : <UploadPage />}
+          {tab === "ask" ? <AskPage /> : tab === "documents" ? <UploadPage /> : <SetupPage />}
         </main>
       </div>
     </div>
@@ -137,6 +162,24 @@ function DocIcon() {
         strokeLinejoin="round"
       />
       <path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SetupIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <path
+        d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M19.4 15a8 8 0 000-6l2-1.5-2-3.4-2.4 1a8 8 0 00-5.2-3l-.4-2.6h-4l-.4 2.6a8 8 0 00-5.2 3l-2.4-1-2 3.4L4.6 9a8 8 0 000 6l-2 1.5 2 3.4 2.4-1a8 8 0 005.2 3l.4 2.6h4l.4-2.6a8 8 0 005.2-3l2.4 1 2-3.4L19.4 15z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

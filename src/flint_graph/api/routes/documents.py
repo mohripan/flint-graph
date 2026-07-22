@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
@@ -7,7 +8,9 @@ from flint_graph.api.dependencies import (
     ObjectStoreDep,
     SessionDep,
     SettingsDep,
+    TenantAdminDep,
     TenantIdDep,
+    TenantMemberDep,
     URLFetcherDep,
 )
 from flint_graph.api.schemas import (
@@ -15,6 +18,7 @@ from flint_graph.api.schemas import (
     DocumentDeleteResponse,
     DocumentIntakeResponse,
     DocumentLifecycleEventResponse,
+    DocumentListItemResponse,
     DocumentProjectionCleanupResponse,
     DocumentResponse,
     IngestionJobEventResponse,
@@ -27,7 +31,7 @@ from flint_graph.application.services.document_lifecycle import (
     list_projection_cleanups,
     retry_projection_cleanups,
 )
-from flint_graph.application.services.documents import create_document
+from flint_graph.application.services.documents import create_document, list_documents
 from flint_graph.application.services.ingestion_jobs import (
     JobRecord,
     create_ingestion_job,
@@ -82,10 +86,20 @@ def _intake_response(record: IntakeRecord) -> DocumentIntakeResponse:
     )
 
 
+@router.get("/documents", response_model=list[DocumentListItemResponse])
+async def list_documents_endpoint(
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[DocumentListItemResponse]:
+    documents = await list_documents(session, tenant_id=tenant_id, limit=limit)
+    return [DocumentListItemResponse(**asdict(document)) for document in documents]
+
+
 @router.post("/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def create_document_endpoint(
     payload: DocumentCreate,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantMemberDep,
     session: SessionDep,
 ) -> DocumentResponse:
     document = await create_document(
@@ -106,7 +120,7 @@ async def create_document_endpoint(
 )
 async def upload_document_endpoint(
     response: Response,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantMemberDep,
     session: SessionDep,
     object_store: ObjectStoreDep,
     settings: SettingsDep,
@@ -145,7 +159,7 @@ async def upload_document_endpoint(
 async def create_document_from_url_endpoint(
     payload: URLIntakeCreate,
     response: Response,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantMemberDep,
     session: SessionDep,
     object_store: ObjectStoreDep,
     settings: SettingsDep,
@@ -174,7 +188,7 @@ async def create_document_from_url_endpoint(
 @router.delete("/documents/{document_id}", response_model=DocumentDeleteResponse)
 async def delete_document_endpoint(
     document_id: UUID,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
 ) -> DocumentDeleteResponse:
     result = await delete_document(
@@ -234,7 +248,7 @@ async def list_document_projection_cleanups_endpoint(
 )
 async def retry_document_projection_cleanups_endpoint(
     document_id: UUID,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
 ) -> list[DocumentProjectionCleanupResponse]:
     cleanups = await retry_projection_cleanups(
@@ -253,7 +267,7 @@ async def retry_document_projection_cleanups_endpoint(
 async def create_job_endpoint(
     document_id: UUID,
     response: Response,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantMemberDep,
     session: SessionDep,
     idempotency_key: str = Header(alias="Idempotency-key", min_length=8, max_length=200),
 ) -> IngestionJobResponse:
@@ -281,7 +295,7 @@ async def get_job_endpoint(
 @router.post("/ingestion-jobs/{job_id}/cancel", response_model=IngestionJobResponse)
 async def cancel_job_endpoint(
     job_id: UUID,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantMemberDep,
     session: SessionDep,
 ) -> IngestionJobResponse:
     record = await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job_id)

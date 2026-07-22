@@ -50,6 +50,7 @@ from flint_graph.application.services.query_runs import (
     create_query_run,
     get_query_run,
     list_query_run_events,
+    list_query_runs,
     transition_query_run,
 )
 from flint_graph.application.services.retrieval import (
@@ -73,6 +74,16 @@ _TERMINAL_QUERY_STATUSES = {
     QueryRunStatus.FAILED,
     QueryRunStatus.CANCELLED,
 }
+
+
+@router.get("/query-runs", response_model=list[QueryRunResponse])
+async def list_query_runs_endpoint(
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[QueryRunResponse]:
+    runs = await list_query_runs(session, tenant_id=tenant_id, limit=limit)
+    return [QueryRunResponse.model_validate(run) for run in runs]
 
 
 @router.post(

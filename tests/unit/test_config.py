@@ -11,6 +11,14 @@ def _settings(**overrides: Any) -> Settings:
     return Settings(_env_file=None, **overrides)
 
 
+def _production_auth_overrides() -> dict[str, str]:
+    return {
+        "auth_mode": "oidc",
+        "oidc_issuer": "https://keycloak.example/realms/flintgraph",
+        "oidc_audience": "flintgraph-api",
+    }
+
+
 def test_settings_accept_default_retrieval_indexing_configuration() -> None:
     settings = Settings()
 
@@ -113,7 +121,11 @@ def test_anthropic_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) ->
 def test_anthropic_provider_accepts_env_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env")
 
-    settings = _settings(env="production", embedding_openai_api_key="sk-emb")
+    settings = _settings(
+        env="production",
+        embedding_openai_api_key="sk-emb",
+        **_production_auth_overrides(),
+    )
 
     assert settings.query_answer_provider == "anthropic"
     assert settings.anthropic_api_key is None
@@ -132,6 +144,7 @@ def test_embedding_provider_resolves_to_openai_in_production_env() -> None:
         env="production",
         anthropic_api_key="sk-test",
         embedding_openai_api_key="sk-emb",
+        **_production_auth_overrides(),
     )
 
     assert settings.embedding_provider == "openai_compatible"

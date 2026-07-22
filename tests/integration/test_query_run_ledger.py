@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -15,6 +16,7 @@ from flint_graph.application.services.query_runs import (
     append_query_run_event,
     create_query_run,
     get_query_run,
+    list_query_runs,
     persist_query_candidate,
     persist_query_context_pack,
     persist_query_entity_link,
@@ -96,6 +98,47 @@ async def test_create_query_run_persists_hash_status_and_tenant_boundary(
     assert await get_query_run(db_session, tenant_id=tenant.id, query_run_id=run.id) == run
     with pytest.raises(NotFoundError):
         await get_query_run(db_session, tenant_id=other.id, query_run_id=run.id)
+
+
+async def test_list_query_runs_is_recent_first_and_tenant_scoped(
+    db_session: AsyncSession,
+) -> None:
+    tenant = await _tenant(db_session, "query-history")
+    other = await _tenant(db_session, "query-history-other")
+    index_version = await _active_index_version(db_session, tenant)
+    other_index_version = await _active_index_version(db_session, other)
+    first = await create_query_run(
+        db_session,
+        QueryRunCreate(
+            tenant_id=tenant.id,
+            query_text="First question?",
+            retrieval_index_version_id=index_version.id,
+        ),
+    )
+    second = await create_query_run(
+        db_session,
+        QueryRunCreate(
+            tenant_id=tenant.id,
+            query_text="Second question?",
+            retrieval_index_version_id=index_version.id,
+        ),
+    )
+    first.created_at = datetime.now(UTC) - timedelta(minutes=1)
+    second.created_at = datetime.now(UTC)
+    await db_session.flush()
+    await create_query_run(
+        db_session,
+        QueryRunCreate(
+            tenant_id=other.id,
+            query_text="Foreign question?",
+            retrieval_index_version_id=other_index_version.id,
+        ),
+    )
+
+    runs = await list_query_runs(db_session, tenant_id=tenant.id, limit=10)
+
+    assert [run.id for run in runs] == [second.id, first.id]
+    assert [run.query_text for run in runs] == ["Second question?", "First question?"]
 
 
 async def test_query_run_transitions_set_timestamps_and_reject_invalid_moves(

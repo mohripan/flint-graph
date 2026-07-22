@@ -7,70 +7,96 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api } from "./api";
-import type { Tenant } from "./types";
+import { api, setAccessTokenProvider } from "./api";
+import { useAuth } from "./auth";
+import type { Workspace } from "./types";
 
-// A "workspace" is a tenant. Non-technical users never see the tenant concept:
-// we create one on first use and remember it in localStorage. No auth yet.
-
-const STORAGE_KEY = "atlasrag.workspace";
-
-interface StoredWorkspace {
-  id: string;
-  name: string;
-}
+const STORAGE_KEY = "flintgraph.workspace";
 
 interface WorkspaceContextValue {
-  workspace: StoredWorkspace | null;
+  workspace: Workspace | null;
+  workspaces: Workspace[];
   loading: boolean;
   create: (name: string) => Promise<void>;
+  select: (workspace: Workspace) => void;
   reset: () => void;
+  refresh: () => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-function load(): StoredWorkspace | null {
+function loadSelectedId(): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredWorkspace;
-    return parsed?.id ? parsed : null;
+    return localStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
 }
 
+function saveSelectedId(id: string | null) {
+  if (id) localStorage.setItem(STORAGE_KEY, id);
+  else localStorage.removeItem(STORAGE_KEY);
+}
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [workspace, setWorkspace] = useState<StoredWorkspace | null>(null);
+  const auth = useAuth();
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setWorkspace(load());
-    setLoading(false);
-  }, []);
+    setAccessTokenProvider(() => auth.getAccessToken());
+    return () => setAccessTokenProvider(null);
+  }, [auth]);
+
+  const refresh = useCallback(async () => {
+    if (!auth.authenticated) {
+      setWorkspace(null);
+      setWorkspaces([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const rows = await api.listWorkspaces();
+      setWorkspaces(rows);
+      const selectedId = loadSelectedId();
+      const selected = rows.find((item) => item.id === selectedId) ?? rows[0] ?? null;
+      setWorkspace(selected);
+      saveSelectedId(selected?.id ?? null);
+    } finally {
+      setLoading(false);
+    }
+  }, [auth.authenticated]);
+
+  useEffect(() => {
+    if (auth.loading) return;
+    void refresh();
+  }, [auth.loading, refresh]);
 
   const create = useCallback(async (name: string) => {
-    const tenant: Tenant = await api.createTenant(name);
-    const stored: StoredWorkspace = { id: tenant.id, name: tenant.name };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-    setWorkspace(stored);
+    const created = await api.createWorkspace(name);
+    setWorkspaces((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
+    setWorkspace(created);
+    saveSelectedId(created.id);
+  }, []);
+
+  const select = useCallback((next: Workspace) => {
+    setWorkspace(next);
+    saveSelectedId(next.id);
   }, []);
 
   const reset = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
     setWorkspace(null);
+    saveSelectedId(null);
   }, []);
 
   const value = useMemo<WorkspaceContextValue>(
-    () => ({ workspace, loading, create, reset }),
-    [workspace, loading, create, reset],
+    () => ({ workspace, workspaces, loading, create, select, reset, refresh }),
+    [workspace, workspaces, loading, create, select, reset, refresh],
   );
 
-  return (
-    <WorkspaceContext.Provider value={value}>
-      {children}
-    </WorkspaceContext.Provider>
-  );
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
 export function useWorkspace(): WorkspaceContextValue {

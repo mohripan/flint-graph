@@ -182,3 +182,15 @@ class QueryRunStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class WorkspaceRole(StrEnum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+    VIEWER = "viewer"
+
+
+class WorkspaceMembershipStatus(StrEnum):
+    ACTIVE = "active"
+    DISABLED = "disabled"

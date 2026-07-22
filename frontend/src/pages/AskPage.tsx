@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { streamQueryRun } from "../lib/stream";
-import type { AnswerProvenance, QueryDiagnostics, QueryRunEvent, SearchReadiness } from "../lib/types";
+import type {
+  AnswerProvenance,
+  QueryDiagnostics,
+  QueryRunEvent,
+  QueryRunResponse,
+  SearchReadiness,
+} from "../lib/types";
 import { useWorkspace } from "../lib/workspace";
 import { Button, Card, Spinner } from "../components/ui";
 import { ProgressTrail } from "../components/ProgressTrail";
@@ -31,6 +37,7 @@ export function AskPage() {
   const [provenance, setProvenance] = useState<AnswerProvenance | null>(null);
   const [readiness, setReadiness] = useState<SearchReadiness | null>(null);
   const [diagnostics, setDiagnostics] = useState<QueryDiagnostics | null>(null);
+  const [history, setHistory] = useState<QueryRunResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
@@ -38,9 +45,15 @@ export function AskPage() {
 
   const refreshReadiness = useCallback(async () => {
     try {
-      setReadiness(await api.getSearchReadiness(tenantId));
+      const [nextReadiness, nextHistory] = await Promise.all([
+        api.getSearchReadiness(tenantId),
+        api.listQueryRuns(tenantId),
+      ]);
+      setReadiness(nextReadiness);
+      setHistory(nextHistory);
     } catch {
       setReadiness(null);
+      setHistory([]);
     }
   }, [tenantId]);
 
@@ -157,6 +170,24 @@ export function AskPage() {
       </div>
 
       <ReadinessBanner readiness={readiness} />
+
+      {history.length > 0 && (
+        <Card className="p-4">
+          <p className="mb-3 text-sm font-semibold text-slate-800">Recent questions</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {history.slice(0, 6).map((run) => (
+              <button
+                key={run.id}
+                onClick={() => setInput(run.query_text)}
+                className="min-w-52 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
+              >
+                <p className="truncate font-medium text-slate-700">{run.query_text}</p>
+                <p className="mt-1 text-xs text-slate-400">{run.status}</p>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Composer */}
       <Card className="p-4">

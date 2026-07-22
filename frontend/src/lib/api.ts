@@ -2,17 +2,31 @@ import type {
   AnswerProvenance,
   DocumentDeleteResponse,
   DocumentIntakeResponse,
+  DocumentListItem,
   DocumentProjectionCleanup,
+  IndexBackfillJob,
   IngestionJobResponse,
   ProblemDetail,
   QueryRunResponse,
   SearchReadiness,
+  SystemReadiness,
   Tenant,
+  Workspace,
 } from "./types";
 
 // All requests are same-origin; the Vite dev server proxies /v1 and /health to
 // the API. In a production build these paths are served behind the same origin.
 const BASE = "";
+let accessTokenProvider: (() => Promise<string | null>) | null = null;
+
+export function setAccessTokenProvider(provider: (() => Promise<string | null>) | null) {
+  accessTokenProvider = provider;
+}
+
+export async function authHeaders(): Promise<HeadersInit> {
+  const token = accessTokenProvider ? await accessTokenProvider() : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export class ApiError extends Error {
   status: number;
@@ -51,6 +65,7 @@ async function jsonRequest<T>(
   const res = await fetch(`${BASE}${path}`, {
     ...rest,
     headers: {
+      ...(await authHeaders()),
       ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(headers ?? {}),
     },
@@ -80,6 +95,23 @@ export const api = {
     return jsonRequest<Tenant>("/v1/tenants", {
       method: "POST",
       json: { name },
+    });
+  },
+
+  listWorkspaces(): Promise<Workspace[]> {
+    return jsonRequest<Workspace[]>("/v1/workspaces");
+  },
+
+  createWorkspace(name: string): Promise<Workspace> {
+    return jsonRequest<Workspace>("/v1/workspaces", {
+      method: "POST",
+      json: { name },
+    });
+  },
+
+  listDocuments(tenantId: string): Promise<DocumentListItem[]> {
+    return jsonRequest<DocumentListItem[]>("/v1/documents", {
+      headers: tenantHeaders(tenantId),
     });
   },
 
@@ -131,6 +163,32 @@ export const api = {
     });
   },
 
+  getSystemReadiness(tenantId: string): Promise<SystemReadiness> {
+    return jsonRequest<SystemReadiness>("/v1/system-readiness", {
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
+  bootstrapRetrievalIndex(tenantId: string): Promise<unknown> {
+    return jsonRequest<unknown>("/v1/retrieval-index/bootstrap", {
+      method: "POST",
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
+  backfillActiveIndex(tenantId: string): Promise<IndexBackfillJob> {
+    return jsonRequest<IndexBackfillJob>("/v1/retrieval-index/backfill-active", {
+      method: "POST",
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
+  listIndexBackfills(tenantId: string): Promise<IndexBackfillJob[]> {
+    return jsonRequest<IndexBackfillJob[]>("/v1/index-backfills", {
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
   deleteDocument(tenantId: string, documentId: string): Promise<DocumentDeleteResponse> {
     return jsonRequest<DocumentDeleteResponse>(`/v1/documents/${documentId}`, {
       method: "DELETE",
@@ -175,6 +233,12 @@ export const api = {
 
   getQueryRun(tenantId: string, queryRunId: string): Promise<QueryRunResponse> {
     return jsonRequest<QueryRunResponse>(`/v1/query-runs/${queryRunId}`, {
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
+  listQueryRuns(tenantId: string): Promise<QueryRunResponse[]> {
+    return jsonRequest<QueryRunResponse[]>("/v1/query-runs", {
       headers: tenantHeaders(tenantId),
     });
   },

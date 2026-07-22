@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from flint_graph.api.dependencies import Neo4jClientDep, SessionDep, TenantIdDep
+from flint_graph.api.dependencies import Neo4jClientDep, SessionDep, TenantAdminDep, TenantIdDep
 from flint_graph.api.schemas import (
     CanonicalEntityDetail,
     CanonicalEntitySummary,
@@ -100,7 +100,7 @@ async def get_entity(
 async def merge_entity_endpoint(
     entity_id: UUID,
     payload: MergeEntitiesRequest,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
     neo4j_client: Neo4jClientDep,
 ) -> EntityMergeResponse:
@@ -124,7 +124,7 @@ async def merge_entity_endpoint(
 async def unmerge_entity_endpoint(
     entity_id: UUID,
     payload: UnmergeEntityRequest,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
     neo4j_client: Neo4jClientDep,
 ) -> EntityMergeResponse:
@@ -169,7 +169,7 @@ async def list_merge_reviews(
 async def decide_merge_review(
     candidate_id: UUID,
     payload: ReviewDecisionRequest,
-    tenant_id: TenantIdDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
     neo4j_client: Neo4jClientDep,
 ) -> ReviewDecisionResponse:

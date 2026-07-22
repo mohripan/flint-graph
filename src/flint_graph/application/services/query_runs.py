@@ -98,6 +98,22 @@ async def get_query_run(
     return run
 
 
+async def list_query_runs(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    limit: int = 50,
+) -> list[QueryRun]:
+    return list(
+        await session.scalars(
+            select(QueryRun)
+            .where(QueryRun.tenant_id == tenant_id)
+            .order_by(QueryRun.created_at.desc(), QueryRun.id.desc())
+            .limit(limit)
+        )
+    )
+
+
 async def transition_query_run(
     session: AsyncSession,
     *,

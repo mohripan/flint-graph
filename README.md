@@ -1,6 +1,6 @@
 # FlintGraph
 
-A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, and includes real-model defaults plus an offline evaluation quality gate. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
+A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, and adds an OIDC-backed workspace access boundary for MVP use. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 ## Why these milestones come first
 
@@ -11,6 +11,7 @@ The early milestones establish durable identities, tenant boundaries, version se
 - Docker with Compose, or PostgreSQL 17+
 - `uv`
 - Python 3.12
+- Node.js 20.19+ or 22.12+ for the frontend
 
 ## Run locally with Docker
 
@@ -46,17 +47,52 @@ make relay
 make worker
 ```
 
-## Exercise the vertical slice
+## Authentication and workspaces
 
-Create a tenant:
+Local development defaults to `FLINT_GRAPH_AUTH_MODE=dev`, which creates a fixed
+development user automatically. This preserves the simple curl examples below
+without an `Authorization` header.
+
+For Keycloak or another OIDC provider, configure the API with:
+
+```powershell
+$env:FLINT_GRAPH_AUTH_MODE = "oidc"
+$env:FLINT_GRAPH_OIDC_ISSUER = "http://localhost:8080/realms/flintgraph"
+$env:FLINT_GRAPH_OIDC_AUDIENCE = "flintgraph-api"
+```
+
+In staging and production, `auth_mode=dev` is rejected unless
+`FLINT_GRAPH_ALLOW_UNSAFE_DEV_AUTH=true` is explicitly set.
+
+The frontend OIDC settings are:
+
+```powershell
+$env:VITE_FLINT_GRAPH_AUTH_MODE = "oidc"
+$env:VITE_FLINT_GRAPH_OIDC_AUTHORITY = "http://localhost:8080/realms/flintgraph"
+$env:VITE_FLINT_GRAPH_OIDC_CLIENT_ID = "flintgraph-frontend"
+```
+
+Workspace APIs:
 
 ```bash
-curl -sS -X POST http://localhost:8000/v1/tenants \
+curl -sS -X POST http://localhost:8000/v1/workspaces \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Acme Research"}'
+
+curl -sS http://localhost:8000/v1/workspaces
+```
+
+## Exercise the vertical slice
+
+Create a workspace:
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/workspaces \
   -H 'Content-Type: application/json' \
   -d '{"name":"Acme Research"}'
 ```
 
-Use the returned tenant ID to upload source material:
+Use the returned workspace ID as `X-Tenant-ID` to upload source material:
 
 ```bash
 curl -sS -X POST http://localhost:8000/v1/documents/uploads \
@@ -266,15 +302,18 @@ discrete-math PDF smoke flow.
 
 ## Current milestone boundary
 
-Milestone 10 adds local-first Ollama usability, tenant search readiness,
-query-run diagnostics, and frontend readiness/diagnostic UI. Production
-authentication, authorization, document diffing, deletion propagation,
-tombstones, graph invalidation, and replayable lifecycle semantics remain later
-work.
+Milestone 12 adds OIDC authentication, PostgreSQL-backed workspace membership,
+role checks for tenant-scoped APIs, MVP setup/readiness actions, server-backed
+document lists, server-backed query history, and frontend auth/workspace/setup
+flows. The app is now shaped for controlled internal MVP use.
 
 ## Security status
 
-This milestone is for local development. `X-Tenant-ID` is a tenant-routing input, not authentication or authorization. Do not expose this API publicly until trusted identity, tenant membership checks, role enforcement, and production secret management are implemented. See `docs/architecture/security-boundary.md`.
+`X-Tenant-ID` is still a workspace selector, not an identity proof. In OIDC mode
+the API authorizes that workspace against server-side membership before
+tenant-scoped handlers run. Public deployment still needs production secrets,
+TLS, CORS policy, rate limiting, request/body limit review, and hardened backing
+services. See `docs/architecture/security-boundary.md`.
 
 ## Learning notes
 
@@ -306,6 +345,8 @@ Milestone notes:
 - Grounded answer QA guide: `docs/runbooks/grounded-answer-generation-qa-guide.md`
 - Real models and evaluation: `docs/milestones/09-real-models-and-evaluation.md`
 - Local-first usable RAG: `docs/milestones/10-local-first-usable-rag.md`
+- Document lifecycle correctness: `docs/milestones/11-document-lifecycle-correctness.md`
+- MVP bootstrap and access boundary: `docs/milestones/12-mvp-bootstrap-and-access-boundary.md`
 - Evaluation contract: `docs/architecture/evaluation-contract.md`
 - Real models developer runbook: `docs/runbooks/real-models-developer.md`
 - Evaluation developer runbook: `docs/runbooks/evaluation-developer.md`

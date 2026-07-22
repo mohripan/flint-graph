@@ -53,6 +53,8 @@ from flint_graph.domain.enums import (
     SourceType,
     StagedProposalStatus,
     StagedResolutionStatus,
+    WorkspaceMembershipStatus,
+    WorkspaceRole,
 )
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -71,6 +73,45 @@ class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tenants"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+
+
+class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("oidc_issuer", "oidc_subject", name="uq_users_oidc_identity"),
+        Index("ix_users_email", "email"),
+    )
+
+    oidc_issuer: Mapped[str] = mapped_column(String(500), nullable=False)
+    oidc_subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    claims: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class WorkspaceMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "workspace_memberships"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_workspace_memberships_tenant_user"),
+        Index("ix_workspace_memberships_user_status", "user_id", "status"),
+        Index("ix_workspace_memberships_tenant_role", "tenant_id", "role"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[WorkspaceRole] = mapped_column(enum_column(WorkspaceRole, 32), nullable=False)
+    status: Mapped[WorkspaceMembershipStatus] = mapped_column(
+        enum_column(WorkspaceMembershipStatus, 32),
+        nullable=False,
+        default=WorkspaceMembershipStatus.ACTIVE,
+    )
 
 
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):

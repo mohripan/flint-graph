@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useTrackedJobs, type TrackedJob } from "../lib/jobs";
-import type { DocumentProjectionCleanup, SearchReadiness } from "../lib/types";
+import type { DocumentListItem, DocumentProjectionCleanup, SearchReadiness } from "../lib/types";
 import { useWorkspace } from "../lib/workspace";
 import { Button, Card, Spinner, StatusPill } from "../components/ui";
 
@@ -17,6 +17,7 @@ export function UploadPage() {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [readiness, setReadiness] = useState<SearchReadiness | null>(null);
+  const [documents, setDocuments] = useState<DocumentListItem[]>([]);
   const [cleanupsByDocument, setCleanupsByDocument] = useState<
     Record<string, DocumentProjectionCleanup[]>
   >({});
@@ -34,11 +35,16 @@ export function UploadPage() {
 
   const refreshReadiness = useCallback(async () => {
     try {
-      const nextReadiness = await api.getSearchReadiness(tenantId);
+      const [nextReadiness, nextDocuments] = await Promise.all([
+        api.getSearchReadiness(tenantId),
+        api.listDocuments(tenantId),
+      ]);
       setReadiness(nextReadiness);
+      setDocuments(nextDocuments);
       const documentIds = Array.from(
         new Set([
           ...nextReadiness.documents.map((doc) => doc.document_id),
+          ...nextDocuments.map((doc) => doc.id),
           ...jobs.map((job) => job.documentId),
         ]),
       );
@@ -54,6 +60,7 @@ export function UploadPage() {
       setCleanupsByDocument(Object.fromEntries(cleanupEntries));
     } catch {
       setReadiness(null);
+      setDocuments([]);
       setCleanupsByDocument({});
     }
   }, [jobs, tenantId]);
@@ -269,14 +276,57 @@ export function UploadPage() {
         </Card>
 
         <h2 className="mb-3 text-sm font-semibold text-slate-700">
-          Your documents {jobs.length > 0 && `(${jobs.length})`}
+          Documents {documents.length > 0 && `(${documents.length})`}
         </h2>
-        {jobs.length === 0 ? (
+        {documents.length === 0 && jobs.length === 0 ? (
           <Card className="p-8 text-center text-sm text-slate-400">
             No documents yet. Add one above to get started.
           </Card>
         ) : (
           <ul className="space-y-2">
+            {documents.map((document) => (
+              <li key={document.id}>
+                <Card className="flex items-center justify-between gap-4 p-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium text-slate-800">
+                        {document.title}
+                      </span>
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] uppercase text-slate-500">
+                        {document.source_type}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {document.latest_version_number
+                        ? `v${document.latest_version_number} · ${document.latest_version_status}`
+                        : "No versions yet"}
+                    </p>
+                    <CleanupSummary cleanups={cleanupsByDocument[document.id] ?? []} />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <StatusPill status={document.deleted_at ? "cancelled" : statusForReadiness(document.latest_version_status ?? "queued")} />
+                    {hasFailedCleanup(cleanupsByDocument[document.id] ?? []) && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => retryCleanup(document.id)}
+                        disabled={documentActionId === document.id}
+                      >
+                        Retry cleanup
+                      </Button>
+                    )}
+                    {!document.deleted_at && (
+                      <Button
+                        variant="danger"
+                        onClick={() => deleteDocument(document.id, document.title)}
+                        disabled={documentActionId === document.id}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              </li>
+            ))}
             {jobs.map((job) => (
               <li key={job.jobId}>
                 <Card className="flex items-center justify-between gap-4 p-4">

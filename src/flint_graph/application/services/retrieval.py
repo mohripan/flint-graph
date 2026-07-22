@@ -204,6 +204,22 @@ async def get_tenant_index_backfill_job(
     return job
 
 
+async def list_tenant_index_backfill_jobs(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    limit: int = 50,
+) -> list[IndexBackfillJob]:
+    return list(
+        await session.scalars(
+            select(IndexBackfillJob)
+            .where(IndexBackfillJob.tenant_id == tenant_id)
+            .order_by(IndexBackfillJob.created_at.desc(), IndexBackfillJob.id.desc())
+            .limit(limit)
+        )
+    )
+
+
 async def lexical_search(
     session: AsyncSession,
     *,

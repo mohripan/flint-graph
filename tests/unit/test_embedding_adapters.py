@@ -26,6 +26,9 @@ def test_embedding_factory_builds_openai_model_in_production_env() -> None:
     settings = Settings(
         _env_file=None,
         env="production",
+        auth_mode="oidc",
+        oidc_issuer="https://keycloak.example/realms/flintgraph",
+        oidc_audience="flintgraph-api",
         anthropic_api_key="sk-test",
         embedding_openai_api_key="sk-emb",
     )

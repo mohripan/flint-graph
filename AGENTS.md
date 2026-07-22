@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-FlintGraph is an early GraphRAG platform. Through Milestone 09 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, and an offline evaluation quality gate.
+FlintGraph is an early GraphRAG platform. Through Milestone 12 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, and an OIDC-backed workspace access boundary for MVP use.
 
 Implemented path:
 
@@ -22,9 +22,10 @@ API intake -> immutable raw object in MinIO
     -> draft answer -> repair citations -> support check -> abstain/finalize
     -> persisted SSE events + inspectable query run + answer provenance
     -> offline golden-dataset eval gate + optional secrets-gated live eval
+    -> OIDC-authenticated workspace users with role-scoped MVP setup and app flows
 ```
 
-PostgreSQL is the system of record for the control plane, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, answer metadata, answer claims, support decisions, and answer provenance. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. Evaluation datasets, recorded evaluations, reports, and baselines are file-based under `evals/`. The API serves document/job, graph, review, audit, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, SSE query streaming, answer-provenance, and citation-provenance endpoints; dedicated extraction inspection endpoints are deferred.
+PostgreSQL is the system of record for the control plane, identity, workspace membership, extraction provenance, staged proposals, resolved graph, retrieval index versions, embeddings, coverage, backfill state, query runs, query events, candidates, context packs, answer metadata, answer claims, support decisions, and answer provenance. Neo4j and OpenSearch are idempotent, rebuildable projections. MinIO stores immutable raw and derived artifacts. Evaluation datasets, recorded evaluations, reports, and baselines are file-based under `evals/`. The API serves workspace, document/job, graph, review, audit, setup/readiness, index inspection, backfill, lexical search, vector search, graph-neighborhood, query-run, query-event, SSE query streaming, answer-provenance, and citation-provenance endpoints; dedicated extraction inspection endpoints are deferred.
 
 Earlier milestones (durable dispatch, content pipeline) remain in place; see `docs/milestones/`.
 
@@ -34,7 +35,7 @@ Earlier milestones (durable dispatch, content pipeline) remain in place; see `do
 - Use `notes/` for scratch planning, manual test notes, and working handoff context. `notes/` is gitignored.
 - Add or update tests before changing implementation behavior.
 - Prefer focused changes that preserve the current modular shape.
-- Do not treat `X-Tenant-ID` as authentication. It is only local tenant routing until real identity and authorization exist.
+- Do not treat `X-Tenant-ID` alone as authentication. In OIDC mode it is a workspace selector that must be authorized through server-side membership.
 - Do not revert unrelated user changes in the working tree.
 
 ## Useful Commands
@@ -192,6 +193,21 @@ Milestone 10 local-first usable RAG:
 - `frontend/src/pages/UploadPage.tsx`: backend readiness document status view.
 - `docs/milestones/10-local-first-usable-rag.md`, `docs/adr/0011-local-first-ollama-readiness-diagnostics.md`, `docs/runbooks/local-ollama-rag.md`, `docs/runbooks/frontend-e2e-qa-guide.md`.
 
+Milestone 12 MVP bootstrap and access boundary:
+
+- `src/flint_graph/infrastructure/oidc.py`: Keycloak-compatible OIDC token verifier.
+- `src/flint_graph/application/services/authz.py`: authenticated principal, user upsert, and workspace role checks.
+- `src/flint_graph/application/services/workspaces.py`: workspace and membership service layer.
+- `src/flint_graph/application/services/retrieval_bootstrap.py`: idempotent active retrieval-index bootstrap from settings.
+- `src/flint_graph/api/dependencies.py`: current-user dependency and tenant viewer/member/admin authorization dependencies.
+- `src/flint_graph/api/routes/workspaces.py`: workspace listing, creation, and member-management endpoints.
+- `src/flint_graph/api/routes/retrieval.py`: system readiness, active-index bootstrap, active-index backfill, and backfill listing endpoints.
+- `frontend/src/lib/auth.tsx`: dev/OIDC frontend auth provider.
+- `frontend/src/lib/workspace.tsx`: server-backed workspace selection.
+- `frontend/src/pages/SetupPage.tsx`: readiness, index bootstrap, and backfill UI.
+- `migrations/versions/0014_identity_memberships.py`: users and workspace memberships.
+- `docs/milestones/12-mvp-bootstrap-and-access-boundary.md`, `docs/architecture/security-boundary.md`.
+
 ## Current Invariants
 
 - A document belongs to one tenant.
@@ -224,6 +240,13 @@ Milestone 10 local-first usable RAG:
 - Query creation requires at least one completed document-version coverage row for the selected active retrieval index.
 - Search readiness is derived from PostgreSQL index coverage, not Neo4j or OpenSearch projection state.
 - Query diagnostics are a compact derived summary persisted in query-run metadata; query events and provenance remain the detailed inspection source.
+- OIDC mode requires a valid bearer token before tenant-scoped API access.
+- `env=staging` and `env=production` reject dev auth unless explicitly overridden.
+- Tenant-scoped dependencies authorize `X-Tenant-ID` against active workspace membership.
+- Workspace roles are ordered as viewer, member, admin, owner.
+- Graph review/merge mutations, document deletion/cleanup retry, and retrieval setup/backfill require admin or owner.
+- Document creation/upload/intake requires member, admin, or owner.
+- Server-backed workspace, document list, setup readiness, backfill list, and query history are available to the frontend.
 
 ## Temporal Notes
 
@@ -254,7 +277,9 @@ Milestone 10 local-first usable RAG:
 - Non-test defaults select Anthropic for answer/support, so no-cost local development should explicitly set deterministic or Ollama query providers when no Anthropic key is available.
 - The live eval workflow checks a live-captured recording file; capture automation is intentionally separate from the offline PR gate.
 - Switching the local embedding provider/model/dimension requires a compatible retrieval index version and backfill before documents become searchable.
-- The frontend stores the selected workspace and locally tracked upload jobs in `localStorage`; backend readiness is the durable searchable-document view.
+- Workspace creation is currently open to any authenticated user; invitation or system-admin bootstrap policy is deferred.
+- OIDC group-to-workspace synchronization and SCIM lifecycle management are not implemented.
+- The frontend stores the selected workspace ID and locally tracked transient upload jobs in `localStorage`; backend readiness and document/query lists are durable.
 
 ## Before Ending A Change
 

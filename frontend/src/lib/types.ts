@@ -7,6 +7,14 @@ export interface Tenant {
   created_at: string;
 }
 
+export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
+
+export interface Workspace {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+}
+
 export type IngestionJobStatus =
   | "queued"
   | "running"
@@ -35,6 +43,21 @@ export interface DocumentDeleteResponse {
   document_id: string;
   deleted_version_ids: string[];
   cleanup_count: number;
+}
+
+export interface DocumentListItem {
+  id: string;
+  tenant_id: string;
+  title: string;
+  source_type: string;
+  source_uri: string | null;
+  external_id: string | null;
+  deleted_at: string | null;
+  latest_version_id: string | null;
+  latest_version_number: number | null;
+  latest_version_status: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export type DocumentProjectionCleanupStatus =
@@ -98,6 +121,24 @@ export interface QueryRunResponse {
   updated_at: string;
 }
 
+export interface IndexBackfillJob {
+  id: string;
+  tenant_id: string | null;
+  retrieval_index_version_id: string;
+  document_id: string | null;
+  document_version_id: string | null;
+  status: string;
+  total_count: number;
+  processed_count: number;
+  failed_count: number;
+  checkpoint: Record<string, unknown>;
+  last_error: Record<string, unknown> | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface QueryDiagnostics {
   retriever_candidate_counts?: Record<string, number>;
   failed_retrievers?: string[];
@@ -148,6 +189,25 @@ export interface SearchReadinessDocument {
   error_code: string | null;
   error_message: string | null;
   updated_at: string;
+}
+
+export interface SystemReadiness {
+  auth: {
+    mode: string;
+    oidc_issuer: string | null;
+  };
+  embedding: {
+    provider: string;
+    model: string;
+    dimensions: number;
+  };
+  query: {
+    answer_provider: string | null;
+    answer_model: string;
+    support_provider: string | null;
+    support_model: string;
+  };
+  search_readiness: SearchReadiness;
 }
 
 // A persisted query-run event as delivered over SSE.

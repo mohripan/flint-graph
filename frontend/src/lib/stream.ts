@@ -1,4 +1,4 @@
-import { ApiError } from "./api";
+import { ApiError, authHeaders } from "./api";
 import type { QueryRunEvent } from "./types";
 
 // Native EventSource cannot send the required X-Tenant-ID header, so we consume
@@ -30,7 +30,7 @@ export async function streamQueryRun(
   { onEvent, signal }: StreamHandlers,
 ): Promise<void> {
   const res = await fetch(`/v1/query-runs/${queryRunId}/events/stream`, {
-    headers: { "X-Tenant-ID": tenantId, Accept: "text/event-stream" },
+    headers: { ...(await authHeaders()), "X-Tenant-ID": tenantId, Accept: "text/event-stream" },
     signal,
   });
   if (!res.ok || !res.body) {
