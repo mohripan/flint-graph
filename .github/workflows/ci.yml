@@ -19,6 +19,10 @@ jobs:
         run: uv run mypy
       - name: Tests
         run: uv run pytest
+      - name: Compose config
+        run: |
+          docker compose config > /dev/null
+          docker compose --profile metrics config > /dev/null
       - name: Offline deterministic eval gate
         run: >
           uv run flint-graph-eval run

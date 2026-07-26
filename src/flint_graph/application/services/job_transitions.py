@@ -15,6 +15,8 @@ from flint_graph.domain.enums import IngestionJobStatus
 from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.domain.transitions import can_transition_job
 from flint_graph.infrastructure.db.models import IngestionJob, IngestionJobEvent
+from flint_graph.observability import metrics
+from flint_graph.observability.instruments import INGESTION_JOB_TRANSITIONS
 
 _TERMINAL_STATUSES = {
     IngestionJobStatus.COMPLETED,
@@ -99,4 +101,8 @@ async def transition_ingestion_job(
         )
     )
     await session.flush()
+    metrics.add(
+        INGESTION_JOB_TRANSITIONS,
+        **{"flint_graph.job.status": target_status.value},
+    )
     return job

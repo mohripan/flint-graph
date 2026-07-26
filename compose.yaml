@@ -21,6 +21,11 @@ services:
       FLINT_GRAPH_OTEL_ENABLED: "true"
       FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
       FLINT_GRAPH_OTEL_EXPORTER_OTLP_INSECURE: "true"
+      # Traces and metrics both push over OTLP locally, so the scrape endpoint is
+      # off by default. Enable it (with a token) to use the `metrics` profile.
+      FLINT_GRAPH_METRICS_ENABLED: ${FLINT_GRAPH_METRICS_ENABLED:-false}
+      FLINT_GRAPH_METRICS_TOKEN: ${FLINT_GRAPH_METRICS_TOKEN:-}
+      FLINT_GRAPH_USAGE_PRICING: ${FLINT_GRAPH_USAGE_PRICING:-{}}
       FLINT_GRAPH_OPENSEARCH_URL: http://opensearch:9200
       FLINT_GRAPH_EMBEDDING_PROVIDER: ${FLINT_GRAPH_EMBEDDING_PROVIDER:-deterministic}
       FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_EMBEDDING_MODEL:-deterministic-test}
@@ -58,7 +63,9 @@ services:
       FLINT_GRAPH_ENV: local
       FLINT_GRAPH_DATABASE_URL: postgresql+asyncpg://flint_graph:flint_graph@postgres:5432/flint_graph
       FLINT_GRAPH_TEMPORAL_ADDRESS: temporal:7233
-      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_OTEL_ENABLED: "true"
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_INSECURE: "true"
       FLINT_GRAPH_EMBEDDING_PROVIDER: ${FLINT_GRAPH_EMBEDDING_PROVIDER:-deterministic}
       FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_EMBEDDING_MODEL:-deterministic-test}
       FLINT_GRAPH_EMBEDDING_DIMENSIONS: ${FLINT_GRAPH_EMBEDDING_DIMENSIONS:-384}
@@ -104,7 +111,9 @@ services:
       FLINT_GRAPH_OLLAMA_BASE_URL: http://host.docker.internal:11434
       FLINT_GRAPH_OLLAMA_MODEL: gemma3:1b
       FLINT_GRAPH_EXTRACTION_TIMEOUT_SECONDS: "180"
-      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_OTEL_ENABLED: "true"
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_INSECURE: "true"
       FLINT_GRAPH_OPENSEARCH_URL: http://opensearch:9200
       FLINT_GRAPH_EMBEDDING_PROVIDER: ${FLINT_GRAPH_EMBEDDING_PROVIDER:-deterministic}
       FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_EMBEDDING_MODEL:-deterministic-test}
@@ -140,7 +149,9 @@ services:
       FLINT_GRAPH_NEO4J_PASSWORD: flintgraphpassword
       FLINT_GRAPH_NEO4J_DATABASE: neo4j
       FLINT_GRAPH_OPENSEARCH_URL: http://opensearch:9200
-      FLINT_GRAPH_OTEL_ENABLED: "false"
+      FLINT_GRAPH_OTEL_ENABLED: "true"
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_INSECURE: "true"
       FLINT_GRAPH_EMBEDDING_PROVIDER: deterministic
       FLINT_GRAPH_QUERY_ANSWER_PROVIDER: deterministic
       FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: deterministic
@@ -283,7 +294,30 @@ services:
     volumes:
       - observability_data:/data
 
+  # Opt-in scrape path for rehearsing a deployment that pulls metrics instead of
+  # receiving them over OTLP. Requires the API to be started with
+  # FLINT_GRAPH_METRICS_ENABLED=true and FLINT_GRAPH_METRICS_TOKEN set:
+  #   docker compose --profile metrics up -d
+  prometheus:
+    profiles: ["metrics"]
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+    ports:
+      - "9090:9090"
+    environment:
+      FLINT_GRAPH_METRICS_TOKEN: ${FLINT_GRAPH_METRICS_TOKEN:-}
+    volumes:
+      - ./ops/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
+  prometheus_data:
   postgres_data:
   minio_data:
   neo4j_data:

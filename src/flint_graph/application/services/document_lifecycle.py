@@ -38,6 +38,8 @@ from flint_graph.infrastructure.db.models import (
     RetrievalIndexVersion,
 )
 from flint_graph.infrastructure.opensearch import build_delete_chunks_bulk_body
+from flint_graph.observability import metrics
+from flint_graph.observability.instruments import PROJECTION_CLEANUP_BACKLOG
 
 
 class SupportsOpenSearchBulk(Protocol):
@@ -307,13 +309,51 @@ async def run_next_projection_cleanup(
         .with_for_update(skip_locked=True)
     )
     if cleanup is None:
+        await record_projection_cleanup_backlog(session)
         return None
-    return await run_projection_cleanup(
+    result = await run_projection_cleanup(
         session,
         cleanup_id=cleanup.id,
         neo4j_client=neo4j_client,
         opensearch_client=opensearch_client,
     )
+    await record_projection_cleanup_backlog(session)
+    return result
+
+
+async def record_projection_cleanup_backlog(session: AsyncSession) -> dict[str, int]:
+    """Publish the cleanup backlog gauge, by status.
+
+    A projection cleanup that never drains means deleted content stays queryable,
+    so the backlog is a correctness signal, not just a queue depth.
+    """
+    rows = await session.execute(
+        select(
+            DocumentProjectionCleanup.status,
+            func.count(DocumentProjectionCleanup.id),
+        )
+        .where(
+            DocumentProjectionCleanup.status.in_(
+                [
+                    DocumentProjectionCleanupStatus.PENDING,
+                    DocumentProjectionCleanupStatus.RUNNING,
+                    DocumentProjectionCleanupStatus.FAILED,
+                ]
+            )
+        )
+        .group_by(DocumentProjectionCleanup.status)
+    )
+    counts = {status.value: 0 for status in DocumentProjectionCleanupStatus}
+    for status, count in rows.all():
+        counts[status.value] = int(count)
+    for status_value, count in counts.items():
+        if status_value in {"pending", "running", "failed"}:
+            metrics.set_gauge(
+                PROJECTION_CLEANUP_BACKLOG,
+                count,
+                **{"flint_graph.cleanup.status": status_value},
+            )
+    return counts
 
 
 async def run_projection_cleanup(

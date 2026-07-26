@@ -146,6 +146,11 @@ class S3ObjectStore:
             metadata=_normalize_metadata(metadata),
         )
 
+    async def check_bucket(self, bucket: str) -> None:
+        """Verify the bucket is reachable and readable. Used by readiness probes."""
+        _validate_bucket(bucket)
+        await to_thread(self._client.head_bucket, Bucket=bucket)
+
 
 def create_object_store(settings: Settings) -> ObjectStore:
     if settings.object_store_provider == "s3":

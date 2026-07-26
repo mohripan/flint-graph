@@ -7,7 +7,7 @@ from flint_graph.config import get_settings
 from flint_graph.infrastructure.db.session import SessionFactory
 from flint_graph.infrastructure.neo4j import create_neo4j_client
 from flint_graph.infrastructure.opensearch import create_opensearch_client
-from flint_graph.logging import configure_logging
+from flint_graph.observability.runtime import PROJECTION_CLEANUP_ROLE, configure_observability
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +39,7 @@ async def cleanup_once() -> int:
 
 async def run_forever() -> None:
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_observability(settings, role=PROJECTION_CLEANUP_ROLE)
     while True:
         try:
             cleaned = await cleanup_once()

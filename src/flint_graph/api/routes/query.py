@@ -240,6 +240,8 @@ async def stream_query_run_events_endpoint(
         support_checker=support_checker,
         min_supported_claim_ratio=settings.query_min_supported_claim_ratio,
         min_context_relevance=settings.query_min_context_relevance,
+        usage_pricing=settings.usage_pricing,
+        usage_currency=settings.usage_currency,
         poll_interval_seconds=poll_interval_seconds,
     )
     return StreamingResponse(
@@ -415,6 +417,10 @@ async def _stream_query_events(
     support_checker: SupportChecker,
     min_supported_claim_ratio: float,
     min_context_relevance: float,
+    # Defaulted so an unpriced deployment records usage with a null cost rather
+    # than requiring pricing configuration to run a query at all.
+    usage_pricing: dict[str, dict[str, float]] | None = None,
+    usage_currency: str = "USD",
     poll_interval_seconds: float,
 ) -> AsyncIterator[str]:
     if initial_status != QueryRunStatus.QUEUED:
@@ -441,6 +447,8 @@ async def _stream_query_events(
             support_checker=support_checker,
             min_supported_claim_ratio=min_supported_claim_ratio,
             min_context_relevance=min_context_relevance,
+            usage_pricing=usage_pricing,
+            usage_currency=usage_currency,
             queue=queue,
         )
     )
@@ -483,6 +491,10 @@ async def _execute_query_run(
     support_checker: SupportChecker,
     min_supported_claim_ratio: float,
     min_context_relevance: float,
+    # Defaulted so an unpriced deployment records usage with a null cost rather
+    # than requiring pricing configuration to run a query at all.
+    usage_pricing: dict[str, dict[str, float]] | None = None,
+    usage_currency: str = "USD",
     queue: asyncio.Queue[str | None],
 ) -> None:
     async with session_factory() as execution_session:
@@ -514,6 +526,8 @@ async def _execute_query_run(
                 support_checker=support_checker,
                 min_supported_claim_ratio=min_supported_claim_ratio,
                 min_context_relevance=min_context_relevance,
+                usage_pricing=usage_pricing,
+                usage_currency=usage_currency,
                 commit_after_node=True,
                 after_node_commit=emit_new_events,
             )

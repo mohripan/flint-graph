@@ -30,11 +30,15 @@ from flint_graph.application.services.query_runs import (
     persist_query_answer_claims,
     transition_query_run,
 )
-from flint_graph.domain.enums import QueryRunStatus
+from flint_graph.application.services.usage import record_provider_usage
+from flint_graph.application.usage import usage_from_metadata
+from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus
 from flint_graph.infrastructure.db.models import (
     QueryContextPack,
     QueryContextPackRecord,
 )
+from flint_graph.observability import metrics
+from flint_graph.observability.instruments import QUERY_ABSTENTIONS, QUERY_CLAIMS
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +59,8 @@ async def generate_query_answer(
     support_checker: SupportChecker | None = None,
     min_supported_claim_ratio: float = 0.5,
     min_context_relevance: float = 0.0,
+    usage_pricing: dict[str, dict[str, float]] | None = None,
+    usage_currency: str = "USD",
 ) -> QueryAnswerResult:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
     try:
@@ -95,6 +101,16 @@ async def generate_query_answer(
         answer = verification.answer
         faithfulness = faithfulness_summary(verification.report)
         answer_provider = _answer_provider(draft_answer)
+        await _record_answer_usage(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+            draft_answer=draft_answer,
+            support_metadata=verification.report.metadata.get("support"),
+            pricing=usage_pricing or {},
+            currency=usage_currency,
+        )
+        _record_answer_metrics(verification.report)
         answer_citations = [
             citation.model_dump(mode="json") for citation in answer.citations
         ]
@@ -209,6 +225,62 @@ async def generate_query_answer(
             error_details={"errors": [error]},
         )
         return QueryAnswerResult(status=QueryRunStatus.FAILED, errors=[error])
+
+
+async def _record_answer_usage(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    query_run_id: UUID,
+    draft_answer: object,
+    support_metadata: object,
+    pricing: dict[str, dict[str, float]],
+    currency: str,
+) -> None:
+    """Persist what generation and support checking consumed.
+
+    Two rows, not one: generation and the support check can run on different
+    providers and models, and collapsing them would make per-model cost
+    attribution impossible.
+    """
+    answer_metadata = getattr(draft_answer, "metadata", None)
+    await record_provider_usage(
+        session,
+        tenant_id=tenant_id,
+        usage=usage_from_metadata(
+            answer_metadata if isinstance(answer_metadata, dict) else None,
+            operation=ProviderUsageOperation.ANSWER,
+        ),
+        pricing=pricing,
+        currency=currency,
+        query_run_id=query_run_id,
+    )
+    if isinstance(support_metadata, dict) and support_metadata:
+        await record_provider_usage(
+            session,
+            tenant_id=tenant_id,
+            usage=usage_from_metadata(
+                support_metadata,
+                operation=ProviderUsageOperation.FAITHFULNESS,
+            ),
+            pricing=pricing,
+            currency=currency,
+            query_run_id=query_run_id,
+        )
+
+
+def _record_answer_metrics(report: object) -> None:
+    supported = getattr(report, "supported_claim_count", 0)
+    unsupported = getattr(report, "unsupported_claim_count", 0)
+    if supported:
+        metrics.add(QUERY_CLAIMS, supported, **{"flint_graph.support.status": "supported"})
+    if unsupported:
+        metrics.add(
+            QUERY_CLAIMS, unsupported, **{"flint_graph.support.status": "unsupported"}
+        )
+    if getattr(report, "abstained", False):
+        reason = getattr(report, "abstain_reason", None) or "unspecified"
+        metrics.add(QUERY_ABSTENTIONS, **{"flint_graph.abstain.reason": reason})
 
 
 def _answer_provider(answer: object) -> str:

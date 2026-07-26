@@ -80,6 +80,11 @@ class OpenSearchClient:
             if isinstance(hit, dict)
         ]
 
+    async def check_cluster(self) -> None:
+        """Verify the cluster answers. Used by readiness probes."""
+        response = await self._http_client.get("/_cluster/health")
+        _raise_for_status(response)
+
     async def close(self) -> None:
         await self._http_client.aclose()
 

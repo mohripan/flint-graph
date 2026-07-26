@@ -1,17 +1,9 @@
-from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-import jwt
-import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
-from jwt.algorithms import RSAAlgorithm
+from flint_graph.api.dependencies import get_index_backfill_workflow_starter
 
-from flint_graph.api.dependencies import (
-    get_index_backfill_workflow_starter,
-    get_oidc_token_verifier,
-)
-from flint_graph.config import Settings, get_settings
-from flint_graph.infrastructure.oidc import OIDCTokenVerifier
+# The oidc_auth / oidc_settings_override fixtures live in conftest.py so other
+# suites (audit, usage) can authenticate as distinct real users too.
 
 
 class CapturingBackfillStarter:
@@ -20,76 +12,6 @@ class CapturingBackfillStarter:
 
     async def start_index_backfill_workflow(self, *, job_id: object) -> None:
         self.started.append(str(job_id))
-
-
-def _keypair() -> tuple[object, dict[str, object]]:
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_jwk = RSAAlgorithm.to_jwk(private_key.public_key(), as_dict=True)
-    public_jwk["kid"] = "test-key"
-    public_jwk["alg"] = "RS256"
-    public_jwk["use"] = "sig"
-    return private_key, public_jwk
-
-
-def _token(private_key: object, *, subject: str = "user-123") -> str:
-    now = datetime.now(UTC)
-    return jwt.encode(
-        {
-            "iss": "https://keycloak.example/realms/flintgraph",
-            "sub": subject,
-            "aud": "flintgraph",
-            "email": f"{subject}@example.com",
-            "name": subject,
-            "iat": now,
-            "nbf": now,
-            "exp": now + timedelta(minutes=5),
-        },
-        private_key,
-        algorithm="RS256",
-        headers={"kid": "test-key"},
-    )
-
-
-@pytest.fixture
-def oidc_settings_override(client):
-    get_settings.cache_clear()
-
-    def override_settings() -> Settings:
-        return Settings(
-            env="local",
-            auth_mode="oidc",
-            oidc_issuer="https://keycloak.example/realms/flintgraph",
-            oidc_audience="flintgraph",
-        )
-
-    from flint_graph.main import app
-
-    app.dependency_overrides[get_settings] = override_settings
-    try:
-        yield
-    finally:
-        app.dependency_overrides.pop(get_settings, None)
-        get_settings.cache_clear()
-
-
-@pytest.fixture
-def oidc_auth(client, oidc_settings_override):
-    private_key, public_jwk = _keypair()
-
-    def override_verifier() -> OIDCTokenVerifier:
-        return OIDCTokenVerifier(
-            issuer="https://keycloak.example/realms/flintgraph",
-            audience="flintgraph",
-            jwks_loader=lambda: {"keys": [public_jwk]},
-        )
-
-    from flint_graph.main import app
-
-    app.dependency_overrides[get_oidc_token_verifier] = override_verifier
-    try:
-        yield lambda subject="user-123": _token(private_key, subject=subject)
-    finally:
-        app.dependency_overrides.pop(get_oidc_token_verifier, None)
 
 
 async def test_oidc_mode_rejects_unauthenticated_tenant_scoped_requests(

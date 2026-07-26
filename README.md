@@ -101,6 +101,47 @@ curl -sS -X POST http://localhost:8000/v1/workspaces \
 curl -sS http://localhost:8000/v1/workspaces
 ```
 
+## Observability, audit, and usage
+
+`docker compose up -d` already runs an OTLP receiver plus Grafana on
+<http://localhost:3000>. The API and the durable processes (ingestion worker,
+outbox relay, projection cleanup) all export traces there, so one upload produces
+one trace spanning the API request, the outbox publish, and the Temporal
+activities.
+
+```powershell
+# Dependency-aware readiness: 503 names the dependency that is down.
+curl -sS http://localhost:8000/health/ready
+
+# Who did what in a workspace (admin/owner).
+curl -sS "http://localhost:8000/v1/audit-events?limit=20" -H "X-Tenant-ID: $TENANT"
+
+# What the model providers consumed (admin/owner).
+curl -sS "http://localhost:8000/v1/usage?group_by=model" -H "X-Tenant-ID: $TENANT"
+```
+
+To rehearse a pull-based metrics deployment:
+
+```powershell
+$env:FLINT_GRAPH_METRICS_ENABLED = "true"
+$env:FLINT_GRAPH_METRICS_TOKEN = "local-scrape-token"
+docker compose --profile metrics up -d
+# Prometheus on http://localhost:9090; alert rules from ops/observability/alerts.yml
+```
+
+Cost requires pricing configuration; unpriced calls are recorded with a null cost
+rather than a guessed one:
+
+```powershell
+$env:FLINT_GRAPH_USAGE_PRICING = '{"anthropic:claude-opus-4-8":{"input_per_million":15.0,"output_per_million":75.0}}'
+```
+
+Logs never contain prompts, answers, or document text.
+`FLINT_GRAPH_LOG_PAYLOADS=true` exists for local prompt debugging only and is
+rejected in staging and production. See
+`docs/runbooks/operations-observability.md` and
+`docs/architecture/observability-contract.md`.
+
 ## Exercise the vertical slice
 
 Create a workspace:
@@ -328,11 +369,17 @@ discrete-math PDF smoke flow.
 
 ## Current milestone boundary
 
-Milestone 13 adds the controlled public API boundary around the Milestone 12
-authenticated workspace model. The API now fails closed in staging and
-production unless deployment exposure settings are explicit, request and intake
-sizes are bounded, URL intake is SSRF-aware, CORS and host validation are
-configured, TLS redirect behavior is enabled, and rate limiting is turned on.
+Milestone 13 added the controlled public API boundary around the Milestone 12
+authenticated workspace model. The API fails closed in staging and production
+unless deployment exposure settings are explicit, request and intake sizes are
+bounded, URL intake is SSRF-aware, CORS and host validation are configured, TLS
+redirect behavior is enabled, and rate limiting is turned on.
+
+Milestone 14 makes that deployment operable: metrics and traces across every
+process including the durable pipeline, dependency-aware readiness, an
+append-only audit ledger written in the mutation's transaction, and per-workspace
+token and cost accounting. Retention for audit and usage rows, distributed rate
+limiting, and multi-replica scale-out remain open.
 
 ## Security status
 
@@ -377,6 +424,7 @@ Milestone notes:
 - Document lifecycle correctness: `docs/milestones/11-document-lifecycle-correctness.md`
 - MVP bootstrap and access boundary: `docs/milestones/12-mvp-bootstrap-and-access-boundary.md`
 - Production exposure hardening: `docs/milestones/13-production-exposure-hardening.md`
+- Operational readiness: `docs/milestones/14-operational-readiness.md`
 - Evaluation contract: `docs/architecture/evaluation-contract.md`
 - Real models developer runbook: `docs/runbooks/real-models-developer.md`
 - Evaluation developer runbook: `docs/runbooks/evaluation-developer.md`
@@ -385,3 +433,5 @@ Milestone notes:
 - Frontend E2E QA guide: `docs/runbooks/frontend-e2e-qa-guide.md`
 - Deployment hardening runbook: `docs/runbooks/deployment-hardening.md`
 - Backup and restore runbook: `docs/runbooks/backup-restore.md`
+- Operations, observability, audit, and usage runbook: `docs/runbooks/operations-observability.md`
+- Observability contract: `docs/architecture/observability-contract.md`

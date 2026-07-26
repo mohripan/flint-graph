@@ -22,6 +22,8 @@ from flint_graph.application.query_orchestration import (
     SupportCheckResult,
     SupportStatus,
 )
+from flint_graph.domain.enums import ProviderUsageOperation
+from flint_graph.infrastructure.provider_telemetry import provider_call, usage_metadata
 
 OLLAMA_PROVIDER = "ollama"
 OLLAMA_SUPPORT_METHOD = "ollama-entailment"
@@ -110,17 +112,25 @@ class OllamaProposalExtractionModel:
         )
 
     async def extract_batch(self, request: ExtractionBatchRequest) -> ExtractionBatch:
-        response = await self._http_client.post(
-            "/api/generate",
-            json={
-                "model": self._model,
-                "prompt": _build_proposal_extraction_prompt(request),
-                "stream": False,
-                "format": _proposal_extraction_schema(),
-                "options": {"temperature": 0},
-            },
-            timeout=self._timeout_seconds,
-        )
+        # Latency and errors only: ``ExtractionBatch`` is a provider-neutral
+        # contract with no metadata channel, so extraction token usage is not
+        # persisted yet.
+        async with provider_call(
+            provider=OLLAMA_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.EXTRACTION,
+        ):
+            response = await self._http_client.post(
+                "/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": _build_proposal_extraction_prompt(request),
+                    "stream": False,
+                    "format": _proposal_extraction_schema(),
+                    "options": {"temperature": 0},
+                },
+                timeout=self._timeout_seconds,
+            )
         _raise_for_status(response)
         payload = response.json()
         response_text = payload.get("response")
@@ -145,14 +155,19 @@ class OllamaEmbeddingModel:
         )
 
     async def embed_batch(self, request: EmbeddingBatchRequest) -> EmbeddingBatchResult:
-        response = await self._http_client.post(
-            "/api/embed",
-            json={
-                "model": self._model,
-                "input": [item.text for item in request.inputs],
-            },
-            timeout=self._timeout_seconds,
-        )
+        async with provider_call(
+            provider=OLLAMA_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.EMBEDDING,
+        ) as call:
+            response = await self._http_client.post(
+                "/api/embed",
+                json={
+                    "model": self._model,
+                    "input": [item.text for item in request.inputs],
+                },
+                timeout=self._timeout_seconds,
+            )
         _raise_for_status(response)
         payload = response.json()
         embeddings = payload.get("embeddings")
@@ -174,7 +189,16 @@ class OllamaEmbeddingModel:
                 )
                 for item, vector in zip(request.inputs, embeddings, strict=True)
             ],
-            metadata={"response_model": payload.get("model", self._model)},
+            metadata={
+                "provider": OLLAMA_PROVIDER,
+                "response_model": payload.get("model", self._model),
+                "usage": usage_metadata(
+                    input_tokens=_payload_int(payload, "prompt_eval_count"),
+                    output_tokens=None,
+                    duration_ms=call.duration_ms,
+                    embedded_item_count=len(request.inputs),
+                ),
+            },
         )
 
 
@@ -198,20 +222,25 @@ class OllamaAnswerGenerator:
         )
 
     async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer:
-        response = await self._http_client.post(
-            "/api/generate",
-            json={
-                "model": self._model,
-                "prompt": _build_answer_generation_prompt(request),
-                "stream": False,
-                "format": _answer_generation_schema(),
-                "options": {
-                    "temperature": self._temperature,
-                    "num_predict": self._max_tokens,
+        async with provider_call(
+            provider=OLLAMA_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.ANSWER,
+        ) as call:
+            response = await self._http_client.post(
+                "/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": _build_answer_generation_prompt(request),
+                    "stream": False,
+                    "format": _answer_generation_schema(),
+                    "options": {
+                        "temperature": self._temperature,
+                        "num_predict": self._max_tokens,
+                    },
                 },
-            },
-            timeout=self._timeout_seconds,
-        )
+                timeout=self._timeout_seconds,
+            )
         _raise_for_status(response)
         payload = response.json()
         response_text = payload.get("response")
@@ -221,7 +250,9 @@ class OllamaAnswerGenerator:
             draft = _OllamaAnswerDraft.model_validate_json(response_text)
         except ValueError as exc:
             raise ValueError("Ollama answer response did not match the expected schema.") from exc
-        return _answer_from_ollama_draft(request, payload, self._model, draft)
+        return _answer_from_ollama_draft(
+            request, payload, self._model, draft, duration_ms=call.duration_ms
+        )
 
     async def stream_generate(
         self,
@@ -230,41 +261,48 @@ class OllamaAnswerGenerator:
     ) -> GeneratedAnswer:
         response_parts: list[str] = []
         final_payload: dict[str, Any] = {}
-        async with self._http_client.stream(
-            "POST",
-            "/api/generate",
-            json={
-                "model": self._model,
-                "prompt": _build_answer_generation_prompt(request),
-                "stream": True,
-                "format": _answer_generation_schema(),
-                "options": {
-                    "temperature": self._temperature,
-                    "num_predict": self._max_tokens,
+        async with provider_call(
+            provider=OLLAMA_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.ANSWER,
+        ) as call:
+            async with self._http_client.stream(
+                "POST",
+                "/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": _build_answer_generation_prompt(request),
+                    "stream": True,
+                    "format": _answer_generation_schema(),
+                    "options": {
+                        "temperature": self._temperature,
+                        "num_predict": self._max_tokens,
+                    },
                 },
-            },
-            timeout=self._timeout_seconds,
-        ) as response:
-            _raise_for_status(response)
-            async for line in response.aiter_lines():
-                if not line.strip():
-                    continue
-                try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError as exc:
-                    raise ValueError("Ollama streamed an invalid JSON line.") from exc
-                response_text = payload.get("response")
-                if isinstance(response_text, str) and response_text:
-                    response_parts.append(response_text)
-                    await on_delta(response_text)
-                if payload.get("done") is True:
-                    final_payload = payload
+                timeout=self._timeout_seconds,
+            ) as response:
+                _raise_for_status(response)
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise ValueError("Ollama streamed an invalid JSON line.") from exc
+                    response_text = payload.get("response")
+                    if isinstance(response_text, str) and response_text:
+                        response_parts.append(response_text)
+                        await on_delta(response_text)
+                    if payload.get("done") is True:
+                        final_payload = payload
 
         try:
             draft = _OllamaAnswerDraft.model_validate_json("".join(response_parts))
         except ValueError as exc:
             raise ValueError("Ollama streamed answer did not match the expected schema.") from exc
-        return _answer_from_ollama_draft(request, final_payload, self._model, draft)
+        return _answer_from_ollama_draft(
+            request, final_payload, self._model, draft, duration_ms=call.duration_ms
+        )
 
 
 class OllamaSupportChecker:
@@ -294,20 +332,25 @@ class OllamaSupportChecker:
                 metadata={"provider": OLLAMA_PROVIDER, "model": self._model},
             )
 
-        response = await self._http_client.post(
-            "/api/generate",
-            json={
-                "model": self._model,
-                "prompt": _build_support_check_prompt(request),
-                "stream": False,
-                "format": _support_check_schema(),
-                "options": {
-                    "temperature": self._temperature,
-                    "num_predict": self._max_tokens,
+        async with provider_call(
+            provider=OLLAMA_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.FAITHFULNESS,
+        ) as call:
+            response = await self._http_client.post(
+                "/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": _build_support_check_prompt(request),
+                    "stream": False,
+                    "format": _support_check_schema(),
+                    "options": {
+                        "temperature": self._temperature,
+                        "num_predict": self._max_tokens,
+                    },
                 },
-            },
-            timeout=self._timeout_seconds,
-        )
+                timeout=self._timeout_seconds,
+            )
         _raise_for_status(response)
         payload = response.json()
         response_text = payload.get("response")
@@ -321,6 +364,7 @@ class OllamaSupportChecker:
             request,
             model=str(payload.get("model", self._model)),
             draft=draft,
+            usage=_ollama_usage(payload, call.duration_ms),
         )
 
 
@@ -329,6 +373,8 @@ def _answer_from_ollama_draft(
     payload: dict[str, Any],
     model: str,
     draft: _OllamaAnswerDraft,
+    *,
+    duration_ms: int = 0,
 ) -> GeneratedAnswer:
     if draft.insufficient_context or not draft.claims:
         return GeneratedAnswer(
@@ -339,6 +385,7 @@ def _answer_from_ollama_draft(
                 "model": payload.get("model", model),
                 "raw_citation_markers": [],
                 "draft_claims": [],
+                "usage": _ollama_usage(payload, duration_ms),
             },
         )
 
@@ -381,6 +428,7 @@ def _answer_from_ollama_draft(
             "model": payload.get("model", model),
             "raw_citation_markers": raw_markers,
             "draft_claims": draft_claims,
+            "usage": _ollama_usage(payload, duration_ms),
         },
     )
 
@@ -612,6 +660,7 @@ def _support_result_from_ollama_draft(
     *,
     model: str,
     draft: _OllamaSupportDraft,
+    usage: dict[str, Any] | None = None,
 ) -> SupportCheckResult:
     judgements_by_index = {judgement.claim_index: judgement for judgement in draft.judgements}
     claims: list[AnswerClaim] = []
@@ -642,8 +691,32 @@ def _support_result_from_ollama_draft(
     return SupportCheckResult(
         claims=claims,
         method=OLLAMA_SUPPORT_METHOD,
-        metadata={"provider": OLLAMA_PROVIDER, "model": model},
+        metadata={
+            "provider": OLLAMA_PROVIDER,
+            "model": model,
+            "usage": usage or {},
+        },
     )
+
+
+def _ollama_usage(payload: dict[str, Any], duration_ms: int) -> dict[str, Any]:
+    """Map Ollama's eval counters onto the shared usage shape.
+
+    Ollama reports prompt and completion evaluation counts rather than billed
+    tokens; they are the closest equivalent and are recorded as such.
+    """
+    return usage_metadata(
+        input_tokens=_payload_int(payload, "prompt_eval_count"),
+        output_tokens=_payload_int(payload, "eval_count"),
+        duration_ms=duration_ms,
+    )
+
+
+def _payload_int(payload: dict[str, Any], key: str) -> int | None:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value)
 
 
 def _coerce_status(status: str) -> SupportStatus:

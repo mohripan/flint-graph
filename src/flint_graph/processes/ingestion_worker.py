@@ -4,7 +4,7 @@ from temporalio.worker import Worker
 
 from flint_graph.config import get_settings
 from flint_graph.infrastructure.temporal import connect_temporal
-from flint_graph.logging import configure_logging
+from flint_graph.observability.runtime import INGESTION_WORKER_ROLE, configure_observability
 from flint_graph.worker.activities.index_backfill import (
     complete_index_backfill_activity,
     fail_index_backfill_activity,
@@ -42,7 +42,7 @@ from flint_graph.workflows.resolution import ResolveEntitiesWorkflow
 
 async def run_worker() -> None:
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_observability(settings, role=INGESTION_WORKER_ROLE)
     client = await connect_temporal(settings)
     worker = Worker(
         client,

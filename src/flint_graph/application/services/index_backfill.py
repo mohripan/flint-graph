@@ -24,6 +24,8 @@ from flint_graph.infrastructure.db.models import (
     IndexBackfillJob,
     RetrievalIndexVersion,
 )
+from flint_graph.observability import metrics
+from flint_graph.observability.instruments import INDEX_BACKFILL_PROGRESS
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +127,7 @@ async def complete_backfill_document(
     job.checkpoint = {"after_document_version_id": str(document_version_id)}
     job.last_error = None
     await session.flush()
+    metrics.add(INDEX_BACKFILL_PROGRESS, **{"flint_graph.outcome": "completed"})
     return job
 
 
@@ -145,6 +148,7 @@ async def fail_backfill_document(
         "message": error_message[:500],
     }
     await session.flush()
+    metrics.add(INDEX_BACKFILL_PROGRESS, **{"flint_graph.outcome": "failed"})
     return job
 
 

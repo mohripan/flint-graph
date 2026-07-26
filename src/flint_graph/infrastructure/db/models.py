@@ -26,6 +26,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from flint_graph.domain.enums import (
     AliasSource,
+    AuditAction,
+    AuditOutcome,
     CandidateOutcome,
     CandidateTargetKind,
     ClaimStatus,
@@ -46,6 +48,7 @@ from flint_graph.domain.enums import (
     MergeDecisionSource,
     MergeDecisionType,
     OutboxMessageStatus,
+    ProviderUsageOperation,
     QueryRunStatus,
     RelationshipStatus,
     RetrievalIndexScope,
@@ -538,7 +541,15 @@ class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     support_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
     answer_provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
     candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Packing estimate produced before generation. Distinct from the provider-reported
+    # token counts below, which are what the provider actually billed.
     context_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Denormalized rollups of provider_usage_events for this run, so query history
+    # renders from a single row instead of an aggregate per run.
+    provider_input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_cost_micros: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -1464,4 +1475,102 @@ class EntityResolutionCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         enum_column(MergeCandidateStatus, 32),
         nullable=False,
         default=MergeCandidateStatus.PENDING,
+    )
+
+
+class AuditEvent(UUIDPrimaryKeyMixin, Base):
+    """Append-only record of who performed a security-relevant action.
+
+    Written in the same transaction as the mutation it describes, so an audited
+    action cannot commit without its record. There is no update or delete path in
+    application code; the table is a ledger, not state.
+
+    ``tenant_id`` is nullable because workspace creation and user provisioning
+    happen before a workspace membership exists.
+    """
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        Index("ix_audit_events_tenant_created", "tenant_id", "created_at"),
+        Index("ix_audit_events_actor_created", "actor_user_id", "created_at"),
+        Index("ix_audit_events_action_created", "action", "created_at"),
+    )
+
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    actor_issuer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    actor_subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    action: Mapped[AuditAction] = mapped_column(enum_column(AuditAction, 64), nullable=False)
+    outcome: Mapped[AuditOutcome] = mapped_column(
+        enum_column(AuditOutcome, 32), nullable=False, default=AuditOutcome.ALLOWED
+    )
+    resource_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    client_ip: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProviderUsageEvent(UUIDPrimaryKeyMixin, Base):
+    """One model-provider call's consumption.
+
+    Cost is stored in micros of ``currency`` and is nullable on purpose: when no
+    pricing is configured for a provider/model, a null cost is honest and a
+    fabricated one is not.
+    """
+
+    __tablename__ = "provider_usage_events"
+    __table_args__ = (
+        Index("ix_provider_usage_events_tenant_created", "tenant_id", "created_at"),
+        Index(
+            "ix_provider_usage_events_tenant_operation_created",
+            "tenant_id",
+            "operation",
+            "created_at",
+        ),
+        Index("ix_provider_usage_events_query_run", "query_run_id"),
+        CheckConstraint("input_tokens >= 0", name="ck_provider_usage_input_tokens"),
+        CheckConstraint("output_tokens >= 0", name="ck_provider_usage_output_tokens"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    operation: Mapped[ProviderUsageOperation] = mapped_column(
+        enum_column(ProviderUsageOperation, 32), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    embedded_item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_cost_micros: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="USD")
+    query_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("query_runs.id", ondelete="CASCADE"), nullable=True
+    )
+    ingestion_job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("ingestion_jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    document_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    request_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    workflow_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )

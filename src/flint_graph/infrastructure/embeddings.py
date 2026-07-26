@@ -9,6 +9,10 @@ from flint_graph.application.embeddings import (
     EmbeddingBatchResult,
     EmbeddingVector,
 )
+from flint_graph.domain.enums import ProviderUsageOperation
+from flint_graph.infrastructure.provider_telemetry import provider_call, usage_metadata
+
+OPENAI_COMPATIBLE_PROVIDER = "openai_compatible"
 
 
 class OpenAICompatibleEmbeddingModel:
@@ -29,16 +33,21 @@ class OpenAICompatibleEmbeddingModel:
         )
 
     async def embed_batch(self, request: EmbeddingBatchRequest) -> EmbeddingBatchResult:
-        response = await self._http_client.post(
-            "/v1/embeddings",
-            json={
-                "model": self._model,
-                "input": [item.text for item in request.inputs],
-                "dimensions": request.dimensions,
-            },
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            timeout=self._timeout_seconds,
-        )
+        async with provider_call(
+            provider=OPENAI_COMPATIBLE_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.EMBEDDING,
+        ) as call:
+            response = await self._http_client.post(
+                "/v1/embeddings",
+                json={
+                    "model": self._model,
+                    "input": [item.text for item in request.inputs],
+                    "dimensions": request.dimensions,
+                },
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                timeout=self._timeout_seconds,
+            )
         _raise_for_status(response, provider_name="OpenAI-compatible embedding provider")
         payload = response.json()
         data = payload.get("data")
@@ -64,8 +73,15 @@ class OpenAICompatibleEmbeddingModel:
                 for index, item in enumerate(request.inputs)
             ],
             metadata={
+                "provider": OPENAI_COMPATIBLE_PROVIDER,
                 "response_model": payload.get("model", self._model),
-                "usage": payload.get("usage"),
+                "provider_usage": payload.get("usage"),
+                "usage": usage_metadata(
+                    input_tokens=_usage_int(payload.get("usage"), "prompt_tokens"),
+                    output_tokens=None,
+                    duration_ms=call.duration_ms,
+                    embedded_item_count=len(request.inputs),
+                ),
             },
         )
 
@@ -85,6 +101,15 @@ def _openai_vectors_by_index(data: list[Any]) -> dict[int, list[float]]:
             raise ValueError("embedding response item had invalid index or embedding.")
         vectors_by_index[index] = [float(value) for value in vector]
     return vectors_by_index
+
+
+def _usage_int(usage: Any, key: str) -> int | None:
+    if not isinstance(usage, dict):
+        return None
+    value = usage.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value)
 
 
 def _raise_for_status(response: httpx.Response, *, provider_name: str) -> None:

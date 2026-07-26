@@ -28,6 +28,7 @@ dependencies = [
   "temporalio>=1.30.0",
   "uvicorn[standard]>=0.35,<1",
   "pyjwt[crypto]>=2.10,<3",
+  "opentelemetry-exporter-prometheus>=0.51b0,<1",
 ]
 
 [dependency-groups]

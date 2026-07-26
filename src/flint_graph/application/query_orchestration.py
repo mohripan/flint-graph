@@ -508,6 +508,9 @@ class DeterministicAnswerGenerator:
                 insufficient_context=True,
                 metadata={
                     "provider": "deterministic",
+                    # Named so usage accounting attributes offline runs to a real
+                    # model identity instead of "unknown".
+                    "model": "deterministic",
                     "algorithm": "deterministic-first-context-sentence",
                 },
             )
@@ -528,6 +531,7 @@ class DeterministicAnswerGenerator:
             citations=citations,
             metadata={
                 "provider": "deterministic",
+                "model": "deterministic",
                 "algorithm": "deterministic-first-context-sentence",
             },
         )

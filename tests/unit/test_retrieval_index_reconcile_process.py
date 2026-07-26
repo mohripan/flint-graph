@@ -33,7 +33,11 @@ async def test_retrieval_index_reconcile_process_closes_projection_clients(
     ) -> int:
         return 3
 
-    monkeypatch.setattr(retrieval_index_reconcile, "configure_logging", lambda _level: None)
+    monkeypatch.setattr(
+        retrieval_index_reconcile,
+        "configure_observability",
+        lambda _settings, **_kwargs: None,
+    )
     monkeypatch.setattr(
         retrieval_index_reconcile,
         "SessionFactory",

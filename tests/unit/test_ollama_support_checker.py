@@ -99,7 +99,15 @@ async def test_ollama_support_checker_sends_schema_and_maps_judgements() -> None
         result = await checker.check(_support_request())
 
     assert result.method == _support_method()
-    assert result.metadata == {"provider": "ollama", "model": "llama3.2"}
+    assert result.metadata["provider"] == "ollama"
+    assert result.metadata["model"] == "llama3.2"
+    # Usage accounting reads token counts from this metadata; the fake response
+    # carries no eval counters, so only the measured duration is present.
+    assert set(result.metadata["usage"]) <= {
+        "duration_ms",
+        "input_tokens",
+        "output_tokens",
+    }
     assert [claim.support_status for claim in result.claims] == ["supported", "unsupported"]
     assert result.claims[0].support_score == pytest.approx(0.95)
     assert result.claims[0].citation_ids == ["c1"]

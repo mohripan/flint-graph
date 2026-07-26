@@ -60,7 +60,19 @@ class TemporalIndexBackfillWorkflowStarter:
 
 
 async def connect_temporal(settings: Settings) -> Client:
+    """Connect to Temporal, propagating trace context when tracing is enabled.
+
+    The interceptor is what carries a trace across the workflow boundary, so a
+    request that queues ingestion and the activities that run it land in one
+    trace instead of three unrelated ones.
+    """
+    interceptors: list[Any] = []
+    if settings.otel_enabled:
+        from temporalio.contrib.opentelemetry import TracingInterceptor
+
+        interceptors.append(TracingInterceptor())
     return await Client.connect(
         settings.temporal_address,
         namespace=settings.temporal_namespace,
+        interceptors=interceptors,
     )

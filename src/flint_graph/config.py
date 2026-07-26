@@ -18,6 +18,31 @@ _REAL_EMBEDDING_DIMENSIONS: dict[str, int] = {
     "openai_compatible": 1536,
 }
 
+# Dependency names a deployment may list as readiness-required or readiness-optional.
+READINESS_DEPENDENCY_NAMES: frozenset[str] = frozenset(
+    {
+        "postgres",
+        "object_store",
+        "temporal",
+        "neo4j",
+        "opensearch",
+        "embedding_provider",
+        "answer_provider",
+    }
+)
+# Local and test stay ergonomic: PostgreSQL is the only hard requirement, so a
+# developer without the full compose stack still gets a ready API.
+_LOCAL_REQUIRED_DEPENDENCIES: list[str] = ["postgres"]
+_DEPLOYED_REQUIRED_DEPENDENCIES: list[str] = [
+    "postgres",
+    "object_store",
+    "temporal",
+    "neo4j",
+    "opensearch",
+]
+# Provider outages degrade answers but should not pull a replica out of service.
+_DEPLOYED_OPTIONAL_DEPENDENCIES: list[str] = ["embedding_provider", "answer_provider"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -168,6 +193,32 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True
     otel_trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
+    otel_metric_export_interval_millis: int = Field(default=60_000, ge=1_000)
+
+    # Prometheus-style scrape endpoint. Off by default: it is an operational
+    # surface, not part of the public API, and must not leak on a public origin.
+    metrics_enabled: bool = False
+    metrics_path: str = "/metrics"
+    metrics_token: str | None = None
+
+    # Structured logging never carries prompts, answers, or document text unless a
+    # local operator explicitly opts in. Staging/production reject the opt-in.
+    log_payloads: bool = False
+    log_renderer: Literal["auto", "json", "console"] = "auto"
+
+    # Readiness probes. Required dependencies fail readiness (503); optional ones are
+    # reported but keep the instance in service so an outage alerts instead of
+    # removing capacity that still works.
+    readiness_required_dependencies: list[str] | None = None
+    readiness_optional_dependencies: list[str] | None = None
+    readiness_probe_timeout_seconds: float = Field(default=2.0, gt=0.0)
+    readiness_cache_seconds: float = Field(default=5.0, ge=0.0)
+
+    # Provider pricing, keyed "<provider>:<model>" (or "<provider>:*" as a fallback),
+    # with per-million-token rates. Unpriced usage is recorded with a null cost
+    # rather than a fabricated one.
+    usage_pricing: dict[str, dict[str, float]] = Field(default_factory=dict)
+    usage_currency: str = "USD"
 
     @field_validator("active_retrieval_index_version_id", mode="before")
     @classmethod
@@ -176,11 +227,57 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("allowed_origins", "trusted_hosts", mode="before")
+    @field_validator(
+        "allowed_origins",
+        "trusted_hosts",
+        "readiness_required_dependencies",
+        "readiness_optional_dependencies",
+        mode="before",
+    )
     @classmethod
     def _split_csv_list(cls, value: object) -> object:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator(
+        "readiness_required_dependencies",
+        "readiness_optional_dependencies",
+        mode="after",
+    )
+    @classmethod
+    def _validate_dependency_names(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        unknown = sorted(set(value) - READINESS_DEPENDENCY_NAMES)
+        if unknown:
+            raise ValueError(
+                f"unknown readiness dependency name(s): {', '.join(unknown)}; "
+                f"supported names are {', '.join(sorted(READINESS_DEPENDENCY_NAMES))}"
+            )
+        return value
+
+    @field_validator("usage_pricing", mode="after")
+    @classmethod
+    def _validate_usage_pricing(
+        cls, value: dict[str, dict[str, float]]
+    ) -> dict[str, dict[str, float]]:
+        allowed_rates = {"input_per_million", "output_per_million"}
+        for key, rates in value.items():
+            if ":" not in key:
+                raise ValueError(
+                    f"usage_pricing key '{key}' must use '<provider>:<model>' form"
+                )
+            unknown = sorted(set(rates) - allowed_rates)
+            if unknown:
+                raise ValueError(
+                    f"usage_pricing['{key}'] has unsupported rate(s): {', '.join(unknown)}"
+                )
+            for rate_name, rate in rates.items():
+                if rate < 0:
+                    raise ValueError(
+                        f"usage_pricing['{key}']['{rate_name}'] must not be negative"
+                    )
         return value
 
     @model_validator(mode="after")
@@ -220,6 +317,18 @@ class Settings(BaseSettings):
             self.max_url_intake_bytes = self.intake_max_source_bytes
         if self.allow_private_url_intake is None:
             self.allow_private_url_intake = self.env in {"local", "test"}
+        if self.readiness_required_dependencies is None:
+            self.readiness_required_dependencies = (
+                list(_DEPLOYED_REQUIRED_DEPENDENCIES)
+                if self.env in {"staging", "production"}
+                else list(_LOCAL_REQUIRED_DEPENDENCIES)
+            )
+        if self.readiness_optional_dependencies is None:
+            self.readiness_optional_dependencies = (
+                list(_DEPLOYED_OPTIONAL_DEPENDENCIES)
+                if self.env in {"staging", "production"}
+                else []
+            )
         return self
 
     @model_validator(mode="after")
@@ -256,10 +365,34 @@ class Settings(BaseSettings):
                     "rate_limit_backend='memory' is not allowed in staging/production "
                     "unless allow_in_memory_rate_limit is explicitly enabled"
                 )
+            if self.log_payloads:
+                raise ValueError(
+                    "log_payloads is not allowed in staging/production: prompts, answers, "
+                    "and document text must never be written to logs"
+                )
+            if self.metrics_enabled and not self.metrics_token:
+                raise ValueError(
+                    "metrics_token is required in staging/production when metrics_enabled "
+                    "is true, so the scrape endpoint is not publicly readable"
+                )
+            if "postgres" not in (self.readiness_required_dependencies or []):
+                raise ValueError(
+                    "readiness_required_dependencies must include 'postgres' in "
+                    "staging/production"
+                )
             if self.object_store_access_key_id == "flint_graph":
                 raise ValueError("object_store_access_key_id must not use the local default")
             if self.object_store_secret_access_key == "flint-graph-secret":
                 raise ValueError("object_store_secret_access_key must not use the local default")
+        overlapping = sorted(
+            set(self.readiness_required_dependencies or [])
+            & set(self.readiness_optional_dependencies or [])
+        )
+        if overlapping:
+            raise ValueError(
+                "readiness dependencies cannot be both required and optional: "
+                + ", ".join(overlapping)
+            )
         if self.entity_resolution_review_threshold > self.entity_resolution_auto_threshold:
             raise ValueError(
                 "entity_resolution_review_threshold must be <= entity_resolution_auto_threshold"

@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from flint_graph.api.dependencies import (
+    AuditActorDep,
     EmbeddingModelDep,
     IndexBackfillWorkflowStarterDep,
     Neo4jClientDep,
@@ -28,6 +29,7 @@ from flint_graph.api.schemas import (
     RetrievalSearchResponse,
     SearchReadinessResponse,
 )
+from flint_graph.application.services.audit import record_audit_event
 from flint_graph.application.services.retrieval import (
     create_tenant_index_backfill_job,
     get_tenant_index_backfill_job,
@@ -42,6 +44,7 @@ from flint_graph.application.services.retrieval import (
 from flint_graph.application.services.retrieval_bootstrap import bootstrap_retrieval_index
 from flint_graph.application.services.search_readiness import get_search_readiness
 from flint_graph.domain.enums import (
+    AuditAction,
     DocumentIndexCoverageStatus,
     RetrievalIndexVersionStatus,
 )
@@ -83,11 +86,25 @@ async def get_system_readiness_endpoint(
     response_model=RetrievalIndexVersionResponse,
 )
 async def bootstrap_retrieval_index_endpoint(
-    _tenant_id: TenantAdminDep,
+    tenant_id: TenantAdminDep,
     session: SessionDep,
     settings: SettingsDep,
+    actor: AuditActorDep,
 ) -> RetrievalIndexVersionResponse:
     version = await bootstrap_retrieval_index(session, settings=settings)
+    await record_audit_event(
+        session,
+        action=AuditAction.RETRIEVAL_INDEX_BOOTSTRAPPED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="retrieval_index_version",
+        resource_id=version.id,
+        metadata={
+            "embedding_provider": version.embedding_provider,
+            "embedding_model": version.embedding_model,
+            "vector_dimension": version.vector_dimension,
+        },
+    )
     return RetrievalIndexVersionResponse.model_validate(version)
 
 
@@ -99,6 +116,7 @@ async def backfill_active_retrieval_index_endpoint(
     tenant_id: TenantAdminDep,
     session: SessionDep,
     starter: IndexBackfillWorkflowStarterDep,
+    actor: AuditActorDep,
 ) -> IndexBackfillJobResponse:
     index_version = await resolve_index_version(
         session,
@@ -109,6 +127,18 @@ async def backfill_active_retrieval_index_endpoint(
         session,
         tenant_id=tenant_id,
         retrieval_index_version_id=index_version.id,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.INDEX_BACKFILL_STARTED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="index_backfill_job",
+        resource_id=job.id,
+        metadata={
+            "retrieval_index_version_id": str(index_version.id),
+            "scope": "active_index",
+        },
     )
     await session.commit()
     await starter.start_index_backfill_workflow(job_id=job.id)
@@ -173,6 +203,7 @@ async def create_index_backfill(
     tenant_id: TenantAdminDep,
     session: SessionDep,
     starter: IndexBackfillWorkflowStarterDep,
+    actor: AuditActorDep,
 ) -> IndexBackfillJobResponse:
     job = await create_tenant_index_backfill_job(
         session,
@@ -180,6 +211,21 @@ async def create_index_backfill(
         retrieval_index_version_id=payload.retrieval_index_version_id,
         document_id=payload.document_id,
         document_version_id=payload.document_version_id,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.INDEX_BACKFILL_STARTED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="index_backfill_job",
+        resource_id=job.id,
+        metadata={
+            "retrieval_index_version_id": str(payload.retrieval_index_version_id)
+            if payload.retrieval_index_version_id
+            else None,
+            "document_id": str(payload.document_id) if payload.document_id else None,
+            "scope": "explicit",
+        },
     )
     await session.commit()
     await starter.start_index_backfill_workflow(job_id=job.id)

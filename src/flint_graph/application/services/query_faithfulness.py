@@ -84,7 +84,12 @@ async def verify_generated_answer(
         abstained=decision.abstained,
         abstain_reason=decision.reason,
         support_method=support_result.method,
-        metadata={"claim_count": len(support_result.claims)},
+        metadata={
+            "claim_count": len(support_result.claims),
+            # Carried through so usage accounting can attribute the support check
+            # to the provider and model that performed it.
+            "support": dict(support_result.metadata),
+        },
     )
     if decision.abstained:
         return QueryFaithfulnessResult(

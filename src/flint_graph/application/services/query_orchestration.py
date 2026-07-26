@@ -30,6 +30,11 @@ from flint_graph.application.services.query_runs import (
     transition_query_run,
 )
 from flint_graph.domain.enums import QueryRunStatus
+from flint_graph.observability import metrics
+from flint_graph.observability.instruments import (
+    QUERY_RUN_TERMINAL_STATES,
+    QUERY_STAGE_DURATION,
+)
 
 RetrieverName = Literal["lexical", "vector", "graph"]
 
@@ -157,6 +162,8 @@ async def run_query_retrieval_graph(
     context_max_records: int = 25,
     min_supported_claim_ratio: float = 0.5,
     min_context_relevance: float = 0.0,
+    usage_pricing: dict[str, dict[str, float]] | None = None,
+    usage_currency: str = "USD",
     commit_after_node: bool = False,
     after_node_commit: Callable[[], Awaitable[None]] | None = None,
 ) -> QueryRetrievalGraphResult:
@@ -172,6 +179,8 @@ async def run_query_retrieval_graph(
         context_max_records=context_max_records,
         min_supported_claim_ratio=min_supported_claim_ratio,
         min_context_relevance=min_context_relevance,
+        usage_pricing=usage_pricing,
+        usage_currency=usage_currency,
         commit_after_node=commit_after_node,
         after_node_commit=after_node_commit,
     )
@@ -195,6 +204,10 @@ async def run_query_retrieval_graph(
         session,
         tenant_id=tenant_id,
         query_run_id=query_run_id,
+    )
+    metrics.add(
+        QUERY_RUN_TERMINAL_STATES,
+        **{"flint_graph.query.status": str(state["status"])},
     )
     return QueryRetrievalGraphResult(
         query_run_id=query_run_id,
@@ -228,6 +241,8 @@ def _build_retrieval_graph(
     context_max_records: int,
     min_supported_claim_ratio: float,
     min_context_relevance: float,
+    usage_pricing: dict[str, dict[str, float]] | None,
+    usage_currency: str,
     commit_after_node: bool,
     after_node_commit: Callable[[], Awaitable[None]] | None,
 ) -> Any:
@@ -441,6 +456,8 @@ def _build_retrieval_graph(
             support_checker=support_checker,
             min_supported_claim_ratio=min_supported_claim_ratio,
             min_context_relevance=min_context_relevance,
+            usage_pricing=usage_pricing,
+            usage_currency=usage_currency,
         )
         await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
@@ -451,15 +468,17 @@ def _build_retrieval_graph(
             "errors": result.errors,
         }
 
-    builder.add_node("initialize_run", initialize_run)
-    builder.add_node("classify_query", classify)
-    builder.add_node("link_entities", link_entities)
-    builder.add_node("plan_retrieval", plan_retrieval)
-    builder.add_node("retrieve_parallel", retrieve_parallel)
-    builder.add_node("fuse_candidates", fuse_candidates)
-    builder.add_node("rerank_candidates", rerank_candidates)
-    builder.add_node("pack_context", pack_context)
-    builder.add_node("generate_answer", generate_answer)
+    # Every node is registered through _timed so one stage histogram covers the
+    # whole graph; a per-node metric call would drift as nodes are added.
+    builder.add_node("initialize_run", _timed("initialize_run", initialize_run))
+    builder.add_node("classify_query", _timed("classify_query", classify))
+    builder.add_node("link_entities", _timed("link_entities", link_entities))
+    builder.add_node("plan_retrieval", _timed("plan_retrieval", plan_retrieval))
+    builder.add_node("retrieve_parallel", _timed("retrieve_parallel", retrieve_parallel))
+    builder.add_node("fuse_candidates", _timed("fuse_candidates", fuse_candidates))
+    builder.add_node("rerank_candidates", _timed("rerank_candidates", rerank_candidates))
+    builder.add_node("pack_context", _timed("pack_context", pack_context))
+    builder.add_node("generate_answer", _timed("generate_answer", generate_answer))
     builder.add_edge(START, "initialize_run")
     builder.add_edge("initialize_run", "classify_query")
     builder.add_edge("classify_query", "link_entities")
@@ -536,6 +555,24 @@ def _require_classification(state: _GraphState) -> QueryClassification:
     if classification is None:
         raise RuntimeError("classification is missing from graph state")
     return classification
+
+
+def _timed(
+    stage: str,
+    node: Callable[[_GraphState], Awaitable[_GraphStateUpdate]],
+) -> Any:
+    """Wrap a graph node with stage duration metrics and a span.
+
+    Returns ``Any`` because LangGraph's accepted node type is a set of overloads
+    over internal protocols that a wrapper's ``Callable`` type cannot satisfy,
+    even though the wrapped signature is unchanged.
+    """
+
+    async def run(state: _GraphState) -> _GraphStateUpdate:
+        async with metrics.timed_stage(QUERY_STAGE_DURATION, stage):
+            return await node(state)
+
+    return run
 
 
 async def _commit_if_requested(

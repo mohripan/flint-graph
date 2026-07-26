@@ -125,4 +125,9 @@ async def test_health_endpoints(client: httpx.AsyncClient) -> None:
     assert live.status_code == 200
     assert live.json() == {"status": "ok"}
     assert ready.status_code == 200
-    assert ready.json() == {"status": "ready"}
+    body = ready.json()
+    assert body["status"] == "ready"
+    # Test env requires PostgreSQL only, so the API stays ready without the rest
+    # of the compose stack running.
+    assert body["dependencies"]["postgres"]["status"] == "ok"
+    assert body["dependencies"]["postgres"]["required"] is True

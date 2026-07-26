@@ -1,0 +1,112 @@
+# FlintGraph alert rules.
+#
+# Every rule maps to a first action in docs/runbooks/operations-observability.md.
+# Metric names come from src/flint_graph/observability/instruments.py with dots
+# rendered as underscores by the Prometheus exporter, and are asserted against
+# the registry by tests/unit/test_alert_rules.py.
+
+groups:
+  - name: flint-graph-availability
+    rules:
+      - alert: FlintGraphApiErrorRateHigh
+        expr: |
+          sum(rate(flint_graph_http_server_request_duration_milliseconds_count{http_response_status_class="5xx"}[5m]))
+            /
+          sum(rate(flint_graph_http_server_request_duration_milliseconds_count[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: Over 5% of API requests are failing
+          runbook: docs/runbooks/operations-observability.md#api-error-rate
+
+      - alert: FlintGraphApiLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(flint_graph_http_server_request_duration_milliseconds_bucket[5m])) by (le)
+          ) > 2000
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: API p95 latency is above the 2s objective
+          runbook: docs/runbooks/operations-observability.md#api-latency
+
+  - name: flint-graph-durability
+    rules:
+      - alert: FlintGraphOutboxLagHigh
+        # A small pending count with a very old head means the relay is stuck on
+        # one message, which a depth alert alone would miss.
+        expr: flint_graph_outbox_oldest_pending_age_seconds > 300
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Oldest unpublished outbox message is over 5 minutes old
+          runbook: docs/runbooks/operations-observability.md#outbox-lag
+
+      - alert: FlintGraphOutboxBacklogGrowing
+        expr: flint_graph_outbox_pending_messages > 100
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Outbox backlog is above 100 messages
+          runbook: docs/runbooks/operations-observability.md#outbox-lag
+
+      - alert: FlintGraphIngestionFailureRateHigh
+        expr: |
+          sum(rate(flint_graph_ingestion_job_transitions_total{flint_graph_job_status="failed"}[15m]))
+            /
+          clamp_min(sum(rate(flint_graph_ingestion_job_transitions_total[15m])), 0.001) > 0.1
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: More than 10% of ingestion jobs are failing
+          runbook: docs/runbooks/operations-observability.md#ingestion-failures
+
+      - alert: FlintGraphProjectionCleanupBacklog
+        expr: flint_graph_lifecycle_projection_cleanup_backlog > 0
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Document projection cleanups are not draining
+          runbook: docs/runbooks/operations-observability.md#projection-cleanup
+
+  - name: flint-graph-answers
+    rules:
+      - alert: FlintGraphProviderErrorRateHigh
+        expr: |
+          sum(rate(flint_graph_provider_call_errors_total[10m])) by (flint_graph_provider) > 0.2
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: A model provider is failing calls
+          runbook: docs/runbooks/operations-observability.md#provider-errors
+
+      - alert: FlintGraphAbstentionRateHigh
+        # Not an outage: usually a retrieval or indexing regression showing up as
+        # withheld answers rather than wrong ones.
+        expr: |
+          sum(rate(flint_graph_query_abstentions_total[30m]))
+            /
+          clamp_min(sum(rate(flint_graph_query_runs_terminal_total[30m])), 0.001) > 0.5
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: More than half of answers are being withheld
+          runbook: docs/runbooks/operations-observability.md#abstention-rate
+
+      - alert: FlintGraphUnpricedUsage
+        expr: increase(flint_graph_usage_unpriced_events_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Provider usage is being recorded without a configured price
+          runbook: docs/runbooks/operations-observability.md#unpriced-usage

@@ -36,6 +36,34 @@ Local-development boundary:
 - Local URL intake permits private addresses so developers can test against
   local fileservers.
 
+Operational telemetry boundary (Milestone 14):
+
+- Telemetry may carry identifiers, model names, sizes, counts, and durations. It
+  must never carry prompts, answers, document text, chunk text, or credentials.
+  A structlog redaction processor enforces this for logs, and span attributes
+  follow the same rule.
+- `FLINT_GRAPH_LOG_PAYLOADS=true` exists for local prompt debugging only and is
+  rejected in staging and production.
+- The Prometheus scrape endpoint is an operator surface, not tenant API. It is
+  registered only when `FLINT_GRAPH_METRICS_ENABLED=true`, sits outside `/v1`,
+  is excluded from the OpenAPI schema, and requires a bearer token whenever one
+  is configured. Staging and production refuse to enable it without a token, and
+  it should not be reachable from the public internet.
+- Metric attributes never include workspace, user, or document identifiers. This
+  is a cardinality decision and also means metrics cannot be used to enumerate
+  tenants.
+- `/health/ready` is unauthenticated by necessity (load balancers call it), so its
+  failure details name the dependency and strip credentials out of driver error
+  messages before returning them.
+- The audit ledger records the socket peer address, never a forwarded header: a
+  client can set `X-Forwarded-For` freely, and recording a forgeable value as
+  fact is worse than recording the hop actually seen. Any forwarded chain is kept
+  as a claim in event metadata.
+- Audit reads and usage reads are workspace-scoped and require admin or owner.
+- Audit rows are append-only with no application update or delete path, but the
+  database role used by the application is not separately restricted, so
+  database-level immutability is not yet enforced.
+
 Still outside the boundary:
 
 - Workspace creation is allowed for any authenticated user.
@@ -45,3 +73,5 @@ Still outside the boundary:
 - Compose credentials and local service defaults are development-only.
 - Distributed rate limiting, audit export, image pinning policy, and
   non-development Temporal/object-storage posture remain deployment-specific.
+- Retention and pruning of audit and usage rows, WORM storage, and cryptographic
+  audit chaining are not implemented.

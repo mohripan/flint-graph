@@ -2,13 +2,14 @@ from collections.abc import Awaitable, Callable
 from time import monotonic
 from uuid import uuid4
 
-import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from flint_graph.config import Settings
+from flint_graph.logging import bind_log_context, clear_log_context
+from flint_graph.observability import metrics
 
 
 def problem_response(
@@ -34,6 +35,13 @@ def problem_response(
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
+    """Correlation context, request logging fields, and API request metrics.
+
+    The workspace selector is bound as a log field because almost every support
+    question starts with "which workspace"; it is deliberately not a metric
+    attribute, where it would be unbounded cardinality.
+    """
+
     async def dispatch(
         self,
         request: Request,
@@ -41,14 +49,66 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         request_id = request.headers.get("X-Request-ID", str(uuid4()))
         request.state.request_id = request_id
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id)
+        clear_log_context()
+        bind_log_context(
+            request_id=request_id,
+            tenant_id=request.headers.get("X-Tenant-ID"),
+            http_method=request.method,
+            http_path=request.url.path,
+        )
+        started = monotonic()
+        _in_flight.increment()
+        status_code = 500
         try:
             response = await call_next(request)
+            status_code = response.status_code
         finally:
-            structlog.contextvars.clear_contextvars()
+            _in_flight.decrement()
+            metrics.record_http_request(
+                route=route_label(request),
+                method=request.method,
+                status_code=status_code,
+                duration_ms=(monotonic() - started) * 1000,
+            )
+            clear_log_context()
         response.headers["X-Request-ID"] = request_id
         return response
+
+
+class _InFlightCounter:
+    """Tracks concurrent requests for the in-flight gauge.
+
+    Starlette gives no hook for "requests currently executing", and a gauge that
+    only rises is worse than none, so the count is kept here and published on
+    every change.
+    """
+
+    def __init__(self) -> None:
+        self._value = 0
+
+    def increment(self) -> None:
+        self._value += 1
+        metrics.set_http_requests_in_flight(self._value)
+
+    def decrement(self) -> None:
+        self._value = max(0, self._value - 1)
+        metrics.set_http_requests_in_flight(self._value)
+
+
+_in_flight = _InFlightCounter()
+
+
+def route_label(request: Request) -> str:
+    """Return the templated route for metric attributes.
+
+    Falls back to the literal path only for unmatched requests, which cannot
+    contain identifiers a route template would otherwise hide.
+    """
+    route = request.scope.get("route")
+    path_format = getattr(route, "path_format", None)
+    if isinstance(path_format, str) and path_format:
+        return path_format
+    return "unmatched"
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
@@ -69,6 +129,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
             except ValueError:
                 size = 0
             if size > limit:
+                metrics.record_request_size_rejection(route=limited_route_label(request))
                 return problem_response(
                     status_code=413,
                     title="Payload too large",
@@ -80,7 +141,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
-    _EXPENSIVE_PATHS = (
+    # Public so the metric label helper can attribute rejections to a bounded set
+    # of prefixes rather than to raw request paths.
+    EXPENSIVE_PATHS = (
         "/v1/documents/uploads",
         "/v1/documents/from-url",
         "/v1/query-runs",
@@ -112,6 +175,7 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
         count += 1
         self._buckets[key] = (window_start, count)
         if count > self._settings.rate_limit_requests:
+            metrics.record_rate_limit_rejection(route=limited_route_label(request))
             response = problem_response(
                 status_code=429,
                 title="Too many requests",
@@ -130,7 +194,7 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
             return False
         if request.method not in {"GET", "POST"}:
             return False
-        return any(request.url.path.startswith(path) for path in self._EXPENSIVE_PATHS)
+        return any(request.url.path.startswith(path) for path in self.EXPENSIVE_PATHS)
 
     def _key(self, request: Request) -> str:
         user = (
@@ -140,6 +204,20 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
         )
         workspace = request.headers.get("X-Tenant-ID", "no-workspace")
         return f"{request.url.path}:{user}:{workspace}"
+
+
+def limited_route_label(request: Request) -> str:
+    """Bounded metric label for middleware that runs before routing.
+
+    These middlewares see the raw path, which can embed identifiers, so
+    rejections are attributed to the configured prefix they matched rather than
+    to the literal URL.
+    """
+    path = request.url.path
+    for prefix in FixedWindowRateLimitMiddleware.EXPENSIVE_PATHS:
+        if path.startswith(prefix):
+            return prefix
+    return "other"
 
 
 def _request_size_limit(request: Request, settings: Settings) -> int | None:

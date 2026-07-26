@@ -129,7 +129,11 @@ async def test_openai_compatible_embedding_model_sends_bearer_token_and_dimensio
 
     assert [item.input_id for item in batch.embeddings] == ["chunk-000001", "chunk-000002"]
     assert [item.vector for item in batch.embeddings] == [[0.1, 0.2], [0.3, 0.4]]
-    assert batch.metadata["usage"] == {"prompt_tokens": 7, "total_tokens": 7}
+    # The provider's raw usage block is preserved, and the normalized usage shape
+    # that accounting reads is derived from it.
+    assert batch.metadata["provider_usage"] == {"prompt_tokens": 7, "total_tokens": 7}
+    assert batch.metadata["usage"]["input_tokens"] == 7
+    assert batch.metadata["usage"]["embedded_item_count"] == 2
     assert requests[0].headers["authorization"] == "Bearer secret"
     payload = json.loads(requests[0].read().decode("utf-8"))
     assert payload == {

@@ -28,6 +28,8 @@ from flint_graph.application.query_orchestration import (
     SupportCheckResult,
     SupportStatus,
 )
+from flint_graph.domain.enums import ProviderUsageOperation
+from flint_graph.infrastructure.provider_telemetry import provider_call, usage_metadata
 
 ANTHROPIC_ANSWER_PROVIDER = "anthropic"
 ANTHROPIC_SUPPORT_METHOD = "anthropic-entailment"
@@ -101,10 +103,20 @@ class AnthropicAnswerGenerator:
         }
 
     async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer:
-        message = await self._client.messages.create(**self._request_kwargs(request))
+        async with provider_call(
+            provider=ANTHROPIC_ANSWER_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.ANSWER,
+        ) as call:
+            message = await self._client.messages.create(**self._request_kwargs(request))
         _raise_on_refusal(message)
         draft = _parse_answer_draft(_message_text(message))
-        return _answer_from_draft(request, _message_model(message, self._model), draft)
+        return _answer_from_draft(
+            request,
+            _message_model(message, self._model),
+            draft,
+            usage=_message_usage(message, call.duration_ms),
+        )
 
     async def stream_generate(
         self,
@@ -112,16 +124,26 @@ class AnthropicAnswerGenerator:
         on_delta: AnswerDeltaCallback,
     ) -> GeneratedAnswer:
         parts: list[str] = []
-        async with self._client.messages.stream(**self._request_kwargs(request)) as stream:
-            async for text in stream.text_stream:
-                if text:
-                    parts.append(text)
-                    await on_delta(text)
-            final = await stream.get_final_message()
+        async with provider_call(
+            provider=ANTHROPIC_ANSWER_PROVIDER,
+            model=self._model,
+            operation=ProviderUsageOperation.ANSWER,
+        ) as call:
+            async with self._client.messages.stream(**self._request_kwargs(request)) as stream:
+                async for text in stream.text_stream:
+                    if text:
+                        parts.append(text)
+                        await on_delta(text)
+                final = await stream.get_final_message()
 
         _raise_on_refusal(final)
         draft = _parse_answer_draft("".join(parts))
-        return _answer_from_draft(request, _message_model(final, self._model), draft)
+        return _answer_from_draft(
+            request,
+            _message_model(final, self._model),
+            draft,
+            usage=_message_usage(final, call.duration_ms),
+        )
 
 
 class AnthropicSupportChecker:
@@ -150,18 +172,26 @@ class AnthropicSupportChecker:
                 metadata={"provider": ANTHROPIC_ANSWER_PROVIDER, "model": self._model},
             )
 
-        message = await self._client.messages.create(
+        async with provider_call(
+            provider=ANTHROPIC_ANSWER_PROVIDER,
             model=self._model,
-            max_tokens=self._max_tokens,
-            system=_support_system_prompt(),
-            messages=[{"role": "user", "content": _support_user_prompt(request)}],
-            thinking={"type": "adaptive"},
-            output_config={"effort": self._effort},
-        )
+            operation=ProviderUsageOperation.FAITHFULNESS,
+        ) as call:
+            message = await self._client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                system=_support_system_prompt(),
+                messages=[{"role": "user", "content": _support_user_prompt(request)}],
+                thinking={"type": "adaptive"},
+                output_config={"effort": self._effort},
+            )
         _raise_on_refusal(message)
         draft = _parse_support_draft(_message_text(message))
         return _result_from_support_draft(
-            request, _message_model(message, self._model), draft
+            request,
+            _message_model(message, self._model),
+            draft,
+            usage=_message_usage(message, call.duration_ms),
         )
 
 
@@ -187,6 +217,8 @@ def _answer_from_draft(
     request: AnswerGenerationRequest,
     model: str,
     draft: _AnthropicAnswerDraft,
+    *,
+    usage: dict[str, Any] | None = None,
 ) -> GeneratedAnswer:
     if draft.insufficient_context or not draft.claims:
         return GeneratedAnswer(
@@ -197,6 +229,7 @@ def _answer_from_draft(
                 "model": model,
                 "raw_citation_markers": [],
                 "draft_claims": [],
+                "usage": usage or {},
             },
         )
 
@@ -239,6 +272,7 @@ def _answer_from_draft(
             "model": model,
             "raw_citation_markers": raw_markers,
             "draft_claims": draft_claims,
+            "usage": usage or {},
         },
     )
 
@@ -247,6 +281,8 @@ def _result_from_support_draft(
     request: SupportCheckRequest,
     model: str,
     draft: _AnthropicSupportDraft,
+    *,
+    usage: dict[str, Any] | None = None,
 ) -> SupportCheckResult:
     judgements_by_index = {judgement.claim_index: judgement for judgement in draft.judgements}
     claims: list[AnswerClaim] = []
@@ -277,7 +313,11 @@ def _result_from_support_draft(
     return SupportCheckResult(
         claims=claims,
         method=ANTHROPIC_SUPPORT_METHOD,
-        metadata={"provider": ANTHROPIC_ANSWER_PROVIDER, "model": model},
+        metadata={
+            "provider": ANTHROPIC_ANSWER_PROVIDER,
+            "model": model,
+            "usage": usage or {},
+        },
     )
 
 
@@ -354,6 +394,27 @@ def _message_text(message: Any) -> str:
 def _message_model(message: Any, fallback: str) -> str:
     model = getattr(message, "model", None)
     return str(model) if model else fallback
+
+
+def _message_usage(message: Any, duration_ms: int) -> dict[str, Any]:
+    """Read token counts off an Anthropic message.
+
+    Tolerates fakes and older response shapes: a missing ``usage`` yields duration
+    only, which the usage recorder stores as a zero-token call rather than
+    dropping the record.
+    """
+    usage = getattr(message, "usage", None)
+    return usage_metadata(
+        input_tokens=_int_or_none(getattr(usage, "input_tokens", None)),
+        output_tokens=_int_or_none(getattr(usage, "output_tokens", None)),
+        duration_ms=duration_ms,
+    )
+
+
+def _int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value)
 
 
 def _raise_on_refusal(message: Any) -> None:

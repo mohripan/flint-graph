@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from flint_graph.domain.enums import (
     AliasSource,
+    AuditAction,
+    AuditOutcome,
     DocumentIndexCoverageStatus,
     DocumentLifecycleEventType,
     DocumentProjectionCleanupStatus,
@@ -201,6 +203,47 @@ class ProblemDetail(BaseModel):
     instance: str
     request_id: str | None = None
     errors: list[dict[str, Any]] | None = None
+
+
+class AuditEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID | None
+    actor_user_id: UUID | None
+    actor_issuer: str | None
+    actor_subject: str | None
+    action: AuditAction
+    outcome: AuditOutcome
+    resource_type: str | None
+    resource_id: str | None
+    request_id: str | None
+    client_ip: str | None
+    user_agent: str | None
+    metadata: dict[str, Any] = Field(validation_alias="metadata_")
+    created_at: datetime
+
+
+class UsageRollupResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    group: str
+    event_count: int
+    input_tokens: int
+    output_tokens: int
+    embedded_item_count: int
+    duration_ms: int
+    estimated_cost_micros: int | None
+    unpriced_event_count: int
+
+
+class UsageSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    currency: str
+    group_by: Literal["day", "operation", "model"]
+    rows: list[UsageRollupResponse]
+    totals: UsageRollupResponse
 
 
 class CanonicalEntitySummary(BaseModel):

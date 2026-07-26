@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, File, Form, Header, Query, Response, UploadFile, status
 
 from flint_graph.api.dependencies import (
+    AuditActorDep,
     ObjectStoreDep,
     SessionDep,
     SettingsDep,
@@ -25,6 +26,7 @@ from flint_graph.api.schemas import (
     IngestionJobResponse,
     URLIntakeCreate,
 )
+from flint_graph.application.services.audit import record_audit_event
 from flint_graph.application.services.document_lifecycle import (
     delete_document,
     list_lifecycle_events,
@@ -44,6 +46,7 @@ from flint_graph.application.services.intake import (
     create_url_intake,
 )
 from flint_graph.application.services.job_cancellation import cancel_ingestion_job
+from flint_graph.domain.enums import AuditAction
 from flint_graph.domain.errors import PayloadTooLargeError
 
 router = APIRouter(prefix="/v1", tags=["documents"])
@@ -101,6 +104,7 @@ async def create_document_endpoint(
     payload: DocumentCreate,
     tenant_id: TenantMemberDep,
     session: SessionDep,
+    actor: AuditActorDep,
 ) -> DocumentResponse:
     document = await create_document(
         session,
@@ -109,6 +113,15 @@ async def create_document_endpoint(
         source_type=payload.source_type,
         source_uri=payload.source_uri,
         external_id=payload.external_id,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.DOCUMENT_CREATED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="document",
+        resource_id=document.id,
+        metadata={"source_type": document.source_type.value},
     )
     return DocumentResponse.model_validate(document)
 
@@ -124,6 +137,7 @@ async def upload_document_endpoint(
     session: SessionDep,
     object_store: ObjectStoreDep,
     settings: SettingsDep,
+    actor: AuditActorDep,
     title: Annotated[str, Form(min_length=1, max_length=500)],
     file: Annotated[UploadFile, File()],
     external_id: Annotated[str | None, Form(max_length=500)] = None,
@@ -147,7 +161,24 @@ async def upload_document_endpoint(
         content_type=file.content_type or "application/octet-stream",
         original_filename=file.filename or None,
     )
-    if not record.created:
+    if record.created:
+        # Only a new intake is an audited action; a replayed idempotency key
+        # returns the existing record and creates nothing.
+        await record_audit_event(
+            session,
+            action=AuditAction.DOCUMENT_INTAKE_CREATED,
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="document",
+            resource_id=record.document.id,
+            metadata={
+                "source_type": record.document.source_type.value,
+                "document_version_id": str(record.version.id),
+                "ingestion_job_id": str(record.job.id),
+                "byte_count": len(data),
+            },
+        )
+    else:
         response.status_code = status.HTTP_200_OK
     return _intake_response(record)
 
@@ -165,6 +196,7 @@ async def create_document_from_url_endpoint(
     object_store: ObjectStoreDep,
     settings: SettingsDep,
     url_fetcher: URLFetcherDep,
+    actor: AuditActorDep,
     idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=200),
 ) -> DocumentIntakeResponse:
     fetched = await url_fetcher.fetch(payload.source_url)
@@ -181,7 +213,23 @@ async def create_document_from_url_endpoint(
         content_type=fetched.content_type,
         final_url=fetched.final_url,
     )
-    if not record.created:
+    if record.created:
+        await record_audit_event(
+            session,
+            action=AuditAction.DOCUMENT_INTAKE_CREATED,
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="document",
+            resource_id=record.document.id,
+            metadata={
+                "source_type": record.document.source_type.value,
+                "document_version_id": str(record.version.id),
+                "ingestion_job_id": str(record.job.id),
+                "final_url": fetched.final_url,
+                "byte_count": len(fetched.body),
+            },
+        )
+    else:
         response.status_code = status.HTTP_200_OK
     return _intake_response(record)
 
@@ -191,12 +239,25 @@ async def delete_document_endpoint(
     document_id: UUID,
     tenant_id: TenantAdminDep,
     session: SessionDep,
+    actor: AuditActorDep,
 ) -> DocumentDeleteResponse:
     result = await delete_document(
         session,
         tenant_id=tenant_id,
         document_id=document_id,
         reason="api document delete",
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.DOCUMENT_DELETED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="document",
+        resource_id=document_id,
+        metadata={
+            "deleted_version_count": len(result.deleted_version_ids),
+            "cleanup_count": result.cleanup_count,
+        },
     )
     return DocumentDeleteResponse(
         document_id=result.document_id,
@@ -251,11 +312,21 @@ async def retry_document_projection_cleanups_endpoint(
     document_id: UUID,
     tenant_id: TenantAdminDep,
     session: SessionDep,
+    actor: AuditActorDep,
 ) -> list[DocumentProjectionCleanupResponse]:
     cleanups = await retry_projection_cleanups(
         session,
         tenant_id=tenant_id,
         document_id=document_id,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.PROJECTION_CLEANUP_RETRIED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="document",
+        resource_id=document_id,
+        metadata={"cleanup_count": len(cleanups)},
     )
     return [DocumentProjectionCleanupResponse.model_validate(cleanup) for cleanup in cleanups]
 
@@ -270,6 +341,7 @@ async def create_job_endpoint(
     response: Response,
     tenant_id: TenantMemberDep,
     session: SessionDep,
+    actor: AuditActorDep,
     idempotency_key: str = Header(alias="Idempotency-key", min_length=8, max_length=200),
 ) -> IngestionJobResponse:
     record = await create_ingestion_job(
@@ -278,7 +350,17 @@ async def create_job_endpoint(
         document_id=document_id,
         idempotency_key=idempotency_key,
     )
-    if not record.created:
+    if record.created:
+        await record_audit_event(
+            session,
+            action=AuditAction.INGESTION_JOB_CREATED,
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="ingestion_job",
+            resource_id=record.job.id,
+            metadata={"document_id": str(document_id)},
+        )
+    else:
         response.status_code = status.HTTP_200_OK
     return _job_response(record)
 
@@ -298,8 +380,18 @@ async def cancel_job_endpoint(
     job_id: UUID,
     tenant_id: TenantMemberDep,
     session: SessionDep,
+    actor: AuditActorDep,
 ) -> IngestionJobResponse:
     record = await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job_id)
+    await record_audit_event(
+        session,
+        action=AuditAction.INGESTION_JOB_CANCELLED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="ingestion_job",
+        resource_id=job_id,
+        metadata={"status": record.job.status.value},
+    )
     return _job_response(record)
 
 

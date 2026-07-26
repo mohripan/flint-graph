@@ -3,7 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from flint_graph.api.dependencies import Neo4jClientDep, SessionDep, TenantAdminDep, TenantIdDep
+from flint_graph.api.dependencies import (
+    AuditActorDep,
+    Neo4jClientDep,
+    SessionDep,
+    TenantAdminDep,
+    TenantIdDep,
+)
 from flint_graph.api.schemas import (
     CanonicalEntityDetail,
     CanonicalEntitySummary,
@@ -18,10 +24,11 @@ from flint_graph.api.schemas import (
     ReviewDecisionResponse,
     UnmergeEntityRequest,
 )
+from flint_graph.application.services.audit import record_audit_event
 from flint_graph.application.services.entity_merge import merge_entities, unmerge_entity
 from flint_graph.application.services.graph_projection import reconcile_tenant_graph
 from flint_graph.application.services.review import apply_review_decision, list_pending_reviews
-from flint_graph.domain.enums import EntityStatus, MergeDecisionSource
+from flint_graph.domain.enums import AuditAction, EntityStatus, MergeDecisionSource
 from flint_graph.domain.errors import NotFoundError
 from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
@@ -103,6 +110,7 @@ async def merge_entity_endpoint(
     tenant_id: TenantAdminDep,
     session: SessionDep,
     neo4j_client: Neo4jClientDep,
+    audit_actor: AuditActorDep,
 ) -> EntityMergeResponse:
     await merge_entities(
         session,
@@ -112,6 +120,21 @@ async def merge_entity_endpoint(
         source=MergeDecisionSource.HUMAN,
         actor=payload.actor,
         reason=payload.reason,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.ENTITY_MERGED,
+        actor=audit_actor,
+        tenant_id=tenant_id,
+        resource_type="canonical_entity",
+        resource_id=entity_id,
+        metadata={
+            "target_entity_id": str(payload.target_entity_id),
+            # The claimed actor from the payload is kept alongside the
+            # authenticated identity, never in place of it.
+            "claimed_actor": payload.actor,
+            "reason": payload.reason,
+        },
     )
     await session.commit()
     await reconcile_tenant_graph(session, neo4j_client, tenant_id=tenant_id)
@@ -127,6 +150,7 @@ async def unmerge_entity_endpoint(
     tenant_id: TenantAdminDep,
     session: SessionDep,
     neo4j_client: Neo4jClientDep,
+    audit_actor: AuditActorDep,
 ) -> EntityMergeResponse:
     entity = await session.get(CanonicalEntity, entity_id)
     former_target = entity.merged_into_id if entity is not None else None
@@ -136,6 +160,19 @@ async def unmerge_entity_endpoint(
         source_entity_id=entity_id,
         actor=payload.actor,
         reason=payload.reason,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.ENTITY_UNMERGED,
+        actor=audit_actor,
+        tenant_id=tenant_id,
+        resource_type="canonical_entity",
+        resource_id=entity_id,
+        metadata={
+            "former_target_entity_id": str(former_target) if former_target else None,
+            "claimed_actor": payload.actor,
+            "reason": payload.reason,
+        },
     )
     await session.commit()
     await reconcile_tenant_graph(session, neo4j_client, tenant_id=tenant_id)
@@ -172,6 +209,7 @@ async def decide_merge_review(
     tenant_id: TenantAdminDep,
     session: SessionDep,
     neo4j_client: Neo4jClientDep,
+    audit_actor: AuditActorDep,
 ) -> ReviewDecisionResponse:
     await apply_review_decision(
         session,
@@ -180,6 +218,19 @@ async def decide_merge_review(
         decision=payload.decision,
         actor=payload.actor,
         reason=payload.reason,
+    )
+    await record_audit_event(
+        session,
+        action=AuditAction.MERGE_REVIEW_DECIDED,
+        actor=audit_actor,
+        tenant_id=tenant_id,
+        resource_type="merge_candidate",
+        resource_id=candidate_id,
+        metadata={
+            "decision": str(payload.decision),
+            "claimed_actor": payload.actor,
+            "reason": payload.reason,
+        },
     )
     await session.commit()
     await reconcile_tenant_graph(session, neo4j_client, tenant_id=tenant_id)

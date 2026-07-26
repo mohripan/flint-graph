@@ -10,14 +10,13 @@ from flint_graph.api.middleware import (
     RequestSizeLimitMiddleware,
 )
 from flint_graph.api.router import api_router
+from flint_graph.api.routes.observability import scrape_metrics
 from flint_graph.config import Settings, get_settings
-from flint_graph.logging import configure_logging
-from flint_graph.observability.tracing import configure_tracing
+from flint_graph.observability.runtime import API_ROLE, configure_observability
 
 
 def create_app(settings_override: Settings | None = None) -> FastAPI:
     settings = settings_override or get_settings()
-    configure_logging(settings.log_level)
 
     app = FastAPI(
         title="FlintGraph API",
@@ -49,7 +48,17 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     )
     install_error_handlers(app)
     app.include_router(api_router)
-    configure_tracing(app, settings)
+    if settings.metrics_enabled:
+        # Registered only when enabled, so a deployment with metrics off does not
+        # expose the route at all. It is intentionally outside /v1 and out of the
+        # OpenAPI schema: this is an operator surface, not tenant API.
+        app.add_api_route(
+            settings.metrics_path,
+            scrape_metrics,
+            methods=["GET"],
+            include_in_schema=False,
+        )
+    configure_observability(settings, role=API_ROLE, app=app)
     return app
 
 

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.embeddings import EmbeddingModel
 from flint_graph.application.query_orchestration import AnswerGenerator, SupportChecker
+from flint_graph.application.services.audit import AuditActor
 from flint_graph.application.services.authz import (
     AuthenticatedPrincipal,
     add_workspace_member,
@@ -19,6 +20,7 @@ from flint_graph.application.services.authz import (
     role_at_least,
     upsert_user_from_principal,
 )
+from flint_graph.application.services.health_probes import ReadinessChecker
 from flint_graph.config import Settings, get_settings
 from flint_graph.domain.enums import WorkspaceRole
 from flint_graph.domain.errors import NotFoundError, UnauthorizedError
@@ -111,6 +113,44 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+def get_audit_actor(request: Request, current_user: CurrentUserDep) -> AuditActor:
+    """Capture who is acting, for the audit ledger.
+
+    ``client_ip`` is the socket peer, never a forwarded header: a client can set
+    ``X-Forwarded-For`` freely, and an audit trail that records a forgeable value
+    as fact is worse than one that records the hop it actually saw. Any forwarded
+    chain is preserved as a claim in event metadata instead.
+    """
+    return AuditActor(
+        user_id=current_user.user.id,
+        issuer=current_user.principal.issuer,
+        subject=current_user.principal.subject,
+        request_id=getattr(request.state, "request_id", None),
+        client_ip=request.client.host if request.client else None,
+        user_agent=(request.headers.get("User-Agent") or None),
+    )
+
+
+AuditActorDep = Annotated[AuditActor, Depends(get_audit_actor)]
+
+_readiness_checker: ReadinessChecker | None = None
+
+
+def get_readiness_checker(settings: SettingsDep) -> ReadinessChecker:
+    """Return the process-wide readiness checker.
+
+    Shared rather than per-request so its short result cache actually absorbs
+    orchestrator polling instead of re-probing every dependency each call.
+    """
+    global _readiness_checker
+    if _readiness_checker is None or _readiness_checker.settings is not settings:
+        _readiness_checker = ReadinessChecker(settings)
+    return _readiness_checker
+
+
+ReadinessCheckerDep = Annotated[ReadinessChecker, Depends(get_readiness_checker)]
 
 
 async def get_tenant_id(

@@ -1,0 +1,293 @@
+{
+  "title": "FlintGraph Operations",
+  "uid": "flint-graph-operations",
+  "tags": ["flint-graph", "milestone-14"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "API",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request rate by status class",
+      "description": "Requests per second, bucketed by status class.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (http_response_status_class) (rate(flint_graph_http_server_request_duration_milliseconds_count[5m]))",
+          "legendFormat": "{{http_response_status_class}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Request latency p50/p95/p99",
+      "description": "Latency percentiles across all routes.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(flint_graph_http_server_request_duration_milliseconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(flint_graph_http_server_request_duration_milliseconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(flint_graph_http_server_request_duration_milliseconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Slowest routes (p95)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(5, histogram_quantile(0.95, sum by (http_route, le) (rate(flint_graph_http_server_request_duration_milliseconds_bucket[5m]))))",
+          "legendFormat": "{{http_route}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Boundary rejections and concurrency",
+      "description": "Rate-limit and body-size rejections alongside in-flight requests.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (http_route) (rate(flint_graph_http_server_rate_limit_rejections_total[5m]))",
+          "legendFormat": "429 {{http_route}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (http_route) (rate(flint_graph_http_server_request_size_rejections_total[5m]))",
+          "legendFormat": "413 {{http_route}}"
+        },
+        {
+          "refId": "C",
+          "expr": "flint_graph_http_server_active_requests",
+          "legendFormat": "in flight"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Durable pipeline",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Outbox lag",
+      "description": "Age of the oldest unpublished message. The signal that catches a relay stuck on one message.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "flint_graph_outbox_oldest_pending_age_seconds",
+          "legendFormat": "oldest pending"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Outbox depth and relay outcomes",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "flint_graph_outbox_pending_messages",
+          "legendFormat": "pending"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (flint_graph_outcome) (rate(flint_graph_outbox_relay_messages_total[5m]))",
+          "legendFormat": "{{flint_graph_outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Ingestion outcomes and stage latency",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (flint_graph_job_status) (rate(flint_graph_ingestion_job_transitions_total[15m]))",
+          "legendFormat": "{{flint_graph_job_status}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (flint_graph_stage, le) (rate(flint_graph_ingestion_stage_duration_milliseconds_bucket[15m])))",
+          "legendFormat": "p95 {{flint_graph_stage}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Lifecycle backlogs",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (flint_graph_cleanup_status) (flint_graph_lifecycle_projection_cleanup_backlog)",
+          "legendFormat": "cleanup {{flint_graph_cleanup_status}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (flint_graph_outcome) (rate(flint_graph_index_backfill_documents_total[15m]))",
+          "legendFormat": "backfill {{flint_graph_outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Answers and providers",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Query stage latency (p95)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (flint_graph_stage, le) (rate(flint_graph_query_stage_duration_milliseconds_bucket[15m])))",
+          "legendFormat": "{{flint_graph_stage}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Answer quality signals",
+      "description": "Terminal run states, abstentions, and claim support.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (flint_graph_query_status) (rate(flint_graph_query_runs_terminal_total[30m]))",
+          "legendFormat": "{{flint_graph_query_status}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (flint_graph_abstain_reason) (rate(flint_graph_query_abstentions_total[30m]))",
+          "legendFormat": "abstain {{flint_graph_abstain_reason}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (flint_graph_support_status) (rate(flint_graph_query_answer_claims_total[30m]))",
+          "legendFormat": "claims {{flint_graph_support_status}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Provider latency and errors",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (flint_graph_provider, flint_graph_operation, le) (rate(flint_graph_provider_call_duration_milliseconds_bucket[15m])))",
+          "legendFormat": "p95 {{flint_graph_provider}}/{{flint_graph_operation}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (flint_graph_provider) (rate(flint_graph_provider_call_errors_total[15m]))",
+          "legendFormat": "errors {{flint_graph_provider}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Token consumption and pricing gaps",
+      "description": "Per-workspace cost lives in the usage API; these are fleet-wide totals.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (flint_graph_model, flint_graph_token_direction) (rate(flint_graph_provider_tokens_total[15m]))",
+          "legendFormat": "{{flint_graph_model}} {{flint_graph_token_direction}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (flint_graph_model) (increase(flint_graph_usage_unpriced_events_total[1h]))",
+          "legendFormat": "unpriced {{flint_graph_model}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Readiness probe latency by dependency",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 51 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (flint_graph_dependency, le) (rate(flint_graph_readiness_probe_duration_milliseconds_bucket[15m])))",
+          "legendFormat": "{{flint_graph_dependency}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (flint_graph_dependency, flint_graph_dependency_status) (rate(flint_graph_readiness_probe_duration_milliseconds_count[15m]))",
+          "legendFormat": "{{flint_graph_dependency}} {{flint_graph_dependency_status}}"
+        }
+      ]
+    }
+  ]
+}

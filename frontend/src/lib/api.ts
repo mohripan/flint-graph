@@ -11,6 +11,7 @@ import type {
   SearchReadiness,
   SystemReadiness,
   Tenant,
+  UsageSummary,
   Workspace,
 } from "./types";
 
@@ -165,6 +166,16 @@ export const api = {
 
   getSystemReadiness(tenantId: string): Promise<SystemReadiness> {
     return jsonRequest<SystemReadiness>("/v1/system-readiness", {
+      headers: tenantHeaders(tenantId),
+    });
+  },
+
+  // Admin/owner only; a viewer gets 403.
+  getUsage(
+    tenantId: string,
+    groupBy: UsageSummary["group_by"] = "operation",
+  ): Promise<UsageSummary> {
+    return jsonRequest<UsageSummary>(`/v1/usage?group_by=${groupBy}`, {
       headers: tenantHeaders(tenantId),
     });
   },

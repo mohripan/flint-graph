@@ -210,6 +210,26 @@ export interface SystemReadiness {
   search_readiness: SearchReadiness;
 }
 
+// Provider usage rollup. Costs are integer micros of `currency`; null means the
+// provider/model has no configured price, not that it was free.
+export interface UsageRollup {
+  group: string;
+  event_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  embedded_item_count: number;
+  duration_ms: number;
+  estimated_cost_micros: number | null;
+  unpriced_event_count: number;
+}
+
+export interface UsageSummary {
+  currency: string;
+  group_by: "day" | "operation" | "model";
+  rows: UsageRollup[];
+  totals: UsageRollup;
+}
+
 // A persisted query-run event as delivered over SSE.
 export interface QueryRunEvent {
   id: string;

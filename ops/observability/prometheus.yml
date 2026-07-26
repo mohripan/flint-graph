@@ -1,0 +1,36 @@
+# Prometheus configuration for a deployment that scrapes FlintGraph.
+#
+# Local compose pushes traces and metrics over OTLP into the `observability`
+# service, so this is only needed to rehearse a pull-based deployment:
+#   FLINT_GRAPH_METRICS_ENABLED=true FLINT_GRAPH_METRICS_TOKEN=local-scrape-token \
+#     docker compose --profile metrics up -d
+#
+# The scrape endpoint is token-gated (mandatory in staging/production), which is
+# why the bearer token is threaded through here.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: flint-graph
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: flint-graph-api
+    metrics_path: /metrics
+    # Prometheus does not expand environment variables in its config, so this
+    # value is a local rehearsal token only. A real deployment should template
+    # this file or mount the token via `credentials_file`.
+    authorization:
+      type: Bearer
+      credentials: local-scrape-token
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          flint_graph_service_role: api
+
+  # Worker processes do not serve HTTP. They export over OTLP to a collector,
+  # which is the supported path for their metrics; see
+  # docs/runbooks/operations-observability.md.

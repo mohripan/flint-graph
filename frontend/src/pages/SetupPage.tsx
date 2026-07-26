@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import type { IndexBackfillJob, SystemReadiness } from "../lib/types";
+import type { IndexBackfillJob, SystemReadiness, UsageSummary } from "../lib/types";
 import { useWorkspace } from "../lib/workspace";
 import { Button, Card, Spinner, StatusPill } from "../components/ui";
 
@@ -10,18 +10,22 @@ export function SetupPage() {
   const canAdmin = workspace!.role === "owner" || workspace!.role === "admin";
   const [readiness, setReadiness] = useState<SystemReadiness | null>(null);
   const [backfills, setBackfills] = useState<IndexBackfillJob[]>([]);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const [nextReadiness, nextBackfills] = await Promise.all([
+      const [nextReadiness, nextBackfills, nextUsage] = await Promise.all([
         api.getSystemReadiness(tenantId),
         canAdmin ? api.listIndexBackfills(tenantId) : Promise.resolve([]),
+        // Usage is admin-only, so a viewer simply sees no panel rather than an error.
+        canAdmin ? api.getUsage(tenantId, "operation") : Promise.resolve(null),
       ]);
       setReadiness(nextReadiness);
       setBackfills(nextBackfills);
+      setUsage(nextUsage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load setup status.");
     }
@@ -129,6 +133,41 @@ export function SetupPage() {
         </div>
       </Card>
 
+      {canAdmin && (
+        <Card className="p-5">
+          <div className="mb-3 flex items-baseline justify-between">
+            <p className="text-sm font-semibold text-slate-800">Model usage</p>
+            {usage && (
+              <p className="text-xs text-slate-500">
+                {formatCost(usage.totals.estimated_cost_micros, usage.currency)} total
+                {usage.totals.unpriced_event_count > 0 &&
+                  ` · ${usage.totals.unpriced_event_count} unpriced`}
+              </p>
+            )}
+          </div>
+          {!usage || usage.rows.length === 0 ? (
+            <p className="text-sm text-slate-400">No provider calls recorded yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {usage.rows.map((row) => (
+                <li key={row.group} className="flex items-center justify-between py-3 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-800">{row.group}</p>
+                    <p className="text-xs text-slate-500">
+                      {row.event_count} calls · {row.input_tokens.toLocaleString()} in ·{" "}
+                      {row.output_tokens.toLocaleString()} out
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {formatCost(row.estimated_cost_micros, usage.currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
       <Card className="p-5">
         <p className="mb-3 text-sm font-semibold text-slate-800">Backfills</p>
         {backfills.length === 0 ? (
@@ -151,6 +190,14 @@ export function SetupPage() {
       </Card>
     </div>
   );
+}
+
+// Costs arrive as integer micros. "not priced" is shown rather than a zero, so an
+// unconfigured price is never mistaken for a free call.
+function formatCost(micros: number | null, currency: string): string {
+  if (micros === null) return "not priced";
+  const amount = micros / 1_000_000;
+  return `${amount.toFixed(amount < 1 ? 4 : 2)} ${currency}`;
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
