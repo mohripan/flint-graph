@@ -114,6 +114,8 @@ export interface QueryRunResponse {
   retrieval_index_version_id: string;
   query_text: string;
   status: QueryRunStatus;
+  error_code: string | null;
+  error_message: string | null;
   answer_text: string | null;
   answer_citations: Array<Record<string, unknown>>;
   query_diagnostics: QueryDiagnostics;

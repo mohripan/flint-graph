@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { streamQueryRun } from "../lib/stream";
+import { queryFailureMessage } from "../lib/queryOutcome";
 import type {
   AnswerProvenance,
   QueryDiagnostics,
@@ -15,14 +16,6 @@ import { CitationsPanel } from "../components/CitationsPanel";
 
 type Phase = "idle" | "streaming" | "done" | "error";
 
-// Provisional deltas may arrive as either incremental chunks or a growing
-// cumulative string. Detect and merge either way.
-function mergeDelta(prev: string, incoming: string): string {
-  if (!incoming) return prev;
-  if (incoming.startsWith(prev) && incoming.length >= prev.length) return incoming;
-  return prev + incoming;
-}
-
 export function AskPage() {
   const { workspace } = useWorkspace();
   const tenantId = workspace!.id;
@@ -31,7 +24,6 @@ export function AskPage() {
   const [question, setQuestion] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [seenEvents, setSeenEvents] = useState<string[]>([]);
-  const [streamedText, setStreamedText] = useState("");
   const [finalText, setFinalText] = useState<string | null>(null);
   const [abstainReason, setAbstainReason] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<AnswerProvenance | null>(null);
@@ -78,15 +70,11 @@ export function AskPage() {
     setQuestion(q);
     setPhase("streaming");
     setSeenEvents([]);
-    setStreamedText("");
     setFinalText(null);
     setAbstainReason(null);
     setProvenance(null);
     setDiagnostics(null);
     setError(null);
-
-    let completed = false;
-    let failed = false;
 
     try {
       const run = await api.createQueryRun(tenantId, q);
@@ -95,21 +83,21 @@ export function AskPage() {
         onEvent: (event: QueryRunEvent) => {
           setSeenEvents((prev) => [...prev, event.event_type]);
           handleEvent(event);
-          if (event.event_type === "query.completed") completed = true;
-          if (event.event_type === "query.failed") failed = true;
         },
       });
 
-      if (failed) {
-        setPhase("error");
-        setError("The query could not be answered. Please try again.");
-        return;
-      }
       const inspected = await api.getQueryRun(tenantId, run.id);
       setDiagnostics(inspected.query_diagnostics);
+      const failure = queryFailureMessage(inspected);
+      if (failure) {
+        setPhase("error");
+        setError(failure);
+        await refreshReadiness();
+        return;
+      }
 
       // Pull authoritative citations + support once the run is complete.
-      if (completed) {
+      if (inspected.status === "completed") {
         try {
           const prov = await api.getAnswerProvenance(tenantId, run.id);
           setProvenance(prov);
@@ -138,8 +126,6 @@ export function AskPage() {
           const text = typeof p.text === "string" ? p.text : "";
           if (p.provisional === false) {
             setFinalText(text);
-          } else {
-            setStreamedText((prev) => mergeDelta(prev, text));
           }
           break;
         }
@@ -157,7 +143,7 @@ export function AskPage() {
     }
   }, [input, phase, readiness, refreshReadiness, tenantId]);
 
-  const answerText = finalText ?? streamedText;
+  const answerText = finalText;
   const showAnswer = phase !== "idle";
 
   return (

@@ -124,3 +124,18 @@ unregistered model attribute from the provider-error counter. Failed calls now
 preserve the original provider exception rather than replacing it with an
 instrument-attribute validation error. Duration traces/metrics retain model
 information according to their existing registry contracts.
+
+## Ask outcome handling
+
+[Issue #18](https://github.com/mohripan/flint-graph/issues/18) makes Ask inspect
+persisted status/diagnostics after the stream closes. It shows the safe provider
+failure message, distinguishes cancellation, and flags a stream ending while a
+run is still queued/running. Only completed runs enter the normal final-answer
+path. Structured provisional model JSON remains progress activity; it is not
+displayed as verified answer prose.
+
+Frontend outcome tests cover failure/cancellation/incomplete/completed states.
+Browser QA with controlled network responses verifies the support-error message
+and diagnostics, cancelled and unfinished outcomes, verified Berlin output, and
+absence of raw draft JSON. `npm test`, `npm run typecheck`, and `npm run build`
+passed. Real incremental verified sections remain Milestone 20 work.
