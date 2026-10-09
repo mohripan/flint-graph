@@ -20,3 +20,12 @@ Regression tests cover a correct headquarters claim alongside an office claim
 with an unevidenced date/profitability, and zero-threshold abstention. Provider
 support decisions are still the verification boundary; a deterministic lexical
 checker is an offline fixture, not proof of production semantic accuracy.
+
+## Offline OIDC integration harness
+
+[Issue #11](https://github.com/mohripan/flint-graph/issues/11) makes the shared
+OIDC fixture explicitly select deterministic extraction, embeddings, answers,
+and support checking. It retains local OIDC behavior without requiring hosted
+credentials or a developer `.env`. Production provider defaults are unchanged.
+The original complete suite had 17 credential-validation failures in this
+fixture; explicitly selecting offline providers resolves those failures.

@@ -58,6 +58,10 @@ def oidc_settings_override(client):
             auth_mode="oidc",
             oidc_issuer=OIDC_ISSUER,
             oidc_audience=OIDC_AUDIENCE,
+            llm_provider="deterministic",
+            embedding_provider="deterministic",
+            query_answer_provider="deterministic",
+            query_support_provider="deterministic",
         )
 
     from flint_graph.main import app
