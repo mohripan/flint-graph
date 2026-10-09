@@ -3,7 +3,7 @@ name: CI
 'on':
   pull_request:
   push:
-    branches: [main]
+    branches: [master, main]
 
 jobs:
   offline-check:
@@ -19,6 +19,11 @@ jobs:
         run: uv run mypy
       - name: Tests
         run: uv run pytest
+      - name: Offline migration SQL
+        run: uv run alembic upgrade head --sql > /dev/null
+        env:
+          FLINT_GRAPH_QUERY_ANSWER_PROVIDER: deterministic
+          FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: deterministic
       - name: Compose config
         run: |
           docker compose config > /dev/null
@@ -31,3 +36,24 @@ jobs:
           --experiment evals/experiments/acme-smoke.yaml
           --baseline evals/reports/acme-smoke/baselines.json
           --config-name deterministic
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Outcome tests
+        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build

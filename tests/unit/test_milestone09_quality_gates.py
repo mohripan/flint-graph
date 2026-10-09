@@ -8,6 +8,17 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_ci_checks_default_branch_pushes_and_frontend_behavior() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    assert "master" in workflow["on"]["push"]["branches"]
+    steps = workflow["jobs"]["frontend-check"]["steps"]
+    commands = "\n".join(step.get("run", "") for step in steps)
+    assert "npm ci" in commands
+    assert "npm test" in commands
+    assert "npm run typecheck" in commands
+    assert "npm run build" in commands
+
+
 def test_make_check_runs_offline_eval_gate() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
