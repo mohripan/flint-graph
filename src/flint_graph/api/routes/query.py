@@ -554,6 +554,7 @@ async def _execute_query_run(
                 min_context_relevance=min_context_relevance,
                 usage_pricing=usage_pricing,
                 usage_currency=usage_currency,
+                retrieval_session_factory=session_factory,
                 commit_after_node=True,
                 after_node_commit=emit_new_events,
             )

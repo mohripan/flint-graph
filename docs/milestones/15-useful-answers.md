@@ -44,3 +44,22 @@ when a projection returns them. Graph relationship summaries may combine sources
 so filtered queries currently use only lexical/vector evidence; graph retrieval
 returns no relationships until source-scoped relationship evidence is supported.
 Unfiltered graph behavior is unchanged. A scoped query without evidence abstains.
+
+## Parallel retrieval sessions
+
+[Issue #13](https://github.com/mohripan/flint-graph/issues/13) gives each API
+retrieval task its own read session. The execution session alone writes run state,
+candidates, and events after gathering results. Independent network retrieval
+remains concurrent, and one retriever ending its read transaction cannot roll
+back another retriever or the query's event ledger.
+
+The application graph accepts an optional `retrieval_session_factory`. Callers
+using independent read sessions must commit source/setup records before running
+retrieval. The graph commits pending run state and `retrieval.started` before
+opening those read sessions. Existing transactional service tests may omit the factory to read their
+uncommitted fixtures; production API execution always supplies it.
+
+Query API regressions can additionally run against PostgreSQL by setting
+`FLINT_GRAPH_PG_INTEGRATION=1`, with optional `FLINT_GRAPH_PG_TEST_URL`. Each
+fixture owns a unique schema which it removes afterward, avoiding production
+table mutation. Offline SQLite remains the default test backend.

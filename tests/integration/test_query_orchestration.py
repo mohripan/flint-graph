@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from flint_graph.application.query_orchestration import QueryCandidate
 from flint_graph.application.services.query_context_packing import pack_query_context
@@ -364,6 +364,59 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
     ]
     assert all(row.fusion_score is not None for row in rows)
     assert [row.rerank_rank for row in rows if row.rerank_rank is not None] == [1, 2, 3]
+
+
+async def test_parallel_retrieval_can_use_independent_read_transactions(
+    db_session: AsyncSession,
+) -> None:
+    tenant = await _tenant(db_session, name="parallel-query")
+    tenant_id = tenant.id
+    run_id, index_id = await _query_run(db_session, tenant, "Where is Acme headquartered?")
+    await db_session.commit()
+
+    class ReadingRetriever:
+        async def retrieve_lexical(
+            self, session: AsyncSession, **kwargs: Any
+        ) -> list[QueryCandidate]:
+            await session.execute(text("SELECT 1"))
+            # Close this task's read transaction while its peer still runs.
+            await session.rollback()
+            return [
+                _candidate(
+                    tenant_id=tenant_id,
+                    index_id=index_id,
+                    source="lexical",
+                    candidate_id="lexical:chunk:one",
+                    rank=1,
+                )
+            ]
+
+        async def retrieve_vector(
+            self, session: AsyncSession, **kwargs: Any
+        ) -> list[QueryCandidate]:
+            await asyncio.sleep(0)
+            await session.execute(text("SELECT 1"))
+            return [
+                _candidate(
+                    tenant_id=tenant_id,
+                    index_id=index_id,
+                    source="vector",
+                    candidate_id="vector:chunk:two",
+                    rank=1,
+                )
+            ]
+
+    retriever = ReadingRetriever()
+    result = await run_query_retrieval_graph(
+        db_session,
+        tenant_id=tenant_id,
+        query_run_id=run_id,
+        retrievers=QueryRetrieverBundle(lexical=retriever, vector=retriever),
+        retrieval_session_factory=async_sessionmaker(db_session.bind, expire_on_commit=False),
+    )
+    assert result.status == QueryRunStatus.COMPLETED
+    assert result.retrieved_candidate_count == 2
+    assert result.errors == []
 
 
 async def test_context_packing_skips_chunk_candidate_deleted_after_retrieval(

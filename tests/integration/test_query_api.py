@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -128,8 +130,12 @@ class QueryAnswerGenerator:
         )
 
 
-@pytest_asyncio.fixture
-async def query_api_env() -> AsyncIterator[
+@pytest_asyncio.fixture(
+    params=["sqlite", "postgres"] if os.getenv("FLINT_GRAPH_PG_INTEGRATION") else ["sqlite"]
+)
+async def query_api_env(
+    request: pytest.FixtureRequest,
+) -> AsyncIterator[
     tuple[
         httpx.AsyncClient,
         async_sessionmaker[AsyncSession],
@@ -137,11 +143,24 @@ async def query_api_env() -> AsyncIterator[
         QueryNeo4jClient,
     ]
 ]:
-    engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    schema = None
+    if request.param == "postgres":
+        schema = f"flint_query_test_{uuid4().hex}"
+        engine = create_async_engine(
+            os.getenv(
+                "FLINT_GRAPH_PG_TEST_URL",
+                "postgresql+asyncpg://flint_graph:flint_graph@localhost:55432/flint_graph",
+            )
+        )
+        async with engine.begin() as connection:
+            await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        engine = engine.execution_options(schema_translate_map={None: schema})
+    else:
+        engine = create_async_engine(
+            "sqlite+aiosqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -161,10 +180,15 @@ async def query_api_env() -> AsyncIterator[
     app.dependency_overrides[dependencies.get_opensearch_client] = lambda: opensearch
     app.dependency_overrides[dependencies.get_neo4j_client] = lambda: neo4j
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client, session_factory, opensearch, neo4j
-    app.dependency_overrides.clear()
-    await engine.dispose()
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client, session_factory, opensearch, neo4j
+    finally:
+        app.dependency_overrides.clear()
+        if schema is not None:
+            async with engine.begin() as connection:
+                await connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await engine.dispose()
 
 
 def _headers(tenant_id: UUID) -> dict[str, str]:

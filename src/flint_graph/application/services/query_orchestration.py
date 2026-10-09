@@ -7,7 +7,7 @@ from typing import Any, Literal, NotRequired, Protocol, Required, TypedDict
 from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from flint_graph.application.query_orchestration import (
     AnswerGenerator,
@@ -164,6 +164,7 @@ async def run_query_retrieval_graph(
     min_context_relevance: float = 0.0,
     usage_pricing: dict[str, dict[str, float]] | None = None,
     usage_currency: str = "USD",
+    retrieval_session_factory: async_sessionmaker[AsyncSession] | None = None,
     commit_after_node: bool = False,
     after_node_commit: Callable[[], Awaitable[None]] | None = None,
 ) -> QueryRetrievalGraphResult:
@@ -181,6 +182,7 @@ async def run_query_retrieval_graph(
         min_context_relevance=min_context_relevance,
         usage_pricing=usage_pricing,
         usage_currency=usage_currency,
+        retrieval_session_factory=retrieval_session_factory,
         commit_after_node=commit_after_node,
         after_node_commit=after_node_commit,
     )
@@ -243,6 +245,7 @@ def _build_retrieval_graph(
     min_context_relevance: float,
     usage_pricing: dict[str, dict[str, float]] | None,
     usage_currency: str,
+    retrieval_session_factory: async_sessionmaker[AsyncSession] | None,
     commit_after_node: bool,
     after_node_commit: Callable[[], Awaitable[None]] | None,
 ) -> Any:
@@ -304,6 +307,24 @@ def _build_retrieval_graph(
             "allow_partial_retrieval": classification.retrieval_plan.allow_partial_retrieval,
         }
 
+    async def retrieve_one(state: _GraphState, source: RetrieverName) -> list[QueryCandidate]:
+        if retrieval_session_factory is None:
+            return await _retrieve_source(
+                session=session,
+                state=state,
+                retrievers=retrievers,
+                source=source,
+                graph_depth=graph_depth,
+            )
+        async with retrieval_session_factory() as read_session:
+            return await _retrieve_source(
+                session=read_session,
+                state=state,
+                retrievers=retrievers,
+                source=source,
+                graph_depth=graph_depth,
+            )
+
     async def retrieve_parallel(state: _GraphState) -> _GraphStateUpdate:
         enabled = state.get("enabled_retrievers", [])
         await append_query_run_event(
@@ -313,17 +334,13 @@ def _build_retrieval_graph(
             event_type="retrieval.started",
             payload={"retrievers": enabled},
         )
+        # Publish pending run state before independent read transactions begin.
+        # This also exposes retrieval progress before slow network calls finish.
+        await _commit_if_requested(
+            session, commit_after_node or retrieval_session_factory is not None, after_node_commit
+        )
         results = await asyncio.gather(
-            *[
-                _retrieve_source(
-                    session=session,
-                    state=state,
-                    retrievers=retrievers,
-                    source=source,
-                    graph_depth=graph_depth,
-                )
-                for source in enabled
-            ],
+            *[retrieve_one(state, source) for source in enabled],
             return_exceptions=True,
         )
 
