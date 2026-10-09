@@ -44,9 +44,7 @@ _WORSE = [
 
 def _write_dataset(directory: Path) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "dataset.yaml").write_text(
-        "name: mini\nversion: 1\ntenant: t\n", encoding="utf-8"
-    )
+    (directory / "dataset.yaml").write_text("name: mini\nversion: 1\ntenant: t\n", encoding="utf-8")
     queries = [
         {
             "id": "q1",
@@ -132,11 +130,16 @@ def test_cli_run_writes_report_and_passes(tmp_path: Path) -> None:
     exit_code = main(
         [
             "run",
-            "--dataset", str(dataset_dir),
-            "--evaluations", str(recorded),
-            "--report", str(report_path),
-            "--created-at", "2026-07-14T00:00:00Z",
-            "--k", "1",
+            "--dataset",
+            str(dataset_dir),
+            "--evaluations",
+            str(recorded),
+            "--report",
+            str(report_path),
+            "--created-at",
+            "2026-07-14T00:00:00Z",
+            "--k",
+            "1",
         ]
     )
 
@@ -158,11 +161,16 @@ def test_cli_run_fails_on_threshold(tmp_path: Path) -> None:
     exit_code = main(
         [
             "run",
-            "--dataset", str(dataset_dir),
-            "--evaluations", str(recorded),
-            "--experiment", str(experiment),
-            "--created-at", "2026-07-14T00:00:00Z",
-            "--k", "1",
+            "--dataset",
+            str(dataset_dir),
+            "--evaluations",
+            str(recorded),
+            "--experiment",
+            str(experiment),
+            "--created-at",
+            "2026-07-14T00:00:00Z",
+            "--k",
+            "1",
         ]
     )
 
@@ -179,8 +187,17 @@ def test_cli_baseline_update_then_regression(tmp_path: Path) -> None:
     assert (
         main(
             [
-                "run", "--dataset", str(dataset_dir), "--evaluations", str(good),
-                "--report", str(report_path), "--created-at", "2026-07-14T00:00:00Z", "--k", "1",
+                "run",
+                "--dataset",
+                str(dataset_dir),
+                "--evaluations",
+                str(good),
+                "--report",
+                str(report_path),
+                "--created-at",
+                "2026-07-14T00:00:00Z",
+                "--k",
+                "1",
             ]
         )
         == 0
@@ -193,8 +210,17 @@ def test_cli_baseline_update_then_regression(tmp_path: Path) -> None:
 
     regression_exit = main(
         [
-            "run", "--dataset", str(dataset_dir), "--evaluations", str(worse),
-            "--baseline", str(baseline_path), "--created-at", "2026-07-14T00:00:00Z", "--k", "1",
+            "run",
+            "--dataset",
+            str(dataset_dir),
+            "--evaluations",
+            str(worse),
+            "--baseline",
+            str(baseline_path),
+            "--created-at",
+            "2026-07-14T00:00:00Z",
+            "--k",
+            "1",
         ]
     )
     assert regression_exit == 1
@@ -209,12 +235,18 @@ def test_cli_compare_writes_table(tmp_path: Path) -> None:
     exit_code = main(
         [
             "compare",
-            "--dataset", str(dataset_dir),
-            "--evaluations", f"good={good}",
-            "--evaluations", f"worse={worse}",
-            "--output", str(output),
-            "--created-at", "2026-07-14T00:00:00Z",
-            "--k", "1",
+            "--dataset",
+            str(dataset_dir),
+            "--evaluations",
+            f"good={good}",
+            "--evaluations",
+            f"worse={worse}",
+            "--output",
+            str(output),
+            "--created-at",
+            "2026-07-14T00:00:00Z",
+            "--k",
+            "1",
         ]
     )
 
@@ -228,3 +260,40 @@ def test_dataset_helper_builds_valid_dataset(tmp_path: Path) -> None:
     dataset = load_dataset(_write_dataset(tmp_path / "ds"))
     assert isinstance(dataset, GoldenDataset)
     assert [q.id for q in dataset.queries] == ["q1", "q2"]
+
+
+def test_capture_cli_never_overwrites_recordings(tmp_path: Path) -> None:
+    output = tmp_path / "capture.jsonl"
+    output.write_text("existing", encoding="utf-8")
+    result = main(
+        [
+            "capture",
+            "--dataset",
+            "missing",
+            "--manifest",
+            "missing",
+            "--base-url",
+            "http://localhost:8000",
+            "--output",
+            str(output),
+        ]
+    )
+    assert result == 1
+    assert output.read_text(encoding="utf-8") == "existing"
+
+
+def test_capture_cli_rejects_insecure_remote_url(tmp_path: Path) -> None:
+    result = main(
+        [
+            "capture",
+            "--dataset",
+            "missing",
+            "--manifest",
+            "missing",
+            "--base-url",
+            "http://example.com",
+            "--output",
+            str(tmp_path / "capture.jsonl"),
+        ]
+    )
+    assert result == 1

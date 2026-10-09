@@ -32,3 +32,17 @@ The response excludes text previews, prompts, provider payloads and arbitrary
 metadata. Foreign runs return 404. Queued runs have an empty candidate list;
 inspection never starts execution. Null rerank ranks identify candidates that were
 not selected, including deduplicated retriever copies. Ordering is deterministic.
+
+## Fresh public-API query capture
+
+[Issue #21](https://github.com/mohripan/flint-graph/issues/21) implements opt-in
+`flint-graph-eval capture` against an already-indexed evaluation workspace. It
+creates runs, consumes SSE, requires completed status, reads actual retrieval
+rankings/provenance, validates golden-label mappings, and emits scorer-compatible
+JSONL with run/index/revision metadata. It does not overwrite recordings or
+baselines, leak bearer tokens, or treat entity links as retrieved graph evidence.
+
+Tests exercise the public HTTP boundary and capture a real in-process query run
+(deterministic providers and fixture projections), with optional PostgreSQL
+coverage. This is not evidence of full upload-to-answer ingestion quality or
+hosted-provider health. See the [capture runbook](../runbooks/fresh-query-evaluation.md).

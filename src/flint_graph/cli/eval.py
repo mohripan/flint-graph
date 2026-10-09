@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from datetime import UTC, datetime
 from pathlib import Path
+
+import httpx
 
 from flint_graph.evaluation.baselines import (
     ThresholdViolation,
@@ -20,6 +23,7 @@ from flint_graph.evaluation.baselines import (
     load_baseline,
     save_baseline,
 )
+from flint_graph.evaluation.capture import CaptureManifest, capture_dataset
 from flint_graph.evaluation.comparison import comparison_table, run_comparison
 from flint_graph.evaluation.datasets import load_dataset
 from flint_graph.evaluation.experiment import run_experiment
@@ -42,8 +46,7 @@ def _print_violations(violations: list[ThresholdViolation]) -> None:
     for violation in violations:
         actual = "n/a" if violation.actual is None else f"{violation.actual:.4f}"
         print(
-            f"FAIL {violation.metric}: {violation.kind} "
-            f"limit={violation.limit:.4f} actual={actual}"
+            f"FAIL {violation.metric}: {violation.kind} limit={violation.limit:.4f} actual={actual}"
         )
 
 
@@ -75,9 +78,7 @@ def run_command(args: argparse.Namespace) -> int:
         violations += check_thresholds(report.aggregate, experiment.thresholds)
     if args.baseline:
         baseline = load_baseline(Path(args.baseline))
-        violations += check_regressions(
-            report.aggregate, baseline, tolerance=args.tolerance
-        )
+        violations += check_regressions(report.aggregate, baseline, tolerance=args.tolerance)
 
     if violations:
         _print_violations(violations)
@@ -127,9 +128,80 @@ def baseline_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def capture_command(args: argparse.Namespace) -> int:
+    output = Path(args.output)
+    try:
+        if output.exists():
+            raise ValueError("Capture output already exists; choose a new recording path.")
+        url = httpx.URL(args.base_url)
+        local = url.host in {"localhost", "127.0.0.1", "::1"}
+        if (
+            url.scheme not in {"https", "http"}
+            or not url.host
+            or (url.scheme == "http" and not local)
+            or url.username
+            or url.password
+            or url.query
+            or url.fragment
+        ):
+            raise ValueError(
+                "Capture requires HTTPS (or literal loopback HTTP), without URL credentials."
+            )
+        dataset = load_dataset(Path(args.dataset))
+        manifest = CaptureManifest.model_validate_json(
+            Path(args.manifest).read_text(encoding="utf-8")
+        )
+        token = os.getenv(args.token_env)
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+        async def capture() -> str:
+            async with httpx.AsyncClient(
+                base_url=str(url),
+                headers=headers,
+                timeout=args.query_timeout,
+                follow_redirects=False,
+            ) as client:
+                records = await capture_dataset(
+                    client,
+                    dataset,
+                    manifest,
+                    git_sha=args.git_sha,
+                    query_timeout_seconds=args.query_timeout,
+                )
+            return "".join(record.model_dump_json() + "\n" for record in records)
+
+        content = asyncio.run(capture())
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("x", encoding="utf-8") as recording:
+            recording.write(content)
+        print(f"Captured {len(dataset.queries)} fresh query evaluations to {output}")
+        return 0
+    except httpx.HTTPError as exc:
+        # Do not echo error response payloads, authorization headers or credential-bearing URLs.
+        print(f"Capture failed: {type(exc).__name__}. Inspect the server-side run/events.")
+        return 1
+    except (ValueError, OSError, TimeoutError) as exc:
+        print(f"Capture failed: {exc}")
+        return 1
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="flint-graph-eval")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    capture_parser = subparsers.add_parser("capture", help="capture fresh public-API query runs")
+    capture_parser.add_argument("--dataset", required=True)
+    capture_parser.add_argument(
+        "--manifest", required=True, help="tenant and golden-label mappings"
+    )
+    capture_parser.add_argument("--base-url", required=True)
+    capture_parser.add_argument(
+        "--output", required=True, help="new JSONL recording (never overwritten)"
+    )
+    capture_parser.add_argument("--token-env", default="FLINT_GRAPH_EVAL_TOKEN")
+    capture_parser.add_argument("--query-timeout", type=float, default=300.0)
+    capture_parser.add_argument("--git-sha", default=None)
+    capture_parser.set_defaults(func=capture_command)
 
     run_parser = subparsers.add_parser("run", help="score a dataset and gate on thresholds")
     run_parser.add_argument("--dataset", required=True, help="dataset directory")
@@ -144,9 +216,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--created-at", default=None)
     run_parser.set_defaults(func=run_command)
 
-    compare_parser = subparsers.add_parser(
-        "compare", help="score several evaluators side by side"
-    )
+    compare_parser = subparsers.add_parser("compare", help="score several evaluators side by side")
     compare_parser.add_argument("--dataset", required=True)
     compare_parser.add_argument(
         "--evaluations", action="append", required=True, help="name=path (repeatable)"

@@ -926,6 +926,34 @@ async def test_query_retrieval_trace_is_persisted_and_tenant_scoped(query_api_en
 
 
 @pytest.mark.asyncio
+async def test_fresh_evaluation_capture_runs_public_query_pipeline(query_api_env: Any) -> None:
+    from flint_graph.evaluation.capture import CaptureManifest, capture_dataset
+    from flint_graph.evaluation.datasets import DatasetMetadata, GoldenDataset, GoldenQuery
+
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, _index_id = await _tenant_with_searchable_content(session)
+    dataset = GoldenDataset(
+        metadata=DatasetMetadata(name="mini", version=1, tenant="query-api"),
+        queries=[GoldenQuery(
+            id="q1", query="Where is Acme headquartered?", query_type="factoid",
+            expected_answer="Berlin", relevant_chunk_ids=["acme"], must_cite_sources=["acme"],
+        )],
+    )
+    manifest = CaptureManifest(
+        tenant_id=tenant.id, dataset_name="mini", dataset_version=1,
+        document_labels={"11111111-1111-4111-8111-111111111111": "acme"},
+    )
+    captured = await capture_dataset(client, dataset, manifest, git_sha="test")
+    evaluation = captured[0].evaluation
+    assert evaluation.retrieved_chunk_ids == ["acme"]
+    assert evaluation.cited_source_ids == ["acme"]
+    assert "Berlin" in evaluation.answer_text
+    assert evaluation.supported_claim_count == 1
+    assert not evaluation.abstained
+
+
+@pytest.mark.asyncio
 async def test_query_run_creation_rejects_active_index_without_searchable_content(
     query_api_env: tuple[
         httpx.AsyncClient,
