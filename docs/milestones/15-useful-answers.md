@@ -116,3 +116,11 @@ uv run pytest tests/integration/test_query_api.py -q -k live_ollama
 The live smoke passed with the locally installed model after initially abstaining.
 It validates real generation/support plus API/provenance, not full upload,
 extraction, and projection operation; that end-to-end gate remains outstanding.
+
+## Provider telemetry failure path
+
+[Issue #17](https://github.com/mohripan/flint-graph/issues/17) removes the
+unregistered model attribute from the provider-error counter. Failed calls now
+preserve the original provider exception rather than replacing it with an
+instrument-attribute validation error. Duration traces/metrics retain model
+information according to their existing registry contracts.

@@ -56,7 +56,6 @@ async def provider_call(
                 PROVIDER_CALL_ERRORS,
                 **{
                     "flint_graph.provider": provider,
-                    "flint_graph.model": model,
                     "flint_graph.operation": operation.value,
                 },
             )
