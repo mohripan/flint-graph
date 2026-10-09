@@ -103,7 +103,7 @@ async def verify_generated_answer(
         )
 
     surviving_claims = [
-        claim for claim in support_result.claims if claim.support_status != "unsupported"
+        claim for claim in support_result.claims if claim.support_status == "supported"
     ]
     citations = _answer_citations(surviving_claims, context_pack)
     return QueryFaithfulnessResult(

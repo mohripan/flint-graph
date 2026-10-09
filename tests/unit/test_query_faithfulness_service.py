@@ -41,6 +41,58 @@ def _context_pack() -> QueryContextPack:
 
 
 @pytest.mark.anyio
+async def test_verified_answer_omits_partially_supported_claims() -> None:
+    draft = GeneratedAnswer(
+        text="The draft is provisional.",
+        metadata={
+            "draft_claims": [
+                {"text": "Acme Corporation is headquartered in Berlin.", "citations": ["c1"]},
+                {
+                    "text": "Acme opened a profitable research office in Paris in 2025.",
+                    "citations": ["c2"],
+                },
+            ]
+        },
+    )
+    result = await verify_generated_answer(
+        tenant_id=uuid4(),
+        query="Where does Acme operate?",
+        context_pack=_context_pack(),
+        draft_answer=draft,
+    )
+
+    assert [claim.support_status for claim in result.report.claims] == ["supported", "partial"]
+    assert result.answer.text == "Acme Corporation is headquartered in Berlin. [c1]"
+    assert [citation.citation_id for citation in result.answer.citations] == ["c1"]
+
+
+@pytest.mark.anyio
+async def test_zero_support_threshold_cannot_publish_an_unverified_answer() -> None:
+    result = await verify_generated_answer(
+        tenant_id=uuid4(),
+        query="When did Acme open its profitable Paris office?",
+        context_pack=_context_pack(),
+        draft_answer=GeneratedAnswer(
+            text="Provisional draft",
+            metadata={
+                "draft_claims": [
+                    {
+                        "text": "Acme opened a profitable research office in Paris in 2025.",
+                        "citations": ["c2"],
+                    },
+                ]
+            },
+        ),
+        policy=QueryFaithfulnessPolicy(min_supported_claim_ratio=0.0),
+    )
+
+    assert result.report.claims[0].support_status == "partial"
+    assert result.report.abstained is True
+    assert result.answer.insufficient_context is True
+    assert result.answer.citations == []
+
+
+@pytest.mark.anyio
 async def test_verify_generated_answer_repairs_citations_and_keeps_supported_claims() -> None:
     draft = GeneratedAnswer(
         text="raw draft should not be authoritative",
@@ -87,7 +139,7 @@ async def test_verify_generated_answer_abstains_when_support_is_insufficient() -
             "draft_claims": [
                 {
                     "claim_index": 0,
-                        "text": "Contoso acquired Globex.",
+                    "text": "Contoso acquired Globex.",
                     "raw_citation_markers": ["c1"],
                 }
             ]

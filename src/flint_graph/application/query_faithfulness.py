@@ -144,7 +144,7 @@ def evaluate_abstention(
         return AbstentionDecision(abstained=True, reason="no_answer_claims")
 
     supported_ratio = supported_claim_count / total_claim_count
-    if supported_ratio < min_supported_claim_ratio:
+    if supported_claim_count <= 0 or supported_ratio < min_supported_claim_ratio:
         return AbstentionDecision(
             abstained=True,
             reason="supported_claim_ratio_below_threshold",
