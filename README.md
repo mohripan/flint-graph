@@ -2,6 +2,9 @@
 
 A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, adds an OIDC-backed workspace access boundary for MVP use, and hardens the public API boundary for controlled deployments. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
+See the [roadmap](docs/ROADMAP.md) for useful-answer reliability, embeddings,
+agent strategies, whole-corpus CAG, delegated research, and production delivery.
+
 ## Why these milestones come first
 
 The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, a safe asynchronous dispatch path, canonical graph mutation, retrieval primitives, and query-time orchestration. LangGraph orchestrates query execution; it does not replace the ingestion or indexing control planes.
