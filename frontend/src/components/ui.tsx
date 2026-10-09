@@ -8,11 +8,11 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "danger";
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-1";
+    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 focus:outline-hidden focus:ring-2 focus:ring-brand-400 focus:ring-offset-1";
   const variants: Record<string, string> = {
-    primary: "bg-brand-600 text-white hover:bg-brand-700 shadow-sm",
+    primary: "bg-brand-600 text-white hover:bg-brand-700 shadow-xs",
     secondary:
-      "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-sm",
+      "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-xs",
     ghost: "text-slate-600 hover:bg-slate-100",
     danger: "bg-white text-red-600 border border-red-200 hover:bg-red-50",
   };
@@ -28,7 +28,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}
+      className={`rounded-xl border border-slate-200 bg-white shadow-xs ${className}`}
     >
       {children}
     </div>

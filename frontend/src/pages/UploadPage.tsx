@@ -158,7 +158,7 @@ export function UploadPage() {
               onClick={() => setMode(m)}
               className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
                 mode === m
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "bg-white text-slate-900 shadow-xs"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -438,7 +438,7 @@ function CleanupSummary({ cleanups }: { cleanups: DocumentProjectionCleanup[] })
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-xs focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

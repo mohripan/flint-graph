@@ -93,7 +93,7 @@ export function WorkspaceGate() {
                 className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
               >
                 <span className="font-medium text-slate-800">{workspace.name}</span>
-                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                <span className="rounded-sm bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                   {workspace.role}
                 </span>
               </button>
@@ -115,7 +115,7 @@ export function WorkspaceGate() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Research Notes"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-xs focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
             />
           </div>
           {error && (
@@ -133,10 +133,10 @@ export function WorkspaceGate() {
   );
 }
 
-export function Logo({ className = "" }: { className?: string }) {
+export function Logo({ className = "h-10 w-10" }: { className?: string }) {
   return (
     <div
-      className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm ${className}`}
+      className={`flex items-center justify-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-xs ${className}`}
     >
       <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
         <circle cx="12" cy="5" r="2.2" fill="currentColor" />

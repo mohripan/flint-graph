@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // The FlintGraph API does not send CORS headers, so we proxy same-origin requests
 // from the dev server to the backend. The browser only ever talks to Vite.
@@ -7,7 +8,7 @@ import react from "@vitejs/plugin-react";
 const API_TARGET = process.env.FLINT_GRAPH_API_TARGET ?? "http://localhost:8000";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {

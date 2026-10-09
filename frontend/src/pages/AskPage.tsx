@@ -185,7 +185,7 @@ export function AskPage() {
           }}
           rows={3}
           placeholder="e.g. Where is Acme headquartered?"
-          className="w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
         />
         <div className="mt-3 flex items-center justify-between">
           <span className="text-xs text-slate-400">
