@@ -29,3 +29,18 @@ and support checking. It retains local OIDC behavior without requiring hosted
 credentials or a developer `.env`. Production provider defaults are unchanged.
 The original complete suite had 17 credential-validation failures in this
 fixture; explicitly selecting offline providers resolves those failures.
+
+## Document-scoped queries
+
+[Issue #12](https://github.com/mohripan/flint-graph/issues/12) implements query
+filters for `document_id`, `document_version_id`, and `chunk_id`. Document/version
+IDs must be UUID strings; chunk IDs must be nonempty strings of at most 100
+characters. Unsupported query filters return 422. The primitive retrieval APIs
+retain their separate existing filter contract.
+
+Lexical/vector search receives the restrictions, and returned chunks are checked
+again before candidate creation. Out-of-scope hits cannot reach an answer even
+when a projection returns them. Graph relationship summaries may combine sources,
+so filtered queries currently use only lexical/vector evidence; graph retrieval
+returns no relationships until source-scoped relationship evidence is supported.
+Unfiltered graph behavior is unchanged. A scoped query without evidence abstains.

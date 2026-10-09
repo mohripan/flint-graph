@@ -251,10 +251,73 @@ async def _tenant_with_searchable_content(session: AsyncSession) -> tuple[Tenant
 
 def _sse_event_types(body: str) -> list[str]:
     return [
-        line.removeprefix("event: ")
-        for line in body.splitlines()
-        if line.startswith("event: ")
+        line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filter_name", "filter_value"),
+    [
+        ("document_id", "33333333-3333-4333-8333-333333333333"),
+        ("document_version_id", "44444444-4444-4444-8444-444444444444"),
+        ("chunk_id", "other-chunk"),
+    ],
+)
+async def test_filtered_query_cannot_answer_from_another_document(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+    filter_name: str,
+    filter_value: str,
+) -> None:
+    client, session_factory, opensearch, neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant.id),
+        json={
+            "query": "Where is Acme headquartered?",
+            "retrieval_index_version_id": str(index_version_id),
+            "filters": {filter_name: filter_value},
+        },
+    )
+    assert created.status_code == 201
+    run_id = created.json()["id"]
+    streamed = await client.get(
+        f"/v1/query-runs/{run_id}/events/stream", headers=_headers(tenant.id)
+    )
+    assert streamed.status_code == 200
+    inspected = await client.get(f"/v1/query-runs/{run_id}", headers=_headers(tenant.id))
+    assert inspected.json()["query_diagnostics"]["abstention_reason"] is not None
+    assert inspected.json()["answer_citations"] == []
+    assert "Berlin" not in inspected.json()["answer_text"]
+    assert {"term": {filter_name: filter_value}} in opensearch.searches[0][1]["query"]["bool"][
+        "filter"
+    ]
+    assert neo4j.calls[0][1][filter_name] == filter_value
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_filters_it_cannot_apply(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, index_version_id = await _tenant_with_searchable_content(session)
+    response = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant.id),
+        json={
+            "query": "Where is Acme?",
+            "retrieval_index_version_id": str(index_version_id),
+            "filters": {"unsupported": "value"},
+        },
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

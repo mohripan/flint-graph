@@ -29,32 +29,32 @@ from flint_graph.domain.enums import (
 
 class TenantCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
-    
+
 
 class TenantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     name: str
     created_at: datetime
-    
-    
+
+
 class DocumentCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     source_type: SourceType
     source_uri: str | None = Field(default=None, max_length=4000)
     external_id: str | None = Field(default=None, max_length=500)
-    
+
     @model_validator(mode="after")
     def validate_source_reference(self) -> Self:
         if self.source_type in {SourceType.URL, SourceType.CONNECTOR} and not self.source_uri:
             raise ValueError(f"source_uri is required for source_type '{self.source_type}'.")
         return self
-    
+
 
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     tenant_id: UUID
     title: str
@@ -167,8 +167,8 @@ class DocumentProjectionCleanupResponse(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
-    
-    
+
+
 class IngestionJobResponse(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -182,18 +182,18 @@ class IngestionJobResponse(BaseModel):
     completed_at: datetime | None
     error_code: str | None
     error_message: str | None
-    
+
 
 class IngestionJobEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     event_type: str
     from_status: IngestionJobStatus | None
     to_status: IngestionJobStatus
     details: dict[str, Any]
     created_at: datetime
-    
+
 
 class ProblemDetail(BaseModel):
     type: str
@@ -519,10 +519,16 @@ class QueryRunCreateRequest(BaseModel):
     @model_validator(mode="after")
     def validate_filters(self) -> Self:
         for name, value in self.filters.items():
-            if not isinstance(name, str) or not name:
-                raise ValueError("filter names must be non-empty strings.")
-            if not isinstance(value, str | int | float | bool):
-                raise ValueError("filter values must be strings, numbers, or booleans.")
+            if name not in {"document_id", "document_version_id", "chunk_id"}:
+                raise ValueError(
+                    "query filters support document_id, document_version_id, and chunk_id."
+                )
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("query filter values must be non-empty strings.")
+            if name in {"document_id", "document_version_id"}:
+                self.filters[name] = str(UUID(value))
+            elif len(value) > 100:
+                raise ValueError("chunk_id filters must not exceed 100 characters.")
         return self
 
 

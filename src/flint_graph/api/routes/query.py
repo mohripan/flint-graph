@@ -221,10 +221,11 @@ async def stream_query_run_events_endpoint(
         opensearch_index_name=index_version.opensearch_index_name,
     )
     session_factory = _session_factory_from(session)
+    filters = dict(run.metadata_.get("filters") or {})
     retrievers = QueryRetrieverBundle(
-        lexical=_LexicalQueryRetriever(opensearch_client, index_snapshot),
-        vector=_VectorQueryRetriever(neo4j_client, embedding_model, index_snapshot),
-        graph=_GraphQueryRetriever(),
+        lexical=_LexicalQueryRetriever(opensearch_client, index_snapshot, filters),
+        vector=_VectorQueryRetriever(neo4j_client, embedding_model, index_snapshot, filters),
+        graph=_GraphQueryRetriever(filters),
     )
     stream = _stream_query_events(
         session_factory=session_factory,
@@ -262,9 +263,15 @@ class _IndexVersionSnapshot:
 
 
 class _LexicalQueryRetriever:
-    def __init__(self, opensearch_client: Any, index_version: _IndexVersionSnapshot) -> None:
+    def __init__(
+        self,
+        opensearch_client: Any,
+        index_version: _IndexVersionSnapshot,
+        filters: dict[str, Any] | None = None,
+    ) -> None:
         self._opensearch_client = opensearch_client
         self._index_version = index_version
+        self._filters = filters or {}
 
     async def retrieve_lexical(
         self,
@@ -281,13 +288,19 @@ class _LexicalQueryRetriever:
                 tenant_id=tenant_id,
                 query=query,
                 limit=limit,
-                filters={"index_version_id": retrieval_index_version_id},
+                filters={**self._filters, "index_version_id": retrieval_index_version_id},
             ),
         )
         chunks = await filter_active_chunk_results(
             session,
             tenant_id=tenant_id,
-            results=[_chunk_result_from_opensearch_hit(hit) for hit in hits],
+            results=[
+                chunk
+                for hit in hits
+                if _matches_query_filters(
+                    chunk := _chunk_result_from_opensearch_hit(hit), self._filters
+                )
+            ],
         )
         return [
             _chunk_candidate(
@@ -307,10 +320,12 @@ class _VectorQueryRetriever:
         neo4j_client: Any,
         embedding_model: Any,
         index_version: _IndexVersionSnapshot,
+        filters: dict[str, Any] | None = None,
     ) -> None:
         self._neo4j_client = neo4j_client
         self._embedding_model = embedding_model
         self._index_version = index_version
+        self._filters = filters or {}
 
     async def retrieve_vector(
         self,
@@ -345,16 +360,20 @@ class _VectorQueryRetriever:
                 "vector": embedding_result.embeddings[0].vector,
                 "tenant_id": str(tenant_id),
                 "retrieval_index_version_id": str(retrieval_index_version_id),
-                "document_id": None,
-                "document_version_id": None,
-                "chunk_id": None,
+                "document_id": self._filters.get("document_id"),
+                "document_version_id": self._filters.get("document_version_id"),
+                "chunk_id": self._filters.get("chunk_id"),
                 "limit": limit,
             },
         )
         chunks = await filter_active_chunk_results(
             session,
             tenant_id=tenant_id,
-            results=[_chunk_result_from_neo4j_row(row) for row in rows],
+            results=[
+                chunk
+                for row in rows
+                if _matches_query_filters(chunk := _chunk_result_from_neo4j_row(row), self._filters)
+            ],
         )
         return [
             _chunk_candidate(
@@ -369,6 +388,9 @@ class _VectorQueryRetriever:
 
 
 class _GraphQueryRetriever:
+    def __init__(self, filters: dict[str, Any] | None = None) -> None:
+        self._filters = filters or {}
+
     async def retrieve_graph(
         self,
         session: AsyncSession,
@@ -380,6 +402,10 @@ class _GraphQueryRetriever:
         depth: int,
         limit: int,
     ) -> list[QueryCandidate]:
+        # Relationship summaries can combine evidence from several documents.
+        # Until scoped evidence reads exist, filtered runs use chunk retrieval.
+        if self._filters:
+            return []
         candidates: list[QueryCandidate] = []
         for entity_id in linked_entity_ids:
             if len(candidates) >= limit:
@@ -676,6 +702,15 @@ async def _replay_query_events(
         sequence=0,
     ):
         yield _sse_event(event)
+
+
+def _matches_query_filters(chunk: RetrievalChunkResult, filters: dict[str, Any]) -> bool:
+    values = {
+        "document_id": str(chunk.document_id),
+        "document_version_id": str(chunk.document_version_id),
+        "chunk_id": chunk.chunk_id,
+    }
+    return all(values.get(name) == str(value) for name, value in filters.items())
 
 
 def _chunk_candidate(
