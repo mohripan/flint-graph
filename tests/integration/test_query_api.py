@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -360,6 +361,62 @@ async def test_provider_failures_are_terminal_and_do_not_expose_provider_payload
     assert _sse_event_types(stream.text)[-1] == "query.failed"
     assert "secret-provider-payload" not in stream.text
     assert "secret-provider-payload" not in inspected.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not os.getenv("FLINT_GRAPH_OLLAMA_INTEGRATION"),
+    reason="Set FLINT_GRAPH_OLLAMA_INTEGRATION=1 and FLINT_GRAPH_OLLAMA_TEST_MODEL for live smoke.",
+)
+async def test_live_ollama_query_returns_supported_cited_answer(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_searchable_content(session)
+    model = os.getenv("FLINT_GRAPH_OLLAMA_TEST_MODEL", "llama3.2")
+    settings = Settings(
+        env="test",
+        query_answer_provider="ollama",
+        query_support_provider="ollama",
+        query_answer_model=model,
+        query_support_model=model,
+        ollama_base_url=os.getenv("FLINT_GRAPH_OLLAMA_TEST_URL", "http://localhost:11434"),
+        query_answer_timeout_seconds=120,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant.id),
+        json={
+            "query": "Where is Acme Corporation headquartered?",
+            "retrieval_index_version_id": str(index_id),
+        },
+    )
+    assert created.status_code == 201
+    run_id = created.json()["id"]
+    stream = await client.get(f"/v1/query-runs/{run_id}/events/stream", headers=_headers(tenant.id))
+    response = await client.get(f"/v1/query-runs/{run_id}/provenance", headers=_headers(tenant.id))
+    assert response.status_code == 200
+    answer = response.json()
+    provisional = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert answer["abstained"] is False, json.dumps(
+        {
+            "answer": answer,
+            "draft": [
+                event["payload"] for event in provisional if event["event_type"] == "answer.delta"
+            ],
+        }
+    )
+    assert "Berlin" in answer["answer_text"]
+    assert answer["answer_citations"]
+    assert all(claim["support_status"] == "supported" for claim in answer["claims"])
 
 
 @pytest.mark.asyncio

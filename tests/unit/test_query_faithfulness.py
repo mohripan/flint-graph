@@ -63,6 +63,37 @@ def test_answer_draft_and_faithfulness_report_reject_oversized_metadata() -> Non
         )
 
 
+def test_context_ids_resolve_only_to_the_current_pack_citations() -> None:
+    repaired, repairs = repair_claim_citations(
+        claim_index=0,
+        text="Acme operates in Berlin and Paris.",
+        raw_markers=["ctx-1", "[CTX-2]", "ctx-other"],
+        context_pack=_context_pack(),
+    )
+    assert repaired.citation_ids == ["c1", "c2"]
+    assert [repair.action for repair in repairs] == ["normalized", "normalized", "dropped_unknown"]
+
+
+def test_ambiguous_context_id_does_not_guess_a_citation() -> None:
+    pack = _context_pack()
+    pack = pack.model_copy(
+        update={
+            "records": [
+                pack.records[0],
+                pack.records[1].model_copy(update={"context_id": "ctx-1"}),
+            ]
+        }
+    )
+    repaired, repairs = repair_claim_citations(
+        claim_index=0,
+        text="Acme operates in Berlin.",
+        raw_markers=["ctx-1"],
+        context_pack=pack,
+    )
+    assert repaired.citation_ids == []
+    assert repairs[0].action == "dropped_unknown"
+
+
 def test_repair_claim_citations_normalizes_drops_unknown_and_deduplicates() -> None:
     repaired, repairs = repair_claim_citations(
         claim_index=0,
@@ -73,8 +104,7 @@ def test_repair_claim_citations_normalizes_drops_unknown_and_deduplicates() -> N
 
     assert repaired.citation_ids == ["c1", "c2"]
     assert [
-        (repair.original_marker, repair.resolved_citation_id, repair.action)
-        for repair in repairs
+        (repair.original_marker, repair.resolved_citation_id, repair.action) for repair in repairs
     ] == [
         ("[C1]", "c1", "normalized"),
         ("(c1)", "c1", "deduplicated"),

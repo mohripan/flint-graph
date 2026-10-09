@@ -48,6 +48,10 @@ async def test_ollama_answer_generator_sends_citation_only_schema_and_parses_ans
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        schema = json.loads(request.content)["format"]
+        assert schema["properties"]["claims"]["items"]["properties"]["citations"]["items"][
+            "enum"
+        ] == ["c1", "c2"]
         return httpx.Response(
             200,
             json={

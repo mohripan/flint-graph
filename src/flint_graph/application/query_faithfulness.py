@@ -33,8 +33,12 @@ def repair_claim_citations(
     raw_markers: list[str],
     context_pack: QueryContextPack,
 ) -> tuple[SupportCheckClaim, list[CitationRepair]]:
+    aliases: dict[str, set[str]] = {}
+    for record in context_pack.records:
+        for alias in (record.citation_id.casefold(), record.context_id.casefold()):
+            aliases.setdefault(alias, set()).add(record.citation_id)
     citation_lookup = {
-        record.citation_id.casefold(): record.citation_id for record in context_pack.records
+        alias: next(iter(citations)) for alias, citations in aliases.items() if len(citations) == 1
     }
     seen: set[str] = set()
     resolved_ids: list[str] = []

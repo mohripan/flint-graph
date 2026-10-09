@@ -92,3 +92,27 @@ details, since it may contain credentials or provider payloads.
 These codes identify the failing operation, not the underlying network or model
 diagnosis. Use the run's trace and effective provider settings for that diagnosis;
 an outage must not be represented as a successful evidence abstention.
+
+## Citation IDs from real models
+
+[Issue #16](https://github.com/mohripan/flint-graph/issues/16) was reproduced
+with a live installed Ollama model: a correct Berlin answer cited `ctx-0001`
+instead of `c1`, so repair removed all evidence and the run abstained. Exact,
+unambiguous context IDs from the current pack now normalize to canonical citation
+IDs. Unknown or ambiguous aliases are rejected; repair never searches another
+pack or invents source evidence. Support verification still runs afterward.
+
+Ollama answer schemas enumerate actual pack citation IDs, and Ollama/Anthropic
+prompts explicitly distinguish citation IDs from context IDs. Offline regressions
+cover alias normalization and ambiguity. An opt-in live query API smoke uses real
+Ollama answer/support calls with controlled retrieval fixtures:
+
+```powershell
+$env:FLINT_GRAPH_OLLAMA_INTEGRATION = '1'
+$env:FLINT_GRAPH_OLLAMA_TEST_MODEL = '<installed model name>'
+uv run pytest tests/integration/test_query_api.py -q -k live_ollama
+```
+
+The live smoke passed with the locally installed model after initially abstaining.
+It validates real generation/support plus API/provenance, not full upload,
+extraction, and projection operation; that end-to-end gate remains outstanding.
