@@ -28,6 +28,7 @@ from flint_graph.application.services.retrieval_index_versions import (
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
+from flint_graph.config import Settings, get_settings
 from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     DocumentVersionStatus,
@@ -277,6 +278,44 @@ def _sse_event_types(body: str) -> list[str]:
     return [
         line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider", "answer_model", "support_model"),
+    [
+        ("anthropic", "hosted-answer", "hosted-support"),
+        ("ollama", "local-answer", "local-support"),
+        ("deterministic", "deterministic", "deterministic"),
+    ],
+)
+async def test_system_readiness_reports_effective_provider_models(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+    provider: str,
+    answer_model: str,
+    support_model: str,
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+    settings = Settings(
+        env="test",
+        query_answer_provider=provider,
+        query_support_provider=provider,
+        query_answer_model="local-answer",
+        query_support_model="local-support",
+        anthropic_answer_model="hosted-answer",
+        anthropic_support_model="hosted-support",
+        anthropic_api_key="fake-test-key",
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    response = await client.get("/v1/system-readiness", headers=_headers(tenant.id))
+    assert response.status_code == 200
+    assert response.json()["query"]["answer_model"] == answer_model
+    assert response.json()["query"]["support_model"] == support_model
+    assert "fake-test-key" not in response.text
 
 
 @pytest.mark.asyncio

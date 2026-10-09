@@ -18,6 +18,22 @@ from flint_graph.infrastructure.anthropic import (
 from flint_graph.infrastructure.ollama import OllamaAnswerGenerator, OllamaSupportChecker
 
 
+def answer_generator_model(settings: Settings) -> str:
+    if settings.query_answer_provider == "anthropic":
+        return settings.anthropic_answer_model
+    if settings.query_answer_provider == "ollama":
+        return settings.query_answer_model
+    return "deterministic"
+
+
+def support_checker_model(settings: Settings) -> str:
+    if settings.query_support_provider == "anthropic":
+        return settings.anthropic_support_model
+    if settings.query_support_provider == "ollama":
+        return settings.query_support_model
+    return "deterministic"
+
+
 def create_answer_generator(
     settings: Settings,
     *,
@@ -29,7 +45,7 @@ def create_answer_generator(
         if http_client is None:
             raise RuntimeError("the ollama answer generator requires an http client")
         return OllamaAnswerGenerator(
-            model=settings.query_answer_model,
+            model=answer_generator_model(settings),
             timeout_seconds=settings.query_answer_timeout_seconds,
             temperature=settings.query_answer_temperature,
             max_tokens=settings.query_answer_max_tokens,
@@ -40,7 +56,7 @@ def create_answer_generator(
         # The Anthropic SDK client manages its own transport; when no client is
         # injected the adapter constructs one from the configured API key.
         return AnthropicAnswerGenerator(
-            model=settings.anthropic_answer_model,
+            model=answer_generator_model(settings),
             max_tokens=settings.query_answer_max_tokens,
             effort=settings.anthropic_effort,
             timeout_seconds=settings.query_answer_timeout_seconds,
@@ -59,7 +75,7 @@ def create_support_checker(
     provider = settings.query_support_provider
     if provider == "anthropic":
         return AnthropicSupportChecker(
-            model=settings.anthropic_support_model,
+            model=support_checker_model(settings),
             max_tokens=settings.anthropic_support_max_tokens,
             effort=settings.anthropic_effort,
             timeout_seconds=settings.query_answer_timeout_seconds,
@@ -70,7 +86,7 @@ def create_support_checker(
         if http_client is None:
             raise RuntimeError("the ollama support checker requires an http client")
         return OllamaSupportChecker(
-            model=settings.query_support_model,
+            model=support_checker_model(settings),
             timeout_seconds=settings.query_answer_timeout_seconds,
             temperature=settings.query_answer_temperature,
             max_tokens=settings.query_answer_max_tokens,

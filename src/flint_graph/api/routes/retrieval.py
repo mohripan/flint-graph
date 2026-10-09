@@ -48,6 +48,10 @@ from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     RetrievalIndexVersionStatus,
 )
+from flint_graph.infrastructure.answer_generator_factory import (
+    answer_generator_model,
+    support_checker_model,
+)
 
 router = APIRouter(prefix="/v1", tags=["retrieval"])
 
@@ -71,9 +75,9 @@ async def get_system_readiness_endpoint(
         },
         "query": {
             "answer_provider": settings.query_answer_provider,
-            "answer_model": settings.query_answer_model,
+            "answer_model": answer_generator_model(settings),
             "support_provider": settings.query_support_provider,
-            "support_model": settings.query_support_model,
+            "support_model": support_checker_model(settings),
         },
         "search_readiness": SearchReadinessResponse.model_validate(readiness).model_dump(
             mode="json"

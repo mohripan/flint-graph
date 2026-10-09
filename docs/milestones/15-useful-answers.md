@@ -63,3 +63,19 @@ Query API regressions can additionally run against PostgreSQL by setting
 `FLINT_GRAPH_PG_INTEGRATION=1`, with optional `FLINT_GRAPH_PG_TEST_URL`. Each
 fixture owns a unique schema which it removes afterward, avoiding production
 table mutation. Offline SQLite remains the default test backend.
+
+## Effective model reporting
+
+[Issue #14](https://github.com/mohripan/flint-graph/issues/14) shares model
+selection between provider factories and system readiness. Anthropic reports
+`anthropic_answer_model`/`anthropic_support_model`; Ollama reports the query model
+settings; deterministic adapters report `deterministic`. Setup therefore shows
+the selected model rather than an unrelated Ollama default. Credentials are
+never included in this response.
+
+The example local configuration and Compose select deterministic query providers
+explicitly. That mode produces fixture answers and lexical support judgments.
+To evaluate actual model quality, select Ollama with installed model names or a
+hosted provider with valid credentials; inspect `/v1/system-readiness` for the
+effective selection. A missing local model, an invalid hosted model name, and a
+faithfulness abstention require different remedies.
