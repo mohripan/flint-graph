@@ -18,3 +18,17 @@ test framework. Workflow contract tests enforce the required commands.
 
 Fresh full-application dataset capture, expanded quality cases, and strategy
 comparisons are not delivered by this CI change and remain open milestone work.
+
+## Persisted retrieval inspection
+
+[Issue #20](https://github.com/mohripan/flint-graph/issues/20) adds the read-only,
+workspace-authorized `/v1/query-runs/{id}/retrieval` endpoint. It returns persisted
+candidate source IDs, per-retriever ranks, fusion/rerank scores and ranks, document
+identities and graph endpoint identities. It includes uncited candidates and
+duplicates, so evaluation tools can distinguish retrieval from answer citation
+selection. Linked entities are reported separately; linking is not a retrieval hit.
+
+The response excludes text previews, prompts, provider payloads and arbitrary
+metadata. Foreign runs return 404. Queued runs have an empty candidate list;
+inspection never starts execution. Null rerank ranks identify candidates that were
+not selected, including deduplicated retriever copies. Ordering is deterministic.

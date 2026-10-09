@@ -895,6 +895,37 @@ async def test_query_run_inspection_preserves_tenant_boundary(
 
 
 @pytest.mark.asyncio
+async def test_query_retrieval_trace_is_persisted_and_tenant_scoped(query_api_env: Any) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_searchable_content(session)
+        other = Tenant(name="foreign-inspector")
+        session.add(other)
+        await session.commit()
+    created = await client.post(
+        "/v1/query-runs", headers=_headers(tenant.id),
+        json={"query": "Where is Acme headquartered?", "retrieval_index_version_id": str(index_id)},
+    )
+    run_id = created.json()["id"]
+    path = f"/v1/query-runs/{run_id}/retrieval"
+    queued = await client.get(path, headers=_headers(tenant.id))
+    assert queued.status_code == 200
+    assert queued.json()["candidates"] == []
+    await client.get(f"/v1/query-runs/{run_id}/events/stream", headers=_headers(tenant.id))
+    inspected = await client.get(path, headers=_headers(tenant.id))
+    repeated = await client.get(path, headers=_headers(tenant.id))
+    assert inspected.json() == repeated.json()
+    rows = inspected.json()["candidates"]
+    assert len(rows) == 2  # Includes uncited retriever duplicates, not just answer citations.
+    assert {row["source"] for row in rows} == {"lexical", "vector"}
+    assert all(row["source_ids"] == {"chunk_id": "chunk-acme"} for row in rows)
+    assert sorted(row["rerank_rank"] for row in rows if row["rerank_rank"] is not None) == [1]
+    assert all(row["document_id"] == "11111111-1111-4111-8111-111111111111" for row in rows)
+    assert "Berlin" not in inspected.text  # Inspection does not duplicate source text/prompts.
+    assert (await client.get(path, headers=_headers(other.id))).status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_query_run_creation_rejects_active_index_without_searchable_content(
     query_api_env: tuple[
         httpx.AsyncClient,

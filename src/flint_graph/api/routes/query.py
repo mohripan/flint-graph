@@ -26,6 +26,7 @@ from flint_graph.api.dependencies import (
 from flint_graph.api.schemas import (
     QueryAnswerProvenanceResponse,
     QueryCitationProvenanceResponse,
+    QueryRetrievalInspectionResponse,
     QueryRunCreateRequest,
     QueryRunEventResponse,
     QueryRunResponse,
@@ -45,6 +46,7 @@ from flint_graph.application.services.query_provenance import (
     get_query_answer_provenance,
     get_query_citation_provenance,
 )
+from flint_graph.application.services.query_retrieval_inspection import inspect_query_retrieval
 from flint_graph.application.services.query_runs import (
     QueryRunCreate,
     create_query_run,
@@ -145,6 +147,16 @@ async def get_query_run_endpoint(
 ) -> QueryRunResponse:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
     return QueryRunResponse.model_validate(run)
+
+
+@router.get("/query-runs/{query_run_id}/retrieval", response_model=QueryRetrievalInspectionResponse)
+async def inspect_query_retrieval_endpoint(
+    query_run_id: UUID, tenant_id: TenantIdDep, session: SessionDep,
+) -> QueryRetrievalInspectionResponse:
+    inspection = await inspect_query_retrieval(
+        session, tenant_id=tenant_id, query_run_id=query_run_id,
+    )
+    return QueryRetrievalInspectionResponse.model_validate(inspection)
 
 
 @router.get("/query-runs/{query_run_id}/events", response_model=list[QueryRunEventResponse])

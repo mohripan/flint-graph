@@ -561,6 +561,29 @@ class QueryRunResponse(BaseModel):
     updated_at: datetime
 
 
+class QueryRetrievalCandidateResponse(BaseModel):
+    candidate_id: str
+    source: str
+    candidate_type: str
+    source_ids: dict[str, str]
+    rank: int
+    raw_score: float
+    normalized_score: float
+    fusion_score: float | None
+    rerank_score: float | None
+    rerank_rank: int | None
+    document_id: UUID | None
+    document_version_id: UUID | None
+    subject_entity_id: UUID | None
+    object_entity_id: UUID | None
+
+
+class QueryRetrievalInspectionResponse(BaseModel):
+    query_run_id: UUID
+    candidates: list[QueryRetrievalCandidateResponse]
+    linked_entity_ids: list[UUID]
+
+
 class QueryRunEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
