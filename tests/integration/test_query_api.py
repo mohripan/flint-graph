@@ -320,6 +320,50 @@ async def test_system_readiness_reports_effective_provider_models(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("operation", "error_code"),
+    [("answer", "answer_generation_failed"), ("support", "support_check_failed")],
+)
+async def test_provider_failures_are_terminal_and_do_not_expose_provider_payloads(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+    operation: str,
+    error_code: str,
+) -> None:
+    class FailingProvider:
+        async def generate(self, request: Any) -> Any:
+            raise RuntimeError("secret-provider-payload")
+
+        async def check(self, request: Any) -> Any:
+            raise RuntimeError("secret-provider-payload")
+
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_searchable_content(session)
+    dependency = (
+        dependencies.get_answer_generator
+        if operation == "answer"
+        else dependencies.get_support_checker
+    )
+    app.dependency_overrides[dependency] = lambda: FailingProvider()
+    created = await client.post(
+        "/v1/query-runs",
+        headers=_headers(tenant.id),
+        json={"query": "Where is Acme headquartered?", "retrieval_index_version_id": str(index_id)},
+    )
+    assert created.status_code == 201
+    run_id = created.json()["id"]
+    stream = await client.get(f"/v1/query-runs/{run_id}/events/stream", headers=_headers(tenant.id))
+    inspected = await client.get(f"/v1/query-runs/{run_id}", headers=_headers(tenant.id))
+    assert inspected.json()["status"] == "failed"
+    assert inspected.json()["error_code"] == error_code
+    assert _sse_event_types(stream.text)[-1] == "query.failed"
+    assert "secret-provider-payload" not in stream.text
+    assert "secret-provider-payload" not in inspected.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("filter_name", "filter_value"),
     [
         ("document_id", "33333333-3333-4333-8333-333333333333"),

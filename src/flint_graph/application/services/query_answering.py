@@ -63,6 +63,7 @@ async def generate_query_answer(
     usage_currency: str = "USD",
 ) -> QueryAnswerResult:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
+    stage = "load_context"
     try:
         context_pack = await _load_latest_context_pack(
             session,
@@ -76,6 +77,7 @@ async def generate_query_answer(
             retrieval_index_version_id=run.retrieval_index_version_id,
             context_pack=context_pack,
         )
+        stage = "generate_answer"
         if isinstance(model, StreamingAnswerGenerator):
             draft_answer = await model.stream_generate(
                 generation_request,
@@ -87,6 +89,7 @@ async def generate_query_answer(
             )
         else:
             draft_answer = await model.generate(generation_request)
+        stage = "support_check"
         verification = await verify_generated_answer(
             tenant_id=tenant_id,
             query=run.query_text,
@@ -98,6 +101,7 @@ async def generate_query_answer(
                 min_context_relevance=min_context_relevance,
             ),
         )
+        stage = "persist_answer"
         answer = verification.answer
         faithfulness = faithfulness_summary(verification.report)
         answer_provider = _answer_provider(draft_answer)
@@ -111,9 +115,7 @@ async def generate_query_answer(
             currency=usage_currency,
         )
         _record_answer_metrics(verification.report)
-        answer_citations = [
-            citation.model_dump(mode="json") for citation in answer.citations
-        ]
+        answer_citations = [citation.model_dump(mode="json") for citation in answer.citations]
         await persist_query_answer_claims(
             session,
             tenant_id=tenant_id,
@@ -208,10 +210,26 @@ async def generate_query_answer(
             insufficient_context=answer.insufficient_context,
         )
     except Exception as exc:
+        code, message = {
+            "load_context": ("answer_context_failed", "Answer context could not be loaded."),
+            "generate_answer": (
+                "answer_generation_failed",
+                "The answer provider could not generate an answer.",
+            ),
+            "support_check": (
+                "support_check_failed",
+                "The support checker could not verify the answer.",
+            ),
+            "persist_answer": (
+                "answer_persistence_failed",
+                "The verified answer could not be saved.",
+            ),
+        }[stage]
         error = {
-            "stage": "generate_answer",
-            "error_code": "answer_generation_failed",
-            "error_message": str(exc),
+            "stage": stage,
+            "error_code": code,
+            "error_message": message,
+            "error_type": type(exc).__name__,
         }
         await transition_query_run(
             session,
@@ -219,9 +237,9 @@ async def generate_query_answer(
             query_run_id=query_run_id,
             target_status=QueryRunStatus.FAILED,
             event_type="query.failed",
-            payload={"stage": "generate_answer", "errors": [error]},
-            error_code="answer_generation_failed",
-            error_message="Answer generation failed.",
+            payload={"stage": stage, "errors": [error]},
+            error_code=code,
+            error_message=message,
             error_details={"errors": [error]},
         )
         return QueryAnswerResult(status=QueryRunStatus.FAILED, errors=[error])
@@ -275,9 +293,7 @@ def _record_answer_metrics(report: object) -> None:
     if supported:
         metrics.add(QUERY_CLAIMS, supported, **{"flint_graph.support.status": "supported"})
     if unsupported:
-        metrics.add(
-            QUERY_CLAIMS, unsupported, **{"flint_graph.support.status": "unsupported"}
-        )
+        metrics.add(QUERY_CLAIMS, unsupported, **{"flint_graph.support.status": "unsupported"})
     if getattr(report, "abstained", False):
         reason = getattr(report, "abstain_reason", None) or "unspecified"
         metrics.add(QUERY_ABSTENTIONS, **{"flint_graph.abstain.reason": reason})

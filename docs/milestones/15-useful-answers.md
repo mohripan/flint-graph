@@ -79,3 +79,16 @@ To evaluate actual model quality, select Ollama with installed model names or a
 hosted provider with valid credentials; inspect `/v1/system-readiness` for the
 effective selection. A missing local model, an invalid hosted model name, and a
 faithfulness abstention require different remedies.
+
+## Provider failure diagnostics
+
+[Issue #15](https://github.com/mohripan/flint-graph/issues/15) distinguishes
+`answer_generation_failed` from `support_check_failed`. Context loading and
+answer persistence also carry separate failure codes. Failed runs persist a
+`query.failed` event, an actionable safe message, the stage, and an exception type.
+Raw provider exception text is excluded from answer-stage events and inspection
+details, since it may contain credentials or provider payloads.
+
+These codes identify the failing operation, not the underlying network or model
+diagnosis. Use the run's trace and effective provider settings for that diagnosis;
+an outage must not be represented as a successful evidence abstention.
