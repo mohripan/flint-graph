@@ -43,8 +43,20 @@ New turns require active visible indexes and searchable coverage. Invalid or
 failed submissions do not consume an ordinal.
 
 A turn response includes its run; run state/events/usage/provenance remain the
-existing system of record. GET does not dispatch inference. POST persists a
-queued run; clients execute/replay through its existing SSE endpoint. Queued
+existing system of record. Ordinary inspection GETs do not dispatch inference.
+POST persists a queued run; clients execute/replay through the existing
+`GET /v1/query-runs/{id}/events/stream` endpoint. This SSE GET is execution-capable:
+a queued run linked by an authoritative tenant-scoped conversation turn requires
+current member, admin or owner membership before execution. Viewer access is
+read-only for conversation runs: non-queued streams replay persisted events,
+without restarting work. Run metadata is not an authorization source; absent or
+forged conversation metadata cannot remove the ledger-based check. Existing
+standalone-query creation/execution policy remains viewer-accessible.
+Foreign run access returns 404 after workspace authorization; missing credentials
+return 401, disabled membership or insufficient role 403. Membership is checked
+at request entry, not continuously throughout an existing stream. Simultaneous
+queued execution claims and atomic mid-request revocation are not guaranteed by
+this request-bound path. Queued
 cancellation appends one terminal event without inference. Running cancellation
 remains request-bound; this slice has no durable dispatch/recovery promise.
 
@@ -125,7 +137,8 @@ presented as a verified answer.
 
 Selection/workspace changes abort and invalidate old requests; 401/403 removes
 conversation data and actions. The UI presents viewers as read-only for these
-conversation actions. The existing queued SSE endpoint's viewer-level execution
-gap is tracked in #100; UI hiding is not an authorization guarantee. Full #73
+conversation actions. The backend enforces member-only queued conversation
+execution independently of UI controls (#100). Full #73
 accessibility/retention and general memory/quality acceptance remain separate.
 See [UI verification](../reports/2026-10-11-conversation-thread-ui.md).
+See [stream authorization verification](../reports/2026-10-11-conversation-stream-authorization.md).

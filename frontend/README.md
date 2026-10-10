@@ -102,8 +102,11 @@ a client-side transcript. Queued turns offer explicit Resume/Cancel; Stop stream
 only disconnects the current request. Refresh confirms actual backend state.
 Switching workspace/chat or receiving 401/403 clears old data and aborts/ignores
 outstanding requests. Durable background execution remains Milestone 18 work.
-Server hardening of queued conversation execution is tracked in #100: hiding
-controls is not authorization.
+The backend independently requires current member-or-higher access before a
+queued conversation stream executes (#100). Viewers retain read-only replay of
+non-queued conversation events; standalone-query policy is unchanged. Hiding
+controls is not the authorization boundary. Membership is checked on each new
+request, not continuously throughout an already-open stream.
 
 Independent question history preserves previous standalone results separately;
 older/unavailable backends fall back to independent questions. These questions

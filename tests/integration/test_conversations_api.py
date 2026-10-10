@@ -9,6 +9,11 @@ import pytest_asyncio
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from flint_graph.api.dependencies import (
+    get_neo4j_client,
+    get_oidc_token_verifier,
+    get_opensearch_client,
+)
 from flint_graph.application.services.conversations import (
     ConversationTurnCreate,
     create_conversation_turn,
@@ -32,6 +37,7 @@ from flint_graph.infrastructure.db.models import (
     Document,
     DocumentIndexCoverage,
     DocumentVersion,
+    QueryRun,
     User,
     WorkspaceMembership,
 )
@@ -86,9 +92,11 @@ async def conversation_env(request, tmp_path) -> AsyncIterator[tuple]:
         await engine.dispose()
 
 
-async def searchable_workspace(client, factory) -> tuple[dict[str, str], str]:
-    workspace = (await client.post("/v1/workspaces", json={"name": "Searchable fixture"})).json()
-    headers = {"X-Tenant-ID": workspace["id"]}
+async def searchable_workspace(client, factory, *, auth_headers=None) -> tuple[dict[str, str], str]:
+    workspace = (await client.post(
+        "/v1/workspaces", headers=auth_headers, json={"name": "Searchable fixture"}
+    )).json()
+    headers = {**(auth_headers or {}), "X-Tenant-ID": workspace["id"]}
     index = (await client.post("/v1/retrieval-index/bootstrap", headers=headers)).json()
     async with factory() as session:
         document = Document(
@@ -116,6 +124,250 @@ async def searchable_workspace(client, factory) -> tuple[dict[str, str], str]:
         )
         await session.commit()
     return headers, index["id"]
+
+
+@pytest_asyncio.fixture
+async def oidc_conversation_stream_env(conversation_env, oidc_auth):
+    # Reuse the isolated SQLite / opt-in PostgreSQL database, with the shared
+    # signed-token JWKS verifier at the identity-provider boundary.
+    _, factory, _ = conversation_env
+    settings = app.dependency_overrides[get_settings]().model_copy(update={"otel_enabled": False})
+    stream_app = create_app(settings)
+    stream_app.dependency_overrides[get_settings] = lambda: settings
+    stream_app.dependency_overrides[get_oidc_token_verifier] = (
+        app.dependency_overrides[get_oidc_token_verifier]
+    )
+
+    class EmptyOpenSearch:
+        async def search(self, *, index_name, body):
+            return []
+
+    class EmptyNeo4j:
+        async def execute(self, query, parameters=None):
+            return []
+
+    # Projection-service boundaries stay offline; authorization, the database,
+    # query graph and invocation accounting are exercised without replacement.
+    stream_app.dependency_overrides[get_opensearch_client] = lambda: EmptyOpenSearch()
+    stream_app.dependency_overrides[get_neo4j_client] = lambda: EmptyNeo4j()
+
+    async def sessions():
+        async with factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    stream_app.dependency_overrides[get_session] = sessions
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=stream_app), base_url="http://test"
+    ) as stream_client:
+        yield stream_client, factory, oidc_auth
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("metadata_state", ["original", "missing", "forged"])
+@pytest.mark.parametrize("question", ["What about the prior year?", "What was revenue in 2017?"])
+async def test_viewer_cannot_execute_a_queued_conversation_run(
+    oidc_conversation_stream_env, question, metadata_state,
+):
+    client, factory, token = oidc_conversation_stream_env
+    owner = {"Authorization": f"Bearer {token('stream-owner')}"}
+    owner, _ = await searchable_workspace(client, factory, auth_headers=owner)
+    for subject, role in (("stream-viewer", "viewer"), ("stream-member", "member")):
+        response = await client.post(
+            f"/v1/workspaces/{owner['X-Tenant-ID']}/members", headers=owner,
+            json={"oidc_subject": subject, "role": role},
+        )
+        assert response.status_code == 201
+    viewer = {**owner, "Authorization": f"Bearer {token('stream-viewer')}"}
+    member = {**owner, "Authorization": f"Bearer {token('stream-member')}"}
+    conversation = (await client.post("/v1/conversations", headers=member, json={})).json()
+    turn = await client.post(
+        f"/v1/conversations/{conversation['id']}/turns", headers=member,
+        json={"query": question, "idempotency_key": str(uuid4())},
+    )
+    assert turn.status_code == 201
+    path = f"/v1/query-runs/{turn.json()['run']['id']}"
+    if metadata_state != "original":
+        async with factory() as session:
+            run = await session.get(QueryRun, UUID(turn.json()["run"]["id"]))
+            run.metadata_ = {} if metadata_state == "missing" else {
+                "conversation": {"id": str(uuid4()), "tenant_id": str(uuid4())}
+            }
+            await session.commit()
+    before = (await client.get(path, headers=viewer)).json()
+    events = (await client.get(path + "/events", headers=viewer)).json()
+    assert before["status"] == "queued"
+    assert (await client.get(path + "/usage", headers=viewer)).json() == []
+    denied = await client.get(path + "/events/stream", headers=viewer)
+    assert denied.status_code == 403
+    assert (await client.get(path, headers=viewer)).json() == before
+    assert (await client.get(path + "/events", headers=viewer)).json() == events
+    assert (await client.get(path + "/usage", headers=viewer)).json() == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("execution_role", ["member", "admin", "owner"])
+async def test_member_execution_and_viewer_terminal_replay_are_preserved(
+    oidc_conversation_stream_env, execution_role,
+):
+    client, factory, token = oidc_conversation_stream_env
+    owner, _ = await searchable_workspace(
+        client, factory, auth_headers={"Authorization": f"Bearer {token('replay-owner')}"}
+    )
+    for subject, role in (("replay-viewer", "viewer"), ("replay-executor", execution_role)):
+        assert (await client.post(
+            f"/v1/workspaces/{owner['X-Tenant-ID']}/members", headers=owner,
+            json={"oidc_subject": subject, "role": role},
+        )).status_code == 201
+    viewer = {**owner, "Authorization": f"Bearer {token('replay-viewer')}"}
+    executor = {**owner, "Authorization": f"Bearer {token('replay-executor')}"}
+    conversation = (await client.post("/v1/conversations", headers=executor, json={})).json()
+    turn = await client.post(
+        f"/v1/conversations/{conversation['id']}/turns", headers=executor,
+        json={"query": "What about the prior year?", "idempotency_key": str(uuid4())},
+    )
+    assert turn.status_code == 201
+    path = f"/v1/query-runs/{turn.json()['run']['id']}"
+    executed = await client.get(path + "/events/stream", headers=executor)
+    assert executed.status_code == 200
+    assert "query.completed" in executed.text
+    before = (await client.get(path, headers=viewer)).json()
+    events = (await client.get(path + "/events", headers=viewer)).json()
+    usage = (await client.get(path + "/usage", headers=viewer)).json()
+    assert before["status"] == "completed"
+    assert before["metadata"]["conversation_context"]["mode"] == "clarification"
+    replayed = await client.get(path + "/events/stream", headers=viewer)
+    assert replayed.status_code == 200
+    assert replayed.text == executed.text
+    assert (await client.get(path, headers=viewer)).json() == before
+    assert (await client.get(path + "/events", headers=viewer)).json() == events
+    assert (await client.get(path + "/usage", headers=viewer)).json() == usage
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("membership_change", ["disabled", "downgraded"])
+async def test_foreign_and_revoked_stream_access_leave_queued_turn_untouched(
+    oidc_conversation_stream_env, membership_change,
+):
+    client, factory, token = oidc_conversation_stream_env
+    owner, _ = await searchable_workspace(
+        client, factory, auth_headers={"Authorization": f"Bearer {token('boundary-owner')}"}
+    )
+    assert (await client.post(
+        f"/v1/workspaces/{owner['X-Tenant-ID']}/members", headers=owner,
+        json={"oidc_subject": "boundary-member", "role": "member"},
+    )).status_code == 201
+    member = {**owner, "Authorization": f"Bearer {token('boundary-member')}"}
+    conversation = (await client.post("/v1/conversations", headers=member, json={})).json()
+    turn = (await client.post(
+        f"/v1/conversations/{conversation['id']}/turns", headers=member,
+        json={"query": "What about the prior year?", "idempotency_key": str(uuid4())},
+    )).json()
+    path = f"/v1/query-runs/{turn['run']['id']}"
+    before = (await client.get(path, headers=owner)).json()
+    events = (await client.get(path + "/events", headers=owner)).json()
+    foreign = (await client.post("/v1/workspaces", headers=owner, json={"name": "Foreign"})).json()
+    assert (await client.get(
+        path + "/events/stream", headers={**owner, "X-Tenant-ID": foreign["id"]},
+    )).status_code == 404
+    assert (await client.get(
+        path + "/events/stream", headers={"X-Tenant-ID": owner["X-Tenant-ID"]},
+    )).status_code == 401
+    # Simulate identity lifecycle in setup; verify denial and state through HTTP.
+    if membership_change == "disabled":
+        async with factory() as session:
+            membership = await session.scalar(select(WorkspaceMembership).join(User).where(
+                WorkspaceMembership.tenant_id == UUID(owner["X-Tenant-ID"]),
+                User.oidc_subject == "boundary-member",
+            ))
+            membership.status = WorkspaceMembershipStatus.DISABLED
+            await session.commit()
+    else:
+        assert (await client.post(
+            f"/v1/workspaces/{owner['X-Tenant-ID']}/members", headers=owner,
+            json={"oidc_subject": "boundary-member", "role": "viewer"},
+        )).status_code == 201
+    assert (await client.get(path + "/events/stream", headers=member)).status_code == 403
+    assert (await client.get(path, headers=owner)).json() == before
+    assert (await client.get(path + "/events", headers=owner)).json() == events
+    assert (await client.get(path + "/usage", headers=owner)).json() == []
+
+
+@pytest.mark.anyio
+async def test_forged_metadata_does_not_change_standalone_viewer_execution_policy(
+    oidc_conversation_stream_env,
+):
+    client, factory, token = oidc_conversation_stream_env
+    owner, _ = await searchable_workspace(
+        client, factory, auth_headers={"Authorization": f"Bearer {token('standalone-owner')}"}
+    )
+    assert (await client.post(
+        f"/v1/workspaces/{owner['X-Tenant-ID']}/members", headers=owner,
+        json={"oidc_subject": "standalone-viewer", "role": "viewer"},
+    )).status_code == 201
+    viewer = {**owner, "Authorization": f"Bearer {token('standalone-viewer')}"}
+    response = await client.post("/v1/query-runs", headers=viewer, json={"query": "Revenue?"})
+    assert response.status_code == 201
+    path = f"/v1/query-runs/{response.json()['id']}"
+    async with factory() as session:
+        run = await session.get(QueryRun, UUID(response.json()["id"]))
+        run.metadata_ = {**run.metadata_, "conversation": {"id": str(uuid4())}}
+        await session.commit()
+    streamed = await client.get(path + "/events/stream", headers=viewer)
+    assert streamed.status_code == 200
+    assert "query.completed" in streamed.text
+    assert (await client.get(path, headers=viewer)).json()["status"] == "completed"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "status", [QueryRunStatus.RUNNING, QueryRunStatus.FAILED, QueryRunStatus.CANCELLED],
+)
+async def test_viewer_nonqueued_replay_never_restarts_conversation_work(
+    oidc_conversation_stream_env, status,
+):
+    client, factory, token = oidc_conversation_stream_env
+    owner, _ = await searchable_workspace(
+        client, factory, auth_headers={"Authorization": f"Bearer {token('status-owner')}"}
+    )
+    assert (await client.post(
+        f"/v1/workspaces/{owner['X-Tenant-ID']}/members", headers=owner,
+        json={"oidc_subject": "status-viewer", "role": "viewer"},
+    )).status_code == 201
+    viewer = {**owner, "Authorization": f"Bearer {token('status-viewer')}"}
+    conversation = (await client.post("/v1/conversations", headers=owner, json={})).json()
+    turn = (await client.post(
+        f"/v1/conversations/{conversation['id']}/turns", headers=owner,
+        json={"query": "What about the prior year?", "idempotency_key": str(uuid4())},
+    )).json()
+    path = f"/v1/query-runs/{turn['run']['id']}"
+    # An independent executor advances the ledger before this GET starts.
+    async with factory() as session:
+        await transition_query_run(
+            session, tenant_id=UUID(owner["X-Tenant-ID"]),
+            query_run_id=UUID(turn["run"]["id"]), target_status=QueryRunStatus.RUNNING,
+            event_type="query.started", payload={},
+        )
+        if status != QueryRunStatus.RUNNING:
+            await transition_query_run(
+                session, tenant_id=UUID(owner["X-Tenant-ID"]),
+                query_run_id=UUID(turn["run"]["id"]), target_status=status,
+                event_type=f"query.{status.value}", payload={},
+            )
+        await session.commit()
+    before = (await client.get(path, headers=viewer)).json()
+    events = (await client.get(path + "/events", headers=viewer)).json()
+    assert before["status"] == status.value
+    replayed = await client.get(path + "/events/stream", headers=viewer)
+    assert replayed.status_code == 200
+    assert "query.started" in replayed.text
+    assert (await client.get(path, headers=viewer)).json() == before
+    assert (await client.get(path + "/events", headers=viewer)).json() == events
+    assert (await client.get(path + "/usage", headers=viewer)).json() == []
 
 
 @pytest.mark.anyio

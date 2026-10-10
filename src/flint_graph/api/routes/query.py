@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from flint_graph.api.dependencies import (
     AnswerGeneratorDep,
+    CurrentUserDep,
     EmbeddingModelDep,
     Neo4jClientDep,
     OpenSearchClientDep,
@@ -36,6 +37,11 @@ from flint_graph.application.query_orchestration import (
     AnswerGenerator,
     QueryCandidate,
     SupportChecker,
+)
+from flint_graph.application.services.authz import (
+    get_workspace_role,
+    require_workspace_role,
+    role_at_least,
 )
 from flint_graph.application.services.conversation_memory import conversation_policy_fingerprint
 from flint_graph.application.services.lexical_projection import build_lexical_search_body
@@ -69,13 +75,13 @@ from flint_graph.application.services.retrieval import (
     resolve_index_version,
 )
 from flint_graph.application.services.search_readiness import require_searchable_content
-from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus
+from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus, WorkspaceRole
 from flint_graph.domain.errors import BadRequestError, ConflictError
 from flint_graph.infrastructure.answer_generator_factory import (
     answer_generator_model,
     support_checker_model,
 )
-from flint_graph.infrastructure.db.models import QueryRunEvent
+from flint_graph.infrastructure.db.models import ConversationTurn, QueryRunEvent
 
 router = APIRouter(prefix="/v1", tags=["query"])
 
@@ -230,6 +236,7 @@ async def get_query_citation_provenance_endpoint(
 async def stream_query_run_events_endpoint(
     query_run_id: UUID,
     tenant_id: TenantIdDep,
+    current_user: CurrentUserDep,
     session: SessionDep,
     settings: SettingsDep,
     opensearch_client: OpenSearchClientDep,
@@ -240,6 +247,16 @@ async def stream_query_run_events_endpoint(
     poll_interval_seconds: float = Query(default=0.05, ge=0.01, le=5.0),
 ) -> StreamingResponse:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
+    # This GET executes queued runs; only non-queued replay is read-only. Use
+    # authoritative tenant-scoped turn references, never conversation metadata.
+    if run.status == QueryRunStatus.QUEUED and await session.scalar(
+        select(ConversationTurn.id).where(
+            ConversationTurn.tenant_id == tenant_id,
+            ConversationTurn.query_run_id == run.id,
+        )
+    ) is not None:
+        role = await get_workspace_role(session, tenant_id=tenant_id, user_id=current_user.user.id)
+        require_workspace_role(role, allowed=role_at_least(WorkspaceRole.MEMBER))
     index_version = await resolve_index_version(
         session,
         tenant_id=tenant_id,
