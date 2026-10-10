@@ -96,3 +96,36 @@ attempted unknown provider usage still cannot be treated as free or complete.
 Old standalone runs remain independent. Full GPT-style chat, broad memory,
 retention/summary/cache qualification, parent-wide reservations and durable query
 execution remain separate work. See [verification](../reports/2026-10-10-prior-year-followups.md).
+
+## First thread UI (#99)
+
+[ADR 0028](../adr/0028-capability-gated-conversation-thread-ui.md) defines the
+capability-gated Ask screen. Conversation ledger support enables real ordered
+threads; absent/unavailable capabilities retain independent questions. Standalone
+history is a separate view, never manufactured into a conversation. The UI names
+workspace-shared ownership and only delivered prior-year interpretation.
+
+History uses authorized title search and created-at cursors; turns use increasing
+ordinal cursors. Follow-up submission waits until the latest turn is loaded.
+New chat clears selection without deleting server history. Browser storage holds
+selected IDs per workspace, not messages or evidence. Reopen/reload/refresh are
+GET-only; accepted/lost-response retry keeps the same per-attempt key. Original
+and resolved questions remain distinct. Member-facing queued Resume rechecks the
+existing run and never creates another turn; queued Cancel uses its dedicated
+endpoint. Stop only aborts the current stream; terminal status requires refresh.
+
+The primary transcript scrolls while the composer stays visible. Readers near
+the bottom follow new turn content; readers inspecting older content can jump
+to latest. Page loading and lazy evidence expansion do not trigger auto-follow.
+Each turn loads its own authorized provenance, scopes citation DOM IDs by run,
+and can expand full excerpts in the same scroller. Text is not rendered as HTML.
+Diagnostics are collapsed; clarification, abstention, partial support, queued,
+running, failed and cancelled states are differentiated. Draft SSE text is not
+presented as a verified answer.
+
+Selection/workspace changes abort and invalidate old requests; 401/403 removes
+conversation data and actions. The UI presents viewers as read-only for these
+conversation actions. The existing queued SSE endpoint's viewer-level execution
+gap is tracked in #100; UI hiding is not an authorization guarantee. Full #73
+accessibility/retention and general memory/quality acceptance remain separate.
+See [UI verification](../reports/2026-10-11-conversation-thread-ui.md).

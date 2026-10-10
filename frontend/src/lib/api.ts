@@ -1,5 +1,7 @@
 import type {
   AnswerProvenance,
+  Conversation,
+  ConversationTurn,
   DocumentDeleteResponse,
   DocumentIntakeResponse,
   DocumentListItem,
@@ -165,9 +167,10 @@ export const api = {
     });
   },
 
-  getSystemReadiness(tenantId: string): Promise<SystemReadiness> {
+  getSystemReadiness(tenantId: string, signal?: AbortSignal): Promise<SystemReadiness> {
     return jsonRequest<SystemReadiness>("/v1/system-readiness", {
       headers: tenantHeaders(tenantId),
+      signal,
     });
   },
 
@@ -233,6 +236,57 @@ export const api = {
       `/v1/ingestion-jobs/${jobId}/cancel`,
       { method: "POST", headers: tenantHeaders(tenantId) },
     );
+  },
+
+  listConversations(tenantId: string, options: {
+    limit?: number; beforeId?: string; query?: string; signal?: AbortSignal;
+  } = {}): Promise<Conversation[]> {
+    const params = new URLSearchParams();
+    if (options.limit) params.set("limit", String(options.limit));
+    if (options.beforeId) params.set("before_id", options.beforeId);
+    if (options.query?.trim()) params.set("q", options.query.trim());
+    return jsonRequest<Conversation[]>(`/v1/conversations${params.size ? `?${params}` : ""}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal,
+    });
+  },
+
+  getConversation(tenantId: string, id: string, signal?: AbortSignal): Promise<Conversation> {
+    return jsonRequest<Conversation>(`/v1/conversations/${id}`, { headers: tenantHeaders(tenantId), signal });
+  },
+
+  createConversation(tenantId: string, title: string, signal?: AbortSignal): Promise<Conversation> {
+    return jsonRequest<Conversation>("/v1/conversations", {
+      method: "POST", headers: tenantHeaders(tenantId), json: { title }, signal,
+    });
+  },
+
+  renameConversation(tenantId: string, id: string, title: string, signal?: AbortSignal): Promise<Conversation> {
+    return jsonRequest<Conversation>(`/v1/conversations/${id}`, {
+      method: "PATCH", headers: tenantHeaders(tenantId), json: { title }, signal,
+    });
+  },
+
+  listConversationTurns(tenantId: string, id: string, options: {
+    afterId?: string; limit?: number; signal?: AbortSignal;
+  } = {}): Promise<ConversationTurn[]> {
+    const params = new URLSearchParams();
+    if (options.limit) params.set("limit", String(options.limit));
+    if (options.afterId) params.set("after_id", options.afterId);
+    return jsonRequest<ConversationTurn[]>(`/v1/conversations/${id}/turns${params.size ? `?${params}` : ""}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal,
+    });
+  },
+
+  createConversationTurn(tenantId: string, id: string, query: string, retryKey: string, signal?: AbortSignal): Promise<ConversationTurn> {
+    return jsonRequest<ConversationTurn>(`/v1/conversations/${id}/turns`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: { query, idempotency_key: retryKey, stream: true }, signal,
+    });
+  },
+
+  cancelQueuedConversationTurn(tenantId: string, id: string, turnId: string, signal?: AbortSignal): Promise<ConversationTurn> {
+    return jsonRequest<ConversationTurn>(`/v1/conversations/${id}/turns/${turnId}/cancel`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
   },
 
   createQueryRun(tenantId: string, query: string, signal?: AbortSignal): Promise<QueryRunResponse> {

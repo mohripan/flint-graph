@@ -22,10 +22,14 @@ export function CitationsPanel({
   provenance,
   highlightId,
   onHover,
+  idPrefix = "",
+  fullExcerpts = false,
 }: {
   provenance: AnswerProvenance;
   highlightId?: string | null;
   onHover?: (id: string | null) => void;
+  idPrefix?: string;
+  fullExcerpts?: boolean;
 }) {
   const { citations, supported_claim_count, unsupported_claim_count, answer_provider } =
     provenance;
@@ -62,6 +66,8 @@ export function CitationsPanel({
               citation={c}
               highlighted={highlightId === c.citation_id}
               onHover={onHover}
+              idPrefix={idPrefix}
+              fullExcerpts={fullExcerpts}
             />
           ))}
         </ul>
@@ -74,10 +80,14 @@ function CitationItem({
   citation,
   highlighted,
   onHover,
+  idPrefix,
+  fullExcerpts,
 }: {
   citation: CitationProvenance;
   highlighted: boolean;
   onHover?: (id: string | null) => void;
+  idPrefix: string;
+  fullExcerpts: boolean;
 }) {
   const support = citation.claims[0]?.support_status;
   const title =
@@ -87,7 +97,7 @@ function CitationItem({
 
   return (
     <li
-      id={`citation-${citation.citation_id}`}
+      id={`${idPrefix}citation-${citation.citation_id}`}
       onMouseEnter={() => onHover?.(citation.citation_id)}
       onMouseLeave={() => onHover?.(null)}
     >
@@ -110,6 +120,10 @@ function CitationItem({
         <p className="line-clamp-4 text-sm leading-relaxed text-slate-600 [overflow-wrap:anywhere]">
           {citation.text}
         </p>
+        {fullExcerpts && <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500">Read full excerpt</summary>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700 [overflow-wrap:anywhere]">{citation.text}</p>
+        </details>}
       </Card>
     </li>
   );

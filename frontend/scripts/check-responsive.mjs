@@ -43,6 +43,7 @@ try {
     { id: "qa-workspace", name: "Migration QA", role: "owner" },
     { id: "qa-other", name: "Separate QA workspace", role: "owner" },
   ]);
+  route("**/v1/system-readiness**", { setup_capabilities: { conversation_ledger: false } });
   route("**/v1/search-readiness**", {
     ready: true, reason: "searchable_content_available", active_index_version: null,
     completed_coverage_count: 1, running_coverage_count: 0, failed_coverage_count: 0,

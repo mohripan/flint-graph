@@ -121,6 +121,31 @@ export interface QueryRunResponse {
   query_diagnostics: QueryDiagnostics;
   created_at: string;
   updated_at: string;
+  metadata?: {
+    conversation_context?: {
+      mode: "independent" | "resolved" | "clarification";
+      resolved_query: string | null;
+      reason: string;
+    };
+  };
+}
+
+export interface Conversation {
+  id: string;
+  tenant_id: string;
+  title: string;
+  next_turn_number: number;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationTurn {
+  id: string;
+  tenant_id: string;
+  conversation_id: string;
+  turn_number: number;
+  run: QueryRunResponse;
 }
 
 export interface IndexBackfillJob {
@@ -194,6 +219,12 @@ export interface SearchReadinessDocument {
 }
 
 export interface SystemReadiness {
+  setup_capabilities?: {
+    conversation_ledger?: boolean;
+    conversation_discovery?: boolean;
+    prior_year_followups?: boolean;
+    chained_conversations?: boolean;
+  };
   auth: {
     mode: string;
     oidc_issuer: string | null;
