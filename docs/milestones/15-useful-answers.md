@@ -204,3 +204,9 @@ claim indices. Both adapters fail closed on missing/duplicate judgements.
 A narrow English policy rejects context-insufficiency commentary even if the
 model approves it; explicit negative source facts remain eligible. This guard is
 not a multilingual semantic coverage checker. Rejected claims remain inspectable.
+
+The configured hosted default `claude-opus-4-8` is listed as available in
+[Anthropic's model documentation](https://platform.claude.com/docs/en/models/opus-4-8/overview)
+(checked 2026-10-10); this is not a live credential/account/request validation.
+No hosted calls or automatic model migration were performed. The real end-to-end
+answer rehearsals used the installed local Ollama model.

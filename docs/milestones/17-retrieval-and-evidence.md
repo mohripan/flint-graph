@@ -30,3 +30,10 @@ Regression evidence includes facts beyond character 200, missing/stale hashes,
 foreign/deleted documents, source-ID-only references, oversized chunks and budgets.
 API fixtures now seed canonical chunks as the real ingestion pipeline does, rather
 than assuming an external search response alone is evidence.
+
+Real Compose rehearsal at `fe8423b` uploaded a 633-character memo through the
+public intake API, waited for ingestion/indexing, and asked its codename using a
+document-scoped query. The full PostgreSQL context contained the late `Quartz`
+fact beyond character 200; the local Ollama answer cited it successfully.
+The original global index remained active alongside the separate evaluation
+workspace's tenant index. This is a focused smoke, not a native-vector benchmark.
