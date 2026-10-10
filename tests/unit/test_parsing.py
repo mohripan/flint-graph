@@ -117,6 +117,32 @@ def test_parse_plain_text_into_paragraph_elements() -> None:
     ]
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_plain_text_preserves_multiline_paragraphs_and_exact_offsets(newline: str) -> None:
+    text = f"First line.{newline}Second line.{newline}{newline}Final paragraph.{newline}  "
+    artifact = parse_normalized_document(
+        text.encode(), metadata=_source_metadata(content_type="text/plain"),
+    )
+    assert [element.text for element in artifact.elements] == [
+        f"First line.{newline}Second line.", "Final paragraph.",
+    ]
+    for element in artifact.elements:
+        assert element.source_offsets is not None
+        assert text[element.source_offsets.start:element.source_offsets.end] == element.text
+
+
+def test_bounded_text_parser_accepts_a_normal_upload_ending_with_newline() -> None:
+    content = b"Acme Corporation is headquartered in Berlin.\nAcme was founded by Elena Ruiz.\n"
+    limits = ParserLimits(
+        timeout_seconds=10, max_raw_bytes=10000, max_normalized_bytes=10000, max_elements=100,
+    )
+    artifact = BoundedParserRunner(limits=limits).parse(
+        content, metadata=_source_metadata(content_type="text/plain"),
+    )
+    assert len(artifact.elements) == 1
+    assert artifact.elements[0].text == content.decode().rstrip()
+
+
 def test_parse_markdown_preserves_headings_lists_and_code_blocks() -> None:
     artifact = parse_normalized_document(
         b"# Title\n\nIntro text.\n\n- one\n- two\n\n```python\nprint('hi')\n```",

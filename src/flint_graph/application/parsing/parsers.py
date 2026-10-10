@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from io import BytesIO
-from re import Match, finditer
+from re import DOTALL, Match, finditer
 from typing import Literal, Protocol, cast
 
 from pypdf import PdfReader
@@ -42,7 +42,9 @@ class TextParser:
                 index=index,
                 element_type="paragraph",
                 text=match.group(0).strip(),
-                source_offsets=SourceOffsets(start=match.start(), end=match.end()),
+                source_offsets=SourceOffsets(
+                    start=match.start(), end=match.start() + len(match.group(0).rstrip()),
+                ),
             )
             for index, match in enumerate(_paragraph_matches(text), start=1)
             if match.group(0).strip()
@@ -303,7 +305,7 @@ def _decode_text(content: bytes) -> str:
 
 
 def _paragraph_matches(text: str) -> list[Match[str]]:
-    return list(finditer(r"\S(?:.*?\S)?(?=\n\s*\n|\Z)", text, flags=0))
+    return list(finditer(r"\S.*?(?=\n[^\S\n]*\n|\Z)", text, flags=DOTALL))
 
 
 def _split_paragraphs(text: str) -> list[str]:
