@@ -155,6 +155,7 @@ class Settings(BaseSettings):
     query_answer_timeout_seconds: int = Field(default=180, ge=1)
     query_answer_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     query_answer_max_tokens: int = Field(default=1024, ge=1)
+    query_ollama_context_tokens: int = Field(default=8192, ge=2048, le=131072)
     query_support_provider: Literal["deterministic", "ollama", "anthropic"] | None = None
     query_support_model: str = "llama3.2"
 
@@ -333,6 +334,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_resolution_thresholds(self) -> Self:
+        if "ollama" in (self.query_answer_provider, self.query_support_provider):
+            # Packing counts are estimates, not model-tokenizer admission. Reserve
+            # additional capacity for instructions, schema, query and claim text.
+            minimum_context = self.query_context_token_budget + self.query_answer_max_tokens + 2048
+            if self.query_ollama_context_tokens < minimum_context:
+                raise ValueError(
+                    "query_ollama_context_tokens must cover query_context_token_budget "
+                    "+ query_answer_max_tokens + 2048 prompt-overhead reserve"
+                )
         if (
             self.auth_mode == "dev"
             and self.env in {"staging", "production"}

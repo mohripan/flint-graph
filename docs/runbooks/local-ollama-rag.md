@@ -32,6 +32,21 @@ docker compose up --build
 
 The Compose services talk to host Ollama at `http://host.docker.internal:11434`.
 
+Query generation and support requests explicitly set a context window, independent
+of the host service default:
+
+```powershell
+$env:FLINT_GRAPH_QUERY_OLLAMA_CONTEXT_TOKENS = "8192"
+```
+
+It must cover the configured packed-context budget, output limit and an additional
+2048-token estimated prompt reserve. This is not exact model-tokenizer admission.
+Check the model's supported window and available memory before increasing it;
+larger windows may cause offloading or higher latency. Inspect `ollama ps` (or
+`GET /api/ps`) after a query to confirm effective loaded context. See
+[ADR 0025](../adr/0025-explicit-ollama-query-context.md). Extraction/embedding
+context settings are not changed by this query-only option.
+
 For CPU-constrained smoke tests, use a smaller installed local model and reduce
 the query context:
 

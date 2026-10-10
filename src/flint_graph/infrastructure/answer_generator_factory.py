@@ -49,6 +49,7 @@ def create_answer_generator(
             timeout_seconds=settings.query_answer_timeout_seconds,
             temperature=settings.query_answer_temperature,
             max_tokens=settings.query_answer_max_tokens,
+            context_tokens=settings.query_ollama_context_tokens,
             http_client=http_client,
             base_url=settings.ollama_base_url,
         )
@@ -90,6 +91,7 @@ def create_support_checker(
             timeout_seconds=settings.query_answer_timeout_seconds,
             temperature=settings.query_answer_temperature,
             max_tokens=settings.query_answer_max_tokens,
+            context_tokens=settings.query_ollama_context_tokens,
             http_client=http_client,
             base_url=settings.ollama_base_url,
         )

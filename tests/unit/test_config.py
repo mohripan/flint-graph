@@ -6,6 +6,29 @@ from pydantic import ValidationError
 from flint_graph.config import Settings
 
 
+@pytest.mark.parametrize("provider_field", ["query_answer_provider", "query_support_provider"])
+def test_ollama_context_rejects_insufficient_packing_and_output_capacity(
+    provider_field: str,
+) -> None:
+    with pytest.raises(ValidationError, match="query_ollama_context_tokens"):
+        _settings(
+            env="test",
+            **{provider_field: "ollama"},
+            query_ollama_context_tokens=4096,
+        )
+
+
+def test_ollama_context_is_bounded_and_does_not_limit_other_providers() -> None:
+    assert _settings(env="test").query_ollama_context_tokens == 8192
+    assert (
+        _settings(env="test", query_context_token_budget=100_000).query_context_token_budget
+        == 100_000
+    )
+    for context_tokens in (0, 131073):
+        with pytest.raises(ValidationError, match="query_ollama_context_tokens"):
+            _settings(env="test", query_ollama_context_tokens=context_tokens)
+
+
 def _settings(**overrides: Any) -> Settings:
     # Ignore any developer .env so env-aware provider resolution is deterministic in tests.
     return Settings(_env_file=None, **overrides)

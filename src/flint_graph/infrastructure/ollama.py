@@ -218,6 +218,7 @@ class OllamaAnswerGenerator:
         timeout_seconds: int,
         temperature: float,
         max_tokens: int,
+        context_tokens: int = 8192,
         http_client: httpx.AsyncClient | None = None,
         base_url: str | None = None,
     ) -> None:
@@ -225,6 +226,7 @@ class OllamaAnswerGenerator:
         self._timeout_seconds = timeout_seconds
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._context_tokens = context_tokens
         self._http_client = http_client or httpx.AsyncClient(
             base_url=base_url or "http://localhost:11434"
         )
@@ -245,6 +247,7 @@ class OllamaAnswerGenerator:
                     "options": {
                         "temperature": self._temperature,
                         "num_predict": self._max_tokens,
+                        "num_ctx": self._context_tokens,
                     },
                 },
                 timeout=self._timeout_seconds,
@@ -285,6 +288,7 @@ class OllamaAnswerGenerator:
                     "options": {
                         "temperature": self._temperature,
                         "num_predict": self._max_tokens,
+                        "num_ctx": self._context_tokens,
                     },
                 },
                 timeout=self._timeout_seconds,
@@ -321,6 +325,7 @@ class OllamaSupportChecker:
         timeout_seconds: int,
         temperature: float,
         max_tokens: int,
+        context_tokens: int = 8192,
         http_client: httpx.AsyncClient | None = None,
         base_url: str | None = None,
     ) -> None:
@@ -328,6 +333,7 @@ class OllamaSupportChecker:
         self._timeout_seconds = timeout_seconds
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._context_tokens = context_tokens
         self._http_client = http_client or httpx.AsyncClient(
             base_url=base_url or "http://localhost:11434"
         )
@@ -359,6 +365,7 @@ class OllamaSupportChecker:
                     "options": {
                         "temperature": self._temperature,
                         "num_predict": self._max_tokens,
+                        "num_ctx": self._context_tokens,
                     },
                 },
                 timeout=self._timeout_seconds,

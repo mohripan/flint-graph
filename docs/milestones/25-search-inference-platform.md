@@ -16,7 +16,8 @@ Design: [ADR 14](../adr/0014-measured-search-and-inference-platform.md).
 | [#63](https://github.com/mohripan/flint-graph/issues/63) | Measure reference-only Temporal payloads, history growth and replay/conversation budgets | planned |
 | [#82](https://github.com/mohripan/flint-graph/issues/82) | Atomic parent-wide cost/resource reservations and measured optimizations | planned |
 | [#83](https://github.com/mohripan/flint-graph/issues/83) | Tenant-safe KV/prefix/answer cache qualification | planned |
-| [#94](https://github.com/mohripan/flint-graph/issues/94) | Durable query embedding/generation/support invocation accounting and honest completeness | implemented; verification in progress |
+| [#94](https://github.com/mohripan/flint-graph/issues/94) | Durable query embedding/generation/support invocation accounting and honest completeness | delivered |
+| [#95](https://github.com/mohripan/flint-graph/issues/95) | Explicit Ollama query context capacity and restart reproducibility | delivered |
 
 ## Acceptance and boundaries
 

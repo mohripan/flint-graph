@@ -101,7 +101,7 @@ async def test_ollama_answer_generator_sends_citation_only_schema_and_parses_ans
     assert requests[0].url.path == "/api/generate"
     assert payload["model"] == "llama3.2"
     assert payload["stream"] is False
-    assert payload["options"] == {"temperature": 0.2, "num_predict": 256}
+    assert payload["options"] == {"temperature": 0.2, "num_predict": 256, "num_ctx": 8192}
     assert payload["format"]["type"] == "object"
     assert payload["format"]["properties"]["claims"]["items"]["required"] == [
         "text",
