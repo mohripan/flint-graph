@@ -34,3 +34,19 @@ def test_phoenix_is_opt_in_loopback_persistent_and_not_a_metrics_backend() -> No
     for exporter in config["exporters"].values():
         assert exporter["sending_queue"]["queue_size"] == 256
         assert exporter["retry_on_failure"]["max_elapsed_time"] == "60s"
+
+
+def test_ci_checks_native_configs_rejects_invalid_assets_and_runs_real_privacy_smoke() -> None:
+    workflow = yaml.safe_load(Path(".github/workflows/ci.yml").read_text("utf-8"))
+    job = workflow["jobs"]["observability-check"]
+    commands = "\n".join(step.get("run", "") for step in job["steps"])
+    for command in ("promtool", "amtool", "otel-gateway validate"):
+        assert command in commands
+    for name in ("invalid-alerts.yml", "invalid-alertmanager.yml", "invalid-collector.yml"):
+        assert name in commands
+    assert "tests/integration/test_ai_observability_live.py" in commands
+    assert job["timeout-minutes"] == 15
+    assert any(
+        step.get("env", {}).get("FLINT_GRAPH_AI_OBSERVABILITY_INTEGRATION") == "1"
+        for step in job["steps"]
+    )

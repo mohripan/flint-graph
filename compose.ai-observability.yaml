@@ -24,6 +24,12 @@ services:
     volumes:
       - phoenix_data:/mnt/data
     mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
 
   otel-gateway:
     profiles: ["ai-observability"]
@@ -38,7 +44,7 @@ services:
       observability:
         condition: service_healthy
       phoenix:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   phoenix_data:

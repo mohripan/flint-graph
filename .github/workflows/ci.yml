@@ -28,6 +28,8 @@ jobs:
         run: |
           docker compose config > /dev/null
           docker compose --profile metrics config > /dev/null
+          docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
+          docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability --profile metrics config > /dev/null
       - name: Offline deterministic eval gate
         run: >
           uv run flint-graph-eval run
@@ -36,6 +38,44 @@ jobs:
           --experiment evals/experiments/acme-smoke.yaml
           --baseline evals/reports/acme-smoke/baselines.json
           --config-name deterministic
+
+  observability-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install locked test dependencies
+        run: uv sync --all-groups --locked
+      - name: Validate pinned native configurations
+        run: |
+          docker compose --profile metrics run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
+          docker compose --profile metrics run --rm --no-deps --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml
+          docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability run --rm --no-deps otel-gateway validate --config=/etc/otelcol/config.yml
+      - name: Reject semantically invalid YAML fixtures
+        run: |
+          if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" --entrypoint promtool prom/prometheus:v3.1.0 check rules /invalid/invalid-alerts.yml; then
+            echo "promtool accepted invalid rules"
+            exit 1
+          fi
+          if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" --entrypoint amtool prom/alertmanager:v0.34.1 check-config /invalid/invalid-alertmanager.yml; then
+            echo "amtool accepted an invalid route"
+            exit 1
+          fi
+          if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" otel/opentelemetry-collector-contrib:0.162.0 validate --config=/invalid/invalid-collector.yml; then
+            echo "Collector accepted an unknown component"
+            exit 1
+          fi
+      - name: Start isolated local telemetry backends
+        run: |
+          docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability up -d --no-deps --wait --wait-timeout 180 observability phoenix otel-gateway
+      - name: Check real trace fan-out and content privacy without inference
+        run: uv run pytest tests/integration/test_ai_observability_live.py -q
+        env:
+          FLINT_GRAPH_AI_OBSERVABILITY_INTEGRATION: '1'
+      - name: Diagnostics on failure
+        if: failure()
+        run: docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability logs --tail 100 observability phoenix otel-gateway
 
   frontend-check:
     runs-on: ubuntu-latest

@@ -1,0 +1,10 @@
+# Valid YAML, deliberately references an unknown receiver component.
+receivers:
+  definitely_not_a_receiver: {}
+exporters:
+  debug: {}
+service:
+  pipelines:
+    traces:
+      receivers: [definitely_not_a_receiver]
+      exporters: [debug]

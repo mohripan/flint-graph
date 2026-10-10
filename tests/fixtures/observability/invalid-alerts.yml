@@ -1,0 +1,6 @@
+# Valid YAML, deliberately invalid PromQL: must fail native rule validation.
+groups:
+  - name: invalid
+    rules:
+      - alert: InvalidExpression
+        expr: 'sum('

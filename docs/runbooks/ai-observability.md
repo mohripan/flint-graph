@@ -68,6 +68,12 @@ sentinel was removed. It makes no model calls or corpus mutations. Two sanitized
 smoke spans remain in the local `flint-graph` Phoenix project for inspection.
 Ordinary pytest skips this test unless explicitly enabled.
 
+The CI observability job runs this same real test on isolated telemetry services
+after native positive/negative validation. It does not start the document
+application, database, Ollama or SMTP receiver. Pinned images/dependencies are
+downloaded from registries; "offline-safe" means no model/provider credentials
+or inference calls, not an air-gapped install.
+
 During development, native Collector validation accepted an event-clearing
 expression that failed at runtime. The live smoke caught it; the final config
 uses the supported span-event filter and passed. Syntax checks alone are not
