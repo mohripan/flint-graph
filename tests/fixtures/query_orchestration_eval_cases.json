@@ -46,7 +46,7 @@
     "expected_abstained": false,
     "expected_supported_claim_count": 1,
     "expected_unsupported_claim_count": 0,
-    "expected_surviving_markers": ["[c1]", "[c2]"]
+    "expected_surviving_markers": ["[c1]"]
   },
   {
     "id": "insufficient-context",

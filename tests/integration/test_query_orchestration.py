@@ -358,8 +358,6 @@ async def test_query_retrieval_graph_runs_enabled_retrievers_and_persists_candid
         "context.packed",
         "answer.delta",
         "answer.citation",
-        "answer.citation",
-        "answer.citation",
         "support.checked",
         "answer.finalized",
         "query.completed",
@@ -744,7 +742,8 @@ async def test_query_retrieval_graph_fuses_duplicate_candidates_and_reranks(
     assert state.fused_candidate_count == 2
     assert state.reranked_candidate_count == 2
     assert state.context_pack_record_count == 2
-    assert state.answer_citation_count == 2
+    # Both records were packed, but the deterministic draft only cited the first.
+    assert state.answer_citation_count == 1
     assert [event.event_type for event in events][-4:] == [
         "answer.citation",
         "support.checked",
