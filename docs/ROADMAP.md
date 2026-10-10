@@ -2,6 +2,12 @@
 
 Updated: 2026-10-10. Inspected baseline: `1c15820` (Milestone 14).
 
+Implementation has started: [Milestone 15 progress](milestones/15-useful-answers.md),
+[Milestone 16 progress](milestones/16-evaluation-harness.md), and a
+[fresh local quality report](reports/2026-10-10-local-answer-quality.md).
+The inspection table below describes the original baseline, not current fixed
+behavior. GitHub milestones 15–23 and their linked issues track remaining work.
+
 This roadmap turns the current GraphRAG platform into a useful, measurable,
 agent-driven product. Proposed features are not implemented merely because they
 appear here. Each milestone needs passing acceptance criteria, linked GitHub

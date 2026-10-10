@@ -95,7 +95,7 @@ async def bootstrap_retrieval_index_endpoint(
     settings: SettingsDep,
     actor: AuditActorDep,
 ) -> RetrievalIndexVersionResponse:
-    version = await bootstrap_retrieval_index(session, settings=settings)
+    version = await bootstrap_retrieval_index(session, settings=settings, tenant_id=tenant_id)
     await record_audit_event(
         session,
         action=AuditAction.RETRIEVAL_INDEX_BOOTSTRAPPED,

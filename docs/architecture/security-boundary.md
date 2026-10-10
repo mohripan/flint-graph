@@ -1,5 +1,16 @@
 # Current Security Boundary
 
+## Workspace-scoped retrieval setup
+
+The public `/v1/retrieval-index/bootstrap` endpoint creates or reuses an active
+tenant-scoped index for the authorized workspace. Its admin/owner role cannot
+activate or deprecate a global index or another workspace's index. Same-workspace
+bootstrap is serialized on the workspace row and compatible repeats are idempotent.
+Global setup is an explicit internal operator choice (`tenant_id=None`), not a
+workspace API capability. Existing global versions and coverage remain readable
+through the existing fallback until a workspace opts into its own index; then
+that workspace must backfill the new version. No historical data is deleted.
+
 FlintGraph now has a controlled deployment boundary suitable for a first
 public or internal-company deployment with untrusted authenticated users.
 

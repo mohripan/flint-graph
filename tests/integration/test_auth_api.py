@@ -218,6 +218,8 @@ async def test_workspace_admin_can_bootstrap_retrieval_index_but_viewer_cannot(
     )
     assert created.status_code == 200
     assert created.json()["status"] == "active"
+    assert created.json()["scope"] == "tenant"
+    assert created.json()["tenant_id"] == workspace["id"]
 
     denied = await client.post(
         "/v1/retrieval-index/bootstrap",
@@ -227,6 +229,24 @@ async def test_workspace_admin_can_bootstrap_retrieval_index_but_viewer_cannot(
         },
     )
     assert denied.status_code == 403
+
+
+async def test_bootstrap_never_activates_another_owners_workspace_index(client, oidc_auth):
+    indexes = []
+    for subject in ("owner-first", "owner-second"):
+        token = oidc_auth(subject)
+        workspace = (await client.post(
+            "/v1/workspaces", headers={"Authorization": f"Bearer {token}"},
+            json={"name": subject},
+        )).json()
+        headers = {"Authorization": f"Bearer {token}", "X-Tenant-ID": workspace["id"]}
+        first = await client.post("/v1/retrieval-index/bootstrap", headers=headers)
+        assert first.status_code == 200
+        assert first.json()["tenant_id"] == workspace["id"]
+        repeated = await client.post("/v1/retrieval-index/bootstrap", headers=headers)
+        assert repeated.json()["id"] == first.json()["id"]
+        indexes.append(first.json()["id"])
+    assert indexes[0] != indexes[1]
 
 
 async def test_workspace_document_list_is_server_backed_and_tenant_scoped(

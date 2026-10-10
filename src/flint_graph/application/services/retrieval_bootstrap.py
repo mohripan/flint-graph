@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from hashlib import sha256
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,8 @@ from flint_graph.application.services.retrieval_index_versions import (
 )
 from flint_graph.config import Settings
 from flint_graph.domain.enums import RetrievalIndexScope, RetrievalIndexVersionStatus
-from flint_graph.infrastructure.db.models import RetrievalIndexVersion
+from flint_graph.domain.errors import NotFoundError
+from flint_graph.infrastructure.db.models import RetrievalIndexVersion, Tenant
 
 _CHUNKING_SCHEMA_VERSION = "1"
 _LEXICAL_SCHEMA_VERSION = "1"
@@ -24,12 +26,26 @@ async def bootstrap_retrieval_index(
     session: AsyncSession,
     *,
     settings: Settings,
+    tenant_id: UUID | None,
 ) -> RetrievalIndexVersion:
+    # None is an explicit internal operator choice, never the workspace API default.
+    scope = RetrievalIndexScope.GLOBAL if tenant_id is None else RetrievalIndexScope.TENANT
+    if tenant_id is not None:
+        # Serialize same-workspace bootstraps even when no index exists yet.
+        tenant = await session.scalar(
+            select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+        )
+        if tenant is None:
+            raise NotFoundError(f"Workspace '{tenant_id}' was not found.")
+    scope_filter = (
+        RetrievalIndexVersion.tenant_id.is_(None)
+        if tenant_id is None else RetrievalIndexVersion.tenant_id == tenant_id
+    )
     spec = retrieval_index_spec_from_settings(settings)
     active = await session.scalar(
         select(RetrievalIndexVersion).where(
-            RetrievalIndexVersion.scope == RetrievalIndexScope.GLOBAL,
-            RetrievalIndexVersion.tenant_id.is_(None),
+            RetrievalIndexVersion.scope == scope,
+            scope_filter,
             RetrievalIndexVersion.status == RetrievalIndexVersionStatus.ACTIVE,
         )
     )
@@ -38,8 +54,8 @@ async def bootstrap_retrieval_index(
 
     building = await session.scalar(
         select(RetrievalIndexVersion).where(
-            RetrievalIndexVersion.scope == RetrievalIndexScope.GLOBAL,
-            RetrievalIndexVersion.tenant_id.is_(None),
+            RetrievalIndexVersion.scope == scope,
+            scope_filter,
             RetrievalIndexVersion.status == RetrievalIndexVersionStatus.BUILDING,
             RetrievalIndexVersion.embedding_config_hash == spec.embedding_config_hash,
             RetrievalIndexVersion.chunking_config_hash == spec.chunking_config_hash,
@@ -50,7 +66,8 @@ async def bootstrap_retrieval_index(
     if version is None:
         version = await create_retrieval_index_version(
             session,
-            scope=RetrievalIndexScope.GLOBAL,
+            scope=scope,
+            tenant_id=tenant_id,
             spec=spec,
         )
     activated = await activate_retrieval_index_version(session, version_id=version.id)

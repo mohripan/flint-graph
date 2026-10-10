@@ -59,3 +59,10 @@ their workspace/job evidence inspectable and never delete unrelated data.
 
 This automates the upload/control-plane path; quality claims still require actual
 capture/scoring, not merely successfully prepared documents.
+
+## Fresh local rehearsal
+
+See the [2026-10-10 comparison report](../reports/2026-10-10-local-answer-quality.md)
+for three fresh ten-query captures on the same real-ingested corpus. Answer
+match/abstention improved, but the strict graph-retrieval/draft-support gate still
+fails. Milestone 16 remains in progress; accepted baselines are unchanged.
