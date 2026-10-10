@@ -9,7 +9,7 @@ Design: [ADR 15](../adr/0015-reproducible-developer-experience.md).
 
 | Issue | Scope | State |
 | --- | --- | --- |
-| [#48](https://github.com/mohripan/flint-graph/issues/48) | Add a read-only developer doctor command with actionable readiness diagnostics | planned |
+| [#48](https://github.com/mohripan/flint-graph/issues/48) | Add a read-only developer doctor command with actionable readiness diagnostics | implemented |
 | [#49](https://github.com/mohripan/flint-graph/issues/49) | Add reproducible offline and local-real bootstrap profiles | planned |
 | [#50](https://github.com/mohripan/flint-graph/issues/50) | Pin service images and modernize CI runtimes with reviewed upgrade policy | planned |
 | [#51](https://github.com/mohripan/flint-graph/issues/51) | Validate observability assets with native tools in CI | implemented |
@@ -24,7 +24,16 @@ checks real OTLP fan-out/privacy without model/SMTP calls. The existing offline
 job checks all four base/metrics/AI/combined Compose combinations. Local native
 positive and negative validations passed; see the
 [AI observability runbook](../runbooks/ai-observability.md) for the same smoke.
-Provider/doctor/bootstrap/runtime upgrades remain separately tracked.
+The read-only `flint-graph-doctor` command reports approved effective config,
+local tooling, configured service checks, model inventories and recent workspace
+index coverage. Its offline mode makes no network calls; live mode uses public
+GET APIs and preserves viewer membership authorization. The model-readiness
+endpoint checks installed Ollama tags without running or downloading models;
+hosted availability remains explicitly unverified. See the
+[doctor runbook](../runbooks/developer-doctor.md) for flags, safe next steps,
+exit codes and limitations. Bootstrap/runtime upgrades remain separately tracked.
+The [doctor delivery report](../reports/2026-10-10-developer-doctor-delivery.md)
+records exact checks and the live smoke's deployment boundary.
 
 ## Milestone-wide target (not yet achieved)
 

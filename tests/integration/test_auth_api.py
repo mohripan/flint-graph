@@ -14,6 +14,44 @@ class CapturingBackfillStarter:
         self.started.append(str(job_id))
 
 
+async def test_model_readiness_requires_authorized_workspace_access(client, oidc_auth) -> None:
+    owner_token = oidc_auth("model-owner")
+    outsider_token = oidc_auth("model-outsider")
+    viewer_token = oidc_auth("model-viewer")
+    workspace = (
+        await client.post(
+            "/v1/workspaces",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={"name": "Model diagnostics"},
+        )
+    ).json()
+    selector = {"X-Tenant-ID": workspace["id"]}
+    assert (await client.get("/v1/model-readiness", headers=selector)).status_code == 401
+    denied = await client.get(
+        "/v1/model-readiness",
+        headers={**selector, "Authorization": f"Bearer {outsider_token}"},
+    )
+    assert denied.status_code == 403
+    allowed = await client.get(
+        "/v1/model-readiness",
+        headers={**selector, "Authorization": f"Bearer {owner_token}"},
+    )
+    assert allowed.status_code == 200
+    assert [item["status"] for item in allowed.json()] == ["offline"] * 3
+    assert "model-owner" not in allowed.text
+    added = await client.post(
+        f"/v1/workspaces/{workspace['id']}/members",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"oidc_subject": "model-viewer", "role": "viewer"},
+    )
+    assert added.status_code == 201
+    viewer = await client.get(
+        "/v1/model-readiness",
+        headers={**selector, "Authorization": f"Bearer {viewer_token}"},
+    )
+    assert viewer.status_code == 200
+
+
 async def test_oidc_mode_rejects_unauthenticated_tenant_scoped_requests(
     client,
     oidc_settings_override,

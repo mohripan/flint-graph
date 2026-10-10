@@ -30,6 +30,7 @@ from flint_graph.api.schemas import (
     SearchReadinessResponse,
 )
 from flint_graph.application.services.audit import record_audit_event
+from flint_graph.application.services.model_readiness import ModelReadiness, get_model_readiness
 from flint_graph.application.services.retrieval import (
     create_tenant_index_backfill_job,
     get_tenant_index_backfill_job,
@@ -54,6 +55,15 @@ from flint_graph.infrastructure.answer_generator_factory import (
 )
 
 router = APIRouter(prefix="/v1", tags=["retrieval"])
+
+
+@router.get("/model-readiness", response_model=list[ModelReadiness])
+async def get_model_readiness_endpoint(
+    tenant_id: TenantIdDep,
+    settings: SettingsDep,
+) -> list[ModelReadiness]:
+    # TenantIdDep enforces the same viewer membership boundary as system readiness.
+    return await get_model_readiness(settings)
 
 
 @router.get("/system-readiness")

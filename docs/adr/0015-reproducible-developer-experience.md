@@ -1,6 +1,6 @@
 # ADR 0015: Reproducible developer experience
 
-- Status: accepted direction; tools not yet implemented
+- Status: accepted; doctor and native observability validation implemented, remaining tools planned
 - Date: 2026-10-10
 - Track: developer experience; Milestone 26; epic [#36](https://github.com/mohripan/flint-graph/issues/36)
 
@@ -31,5 +31,8 @@ an alternate route around the workspace access boundary.
 [#50 pins and CI](https://github.com/mohripan/flint-graph/issues/50),
 [#51 native observability validation](https://github.com/mohripan/flint-graph/issues/51),
 [#52 debugging handoff](https://github.com/mohripan/flint-graph/issues/52).
-This ADR records a contract, not completed commands.
+The read-only doctor and native observability validation are implemented.
+See the [doctor runbook](../runbooks/developer-doctor.md) and
+[Milestone 26](../milestones/26-developer-experience.md) for delivered behavior;
+profiles, version upgrades and product debugging handoff remain separate issues.
 

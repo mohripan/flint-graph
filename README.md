@@ -53,6 +53,12 @@ make worker
 
 ## Authentication and workspaces
 
+For read-only setup diagnostics, run `uv run flint-graph-doctor --offline`, or
+`uv run flint-graph-doctor --workspace-id YOUR-WORKSPACE-UUID` against a running
+local API. The [doctor runbook](docs/runbooks/developer-doctor.md) covers OIDC,
+JSON output, missing models, embedding/index mismatches and exit codes. Doctor
+does not download models, run inference or change setup.
+
 Local development defaults to `FLINT_GRAPH_AUTH_MODE=dev`, which creates a fixed
 development user automatically. This preserves the simple curl examples below
 without an `Authorization` header.
