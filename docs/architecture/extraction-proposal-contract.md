@@ -100,6 +100,17 @@ Database UUIDs identify rows. Stable IDs identify extraction-contract records.
 
 Stable IDs are derived from tenant/document-version context, normalized proposal content, and verified evidence IDs. Re-running the same extraction contract over the same accepted content should produce the same stable IDs.
 
+New evidence IDs are `ev_v2_` plus SHA-256 over a canonical JSON array of immutable
+document-version UUID, chunk ID, start/end offsets and quote hash. The pure resolver
+requires that UUID; chunk/quote/offset tuples alone are not tenant-wide identities.
+Existing `ev_` IDs, ready runs and their immutable manifests are not rewritten.
+See [ADR 0017](../adr/0017-version-scoped-evidence-and-extraction-retries.md).
+
+Proposal persistence uses a savepoint. Database failures roll back partial staged
+rows before recording a failed invocation, preserving valid content artifacts.
+Retries reuse failed contract-run rows and append invocation history; successful
+retries become ready. Later failed provider retries do not downgrade ready evidence.
+
 Document-local duplicate entities collapse by normalized name and entity type. Evidence links are unioned and confidence is retained conservatively.
 
 ## Persistence

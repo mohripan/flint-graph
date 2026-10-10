@@ -424,22 +424,25 @@ async def _run_provenance_extraction(
         batch = await extraction_model.extract_batch(request)
         response_bytes = batch.model_dump_json(exclude_none=True).encode("utf-8")
         response_hash = _content_hash(response_bytes)
-        result = await persist_provenance_extraction_run(
-            session,
-            object_store=object_store,
-            bucket=bucket,
-            tenant_id=tenant_id,
-            document_id=document_id,
-            version_id=version_id,
-            chunks=chunks,
-            batch=batch,
-            metadata=metadata.model_copy(
-                update={
-                    "response_hash": response_hash,
-                    "latency_ms": _elapsed_ms(started),
-                }
-            ),
-        )
+        # A flush failure must not poison the outer content-artifact transaction:
+        # rollback proposals before persisting a failed extraction invocation.
+        async with session.begin_nested():
+            result = await persist_provenance_extraction_run(
+                session,
+                object_store=object_store,
+                bucket=bucket,
+                tenant_id=tenant_id,
+                document_id=document_id,
+                version_id=version_id,
+                chunks=chunks,
+                batch=batch,
+                metadata=metadata.model_copy(
+                    update={
+                        "response_hash": response_hash,
+                        "latency_ms": _elapsed_ms(started),
+                    }
+                ),
+            )
         return result.extraction_run_id
     except Exception as exc:
         await persist_failed_provenance_extraction_run(

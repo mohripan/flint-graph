@@ -5,19 +5,54 @@ real authenticated identity: dev auth's fixed principal cannot demonstrate
 per-user authorization or audit attribution.
 """
 
+import os
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import jwt
 import pytest
+import pytest_asyncio
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from flint_graph.api.dependencies import get_oidc_token_verifier
 from flint_graph.config import Settings, get_settings
+from flint_graph.infrastructure.db.base import Base
 from flint_graph.infrastructure.oidc import OIDCTokenVerifier
 
 OIDC_ISSUER = "https://keycloak.example/realms/flintgraph"
 OIDC_AUDIENCE = "flintgraph"
+
+
+@pytest_asyncio.fixture(
+    params=["sqlite", "postgres"] if os.getenv("FLINT_GRAPH_PG_INTEGRATION") else ["sqlite"]
+)
+async def extraction_db_session(request, db_session: AsyncSession) -> AsyncIterator[AsyncSession]:
+    if request.param == "sqlite":
+        yield db_session
+        return
+    # Only this fixture's freshly generated schema is created/dropped; public data is untouched.
+    schema = f"flint_extraction_test_{uuid4().hex}"
+    engine = create_async_engine(os.getenv(
+        "FLINT_GRAPH_PG_TEST_URL",
+        "postgresql+asyncpg://flint_graph:flint_graph@localhost:55432/flint_graph",
+    ))
+    async with engine.begin() as connection:
+        await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = engine.execution_options(schema_translate_map={None: schema})
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            yield session
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await engine.dispose()
 
 
 def keypair() -> tuple[object, dict[str, object]]:

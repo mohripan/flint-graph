@@ -88,7 +88,7 @@ async def persist_provenance_extraction_run(
         version_id=version_id,
     )
     input_hash = _input_hash(chunks)
-    existing = await _find_ready_run(
+    existing = await _find_run(
         session,
         version_id=version_id,
         input_hash=input_hash,
@@ -97,16 +97,17 @@ async def persist_provenance_extraction_run(
         extractor_version=metadata.extractor_version,
         model_name=metadata.model_name,
     )
-    if existing is not None:
-        assert existing.manifest_uri is not None
-        assert existing.manifest_hash is not None
+    if (
+        existing is not None and existing.status == ExtractionRunStatus.READY
+        and existing.manifest_uri is not None and existing.manifest_hash is not None
+    ):
         return PersistedProvenanceExtraction(
             extraction_run_id=existing.id,
             manifest_uri=existing.manifest_uri,
             manifest_hash=existing.manifest_hash,
         )
 
-    resolved_evidence = resolve_batch_evidence(batch, chunks=chunks)
+    resolved_evidence = resolve_batch_evidence(batch, chunks=chunks, document_version_id=version_id)
     manifest = _manifest_payload(
         tenant_id=tenant_id,
         document_id=document_id,
@@ -140,7 +141,8 @@ async def persist_provenance_extraction_run(
         },
     )
 
-    run = ExtractionRun(
+    invocation_index = existing.invocation_count if existing is not None else 0
+    run = existing or ExtractionRun(
         tenant_id=tenant_id,
         document_id=document_id,
         document_version_id=version_id,
@@ -162,6 +164,16 @@ async def persist_provenance_extraction_run(
         warnings=[],
         errors=[],
     )
+    run.status = ExtractionRunStatus.READY
+    run.manifest_uri = manifest_uri
+    run.manifest_hash = manifest_hash
+    run.model_provider = metadata.model_provider
+    run.invocation_count = invocation_index + 1
+    run.accepted_entity_count = len(batch.entities)
+    run.accepted_relation_count = len(batch.relations)
+    run.accepted_claim_count = len(batch.claims)
+    run.errors = []
+    run.warnings = []
     session.add(run)
     await session.flush()
 
@@ -169,7 +181,7 @@ async def persist_provenance_extraction_run(
         ExtractionInvocation(
             tenant_id=tenant_id,
             extraction_run_id=run.id,
-            invocation_index=0,
+            invocation_index=invocation_index,
             status=ExtractionInvocationStatus.SUCCEEDED,
             input_chunk_ids=[chunk.chunk_id for chunk in chunks],
             request_hash=metadata.request_hash,
@@ -294,14 +306,13 @@ async def persist_failed_provenance_extraction_run(
         extractor_version=metadata.extractor_version,
         model_name=metadata.model_name,
     )
-    if existing is not None:
+    if existing is not None and existing.status != ExtractionRunStatus.READY:
         existing.status = ExtractionRunStatus.FAILED
         existing.errors = [{"code": error_code, "message": error_message}]
         existing.warnings = []
-        await session.flush()
-        return FailedProvenanceExtraction(extraction_run_id=existing.id)
 
-    run = ExtractionRun(
+    invocation_index = existing.invocation_count if existing is not None else 0
+    run = existing or ExtractionRun(
         tenant_id=tenant_id,
         document_id=document_id,
         document_version_id=version_id,
@@ -321,13 +332,14 @@ async def persist_failed_provenance_extraction_run(
         warnings=[],
         errors=[{"code": error_code, "message": error_message}],
     )
+    run.invocation_count = invocation_index + 1
     session.add(run)
     await session.flush()
     session.add(
         ExtractionInvocation(
             tenant_id=tenant_id,
             extraction_run_id=run.id,
-            invocation_index=0,
+            invocation_index=invocation_index,
             status=ExtractionInvocationStatus.FAILED,
             input_chunk_ids=[chunk.chunk_id for chunk in chunks],
             request_hash=metadata.request_hash,
@@ -417,35 +429,6 @@ async def _ensure_version_exists(
     )
     if exists is None:
         raise NotFoundError(f"Document version '{version_id}' was not found.")
-
-
-async def _find_ready_run(
-    session: AsyncSession,
-    *,
-    version_id: UUID,
-    input_hash: str,
-    schema_version: str,
-    prompt_version: str,
-    extractor_version: str,
-    model_name: str,
-) -> ExtractionRun | None:
-    existing = await _find_run(
-        session,
-        version_id=version_id,
-        input_hash=input_hash,
-        schema_version=schema_version,
-        prompt_version=prompt_version,
-        extractor_version=extractor_version,
-        model_name=model_name,
-    )
-    if (
-        existing is not None
-        and existing.status == ExtractionRunStatus.READY
-        and existing.manifest_uri is not None
-        and existing.manifest_hash is not None
-    ):
-        return existing
-    return None
 
 
 async def _find_run(

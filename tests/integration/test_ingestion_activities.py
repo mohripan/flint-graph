@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from uuid import UUID
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,12 +46,53 @@ from flint_graph.infrastructure.db.models import (
 )
 from flint_graph.infrastructure.object_store import ObjectInfo
 from flint_graph.worker.activities.ingestion import (
+    RequiredExtractionFailedError,
     _proposal_model_from_settings,
     mark_ingestion_job_completed_for_payload,
     mark_ingestion_job_failed_for_payload,
     mark_ingestion_job_running_for_payload,
     run_ingestion_pipeline_for_payload,
 )
+
+
+@pytest.mark.parametrize("mode", ["optional", "required"])
+async def test_extraction_database_failure_rolls_back_only_proposals_and_records_failure(
+    extraction_db_session: AsyncSession, mode: str,
+) -> None:
+    db_session = extraction_db_session
+    store = FakeObjectStore()
+    payload = await _create_upload_payload(
+        db_session, store=store, idempotency_key="duplicate-staged-proposals",
+        data=b"# Pipeline\n\nAcme Corporation is headquartered in Berlin.",
+    )
+    # Two local proposals resolve to the same unique staged identity. Exercise a real DB
+    # flush failure, not a mocked persistence function or a provider exception.
+    model = _success_proposal_model()
+    assert model.batch is not None
+    entity = model.batch.entities[0]
+    model.batch = model.batch.model_copy(update={
+        "entities": [entity, entity.model_copy(update={"local_id": "duplicate"})],
+        "relations": [], "claims": [],
+    })
+    async def run():
+        await run_ingestion_pipeline_for_payload(
+            db_session, payload, object_store=store, bucket="flint-graph",
+            parser_runner=_parser_runner(), chunking_config=ChunkingConfig(),
+            extraction_config=ExtractionServiceConfig(mode=mode, model="fixture"),
+            extraction_model=model,
+        )
+
+    if mode == "required":
+        with pytest.raises(RequiredExtractionFailedError):
+            await run()
+    else:
+        await run()
+    await db_session.commit()
+    assert db_session.is_active
+    runs = list((await db_session.scalars(select(ExtractionRun))).all())
+    assert len(runs) == 1 and runs[0].status == ExtractionRunStatus.FAILED
+    assert list((await db_session.scalars(select(DocumentChunk))).all())
+    assert not list((await db_session.scalars(select(ExtractedEntity))).all())
 
 
 async def _create_payload(

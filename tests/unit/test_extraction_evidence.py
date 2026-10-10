@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 
 from flint_graph.application.extraction_evidence import (
@@ -11,6 +13,8 @@ from flint_graph.application.extraction_proposals import (
     ExtractionBatch,
     ExtractionInputChunk,
 )
+
+VERSION_ID = UUID("87c13861-d4e4-4a75-9708-7b92b35a13e0")
 
 
 def test_resolve_batch_evidence_calculates_offsets_hashes_and_links() -> None:
@@ -50,6 +54,7 @@ def test_resolve_batch_evidence_calculates_offsets_hashes_and_links() -> None:
 
     resolved = resolve_batch_evidence(
         batch,
+        document_version_id=VERSION_ID,
         chunks=[
             ExtractionInputChunk(
                 chunk_id="chunk-000001",
@@ -89,6 +94,7 @@ def test_resolve_batch_evidence_rejects_absent_quote() -> None:
     with pytest.raises(EvidenceResolutionError, match="quote was not found"):
         resolve_batch_evidence(
             batch,
+            document_version_id=VERSION_ID,
             chunks=[
                 ExtractionInputChunk(
                     chunk_id="chunk-000001",
@@ -116,6 +122,7 @@ def test_resolve_batch_evidence_rejects_repeated_quote_without_start_hint() -> N
     with pytest.raises(EvidenceResolutionError, match="ambiguous repeated quote"):
         resolve_batch_evidence(
             batch,
+            document_version_id=VERSION_ID,
             chunks=[
                 ExtractionInputChunk(
                     chunk_id="chunk-000001",
@@ -150,6 +157,7 @@ def test_resolve_batch_evidence_accepts_repeated_quote_with_valid_start_hint() -
     resolved = resolve_batch_evidence(
         batch,
         chunks=[ExtractionInputChunk(chunk_id="chunk-000001", text=text)],
+        document_version_id=VERSION_ID,
     )
 
     span = resolved.spans_by_id[resolved.entity_evidence_ids["e1"][0]]
@@ -179,6 +187,7 @@ def test_resolve_batch_evidence_rejects_start_hint_that_is_not_an_occurrence() -
     with pytest.raises(EvidenceResolutionError, match="start_hint does not identify"):
         resolve_batch_evidence(
             batch,
+            document_version_id=VERSION_ID,
             chunks=[
                 ExtractionInputChunk(
                     chunk_id="chunk-000001",
@@ -206,6 +215,7 @@ def test_resolve_batch_evidence_rejects_chunk_scope_mismatch() -> None:
     with pytest.raises(EvidenceResolutionError, match="chunk scope mismatch"):
         resolve_batch_evidence(
             batch,
+            document_version_id=VERSION_ID,
             chunks=[
                 ExtractionInputChunk(
                     chunk_id="chunk-000001",

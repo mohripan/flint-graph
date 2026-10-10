@@ -14,6 +14,7 @@ from flint_graph.application.extraction_proposals import (
 )
 from flint_graph.application.services.provenance_extraction import (
     ProvenanceExtractionMetadata,
+    persist_failed_provenance_extraction_run,
     persist_provenance_extraction_run,
 )
 from flint_graph.domain.enums import (
@@ -296,3 +297,125 @@ async def _seed_document(
     await session.flush()
 
     return tenant, document, version
+
+
+async def test_identical_quotes_in_one_tenant_have_distinct_document_version_evidence(
+    extraction_db_session: AsyncSession,
+) -> None:
+    db_session = extraction_db_session
+    tenant, first_document, first_version = await _seed_document(db_session)
+    second_document = Document(tenant_id=tenant.id, title="Second", source_type=SourceType.UPLOAD)
+    db_session.add(second_document)
+    await db_session.flush()
+    second_version = DocumentVersion(document_id=second_document.id, version_number=1)
+    next_version = DocumentVersion(document_id=first_document.id, version_number=2)
+    db_session.add_all([second_version, next_version])
+    await db_session.flush()
+    chunks = [ExtractionInputChunk(chunk_id="chunk-000001", text="Historical FinQA report.")]
+    batch = ExtractionBatch(
+        input_chunk_ids=["chunk-000001"],
+        entities=[
+            ExtractedEntityProposal(
+                local_id="e1",
+                name="FinQA",
+                entity_type="organization",
+                evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="FinQA")],
+            )
+        ],
+    )
+    metadata = ProvenanceExtractionMetadata(
+        prompt_version="proposal-v1",
+        extractor_version="deterministic-v1",
+        model_provider="deterministic",
+        model_name="deterministic",
+        request_hash="sha256:request",
+    )
+    store = FakeObjectStore()
+    results = []
+    for document, version in (
+        (first_document, first_version),
+        (second_document, second_version),
+        (first_document, next_version),
+    ):
+        result = await persist_provenance_extraction_run(
+            db_session,
+            object_store=store,
+            bucket="flint-graph",
+            tenant_id=tenant.id,
+            document_id=document.id,
+            version_id=version.id,
+            chunks=chunks,
+            batch=batch,
+            metadata=metadata,
+        )
+        results.append(result)
+        await db_session.flush()
+    retry = await persist_provenance_extraction_run(
+        db_session,
+        object_store=store,
+        bucket="flint-graph",
+        tenant_id=tenant.id,
+        document_id=first_document.id,
+        version_id=first_version.id,
+        chunks=chunks,
+        batch=batch,
+        metadata=metadata,
+    )
+    assert retry == results[0]
+    spans = list((await db_session.scalars(select(EvidenceSpan))).all())
+    assert len(spans) == 3
+    assert len({span.stable_id for span in spans}) == 3
+    assert {(span.start_offset, span.end_offset, span.quote) for span in spans} == {
+        (11, 16, "FinQA")
+    }
+    for result in results:
+        manifest = json.loads(store.objects[result.manifest_uri])
+        assert manifest["counts"]["spans"] == 1
+
+
+async def test_failed_extraction_can_retry_successfully_without_losing_invocation_history(
+    extraction_db_session: AsyncSession,
+) -> None:
+    session = extraction_db_session
+    tenant, document, version = await _seed_document(session)
+    chunks = [ExtractionInputChunk(chunk_id="chunk-000001", text="Acme Corporation.")]
+    metadata = ProvenanceExtractionMetadata(
+        prompt_version="proposal-v1", extractor_version="fixture-v1",
+        model_provider="deterministic",
+        model_name="fixture", request_hash="sha256:request",
+    )
+    for attempt in range(2):
+        failed = await persist_failed_provenance_extraction_run(
+            session, tenant_id=tenant.id, document_id=document.id, version_id=version.id,
+            chunks=chunks, metadata=metadata, error_code="fixture_failure",
+            error_message=f"attempt {attempt}",
+        )
+    batch = ExtractionBatch(
+        input_chunk_ids=["chunk-000001"], entities=[ExtractedEntityProposal(
+            local_id="e1", name="Acme Corporation", entity_type="organization",
+            evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")],
+        )],
+    )
+    store = FakeObjectStore()
+    ready = await persist_provenance_extraction_run(
+        session, object_store=store, bucket="flint-graph", tenant_id=tenant.id,
+        document_id=document.id, version_id=version.id,
+        chunks=chunks, batch=batch, metadata=metadata,
+    )
+    assert ready.extraction_run_id == failed.extraction_run_id
+    run = await session.get(ExtractionRun, ready.extraction_run_id)
+    assert run.status == ExtractionRunStatus.READY and run.invocation_count == 3
+    invocations = list((await session.scalars(
+        select(ExtractionInvocation).order_by(ExtractionInvocation.invocation_index)
+    )).all())
+    assert [item.invocation_index for item in invocations] == [0, 1, 2]
+    assert [item.status.value for item in invocations] == ["failed", "failed", "succeeded"]
+    assert [item.error_message for item in invocations[:2]] == ["attempt 0", "attempt 1"]
+    # An error on a later provider retry must not invalidate existing verified provenance.
+    await persist_failed_provenance_extraction_run(
+        session, tenant_id=tenant.id, document_id=document.id, version_id=version.id,
+        chunks=chunks, metadata=metadata, error_code="later_failure",
+        error_message="provider unavailable",
+    )
+    assert run.status == ExtractionRunStatus.READY and run.invocation_count == 4
+    assert len((await session.scalars(select(EvidenceSpan))).all()) == 1
