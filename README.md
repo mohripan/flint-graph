@@ -9,8 +9,9 @@ and the platform/developer-experience tracks (Milestones 24–26).
 Use the [explicit developer profiles](docs/runbooks/developer-profiles.md) for
 deterministic offline-model setup or installed local-real models with reviewed
 SHA-256 fingerprints. Guarded bootstrap preserves existing indexes; tiny-corpus
-ingestion is opt-in and repeatable. Financial-report corpus collection and fresh
-nightly user-question testing are tracked in issues #54 and #53.
+ingestion is opt-in and repeatable. Use the [financial corpus runbook](docs/runbooks/financial-corpus.md)
+for pinned public report excerpts with separately held answer annotations.
+Fresh nightly user-question testing is tracked in #53.
 
 ## Why these milestones come first
 

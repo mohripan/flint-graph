@@ -383,6 +383,10 @@ prove it. Report commands passed, failed and skipped explicitly.
 User-requested live/black-box verification and business/financial corpora are
 tracked in [#53: fresh nightly quality tests](https://github.com/mohripan/flint-graph/issues/53)
 and [#54: pinned public financial corpus](https://github.com/mohripan/flint-graph/issues/54).
+The [financial collection runbook](runbooks/financial-corpus.md) covers the
+implemented pinned collector. Live ingestion exposed an evidence-identity
+collision tracked in [#55](https://github.com/mohripan/flint-graph/issues/55);
+downloaded files are not automatically a searchable/quality-qualified corpus.
 Use independently annotated questions/evidence, keep answers out of ingested
 documents, and distinguish real model-quality results from fixture/health checks.
 Every implemented slice should include relevant live verification, with missing
