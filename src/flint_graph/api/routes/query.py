@@ -750,7 +750,7 @@ def _chunk_candidate(
             "document_version_id": str(chunk.document_version_id),
             "chunk_id": chunk.chunk_id,
         },
-        text_preview=chunk.text,
+        text_preview=chunk.text[:2000] if chunk.text is not None else None,
         raw_score=chunk.score,
         normalized_score=_normalize_score(chunk.score),
         rank=rank,

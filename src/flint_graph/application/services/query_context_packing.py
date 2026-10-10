@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.query_orchestration import (
@@ -17,6 +17,7 @@ from flint_graph.application.services.query_runs import (
 from flint_graph.domain.enums import DocumentVersionStatus, RelationshipStatus
 from flint_graph.infrastructure.db.models import (
     Document,
+    DocumentChunk,
     DocumentVersion,
     EntityRelationship,
     QueryRunCandidate,
@@ -59,6 +60,8 @@ async def pack_query_context(
     records: list[PackedContextRecord] = []
     token_count = 0
     skipped_count = 0
+    skipped_reasons: dict[str, int] = {}
+    chunk_evidence = await _load_chunk_evidence(session, tenant_id=tenant_id, rows=rows)
     active_document_version_ids = await _active_candidate_document_version_ids(
         session,
         tenant_id=tenant_id,
@@ -76,17 +79,30 @@ async def pack_query_context(
             active_relationship_ids=active_relationship_ids,
         ):
             skipped_count += 1
+            _count_skip(skipped_reasons, "inactive_source")
             continue
-        text = (row.text_preview or "").strip()
-        candidate_tokens = _estimate_token_count(text)
-        if not text or candidate_tokens <= 0:
+        evidence = _candidate_evidence(row, chunks=chunk_evidence)
+        if evidence is None:
             skipped_count += 1
+            _count_skip(skipped_reasons, "missing_or_stale_chunk")
+            continue
+        text, source_ids, evidence_metadata = evidence
+        if len(text) > 4000:
+            skipped_count += 1
+            _count_skip(skipped_reasons, "record_character_limit")
+            continue
+        candidate_tokens = _estimate_token_count(text)
+        if not text.strip() or candidate_tokens <= 0:
+            skipped_count += 1
+            _count_skip(skipped_reasons, "empty_record")
             continue
         if len(records) >= max_records:
             skipped_count += 1
+            _count_skip(skipped_reasons, "record_limit")
             continue
         if token_count + candidate_tokens > token_budget:
             skipped_count += 1
+            _count_skip(skipped_reasons, "token_budget")
             continue
 
         record_number = len(records) + 1
@@ -97,7 +113,7 @@ async def pack_query_context(
                 citation_id=f"c{record_number}",
                 text=text,
                 token_count=candidate_tokens,
-                source_ids=dict(row.source_ids),
+                source_ids=source_ids,
                 metadata={
                     **dict(row.metadata_),
                     "source": row.source,
@@ -106,6 +122,7 @@ async def pack_query_context(
                     "fusion_score": row.fusion_score,
                     "rerank_score": row.rerank_score,
                     "rerank_rank": row.rerank_rank,
+                    **evidence_metadata,
                 },
             )
         )
@@ -122,9 +139,11 @@ async def pack_query_context(
             token_budget=token_budget,
             records=records,
             metadata={
-                "algorithm": "rerank-order-preview-packer",
+                "algorithm": "rerank-order-authoritative-chunk-packer-v2",
                 "max_records": max_records,
                 "skipped_candidate_count": skipped_count,
+                "skipped_candidate_reasons": skipped_reasons,
+                "token_estimator": "whitespace-words-not-model-tokens",
             },
         ),
     )
@@ -140,6 +159,7 @@ async def pack_query_context(
             "token_budget": token_budget,
             "token_count": token_count,
             "skipped_candidate_count": skipped_count,
+            "skipped_candidate_reasons": skipped_reasons,
         },
     )
     await session.flush()
@@ -148,6 +168,70 @@ async def pack_query_context(
         record_count=len(records),
         token_count=token_count,
         skipped_candidate_count=skipped_count,
+    )
+
+
+def _count_skip(reasons: dict[str, int], reason: str) -> None:
+    reasons[reason] = reasons.get(reason, 0) + 1
+
+
+async def _load_chunk_evidence(
+    session: AsyncSession, *, tenant_id: UUID, rows: list[QueryRunCandidate]
+) -> dict[tuple[UUID, str], DocumentChunk]:
+    keys = {
+        (version_id, row.source_ids["chunk_id"])
+        for row in rows
+        if row.candidate_type == "chunk"
+        and (version_id := _candidate_document_version_id(row)) is not None
+        and row.source_ids.get("chunk_id")
+    }
+    if not keys:
+        return {}
+    chunks = await session.scalars(
+        select(DocumentChunk)
+        .join(DocumentVersion, DocumentVersion.id == DocumentChunk.document_version_id)
+        .join(Document, Document.id == DocumentVersion.document_id)
+        .where(
+            DocumentChunk.tenant_id == tenant_id,
+            Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
+            DocumentVersion.status == DocumentVersionStatus.ACTIVE,
+            DocumentChunk.document_id == Document.id,
+            tuple_(DocumentChunk.document_version_id, DocumentChunk.chunk_id).in_(keys),
+        )
+    )
+    return {(chunk.document_version_id, chunk.chunk_id): chunk for chunk in chunks}
+
+
+def _candidate_evidence(
+    row: QueryRunCandidate, *, chunks: dict[tuple[UUID, str], DocumentChunk]
+) -> tuple[str, dict[str, str], dict[str, object]] | None:
+    version_id = _candidate_document_version_id(row)
+    if row.candidate_type != "chunk" or version_id is None:
+        # Internal legacy fixtures/adapters may not have immutable chunk identities.
+        # Public chunk retrievers always provide them. Never call this full evidence.
+        if row.candidate_type == "chunk" and (
+            "document_version_id" in row.source_ids or "document_version_id" in row.metadata_
+        ):
+            return None
+        return (row.text_preview or "", dict(row.source_ids), {"evidence_origin": "legacy_preview"})
+    chunk = chunks.get((version_id, row.source_ids.get("chunk_id", "")))
+    if chunk is None or row.metadata_.get("chunk_hash") != chunk.chunk_hash:
+        return None
+    # Reject contradictory identities in either projection reference field.
+    for mapping in (row.source_ids, row.metadata_):
+        if (mapping.get("document_id") not in (None, str(chunk.document_id))
+                or mapping.get("document_version_id") not in (None, str(version_id))):
+            return None
+    return (
+        chunk.text,
+        {**row.source_ids, "document_id": str(chunk.document_id),
+         "document_version_id": str(version_id), "chunk_id": chunk.chunk_id},
+        {"evidence_origin": "postgresql_chunk", "document_id": str(chunk.document_id),
+         "document_version_id": str(version_id), "chunk_hash": chunk.chunk_hash,
+         "heading_path": chunk.heading_path, "page_start": chunk.page_start,
+         "page_end": chunk.page_end, "source_element_ids": chunk.source_element_ids,
+         "source_offsets": chunk.source_offsets},
     )
 
 
@@ -267,7 +351,7 @@ def _candidate_relationship_id(row: QueryRunCandidate) -> UUID | None:
 
 
 def _candidate_document_version_id(row: QueryRunCandidate) -> UUID | None:
-    value = row.metadata_.get("document_version_id")
+    value = row.source_ids.get("document_version_id", row.metadata_.get("document_version_id"))
     if value is None:
         return None
     try:

@@ -7,6 +7,8 @@ Implementation has started: [Milestone 15 progress](milestones/15-useful-answers
 [fresh local quality report](reports/2026-10-10-local-answer-quality.md).
 The inspection table below describes the original baseline, not current fixed
 behavior. GitHub milestones 15–23 and their linked issues track remaining work.
+Authoritative chunk packing has also started under
+[Milestone 17](milestones/17-retrieval-and-evidence.md); native vector search remains pending.
 
 This roadmap turns the current GraphRAG platform into a useful, measurable,
 agent-driven product. Proposed features are not implemented merely because they

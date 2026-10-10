@@ -1,5 +1,10 @@
 # Query Orchestration Contract
 
+Current versioned chunk packing rehydrates authoritative PostgreSQL evidence;
+see [Milestone 17 progress](../milestones/17-retrieval-and-evidence.md). Search
+previews are ranking inputs, not the final answering text. Missing/stale/inactive
+versioned chunks are skipped, with explicit reason counts in `context.packed`.
+
 ## Purpose
 
 The query orchestration contract defines how FlintGraph turns a tenant-scoped user

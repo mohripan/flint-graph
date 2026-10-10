@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -33,6 +34,7 @@ from flint_graph.domain.enums import (
 from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
+    DocumentChunk,
     DocumentVersion,
     EntityAlias,
     EntityRelationship,
@@ -417,6 +419,61 @@ async def test_parallel_retrieval_can_use_independent_read_transactions(
     assert result.status == QueryRunStatus.COMPLETED
     assert result.retrieved_candidate_count == 2
     assert result.errors == []
+
+
+@pytest.mark.parametrize("mode", [
+    "full", "source_ids_only", "missing", "stale_hash", "too_large", "budget", "foreign", "deleted"
+])
+async def test_context_packing_reads_canonical_chunk_not_versioned_preview(db_session, mode):
+    tenant = await _tenant(db_session, name="authoritative-context")
+    run_id, index_id = await _query_run(db_session, tenant, "What is the project codename?")
+    source_tenant = await _tenant(db_session, name="Foreign") if mode == "foreign" else tenant
+    document = Document(
+        tenant_id=source_tenant.id, title="Canonical", source_type=SourceType.UPLOAD
+    )
+    db_session.add(document)
+    await db_session.flush()
+    version = DocumentVersion(document_id=document.id, version_number=1,
+                              status=(DocumentVersionStatus.DELETED if mode == "deleted"
+                                      else DocumentVersionStatus.ACTIVE), content_hash="sha256:doc")
+    db_session.add(version)
+    await db_session.flush()
+    text = ("Background information. " * 20) + "The project codename is Quartz."
+    if mode == "too_large":
+        text = "x" * 4001
+    if mode != "missing":
+        db_session.add(DocumentChunk(
+            tenant_id=source_tenant.id, document_id=document.id, document_version_id=version.id,
+            chunk_id="chunk-1", chunk_index=0, text=text, chunk_hash="sha256:canonical",
+            heading_path=["Project"], page_start=2, page_end=2,
+            source_offsets={"start": 50, "end": 50 + len(text)},
+        ))
+    db_session.add(QueryRunCandidate(
+        query_run_id=run_id, tenant_id=tenant.id, retrieval_index_version_id=index_id,
+        source="vector", candidate_type="chunk", dedupe_key="vector:chunk:one",
+        source_ids={"document_id": str(document.id), "document_version_id": str(version.id),
+                    "chunk_id": "chunk-1"},
+        text_preview="Misleading stale preview.", raw_score=1, normalized_score=1,
+        rank=1, fusion_score=1, rerank_score=1, rerank_rank=1,
+        metadata_=({} if mode == "source_ids_only" else {
+                   "document_id": str(document.id), "document_version_id": str(version.id)}) | {
+                   "chunk_hash": "sha256:stale" if mode == "stale_hash" else "sha256:canonical"},
+    ))
+    await db_session.flush()
+    result = await pack_query_context(db_session, tenant_id=tenant.id, query_run_id=run_id,
+                                      token_budget=10 if mode == "budget" else 1000, max_records=10)
+    records = list(await db_session.scalars(select(QueryContextPackRecord).where(
+        QueryContextPackRecord.query_run_id == run_id
+    )))
+    if mode in ("full", "source_ids_only"):
+        assert result.record_count == 1
+        assert records[0].text == text
+        assert "Quartz" in records[0].text[200:]
+        assert records[0].metadata_["evidence_origin"] == "postgresql_chunk"
+        assert records[0].metadata_["source_offsets"] == {"start": 50, "end": 50 + len(text)}
+    else:
+        assert records == []
+        assert result.skipped_candidate_count == 1
 
 
 async def test_context_packing_skips_chunk_candidate_deleted_after_retrieval(

@@ -40,6 +40,7 @@ from flint_graph.domain.enums import (
 from flint_graph.infrastructure.db.base import Base
 from flint_graph.infrastructure.db.models import (
     Document,
+    DocumentChunk,
     DocumentIndexCoverage,
     DocumentVersion,
     Tenant,
@@ -259,6 +260,13 @@ async def _add_active_document_version(
         content_hash="sha256:document",
     )
     session.add(version)
+    await session.flush()
+    session.add(DocumentChunk(
+        tenant_id=tenant.id, document_id=document.id, document_version_id=version.id,
+        chunk_id="chunk-acme", chunk_index=0,
+        text="Acme Corporation is headquartered in Berlin.", chunk_hash="sha256:chunk-acme",
+        heading_path=["Overview"], page_start=1, page_end=1,
+    ))
     await session.flush()
     return document, version
 
@@ -1001,6 +1009,48 @@ async def test_query_inspection_does_not_wait_for_stream_authentication_lock(
 
 
 @pytest.mark.asyncio
+async def test_long_search_preview_is_bounded_but_answer_context_is_complete(query_api_env: Any):
+    from sqlalchemy import select
+
+    from flint_graph.infrastructure.db.models import QueryContextPackRecord, QueryRunCandidate
+
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    text = ("Background information. " * 100) + "The project codename is Quartz."
+    assert 2000 < len(text) < 4000
+    async with session_factory() as session:
+        tenant, _index_id = await _tenant_with_searchable_content(session)
+        chunk = await session.scalar(
+            select(DocumentChunk).where(DocumentChunk.tenant_id == tenant.id)
+        )
+        chunk.text = text
+        await session.commit()
+
+    class LongSearch(QueryOpenSearchClient):
+        async def search(self, *, index_name: str, body: dict[str, Any]) -> list[dict[str, Any]]:
+            hits = await super().search(index_name=index_name, body=body)
+            hits[0]["source"]["text"] = text
+            return hits
+
+    app.dependency_overrides[dependencies.get_opensearch_client] = lambda: LongSearch()
+    created = await client.post("/v1/query-runs", headers=_headers(tenant.id),
+                                json={"query": "What is the project codename?"})
+    run_id = UUID(created.json()["id"])
+    path = f"/v1/query-runs/{run_id}"
+    await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    inspected = await client.get(path, headers=_headers(tenant.id))
+    assert inspected.json()["status"] == "completed"
+    async with session_factory() as session:
+        records = list(await session.scalars(select(QueryContextPackRecord).where(
+            QueryContextPackRecord.query_run_id == run_id
+        )))
+        assert records[0].text == text
+        rows = list(await session.scalars(select(QueryRunCandidate).where(
+            QueryRunCandidate.query_run_id == run_id
+        )))
+        assert all(len(row.text_preview or "") <= 2000 for row in rows)
+
+
+@pytest.mark.asyncio
 async def test_same_named_chunks_from_different_documents_do_not_collide(
     query_api_env: Any,
 ) -> None:
@@ -1017,6 +1067,12 @@ async def test_same_named_chunks_from_different_documents_do_not_collide(
         session.add(DocumentVersion(
             id=other_version_id, document_id=document.id, version_number=1,
             status=DocumentVersionStatus.ACTIVE, content_hash="sha256:globex",
+        ))
+        await session.flush()
+        session.add(DocumentChunk(
+            tenant_id=tenant.id, document_id=document.id, document_version_id=other_version_id,
+            chunk_id="chunk-acme", chunk_index=0,
+            text="Globex Industries is based in Osaka.", chunk_hash="sha256:chunk-acme",
         ))
         await session.commit()
 
