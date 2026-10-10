@@ -6,6 +6,7 @@ Status: in progress; epic [#84](https://github.com/mohripan/flint-graph/issues/8
 | --- | --- | --- |
 | [#96](https://github.com/mohripan/flint-graph/issues/96) | Authorized conversation/ordered-turn/run ledger | implemented and locally verified |
 | [#97](https://github.com/mohripan/flint-graph/issues/97) | Revalidated bounded prior-year follow-ups | implemented; qualification recorded separately |
+| [#98](https://github.com/mohripan/flint-graph/issues/98) | Authorized title search/rename for the sidebar | implemented; qualification recorded separately |
 | [#62](https://github.com/mohripan/flint-graph/issues/62) | Broader grounded follow-up execution | in progress; narrow prior-year slice only |
 | [#73](https://github.com/mohripan/flint-graph/issues/73) | Accessible new/reopen/thread Ask UI | planned |
 | [#74](https://github.com/mohripan/flint-graph/issues/74) | Fresh multi-turn quality and isolation gates | planned |

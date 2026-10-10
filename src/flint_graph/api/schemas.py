@@ -513,12 +513,19 @@ class EntityNeighborhoodResponse(BaseModel):
 
 class ConversationCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    title: str = Field(default="New conversation", min_length=1, max_length=200)
+    title: str = Field(
+        default="New conversation", min_length=1, max_length=200, pattern=r"^[^\x00]*$"
+    )
 
 
 class ConversationArchiveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     archived: bool
+
+
+class ConversationRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=200, pattern=r"^[^\x00]*$")
 
 
 class ConversationResponse(BaseModel):

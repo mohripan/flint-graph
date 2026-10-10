@@ -9,11 +9,23 @@ ID or tenant header alone, authorizes them. Viewer reads; member creates/submits
 cancels queued turns; admin archives/reopens. Foreign resource/cursor 404 follows
 workspace authorization; invalid/revoked membership receives the existing 403.
 Titles are bounded display text. Conversation creation does not make an index.
+Titles are trimmed to 1..200 characters and reject NUL. Discovery/rename is
+advertised separately as `conversation_discovery=true`. Search matches a literal
+case-insensitive title substring using database case matching, bounded to 200
+characters; SQL wildcard/escape characters are treated literally. Empty/whitespace
+search lists all authorized visible conversations. It does not search turn text,
+answers, documents or other workspaces, and has no large-history latency claim.
+The cursor is authorized independently of the search filter. Renaming does not
+change created-at ordering, turn/run identity, idempotency, inference or memory.
+Members may rename workspace-shared conversations; viewers cannot. Archived or
+foreign conversations return 404. Existing row locking serializes metadata
+renames; the last committed rename wins, with no optimistic revision API.
 
 | Endpoint | Contract |
 | --- | --- |
 | `POST /v1/conversations` | Optional title, default `New conversation`; 201 |
-| `GET /v1/conversations` | `limit=1..100`, `before_id`, `include_archived`; newest-created first |
+| `GET /v1/conversations` | `limit=1..100`, `before_id`, `include_archived`, title search `q`; newest-created first |
+| `PATCH /v1/conversations/{id}` | Required title-only body; member rename, 200 |
 | `GET /v1/conversations/{id}` | Reopen authoritative state; archived excluded unless requested |
 | `POST /v1/conversations/{id}/turns` | Existing query fields plus required UUID `idempotency_key`; 201 |
 | `GET /v1/conversations/{id}/turns` | `limit=1..100`, `after_id`, `include_archived`; increasing ordinals |

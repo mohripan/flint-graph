@@ -12,6 +12,7 @@ from flint_graph.api.dependencies import (
 from flint_graph.api.schemas import (
     ConversationArchiveRequest,
     ConversationCreateRequest,
+    ConversationRenameRequest,
     ConversationResponse,
     ConversationTurnCreateRequest,
     ConversationTurnResponse,
@@ -25,11 +26,25 @@ from flint_graph.application.services.conversations import (
     get_conversation_turn,
     list_conversation_turns,
     list_conversations,
+    rename_conversation,
     set_conversation_archived,
 )
 from flint_graph.domain.errors import BadRequestError
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
+
+
+@router.patch("/{conversation_id}", response_model=ConversationResponse)
+async def rename_conversation_endpoint(
+    conversation_id: UUID,
+    payload: ConversationRenameRequest,
+    tenant_id: TenantMemberDep,
+    session: SessionDep,
+) -> ConversationResponse:
+    conversation = await rename_conversation(
+        session, tenant_id=tenant_id, conversation_id=conversation_id, title=payload.title
+    )
+    return ConversationResponse.model_validate(conversation)
 
 
 @router.post("/{conversation_id}/turns/{turn_id}/cancel", response_model=ConversationTurnResponse)
@@ -142,6 +157,7 @@ async def list_conversations_endpoint(
     limit: int = Query(default=50, ge=1, le=100),
     before_id: UUID | None = None,
     include_archived: bool = False,
+    q: str | None = Query(default=None, max_length=200, pattern=r"^[^\x00]*$"),
 ) -> list[ConversationResponse]:
     conversations = await list_conversations(
         session,
@@ -149,6 +165,7 @@ async def list_conversations_endpoint(
         limit=limit,
         before_id=before_id,
         include_archived=include_archived,
+        query=q,
     )
     return [ConversationResponse.model_validate(row) for row in conversations]
 

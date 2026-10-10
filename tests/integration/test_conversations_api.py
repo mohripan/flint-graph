@@ -145,6 +145,155 @@ async def test_conversation_can_be_created_reopened_and_is_tenant_scoped(convers
 
 
 @pytest.mark.anyio
+async def test_conversation_rename_persists_only_a_trimmed_title(conversation_env) -> None:
+    client, _, _ = conversation_env
+    workspace = (await client.post("/v1/workspaces", json={"name": "Rename fixture"})).json()
+    headers = {"X-Tenant-ID": workspace["id"]}
+    created = (
+        await client.post("/v1/conversations", headers=headers, json={"title": "Original"})
+    ).json()
+    path = f"/v1/conversations/{created['id']}"
+    renamed = await client.patch(
+        path, headers=headers, json={"title": "  Annual report research  "}
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["title"] == "Annual report research"
+    assert renamed.json()["id"] == created["id"]
+    assert renamed.json()["created_at"] == created["created_at"]
+    assert renamed.json()["next_turn_number"] == 1
+    assert (await client.get(path, headers=headers)).json() == renamed.json()
+    assert (await client.get("/v1/conversations", headers=headers)).json() == [renamed.json()]
+    assert (await client.get("/v1/system-readiness", headers=headers)).json()["setup_capabilities"][
+        "conversation_discovery"
+    ] is True
+    for payload in (
+        {},
+        {"title": ""},
+        {"title": "   "},
+        {"title": "x" * 201},
+        {"title": "New", "tenant_id": workspace["id"]},
+        {"title": 123},
+        {"title": "Invalid\x00title"},
+    ):
+        assert (await client.patch(path, headers=headers, json=payload)).status_code == 422
+    assert (
+        await client.post("/v1/conversations", headers=headers, json={"title": "Invalid\x00title"})
+    ).status_code == 422
+
+
+@pytest.mark.anyio
+async def test_conversation_search_matches_literal_titles_not_sql_patterns(
+    conversation_env,
+) -> None:
+    client, _, _ = conversation_env
+    workspace = (await client.post("/v1/workspaces", json={"name": "Search fixture"})).json()
+    headers = {"X-Tenant-ID": workspace["id"]}
+    literal = (
+        await client.post(
+            "/v1/conversations", headers=headers, json={"title": "Revenue 100%_!\\ research"}
+        )
+    ).json()
+    other = (
+        await client.post(
+            "/v1/conversations", headers=headers, json={"title": "Headquarters research"}
+        )
+    ).json()
+    for query in ("REVENUE", "%", "_", "!", "\\", "  revenue  "):
+        rows = (await client.get("/v1/conversations", headers=headers, params={"q": query})).json()
+        assert [row["id"] for row in rows] == [literal["id"]]
+    assert (
+        len((await client.get("/v1/conversations", headers=headers, params={"q": "  "})).json())
+        == 2
+    )
+    assert (
+        await client.get("/v1/conversations", headers=headers, params={"q": "missing"})
+    ).json() == []
+    assert (
+        await client.get("/v1/conversations", headers=headers, params={"q": "x" * 201})
+    ).status_code == 422
+    assert (
+        await client.get("/v1/conversations", headers=headers, params={"q": "Invalid\x00search"})
+    ).status_code == 422
+    for cursor in (literal["id"], other["id"]):
+        assert (
+            await client.get(
+                "/v1/conversations",
+                headers=headers,
+                params={"q": "research", "before_id": cursor, "limit": 1},
+            )
+        ).status_code == 200
+
+
+@pytest.mark.anyio
+async def test_search_paging_and_rename_preserve_tenant_and_archive_boundaries(conversation_env):
+    client, _, _ = conversation_env
+    workspace = (await client.post("/v1/workspaces", json={"name": "Discovery fixture"})).json()
+    foreign = (await client.post("/v1/workspaces", json={"name": "Foreign discovery"})).json()
+    headers, foreign_headers = {"X-Tenant-ID": workspace["id"]}, {"X-Tenant-ID": foreign["id"]}
+    created = []
+    for title in ("Revenue first", "Other subject", "Revenue second", "Revenue third"):
+        created.append(
+            (await client.post("/v1/conversations", headers=headers, json={"title": title})).json()
+        )
+    foreign_row = (
+        await client.post(
+            "/v1/conversations", headers=foreign_headers, json={"title": "Revenue foreign"}
+        )
+    ).json()
+    expected = sorted(
+        [row for row in created if "Revenue" in row["title"]],
+        key=lambda row: (row["created_at"], row["id"]),
+        reverse=True,
+    )
+    rows = []
+    params = {"q": "revenue", "limit": 1}
+    while True:
+        page = (await client.get("/v1/conversations", headers=headers, params=params)).json()
+        if not page:
+            break
+        rows.extend(page)
+        params["before_id"] = page[-1]["id"]
+    assert [row["id"] for row in rows] == [row["id"] for row in expected]
+    assert (
+        await client.get(
+            "/v1/conversations",
+            headers=headers,
+            params={"q": "missing", "before_id": foreign_row["id"]},
+        )
+    ).status_code == 404
+    path = f"/v1/conversations/{created[0]['id']}"
+    assert (
+        await client.patch(path, headers=foreign_headers, json={"title": "Foreign write"})
+    ).status_code == 404
+    assert (
+        await client.post(path + "/archive", headers=headers, json={"archived": True})
+    ).status_code == 200
+    assert (
+        await client.patch(path, headers=headers, json={"title": "Hidden write"})
+    ).status_code == 404
+    visible = (
+        await client.get("/v1/conversations", headers=headers, params={"q": "revenue"})
+    ).json()
+    assert created[0]["id"] not in {row["id"] for row in visible}
+    archived = (
+        await client.get(
+            "/v1/conversations",
+            headers=headers,
+            params={"q": "revenue", "include_archived": "true"},
+        )
+    ).json()
+    assert len(archived) == 3
+    assert (
+        await client.post(path + "/archive", headers=headers, json={"archived": False})
+    ).status_code == 200
+    before = (await client.get(path + "/turns", headers=headers)).json()
+    assert (
+        await client.patch(path, headers=headers, json={"title": "Changed topic"})
+    ).status_code == 200
+    assert (await client.get(path + "/turns", headers=headers)).json() == before
+
+
+@pytest.mark.anyio
 async def test_conversation_turn_links_an_original_question_to_a_run(conversation_env) -> None:
     client, factory, _ = conversation_env
     headers, index_id = await searchable_workspace(client, factory)
@@ -407,6 +556,15 @@ async def test_oidc_conversation_roles_and_revocation_are_enforced(client, oidc_
     assert created.status_code == 201
     path = f"/v1/conversations/{created.json()['id']}"
     assert (await client.get(path, headers=viewer)).status_code == 200
+    assert (
+        await client.patch(path, headers=member, json={"title": "Member renamed"})
+    ).status_code == 200
+    assert (
+        await client.patch(path, headers=viewer, json={"title": "Viewer write"})
+    ).status_code == 403
+    assert (await client.get("/v1/conversations", headers=viewer, params={"q": "member"})).json()[
+        0
+    ]["title"] == "Member renamed"
     assert (await client.get(path, headers={"X-Tenant-ID": workspace["id"]})).status_code == 401
     assert (await client.post("/v1/conversations", headers=viewer, json={})).status_code == 403
     assert (
@@ -433,6 +591,12 @@ async def test_oidc_conversation_roles_and_revocation_are_enforced(client, oidc_
         membership.status = WorkspaceMembershipStatus.DISABLED
         await session.commit()
     assert (await client.get(path, headers=member)).status_code == 403
+    assert (
+        await client.patch(path, headers=member, json={"title": "Revoked write"})
+    ).status_code == 403
+    assert (
+        await client.get("/v1/conversations", headers=member, params={"q": "member"})
+    ).status_code == 403
     assert (await client.get(f"{path}/turns", headers=member)).status_code == 403
     assert (
         await client.post(

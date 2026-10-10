@@ -27,7 +27,7 @@ async def create_conversation(
     session: AsyncSession, *, tenant_id: UUID, title: str
 ) -> Conversation:
     title = title.strip()
-    if not title or len(title) > 200:
+    if not title or len(title) > 200 or "\x00" in title:
         raise BadRequestError("Conversation title must contain 1..200 characters.")
     conversation = Conversation(tenant_id=tenant_id, title=title)
     session.add(conversation)
@@ -63,10 +63,16 @@ async def list_conversations(
     limit: int = 50,
     before_id: UUID | None = None,
     include_archived: bool = False,
+    query: str | None = None,
 ) -> list[Conversation]:
     if not 1 <= limit <= 100:
         raise BadRequestError("Conversation page limit must be 1..100.")
+    if query is not None and (len(query) > 200 or "\x00" in query):
+        raise BadRequestError("Conversation search must not exceed 200 characters.")
     statement = select(Conversation).where(Conversation.tenant_id == tenant_id)
+    if query is not None and query.strip():
+        literal = query.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        statement = statement.where(Conversation.title.ilike(f"%{literal}%", escape="!"))
     if not include_archived:
         statement = statement.where(Conversation.archived_at.is_(None))
     if before_id is not None:
@@ -98,6 +104,21 @@ async def list_conversations(
             statement.order_by(Conversation.created_at.desc(), Conversation.id.desc()).limit(limit)
         )
     )
+
+
+async def rename_conversation(
+    session: AsyncSession, *, tenant_id: UUID, conversation_id: UUID, title: str
+) -> Conversation:
+    title = title.strip()
+    if not title or len(title) > 200 or "\x00" in title:
+        raise BadRequestError("Conversation title must contain 1..200 characters.")
+    conversation = await get_conversation(
+        session, tenant_id=tenant_id, conversation_id=conversation_id, for_update=True
+    )
+    conversation.title = title
+    await session.flush()
+    await session.refresh(conversation, attribute_names=["updated_at"])
+    return conversation
 
 
 @dataclass(frozen=True, slots=True)
