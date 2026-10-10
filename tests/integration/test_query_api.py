@@ -5,6 +5,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -23,7 +24,12 @@ from flint_graph.application.query_orchestration import (
     GeneratedAnswer,
 )
 from flint_graph.application.services.query_orchestration import QueryRetrieverBundle
-from flint_graph.application.services.query_runs import get_query_run, list_query_run_events
+from flint_graph.application.services.query_runs import (
+    QueryRunCreate,
+    create_query_run,
+    get_query_run,
+    list_query_run_events,
+)
 from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
@@ -295,6 +301,62 @@ def _sse_event_types(body: str) -> list[str]:
     return [
         line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
     ]
+
+
+@pytest.mark.asyncio
+async def test_history_search_cursor_is_stable_literal_and_tenant_scoped(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_active_index(session)
+        tenant.name = "history-main"
+        await session.flush()
+        other, other_index_id = await _tenant_with_active_index(session)
+        stamp = datetime(2026, 1, 1, tzinfo=UTC)
+        runs = []
+        for number in range(5):
+            run = await create_query_run(session, QueryRunCreate(
+                tenant_id=tenant.id, retrieval_index_version_id=index_id,
+                query_text=f"Revenue %_literal {number}" if number % 2 == 0 else "Margin normal",
+            ))
+            run.id = UUID(int=100 + number)
+            run.created_at = stamp
+            runs.append(run)
+        foreign = await create_query_run(session, QueryRunCreate(
+            tenant_id=other.id, retrieval_index_version_id=other_index_id,
+            query_text="Revenue %_literal foreign",
+        ))
+        await session.commit()
+
+    first = await client.get("/v1/query-runs", headers=_headers(tenant.id),
+                             params={"limit": 2, "q": "REVENUE"})
+    assert first.status_code == 200
+    assert [row["id"] for row in first.json()] == [str(runs[4].id), str(runs[2].id)]
+    async with session_factory() as session:
+        newer = await create_query_run(session, QueryRunCreate(
+            tenant_id=tenant.id, retrieval_index_version_id=index_id,
+            query_text="Revenue newly inserted",
+        ))
+        newer.created_at = stamp + timedelta(days=1)
+        await session.commit()
+    older = await client.get("/v1/query-runs", headers=_headers(tenant.id), params={
+        "limit": 2, "q": "REVENUE", "before_id": str(runs[2].id),
+    })
+    assert older.status_code == 200
+    assert [row["id"] for row in older.json()] == [str(runs[0].id)]
+    literal = await client.get("/v1/query-runs", headers=_headers(tenant.id), params={"q": "%_"})
+    assert literal.status_code == 200
+    assert [row["id"] for row in literal.json()] == [str(runs[n].id) for n in (4, 2, 0)]
+    for cursor in (foreign.id, uuid4()):
+        response = await client.get("/v1/query-runs", headers=_headers(tenant.id),
+                                    params={"before_id": str(cursor)})
+        assert response.status_code == 404
+    for params in ({"before_id": "invalid"}, {"q": "a" * 201}, {"limit": 201}):
+        response = await client.get("/v1/query-runs", headers=_headers(tenant.id), params=params)
+        assert response.status_code == 422
 
 
 @pytest.mark.asyncio

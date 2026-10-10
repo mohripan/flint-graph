@@ -13,6 +13,7 @@ Design: [ADR 14](../adr/0014-measured-search-and-inference-platform.md).
 | [#45](https://github.com/mohripan/flint-graph/issues/45) | Benchmark vLLM versus Ollama on a fixed grounded workload | planned |
 | [#46](https://github.com/mohripan/flint-graph/issues/46) | Build large-corpus tenant-filtered lexical and vector retrieval benchmarks | planned |
 | [#47](https://github.com/mohripan/flint-graph/issues/47) | Add measured OpenSearch shard, refresh, alias and index lifecycle operations | planned |
+| [#63](https://github.com/mohripan/flint-graph/issues/63) | Measure reference-only Temporal payloads, history growth and replay/conversation budgets | planned |
 
 ## Acceptance and boundaries
 

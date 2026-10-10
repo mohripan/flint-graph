@@ -212,6 +212,10 @@ backend choice in an ADR; faster ANN cannot fix poor parsing or embeddings.
 
 ### 18: durable agent execution
 
+- Add explicit tenant-scoped conversations and bounded grounded follow-ups
+  ([#62](https://github.com/mohripan/flint-graph/issues/62)); standalone query
+  history is not model memory. Conversation state and reference-only execution
+  are proposed in [ADR 19](adr/0019-conversation-state-and-reference-only-execution.md).
 - Transactionally dispatch query runs through outbox/Temporal. SSE subscribes;
   disconnect does not cancel execution. Add explicit cancellation and cursor
   replay; prevent multiple subscribers executing the same run.
@@ -385,6 +389,15 @@ budget acceptance requires real services; SQLite/offline fixtures alone cannot
 prove it. Report commands passed, failed and skipped explicitly.
 
 ## Evidence needed for later decisions
+
+User-requested chained conversations are tracked in #62; existing ingestion and
+indexing already pass durable IDs/batch indices through Temporal. Measure and
+bound future query payloads and long-workflow history in
+[#63](https://github.com/mohripan/flint-graph/issues/63), coordinating Milestone 18
+and the platform performance track. Large-document optional retrieval ingestion
+is delivered in #61; full multi-batch graph extraction remains
+[#64](https://github.com/mohripan/flint-graph/issues/64). Ask scrolling and saved
+history access are tracked in [#65](https://github.com/mohripan/flint-graph/issues/65).
 
 User-requested live/black-box verification and business/financial corpora are
 tracked in [#53: fresh nightly quality tests](https://github.com/mohripan/flint-graph/issues/53)

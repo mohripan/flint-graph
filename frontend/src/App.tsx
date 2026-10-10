@@ -96,7 +96,7 @@ export default function App() {
         </nav>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
-          {tab === "ask" ? <AskPage /> : tab === "documents" ? <UploadPage /> : <SetupPage />}
+          {tab === "ask" ? <AskPage key={workspace.id} /> : tab === "documents" ? <UploadPage key={workspace.id} /> : <SetupPage key={workspace.id} />}
         </main>
       </div>
     </div>

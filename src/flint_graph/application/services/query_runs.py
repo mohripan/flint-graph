@@ -7,7 +7,7 @@ from hashlib import sha256
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.query_orchestration import (
@@ -103,11 +103,22 @@ async def list_query_runs(
     *,
     tenant_id: UUID,
     limit: int = 50,
+    before_id: UUID | None = None,
+    query: str | None = None,
 ) -> list[QueryRun]:
+    statement = select(QueryRun).where(QueryRun.tenant_id == tenant_id)
+    if before_id is not None:
+        cursor = await get_query_run(session, tenant_id=tenant_id, query_run_id=before_id)
+        statement = statement.where(or_(
+            QueryRun.created_at < cursor.created_at,
+            and_(QueryRun.created_at == cursor.created_at, QueryRun.id < cursor.id),
+        ))
+    if query and query.strip():
+        # Literal substring search; '%' and '_' supplied by users are not wildcards.
+        statement = statement.where(QueryRun.query_text.icontains(query.strip(), autoescape=True))
     return list(
         await session.scalars(
-            select(QueryRun)
-            .where(QueryRun.tenant_id == tenant_id)
+            statement
             .order_by(QueryRun.created_at.desc(), QueryRun.id.desc())
             .limit(limit)
         )

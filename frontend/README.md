@@ -69,12 +69,27 @@ sends access tokens with API requests and SSE streams.
 | Ingest a URL          | `POST /v1/documents/from-url`                                   |
 | Track ingestion       | `GET /v1/ingestion-jobs/{id}` and `POST .../cancel`             |
 | Ask a question        | `POST /v1/query-runs` then `GET .../events/stream` with `fetch()` |
-| Query history         | `GET /v1/query-runs`                                            |
+| Query history         | `GET /v1/query-runs?limit=25&q=...&before_id=...`                 |
 | Sources for an answer | `GET /v1/query-runs/{id}/provenance`                            |
 | API health indicator  | `GET /health/ready`                                             |
 
 The query stream is consumed via `fetch()` instead of `EventSource` because the
 API requires headers for bearer auth and `X-Tenant-ID`. See `src/lib/stream.ts`.
+
+The Ask page has one primary vertical scroll area, naturally sized answers and
+source columns, and collapsed run diagnostics below the answer. Open **Question
+history** to search and load older questions; selecting one reopens its persisted
+answer/provenance without creating a query or running a model. Refresh history
+checks newly completed runs. **New question** clears the displayed result. Each
+question is independent: conversation memory is planned in #62, not supplied by
+chronological history. Workspace switches clear results and abort/ignore old
+responses. Switching away during an active stream may interrupt request-bound
+execution; durable background query execution remains Milestone 18 work.
+
+`npm run test:browser` uses an isolated pinned agent-browser session and synthetic
+public-HTTP fixtures, with Vite already running. It checks mobile/desktop layout,
+long-answer/source scrolling, history search/pagination/outcomes and delayed
+workspace responses. It does not call models or alter a user's browser session.
 
 ## Real vs. Stub Answers
 

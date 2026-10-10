@@ -14,6 +14,7 @@ Design: [ADR 15](../adr/0015-reproducible-developer-experience.md).
 | [#50](https://github.com/mohripan/flint-graph/issues/50) | Pin service images and modernize CI runtimes with reviewed upgrade policy | planned |
 | [#51](https://github.com/mohripan/flint-graph/issues/51) | Validate observability assets with native tools in CI | implemented |
 | [#52](https://github.com/mohripan/flint-graph/issues/52) | Improve query and ingestion debugging handoff from the product UI | planned |
+| [#65](https://github.com/mohripan/flint-graph/issues/65) | Repair primary Ask scrolling and reopen searchable paginated saved questions | implemented |
 
 ## Acceptance and boundaries
 

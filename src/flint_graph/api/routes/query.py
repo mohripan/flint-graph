@@ -83,8 +83,12 @@ async def list_query_runs_endpoint(
     tenant_id: TenantIdDep,
     session: SessionDep,
     limit: int = Query(default=50, ge=1, le=200),
+    before_id: UUID | None = None,
+    q: str | None = Query(default=None, max_length=200),
 ) -> list[QueryRunResponse]:
-    runs = await list_query_runs(session, tenant_id=tenant_id, limit=limit)
+    runs = await list_query_runs(
+        session, tenant_id=tenant_id, limit=limit, before_id=before_id, query=q,
+    )
     return [QueryRunResponse.model_validate(run) for run in runs]
 
 

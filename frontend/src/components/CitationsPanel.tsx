@@ -97,8 +97,8 @@ function CitationItem({
         }`}
       >
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="rounded bg-brand-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-700">
+          <span className="inline-flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-700">
               {citation.citation_id}
             </span>
             <span className="truncate text-xs font-medium text-slate-600" title={title}>
@@ -107,7 +107,7 @@ function CitationItem({
           </span>
           {support && <SupportBadge status={support} />}
         </div>
-        <p className="line-clamp-4 text-sm leading-relaxed text-slate-600">
+        <p className="line-clamp-4 text-sm leading-relaxed text-slate-600 [overflow-wrap:anywhere]">
           {citation.text}
         </p>
       </Card>

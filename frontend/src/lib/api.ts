@@ -158,9 +158,10 @@ export const api = {
     });
   },
 
-  getSearchReadiness(tenantId: string): Promise<SearchReadiness> {
+  getSearchReadiness(tenantId: string, signal?: AbortSignal): Promise<SearchReadiness> {
     return jsonRequest<SearchReadiness>("/v1/search-readiness", {
       headers: tenantHeaders(tenantId),
+      signal,
     });
   },
 
@@ -234,33 +235,44 @@ export const api = {
     );
   },
 
-  createQueryRun(tenantId: string, query: string): Promise<QueryRunResponse> {
+  createQueryRun(tenantId: string, query: string, signal?: AbortSignal): Promise<QueryRunResponse> {
     return jsonRequest<QueryRunResponse>("/v1/query-runs", {
       method: "POST",
       headers: tenantHeaders(tenantId),
       json: { query, stream: true },
+      signal,
     });
   },
 
-  getQueryRun(tenantId: string, queryRunId: string): Promise<QueryRunResponse> {
+  getQueryRun(tenantId: string, queryRunId: string, signal?: AbortSignal): Promise<QueryRunResponse> {
     return jsonRequest<QueryRunResponse>(`/v1/query-runs/${queryRunId}`, {
       headers: tenantHeaders(tenantId),
+      signal,
     });
   },
 
-  listQueryRuns(tenantId: string): Promise<QueryRunResponse[]> {
-    return jsonRequest<QueryRunResponse[]>("/v1/query-runs", {
+  listQueryRuns(tenantId: string, options: {
+    limit?: number; beforeId?: string; query?: string; signal?: AbortSignal;
+  } = {}): Promise<QueryRunResponse[]> {
+    const params = new URLSearchParams();
+    if (options.limit) params.set("limit", String(options.limit));
+    if (options.beforeId) params.set("before_id", options.beforeId);
+    if (options.query?.trim()) params.set("q", options.query.trim());
+    const suffix = params.size ? `?${params}` : "";
+    return jsonRequest<QueryRunResponse[]>(`/v1/query-runs${suffix}`, {
       headers: tenantHeaders(tenantId),
+      signal: options.signal,
     });
   },
 
   getAnswerProvenance(
     tenantId: string,
     queryRunId: string,
+    signal?: AbortSignal,
   ): Promise<AnswerProvenance> {
     return jsonRequest<AnswerProvenance>(
       `/v1/query-runs/${queryRunId}/provenance`,
-      { headers: tenantHeaders(tenantId) },
+      { headers: tenantHeaders(tenantId), signal },
     );
   },
 };

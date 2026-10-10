@@ -246,6 +246,26 @@ return. Lexical and vector API adapters use an immutable retrieval-index
 snapshot inside parallel retriever branches so concurrent retrievers do not
 share a database session.
 
+## Saved question history
+
+`GET /v1/query-runs` returns a recent-first array, ordered by creation timestamp
+then UUID descending. `limit` defaults to 50 and is bounded to 1–200. Optional
+`q` is a case-insensitive literal question substring (maximum 200 characters);
+`%`, `_` and the escape character are not user-supplied wildcards. Optional
+`before_id` selects rows strictly older than that run's timestamp/UUID tuple.
+The cursor must resolve in the authorized tenant; unknown or foreign IDs return
+404. Use the last row ID as the next cursor; an empty page ends traversal. New
+insertions do not shift older pages. There is no frozen cross-page snapshot:
+deleted cursors require refreshing history and search results reflect live data.
+
+Reading a run and its provenance does not start another model invocation. Failed
+and pending runs are incomplete outcomes, not empty successful answers. Reopening
+history is independent of current search readiness. Conversation IDs, prior-turn
+context and chained conversation execution are not implemented; #62 tracks them.
+Question substring search currently scans tenant-filtered rows rather than
+claiming a full-text indexed history search; large-history benchmarking is future
+work. Existing list response fields remain compatible.
+
 ## Streaming Events
 
 SSE event types include:
