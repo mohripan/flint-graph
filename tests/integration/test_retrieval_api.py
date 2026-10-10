@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -73,6 +74,7 @@ class CapturingOpenSearchClient:
 class CapturingNeo4jClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.scope_count = 1
 
     async def execute(
         self,
@@ -83,6 +85,7 @@ class CapturingNeo4jClient:
         return [
             {
                 "score": 0.91,
+                "scope_count": self.scope_count,
                 "node": {
                     "tenant_id": str((parameters or {})["tenant_id"]),
                     "document_id": "11111111-1111-4111-8111-111111111111",
@@ -467,6 +470,64 @@ async def test_search_endpoints_select_tenant_index_and_apply_filters(
     assert neo4j.calls
     assert neo4j.calls[0][1]["tenant_id"] == str(tenant_id)
     assert neo4j.calls[0][1]["retrieval_index_version_id"] == str(index_version_id)
+    assert "db.index.vector.queryNodes" in neo4j.calls[0][0]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("document_id", "11111111-1111-4111-8111-111111111111"),
+        ("document_version_id", "22222222-2222-4222-8222-222222222222"),
+        ("chunk_id", "chunk-000001"),
+    ],
+)
+async def test_narrow_vector_filters_apply_before_bounded_exact_scoring(
+    retrieval_env,
+    field,
+    value,
+):
+    client, session_factory, _opensearch, neo4j, _starter = retrieval_env
+    async with session_factory() as session:
+        tenant = await _tenant(session, "narrow-vector-scope")
+        await _document_version(session, tenant, title="Acme")
+        _, index = await _active_index_versions(session, tenant)
+        await session.commit()
+        tenant_id, index_id = tenant.id, index.id
+    response = await client.post(
+        "/v1/search/vector",
+        headers=_headers(tenant_id),
+        json={"query": "not the globally closest chunk", "limit": 3, "filters": {field: value}},
+    )
+    assert response.status_code == 200
+    query, parameters = neo4j.calls[-1]
+    assert "db.index.vector.queryNodes" not in query
+    assert "vector.similarity.cosine" in query
+    assert query.index("node.tenant_id = $tenant_id") < query.index("vector.similarity.cosine")
+    assert query.index(f"node.{field} = ${field}") < query.index("vector.similarity.cosine")
+    assert parameters["tenant_id"] == str(tenant_id)
+    assert parameters["retrieval_index_version_id"] == str(index_id)
+    assert parameters["vector_property_name"] == "embedding_v000001"
+    assert parameters["scope_candidate_limit"] == 5001
+
+
+async def test_narrow_vector_scope_over_budget_returns_explicit_error_not_partial_results(
+    retrieval_env,
+):
+    client, session_factory, _opensearch, neo4j, _starter = retrieval_env
+    async with session_factory() as session:
+        tenant = await _tenant(session, "oversized-vector-scope")
+        await _document_version(session, tenant, title="Acme")
+        await _active_index_versions(session, tenant)
+        await session.commit()
+        tenant_id = tenant.id
+    neo4j.scope_count = 5001
+    response = await client.post(
+        "/v1/search/vector",
+        headers=_headers(tenant_id),
+        json={"query": "revenue", "filters": {"chunk_id": "chunk-000001"}},
+    )
+    assert response.status_code == 409
+    assert "narrower" in response.json()["detail"]
 
 
 async def test_search_endpoints_filter_deleted_and_superseded_projection_hits(

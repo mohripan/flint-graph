@@ -263,3 +263,114 @@ async def prepare_corpus(
         raise ValueError(
             f"Preparation timed out; created workspace '{workspace_id}' remains inspectable."
         ) from exc
+
+
+async def verify_prepared_corpus(
+    client: httpx.AsyncClient,
+    dataset: GoldenDataset,
+    sources: Sequence[CorpusSource],
+    *,
+    workspace_id: UUID,
+    index_version_id: UUID,
+    timeout_seconds: float = 600,
+) -> CaptureManifest:
+    """Recover a manifest for a prepared batch without uploading or switching its index.
+
+    Titles are explicit operator-supplied label mappings, not source-byte attestation.
+    Require unique active documents, completed coverage and positive projection probes.
+    """
+    if not 1 <= len(sources) <= _MAX_FILES or not 0 < timeout_seconds <= 1800:
+        raise ValueError("Verification requires a bounded batch and timeout.")
+    if len({source.label for source in sources}) != len(sources):
+        raise ValueError("Verification requires unique source labels.")
+    headers = {"X-Tenant-ID": str(workspace_id)}
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            ready = await client.get("/v1/system-readiness", headers=headers)
+            ready.raise_for_status()
+            active = ready.json()["search_readiness"]["active_index_version"]
+            if active is None or UUID(active["id"]) != index_version_id:
+                raise ValueError("Active index changed; verification never switches it.")
+            response = await client.get("/v1/documents", headers=headers, params={"limit": 500})
+            response.raise_for_status()
+            documents = response.json()
+            labels: dict[str, str] = {}
+            versions: dict[str, str] = {}
+            hashes: dict[str, str] = {}
+            for source in sources:
+                matching = [row for row in documents if row["title"] == source.label]
+                if len(matching) != 1 or matching[0]["latest_version_status"] != "active":
+                    raise ValueError(
+                        "Each source label must match one active document in the bounded list."
+                    )
+                row = matching[0]
+                document_id, version_id = str(UUID(row["id"])), str(UUID(row["latest_version_id"]))
+                coverage = await client.get(
+                    "/v1/index-coverage",
+                    headers=headers,
+                    params={
+                        "retrieval_index_version_id": str(index_version_id),
+                        "document_version_id": version_id,
+                        "limit": 10,
+                    },
+                )
+                coverage.raise_for_status()
+                if not any(
+                    item["status"] == "completed"
+                    and item["chunk_count"] > 0
+                    and str(item["document_version_id"]) == version_id
+                    and str(item["retrieval_index_version_id"]) == str(index_version_id)
+                    for item in coverage.json()
+                ):
+                    raise ValueError("Document lacks completed positive index coverage.")
+                for kind in ("lexical", "vector"):
+                    probe = await client.post(
+                        f"/v1/search/{kind}",
+                        headers=headers,
+                        json={
+                            "query": source.label,
+                            "limit": 50,
+                            "retrieval_index_version_id": str(index_version_id),
+                            "filters": {"document_version_id": version_id},
+                        },
+                    )
+                    probe.raise_for_status()
+                    if not any(
+                        str(hit["document_version_id"]) == version_id
+                        for hit in probe.json()["results"]
+                    ):
+                        raise ValueError(
+                            "A document projection is not visible; retry verification later."
+                        )
+                labels[document_id] = source.label
+                versions[version_id] = document_id
+                hashes[source.label] = "sha256:" + sha256(source.content).hexdigest()
+            entities = await client.get(
+                "/v1/entities", headers=headers, params={"status": "active", "limit": 500}
+            )
+            entities.raise_for_status()
+            ready = await client.get("/v1/system-readiness", headers=headers)
+            ready.raise_for_status()
+            active = ready.json()["search_readiness"]["active_index_version"]
+            if active is None or UUID(active["id"]) != index_version_id:
+                raise ValueError("Active index changed during verification.")
+            return CaptureManifest(
+                tenant_id=workspace_id,
+                dataset_name=dataset.metadata.name,
+                dataset_version=dataset.metadata.version,
+                document_labels=labels,
+                entity_labels={str(row["id"]): row["canonical_name"] for row in entities.json()},
+                preparation={
+                    "prepared_at": datetime.now(UTC).isoformat(),
+                    "retrieval_index_version_id": str(index_version_id),
+                    "document_versions": versions,
+                    "existing_workspace_verified": True,
+                    "projection_visibility_probed": True,
+                    "local_source_hashes": hashes,
+                    "system_readiness": ready.json(),
+                },
+            )
+    except TimeoutError as exc:
+        raise ValueError(
+            "Existing corpus verification timed out; no documents were uploaded."
+        ) from exc

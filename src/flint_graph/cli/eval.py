@@ -13,6 +13,7 @@ import asyncio
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 
@@ -28,7 +29,7 @@ from flint_graph.evaluation.comparison import comparison_table, run_comparison
 from flint_graph.evaluation.datasets import load_dataset
 from flint_graph.evaluation.experiment import run_experiment
 from flint_graph.evaluation.experiments import load_experiment
-from flint_graph.evaluation.prepare import load_corpus, prepare_corpus
+from flint_graph.evaluation.prepare import load_corpus, prepare_corpus, verify_prepared_corpus
 from flint_graph.evaluation.recorded import load_recorded_evaluations, recorded_evaluator
 from flint_graph.evaluation.report import ExperimentReport, read_report, write_report
 
@@ -151,6 +152,10 @@ def prepare_command(args: argparse.Namespace) -> int:
     try:
         if output.exists() or output.is_symlink():
             raise ValueError("Manifest output already exists; choose a new path.")
+        if (args.workspace_id is None) != (args.index_version_id is None):
+            raise ValueError("Existing preparation requires both workspace and active index UUIDs.")
+        if args.verify_only and args.workspace_id is None:
+            raise ValueError("Verify-only requires both workspace and active index UUIDs.")
         base_url, headers = _api_connection_options(args)
         dataset = load_dataset(Path(args.dataset))
         sources = load_corpus(Path(args.dataset), dataset)
@@ -161,12 +166,25 @@ def prepare_command(args: argparse.Namespace) -> int:
                 headers=headers,
                 timeout=60,
                 follow_redirects=False,
+                trust_env=False,
             ) as client:
+                if args.verify_only:
+                    manifest = await verify_prepared_corpus(
+                        client,
+                        dataset,
+                        sources,
+                        workspace_id=args.workspace_id,
+                        index_version_id=args.index_version_id,
+                        timeout_seconds=args.prepare_timeout,
+                    )
+                    return manifest.model_dump_json(indent=2) + "\n"
                 manifest = await prepare_corpus(
                     client,
                     dataset,
                     sources,
                     timeout_seconds=args.prepare_timeout,
+                    workspace_id=args.workspace_id,
+                    index_version_id=args.index_version_id,
                     on_workspace_created=lambda workspace_id: print(
                         f"Created evaluation workspace {workspace_id}"
                     ),
@@ -177,7 +195,8 @@ def prepare_command(args: argparse.Namespace) -> int:
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("x", encoding="utf-8") as manifest_file:
             manifest_file.write(content)
-        print(f"Prepared {len(sources)} documents; wrote capture manifest to {output}")
+        operation = "Verified existing" if args.verify_only else "Prepared"
+        print(f"{operation} {len(sources)} documents; wrote capture manifest to {output}")
         return 0
     except httpx.HTTPError as exc:
         print(f"Preparation failed: {type(exc).__name__}. Inspect the created workspace/jobs.")
@@ -241,6 +260,11 @@ def _build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--output", required=True, help="new capture manifest JSON")
     prepare_parser.add_argument("--token-env", default="FLINT_GRAPH_EVAL_TOKEN")
     prepare_parser.add_argument("--prepare-timeout", type=float, default=600.0)
+    prepare_parser.add_argument("--workspace-id", type=UUID, default=None)
+    prepare_parser.add_argument("--index-version-id", type=UUID, default=None)
+    prepare_parser.add_argument(
+        "--verify-only", action="store_true", help="Verify existing documents without uploads"
+    )
     prepare_parser.set_defaults(func=prepare_command)
 
     capture_parser = subparsers.add_parser("capture", help="capture fresh public-API query runs")

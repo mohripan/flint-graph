@@ -317,3 +317,23 @@ def test_prepare_cli_never_overwrites_manifest(tmp_path: Path) -> None:
         == 1
     )
     assert output.read_text(encoding="utf-8") == "existing"
+
+
+def test_prepare_existing_workspace_requires_explicit_index_before_any_upload(tmp_path, capsys):
+    assert (
+        main(
+            [
+                "prepare",
+                "--dataset",
+                "missing",
+                "--base-url",
+                "http://localhost:8000",
+                "--output",
+                str(tmp_path / "new.json"),
+                "--workspace-id",
+                "11111111-1111-4111-8111-111111111111",
+            ]
+        )
+        == 1
+    )
+    assert "both" in capsys.readouterr().out

@@ -40,6 +40,12 @@ ingestion flow. No user data, jobs or volumes were removed.
 
 ## Verification and limitations
 
+Follow-up: #55/#56 fixed the evidence identity and narrow-vector projection
+blockers. The retry completed 100 document versions/coverage rows, then verify-only
+passed all 100 lexical/vector probe pairs without uploads. See the
+[projection report](2026-10-10-scoped-vector-delivery.md). The original failure
+and workspace were preserved; 679 downloaded excerpts are not all indexed together.
+
 Tests precede behavior changes. Focused corpus/CLI tests: 18 passed, covering
 answer separation, deduplication/provenance, source corruption, redirects,
 size bounds, non-overwrite, safe paths, tampering (including manifest rewrites),

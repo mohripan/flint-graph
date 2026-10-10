@@ -41,8 +41,10 @@ Preparation repeatedly returned empty narrow-document vector searches because
 ANN candidates are selected globally before filters. That separate retrieval
 bug is [#56](https://github.com/mohripan/flint-graph/issues/56). Verified helper
 PIDs 3960/9396 were stopped; no ingestion service or data was stopped/deleted.
-No successful preparation manifest or financial model-quality result is claimed
-yet. Complete projection verification follows #56.
+At that point, no successful preparation manifest or financial model-quality
+result was claimed. Follow-up #56 passed both projection probes for all 100
+versions twice without uploads; see the [verification report](2026-10-10-scoped-vector-delivery.md).
+Financial answer quality is still a separate #53 task.
 
 No frontend/browser changes, paid provider calls, embedding model downloads,
 cross-contract re-extraction coordination or large-corpus scale claims.

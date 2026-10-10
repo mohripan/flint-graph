@@ -25,7 +25,7 @@ from flint_graph.domain.enums import (
     RetrievalIndexScope,
     RetrievalIndexVersionStatus,
 )
-from flint_graph.domain.errors import NotFoundError
+from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     Document,
@@ -90,6 +90,30 @@ WHERE node.tenant_id = $tenant_id
   AND ($chunk_id IS NULL OR node.chunk_id = $chunk_id)
 RETURN node, score
 ORDER BY score DESC
+LIMIT $limit
+"""
+
+# Exact scoring is intentionally limited to explicit document/version/chunk filters.
+# Ordinary tenant-wide ANN semantics and the native-vector performance roadmap are unchanged.
+MAX_EXACT_SCOPE_CANDIDATES = 5000
+SCOPED_VECTOR_SEARCH_CYPHER = """
+MATCH (node:Chunk)
+WHERE node.tenant_id = $tenant_id
+  AND node.retrieval_index_version_id = $retrieval_index_version_id
+  AND ($document_id IS NULL OR node.document_id = $document_id)
+  AND ($document_version_id IS NULL OR node.document_version_id = $document_version_id)
+  AND ($chunk_id IS NULL OR node.chunk_id = $chunk_id)
+  AND node[$vector_property_name] IS NOT NULL
+WITH node
+LIMIT $scope_candidate_limit
+WITH collect(node) AS scoped_nodes
+UNWIND CASE WHEN size(scoped_nodes) = 0 THEN [null] ELSE scoped_nodes END AS node
+WITH node, size(scoped_nodes) AS scope_count,
+  CASE WHEN size(scoped_nodes) <= $max_scope_candidates AND node IS NOT NULL
+    THEN vector.similarity.cosine(node[$vector_property_name], $vector)
+    ELSE null END AS score
+RETURN node, score, scope_count
+ORDER BY score DESC, node.id ASC
 LIMIT $limit
 """
 
@@ -290,20 +314,33 @@ async def vector_search(
     )
     vector = embedding_result.embeddings[0].vector
     resolved_filters = dict(filters or {})
+    document_id = _filter_uuid_string(resolved_filters, "document_id")
+    document_version_id = _filter_uuid_string(resolved_filters, "document_version_id")
+    chunk_id = resolved_filters.get("chunk_id")
+    scoped = any(value is not None for value in (document_id, document_version_id, chunk_id))
     rows = await neo4j_client.execute(
-        VECTOR_SEARCH_CYPHER,
+        SCOPED_VECTOR_SEARCH_CYPHER if scoped else VECTOR_SEARCH_CYPHER,
         {
             "index_name": index_version.neo4j_vector_index_name,
             "candidate_limit": min(max(limit * 5, limit), 500),
             "vector": vector,
             "tenant_id": str(tenant_id),
             "retrieval_index_version_id": str(index_version.id),
-            "document_id": _filter_uuid_string(resolved_filters, "document_id"),
-            "document_version_id": _filter_uuid_string(resolved_filters, "document_version_id"),
-            "chunk_id": resolved_filters.get("chunk_id"),
+            "document_id": document_id,
+            "document_version_id": document_version_id,
+            "chunk_id": chunk_id,
+            "vector_property_name": index_version.neo4j_vector_property_name,
+            "scope_candidate_limit": MAX_EXACT_SCOPE_CANDIDATES + 1,
+            "max_scope_candidates": MAX_EXACT_SCOPE_CANDIDATES,
             "limit": limit,
         },
     )
+    if scoped and rows:
+        if rows[0]["scope_count"] > MAX_EXACT_SCOPE_CANDIDATES:
+            raise ConflictError(
+                "Exact vector scope exceeds 5000 chunks; use a narrower document filter."
+            )
+        rows = [row for row in rows if row.get("node") is not None and row.get("score") is not None]
     return RetrievalSearchResult(
         index_version=index_version,
         results=await filter_active_chunk_results(

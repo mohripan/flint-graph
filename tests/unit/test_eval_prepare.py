@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from flint_graph.evaluation.datasets import load_dataset
-from flint_graph.evaluation.prepare import load_corpus, prepare_corpus
+from flint_graph.evaluation.prepare import load_corpus, prepare_corpus, verify_prepared_corpus
 
 
 def _corpus(tmp_path: Path) -> Path:
@@ -29,6 +29,102 @@ def _corpus(tmp_path: Path) -> Path:
     (tmp_path / "corpus").mkdir()
     (tmp_path / "corpus" / "acme.md").write_text("# Acme\n\nAcme is in Berlin.\n", encoding="utf-8")
     return tmp_path
+
+
+@pytest.mark.parametrize("failure", [None, "index", "document", "projection"])
+async def test_verify_existing_corpus_never_uploads_or_bootstraps_and_requires_both_projections(
+    tmp_path,
+    failure,
+):
+    directory = _corpus(tmp_path)
+    dataset = load_dataset(directory)
+    workspace_id, index_id, document_id, version_id = (uuid4() for _ in range(4))
+    probes = []
+
+    def respond(request):
+        assert request.headers["X-Tenant-ID"] == str(workspace_id)
+        if request.url.path == "/v1/system-readiness":
+            return httpx.Response(
+                200,
+                json={
+                    "search_readiness": {
+                        "active_index_version": {
+                            "id": str(uuid4() if failure == "index" else index_id)
+                        },
+                    }
+                },
+            )
+        if request.url.path == "/v1/documents":
+            return httpx.Response(
+                200,
+                json=[]
+                if failure == "document"
+                else [
+                    {
+                        "id": str(document_id),
+                        "title": "acme",
+                        "latest_version_id": str(version_id),
+                        "latest_version_status": "active",
+                    }
+                ],
+            )
+        if request.url.path == "/v1/index-coverage":
+            assert request.url.params["document_version_id"] == str(version_id)
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "document_version_id": str(version_id),
+                        "retrieval_index_version_id": str(index_id),
+                        "status": "completed",
+                        "chunk_count": 1,
+                    }
+                ],
+            )
+        if request.url.path.startswith("/v1/search/"):
+            probes.append(request.url.path)
+            body = json.loads(request.content)
+            assert body["filters"]["document_version_id"] == str(version_id)
+            return httpx.Response(
+                200,
+                json={
+                    "results": []
+                    if failure == "projection"
+                    else [
+                        {
+                            "document_version_id": str(version_id),
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/v1/entities":
+            return httpx.Response(200, json=[])
+        pytest.fail(f"Unexpected mutation/read: {request.url.path}")
+
+    async with httpx.AsyncClient(
+        base_url="http://test", transport=httpx.MockTransport(respond)
+    ) as client:
+        if failure:
+            with pytest.raises(ValueError):
+                await verify_prepared_corpus(
+                    client,
+                    dataset,
+                    load_corpus(directory, dataset),
+                    workspace_id=workspace_id,
+                    index_version_id=index_id,
+                    timeout_seconds=1,
+                )
+        else:
+            manifest = await verify_prepared_corpus(
+                client,
+                dataset,
+                load_corpus(directory, dataset),
+                workspace_id=workspace_id,
+                index_version_id=index_id,
+            )
+            assert manifest.document_labels == {str(document_id): "acme"}
+            assert manifest.preparation["projection_visibility_probed"] is True
+            assert probes == ["/v1/search/lexical", "/v1/search/vector"]
 
 
 def test_corpus_preflight_rejects_traversal(tmp_path: Path) -> None:

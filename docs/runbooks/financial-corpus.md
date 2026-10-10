@@ -61,9 +61,24 @@ failed workspace/job evidence remains available for inspection. Batch offsets ca
 export the remaining corpus, but each ordinary `prepare` creates a separate
 workspace. Do not claim that all downloaded documents are indexed together.
 
-The first real 100-file preparation exposed a pre-existing cross-document evidence
-ID collision. [#55](https://github.com/mohripan/flint-graph/issues/55) tracks the
-fix; see the [delivery report](../reports/2026-10-10-financial-corpus-delivery.md).
-Do not weaken uniqueness or delete the failed workspace to hide this evidence.
+The first real preparation exposed a cross-document evidence ID collision (#55)
+and narrow-document vector starvation (#56). Both have targeted fixes; all 100
+retry versions/coverage rows and lexical/vector probes passed. The failed
+workspace remains inspectable. See the [collection report](../reports/2026-10-10-financial-corpus-delivery.md)
+and [projection verification report](../reports/2026-10-10-scoped-vector-delivery.md).
+
+Recover/verify an existing prepared batch without reuploading or switching indexes:
+
+```powershell
+uv run flint-graph-eval prepare --dataset notes/finqa-batch-0 --base-url http://localhost:8000 --workspace-id YOUR-WORKSPACE-UUID --index-version-id YOUR-ACTIVE-INDEX-UUID --verify-only --output notes/finqa-verified-manifest.json
+```
+
+Verify-only requires unique active documents with matching local labels,
+completed coverage, both real projection probes and an unchanged active index.
+It uses a bounded 500-document list and fails if the batch is absent. Local hashes
+are recorded, not independent API attestation of stored source bytes. Search
+probes can invoke the configured embedding provider: use no-cost settings or an
+approved budget. Without `--verify-only`, existing-workspace preparation is an
+explicit upload attempt with stable keys, not adoption of legacy random keys.
 
 Source details and licensing: [ADR 0016](../adr/0016-pinned-public-financial-corpus.md).

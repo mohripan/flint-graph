@@ -20,7 +20,9 @@ failure/retry recording. The real retry completed all 100 document versions and
 coverage rows. Per-document projection probes then exposed a separate narrow
 vector-filter recall issue, tracked in [#56](https://github.com/mohripan/flint-graph/issues/56).
 The bounded preparation helper was stopped after those checks; indexed data and
-the original failed workspace were preserved. Neither issue is closed until its
-required live verification is complete.
+the original failed workspace were preserved. After #56, verify-only preparation
+passed all 100 lexical/vector projection pairs without reuploading, and emitted
+a capture manifest. Model quality and native-vector scale qualification remain
+separate. See the [verification report](../reports/2026-10-10-scoped-vector-delivery.md).
 Extraction-quality audits, independent fresh issuer datasets, large-corpus scale,
 and the milestone's remaining graph-quality criteria are not completed here.
