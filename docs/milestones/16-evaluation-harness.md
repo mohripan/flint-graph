@@ -81,3 +81,14 @@ abstention accuracy 0.9167 and p95 latency 16.47 seconds; the strict gate failed
 [#59](https://github.com/mohripan/flint-graph/issues/59) and
 [#60](https://github.com/mohripan/flint-graph/issues/60) track two-source synthesis
 and ambiguous-query failures. See [the runbook](../runbooks/financial-nightly.md).
+
+## Explicit rubric revisions
+
+[#71](https://github.com/mohripan/flint-graph/issues/71) adds only the
+source-consistent `rrps` alias to the two RRP concept groups. Numeric/unit and
+whole-term boundaries remain strict. New format-2 captures identify their dataset,
+rubric and policy fingerprints, without reversioning the corpus or changing old
+captures, thresholds or baselines. A separate fresh 12-case run passed the gate
+at 0.9 useful-answer rate; the independent arithmetic failure remains #70.
+This is a scoring correction, not a model-quality improvement or completed
+external human review. See [the review report](../reports/2026-10-10-financial-rubric-plural.md).

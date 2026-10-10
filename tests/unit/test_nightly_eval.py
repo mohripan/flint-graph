@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -14,6 +15,31 @@ from flint_graph.evaluation.nightly import (
     matches_rubric,
     run_nightly,
 )
+
+
+@pytest.mark.parametrize(
+    "case,answer,expected",
+    [
+        ("pm-rrp-2017", "Net revenues for RRPs were $3.6 billion.", True),
+        ("pm-rrp-2016", "Net revenues for RRPs were $733 million.", True),
+        ("pm-rrp-2017", "RRP net revenues were 3600 million.", True),
+        ("pm-rrp-2017", "Reduced-risk net revenues were 3.6 billion.", True),
+        ("pm-rrp-2017", "RRPs net revenues were 3.8 billion.", False),
+        ("pm-rrp-2017", "RRPs net revenues were 3.6 million.", False),
+        ("pm-rrp-2017", "RRPs net revenues were 733 million.", False),
+        ("pm-rrp-2016", "RRPs net revenues were 739 million.", False),
+        ("pm-rrp-2016", "RRPs net revenues were 733 billion.", False),
+        ("pm-rrp-2017", "RRPsomething net revenues were 3.6 billion.", False),
+        ("pm-rrp-2017", "AnotherRRP net revenues were 3.6 billion.", False),
+        ("amex-average", "American Express average was $127400.", False),
+    ],
+)
+def test_checked_in_financial_rubrics_preserve_concept_value_and_unit_boundaries(
+    case, answer, expected
+):
+    path = Path(__file__).parents[2] / "evals/datasets/financial-nightly/rubrics.json"
+    rubric = AnswerRubric.model_validate(json.loads(path.read_text(encoding="utf-8"))[case])
+    assert matches_rubric(rubric, answer) is expected
 
 
 @pytest.mark.parametrize(
@@ -193,10 +219,60 @@ async def test_fresh_nightly_run_is_serialized_redacted_and_uses_real_usage_and_
     assert result["aggregate"]["useful_answer_rate"] == 1
     assert result["cost_status"] == "unpriced_local_compute"
     assert result["estimated_cost_usd"] is None
+    assert result["format_version"] == 2
+    assert result["dataset_name"] == dataset.metadata.name
+    assert result["dataset_version"] == dataset.metadata.version
+    assert len(result["rubric_fingerprint"]) == 64
+    assert len(result["policy_fingerprint"]) == 64
     serialized = json.dumps(result)
     assert "SECRET" not in serialized and "Revenue was" not in serialized
     assert "What was" not in serialized and "http://test" not in serialized
     assert sum(method == "POST" and path == "/v1/query-runs" for method, path in seen) == 1
+
+
+async def test_report_fingerprints_track_rubric_and_policy_without_reversioning_corpus():
+    dataset, manifest, isolation, label, rubrics, _, _, handler = fixture_target()
+    dataset = dataset.model_copy(
+        update={
+            "queries": [dataset.queries[0], dataset.queries[0].model_copy(update={"id": "second"})]
+        }
+    )
+    rubrics["second"] = rubrics["revenue"]
+    async with httpx.AsyncClient(
+        base_url="http://test", transport=httpx.MockTransport(handler)
+    ) as client:
+        snapshot = await inspect_nightly_target(
+            client, manifest, approved_labels={label}, isolation_workspace_id=isolation
+        )
+
+        async def capture(selected_rubrics, policy):
+            return await run_nightly(
+                client,
+                dataset,
+                manifest,
+                selected_rubrics,
+                approved_labels={label},
+                isolation_workspace_id=isolation,
+                expected_model_fingerprint=snapshot["model_fingerprint"],
+                policy=policy,
+            )
+
+        original = await capture(rubrics, NightlyPolicy())
+        same = await capture(dict(reversed(list(rubrics.items()))), NightlyPolicy())
+        alias = await capture(
+            {
+                **rubrics,
+                "revenue": AnswerRubric(groups=[["revenue", "revenues"], ["500 million"]]),
+            },
+            NightlyPolicy(),
+        )
+        policy_change = await capture(rubrics, NightlyPolicy(max_queries=15))
+    assert original["rubric_fingerprint"] == same["rubric_fingerprint"]
+    assert original["rubric_fingerprint"] != alias["rubric_fingerprint"]
+    assert original["policy_fingerprint"] == alias["policy_fingerprint"]
+    assert original["policy_fingerprint"] != policy_change["policy_fingerprint"]
+    assert original["corpus_fingerprint"] == alias["corpus_fingerprint"]
+    assert original["dataset_version"] == alias["dataset_version"] == 1
 
 
 @pytest.mark.parametrize("provider", ["anthropic", "openai", "deterministic"])

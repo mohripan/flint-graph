@@ -138,7 +138,13 @@ async def run_nightly(
 ) -> dict[str, Any]:
     """Fresh serialized requests; token stop is post-query, not a hard spending reservation."""
     report: dict[str, Any] = {
-        "format_version": 1,
+        "format_version": 2,
+        "dataset_name": dataset.metadata.name,
+        "dataset_version": dataset.metadata.version,
+        "rubric_fingerprint": _fingerprint(
+            {key: rubric.model_dump(mode="json") for key, rubric in rubrics.items()}
+        ),
+        "policy_fingerprint": _fingerprint(policy.model_dump(mode="json")),
         "status": "failed",
         "query_count": 0,
         "attempted_query_count": 0,

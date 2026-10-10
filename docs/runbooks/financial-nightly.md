@@ -27,6 +27,16 @@ dollars, matching FinQA's separate expert annotation. External human review is
 pending. Numeric normalization accepts formatted/equivalent literals without
 converting units automatically; these assertions cannot detect every contradiction.
 
+Rubric review #71 adds only the explicit source-used plural `rrps` to the two
+RRP concept groups; it does not add general stemming or change numeric groups.
+Reports emitted by the updated client use `format_version: 2` and include
+`dataset_name`, `dataset_version`, `rubric_fingerprint` and `policy_fingerprint`.
+Fingerprints hash canonical, sorted-key JSON of the validated rubric mapping and
+policy. Compare them before comparing scores: a new rubric is a scoring revision,
+not an answer-model improvement. Corpus dataset/version and existing recordings
+are unchanged. Older format-1 reports have no rubric/policy attestation; do not
+backfill those fields or overwrite recordings. External human review remains pending.
+
 `policy.json` specifies useful-answer rate >=0.8, abstention accuracy 1.0 and
 p95 latency <=90 seconds. Every non-abstained answer needs supported claims,
 no partial/unsupported claims and valid citations. Do not silently update this
