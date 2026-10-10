@@ -14,6 +14,7 @@ context.packed  (Milestone 07)
     -> draft generation      (citation-only, provider-backed)
     -> citation repair       (map / normalize / drop markers)
     -> support checking       (claim vs. cited context)
+    -> bounded arithmetic     (independent typed operands and unit-scale check)
     -> abstention policy      (abstain on insufficient support)
     -> finalize + persist     (answer, claims, support, provenance)
 ```
@@ -91,8 +92,33 @@ Milestone 08 extends the Milestone 07 ledger:
   score, reason, and method.
 
 Claims store compact text and resolved citation IDs. Source text stays in
-context-pack records; provenance reads join through them. Chunk bodies are never
-duplicated.
+context-pack records; provenance reads join through them. Full chunk bodies are
+not duplicated. The bounded arithmetic audit additionally retains exact operand,
+unit-header and entity spans, not complete chunk copies.
+
+## Bounded financial arithmetic
+
+See [ADR 0023](../adr/0023-source-cited-bounded-financial-arithmetic.md).
+For the supported payments-volume-per-transaction request, an optional typed,
+source-derived result hint is supplied before generation. After repair/support
+checking, decimal division is repeated from the result claim's own cited table
+cells, scale headers and entity row. Hashes/source identities and exact spans
+must resolve to authoritative packed chunk evidence. Unknown/ambiguous operands,
+wrong results or an absent verified result force whole-answer abstention, even
+when enough premises passed the ordinary support-ratio threshold.
+
+This rule only rejects: a correct calculation cannot override an unsupported
+model judgment. Original claims and model judgments remain inspectable alongside
+the deterministic verification audit. Preparation and detailed audit live in
+tenant-owned query-run metadata; normal faithfulness metadata carries only a
+compact method/required/satisfied summary. Logs, SSE summaries, metrics and
+nightly reports do not export operand quotes or provider reasons. No inference
+call, retrieval request, workflow or schema migration is added for calculation.
+Support/generation calls and hint tokens retain the existing usage accounting.
+
+This is not general arithmetic, period/currency verification or table extraction.
+Other operations, phrasing and rounded/repeating results remain outside its
+approval boundary; structured financial expansion is tracked by #89.
 
 ## Streaming Contract
 

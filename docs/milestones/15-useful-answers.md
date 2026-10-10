@@ -257,3 +257,21 @@ answer intent, scope and evidence/support gates remain unchanged. See
 [the delivery report](../reports/2026-10-10-coordinated-source-retrieval.md).
 The final nightly gate meets its unchanged 0.8 useful-answer threshold, but two
 individual cases still fail (#70/#71); this is not full release qualification.
+
+## Source-cited financial arithmetic
+
+[#70](https://github.com/mohripan/flint-graph/issues/70) adds an independent,
+bounded payments-table division tool. Generation can use its typed result hint;
+the final guard recomputes from the draft's own cited operands and scale headers.
+Model approval cannot override a mismatch, and correct premises alone cannot
+substitute for an unverified requested result. Drafts and original model judgments
+remain in a tenant-owned audit. No numbers are silently repaired after generation.
+
+After the explicit rubric correction #71 and this guard, a separate final live
+12-case financial capture passed every individual case: usefulness 1.0,
+abstention accuracy 1.0 and p95 latency 16.458 seconds. The saved average answer
+now gives $127.4 with exact source provenance; replaying the old model-approved
+$127,400 draft through the deployed guard abstains. This bounded suite is not
+general financial reasoning, real-embedding qualification or release readiness.
+See [ADR 0023](../adr/0023-source-cited-bounded-financial-arithmetic.md) and
+[the delivery report](../reports/2026-10-10-source-cited-financial-arithmetic.md).

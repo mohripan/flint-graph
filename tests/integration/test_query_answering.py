@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -8,9 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.query_orchestration import (
+    AnswerClaim,
     AnswerGenerationRequest,
     GeneratedAnswer,
     PackedContextRecord,
+    SupportCheckRequest,
+    SupportCheckResult,
 )
 from flint_graph.application.query_orchestration import (
     QueryContextPack as ApplicationQueryContextPack,
@@ -546,3 +550,143 @@ async def _active_index_id(session: AsyncSession, tenant_id: UUID) -> UUID:
     )
     active = await activate_retrieval_index_version(session, version_id=version.id)
     return active.id
+
+
+@pytest.mark.parametrize("result_amount,abstained", [("127400", True), ("127.4", False)])
+async def test_arithmetic_audit_and_original_claim_survive_authorized_persistence(
+    extraction_db_session: AsyncSession,
+    result_amount: str,
+    abstained: bool,
+) -> None:
+    session = extraction_db_session
+    tenant = Tenant(name="Arithmetic audit")
+    session.add(tenant)
+    await session.flush()
+    index_id = await _active_index_id(session, tenant.id)
+    document = Document(
+        tenant_id=tenant.id, title="Synthetic payments", source_type=SourceType.UPLOAD
+    )
+    session.add(document)
+    await session.flush()
+    version = DocumentVersion(
+        document_id=document.id, version_number=1, status=DocumentVersionStatus.ACTIVE
+    )
+    session.add(version)
+    await session.flush()
+    table = (
+        "| company | payments volume (billions) | total transactions (billions) |\n"
+        "| --- | --- | --- |\n| Example Payments | 637 | 5.0 |"
+    )
+    text = f"Example Payments's average payments volume per transaction was ${result_amount}."
+    source_ids = {
+        "document_id": str(document.id),
+        "document_version_id": str(version.id),
+        "chunk_id": "table-chunk",
+    }
+    run = await create_query_run(
+        session,
+        QueryRunCreate(
+            tenant_id=tenant.id,
+            query_text="What was Example Payments's average payments volume "
+            "per transaction in dollars?",
+            retrieval_index_version_id=index_id,
+        ),
+    )
+    run.status = QueryRunStatus.RUNNING
+    await persist_query_context_pack(
+        session,
+        tenant_id=tenant.id,
+        query_run_id=run.id,
+        context_pack=ApplicationQueryContextPack(
+            pack_id="arithmetic",
+            token_budget=300,
+            records=[
+                PackedContextRecord(
+                    context_id="ctx-0001",
+                    candidate_id="table",
+                    citation_id="c1",
+                    text=table,
+                    token_count=100,
+                    source_ids=source_ids,
+                    metadata={
+                        "evidence_origin": "postgresql_chunk",
+                        "chunk_hash": "sha256:" + hashlib.sha256(table.encode()).hexdigest(),
+                    },
+                )
+            ],
+        ),
+    )
+
+    class Generator:
+        async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer:
+            hint = request.policy["verified_calculation"]
+            assert hint["computed_value"] == "127.4"
+            assert hint["citation_id"] == "c1"
+            return GeneratedAnswer(
+                text=text,
+                metadata={
+                    "draft_claims": [
+                        {
+                            "text": text,
+                            "citations": ["c1"],
+                        }
+                    ]
+                },
+            )
+
+    class Checker:
+        async def check(self, request: SupportCheckRequest) -> SupportCheckResult:
+            return SupportCheckResult(
+                method="provider-fixture",
+                claims=[
+                    AnswerClaim(
+                        claim_index=claim.claim_index,
+                        text=claim.text,
+                        citation_ids=claim.citation_ids,
+                        support_status="supported",
+                        support_score=1,
+                        support_reason="approved",
+                        method="provider-fixture",
+                    )
+                    for claim in request.claims
+                ],
+            )
+
+    result = await generate_query_answer(
+        session,
+        tenant_id=tenant.id,
+        query_run_id=run.id,
+        generator=Generator(),
+        support_checker=Checker(),
+    )
+    assert result.status == QueryRunStatus.COMPLETED
+    assert run.abstained is abstained
+    await session.flush()
+    await session.refresh(run)
+    audit = run.metadata_["arithmetic_verification"]
+    assert audit["calculations"][0]["computed_value"] == "127.4"
+    assert audit["calculations"][0]["verified"] is (not abstained)
+    assert audit["calculations"][0]["operands"][0]["source_ids"] == source_ids
+    assert audit["provider_judgments"][0]["support_status"] == "supported"
+    claim = await session.scalar(
+        select(QueryAnswerClaim).where(QueryAnswerClaim.query_run_id == run.id)
+    )
+    assert claim is not None and claim.text == text
+    assert claim.support_status == ("unsupported" if abstained else "supported")
+    assert run.answer_citations == (
+        []
+        if abstained
+        else [
+            {
+                "citation_id": "c1",
+                "context_id": "ctx-0001",
+                "marker": "[c1]",
+                "source_ids": source_ids,
+            }
+        ]
+    )
+    from flint_graph.application.services.query_provenance import get_query_answer_provenance
+    from flint_graph.domain.errors import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await get_query_answer_provenance(session, tenant_id=uuid4(), query_run_id=run.id)

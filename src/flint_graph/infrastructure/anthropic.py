@@ -24,6 +24,7 @@ from flint_graph.application.grounded_prompt_rules import (
     ANSWER_RULES,
     SUPPORT_PROMPT_VERSION,
     SUPPORT_RULES,
+    verified_calculation_lines,
 )
 from flint_graph.application.query_orchestration import (
     AnswerCitation,
@@ -210,18 +211,14 @@ def _parse_answer_draft(response_text: str) -> _AnthropicAnswerDraft:
     try:
         return _AnthropicAnswerDraft.model_validate_json(response_text)
     except ValueError as exc:
-        raise ValueError(
-            "Anthropic answer response did not match the expected schema."
-        ) from exc
+        raise ValueError("Anthropic answer response did not match the expected schema.") from exc
 
 
 def _parse_support_draft(response_text: str) -> _AnthropicSupportDraft:
     try:
         return _AnthropicSupportDraft.model_validate_json(response_text)
     except ValueError as exc:
-        raise ValueError(
-            "Anthropic support response did not match the expected schema."
-        ) from exc
+        raise ValueError("Anthropic support response did not match the expected schema.") from exc
 
 
 def _answer_from_draft(
@@ -245,9 +242,7 @@ def _answer_from_draft(
             },
         )
 
-    records_by_citation = {
-        record.citation_id: record for record in request.context_pack.records
-    }
+    records_by_citation = {record.citation_id: record for record in request.context_pack.records}
     answer_parts: list[str] = []
     citations_by_id: dict[str, AnswerCitation] = {}
     raw_markers: list[str] = []
@@ -366,7 +361,9 @@ def _answer_user_prompt(request: AnswerGenerationRequest) -> str:
         f"[{record.citation_id}] ({record.context_id}) {record.text}"
         for record in request.context_pack.records
     )
-    return "\n".join(["Query:", request.query, "Context:", context])
+    return "\n".join(
+        ["Query:", request.query, "Context:", context, *verified_calculation_lines(request.policy)]
+    )
 
 
 def _support_system_prompt() -> str:
@@ -390,9 +387,7 @@ def _support_system_prompt() -> str:
 
 
 def _support_user_prompt(request: SupportCheckRequest) -> str:
-    records_by_citation = {
-        record.citation_id: record for record in request.context_pack.records
-    }
+    records_by_citation = {record.citation_id: record for record in request.context_pack.records}
     lines = ["Query:", request.query, "Claims to judge:"]
     for claim in request.claims:
         cited = " ".join(

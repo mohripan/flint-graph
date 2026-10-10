@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
+from flint_graph.application.financial_arithmetic import review_financial_arithmetic
 from flint_graph.application.query_faithfulness import (
+    AbstentionDecision,
     DeterministicSupportChecker,
     evaluate_abstention,
     repair_claim_citations,
@@ -22,9 +25,7 @@ from flint_graph.application.query_orchestration import (
 )
 
 _SAFE_ABSTENTION_ANSWER = "The available context is insufficient to answer this query."
-_CITATION_MARKER_RE = re.compile(
-    r"\s*[\[(]\s*(?:c[0-9]+|ctx-[0-9]+)\s*[\])]", re.IGNORECASE
-)
+_CITATION_MARKER_RE = re.compile(r"\s*[\[(]\s*(?:c[0-9]+|ctx-[0-9]+)\s*[\])]", re.IGNORECASE)
 # Narrow English commentary patterns, not a general semantic/completeness judge.
 # Explicit negative facts ("Acme does not manufacture ...") do not match.
 _CONTEXT_GAP_RE = re.compile(
@@ -46,6 +47,7 @@ class QueryFaithfulnessPolicy:
 class QueryFaithfulnessResult:
     answer: GeneratedAnswer
     report: AnswerFaithfulnessReport
+    arithmetic_audit: dict[str, Any] | None = None
 
 
 async def verify_generated_answer(
@@ -72,17 +74,30 @@ async def verify_generated_answer(
             claims=draft_claims,
         )
     )
-    support_result = support_result.model_copy(update={
-        "claims": [
-            claim.model_copy(update={
-                "support_status": "unsupported",
-                "support_score": 0.0,
-                "support_reason": "context_insufficiency_commentary",
-            })
-            if _CONTEXT_GAP_RE.search(claim.text.strip()) else claim
-            for claim in support_result.claims
-        ]
-    })
+    provider_claims = list(support_result.claims)
+    support_result = support_result.model_copy(
+        update={
+            "claims": [
+                claim.model_copy(
+                    update={
+                        "support_status": "unsupported",
+                        "support_score": 0.0,
+                        "support_reason": "context_insufficiency_commentary",
+                    }
+                )
+                if _CONTEXT_GAP_RE.search(claim.text.strip())
+                else claim
+                for claim in support_result.claims
+            ]
+        }
+    )
+    arithmetic = review_financial_arithmetic(
+        query,
+        support_result.claims,
+        context_pack,
+        provider_claims=provider_claims,
+    )
+    support_result = support_result.model_copy(update={"claims": arithmetic.claims})
     supported_count = sum(
         1 for claim in support_result.claims if claim.support_status == "supported"
     )
@@ -98,6 +113,8 @@ async def verify_generated_answer(
         min_context_relevance=active_policy.min_context_relevance,
         all_citations_dropped=_all_citations_dropped(draft_claims, repairs),
     )
+    if arithmetic.required and not arithmetic.satisfied and not draft_answer.insufficient_context:
+        decision = AbstentionDecision(abstained=True, reason="financial_arithmetic_unverified")
     report = AnswerFaithfulnessReport(
         claims=support_result.claims,
         repairs=repairs,
@@ -111,6 +128,17 @@ async def verify_generated_answer(
             # Carried through so usage accounting can attribute the support check
             # to the provider and model that performed it.
             "support": dict(support_result.metadata),
+            **(
+                {
+                    "arithmetic": {
+                        "method": arithmetic.metadata["method"],
+                        "required": True,
+                        "satisfied": arithmetic.satisfied,
+                    }
+                }
+                if arithmetic.required
+                else {}
+            ),
         },
     )
     if decision.abstained:
@@ -122,6 +150,7 @@ async def verify_generated_answer(
                 metadata=_answer_metadata(draft_answer, report),
             ),
             report=report,
+            arithmetic_audit=arithmetic.metadata if arithmetic.required else None,
         )
 
     surviving_claims = [
@@ -136,6 +165,7 @@ async def verify_generated_answer(
             metadata=_answer_metadata(draft_answer, report),
         ),
         report=report,
+        arithmetic_audit=arithmetic.metadata if arithmetic.required else None,
     )
 
 

@@ -18,6 +18,7 @@ from flint_graph.application.grounded_prompt_rules import (
     ANSWER_RULES,
     SUPPORT_PROMPT_VERSION,
     SUPPORT_RULES,
+    verified_calculation_lines,
 )
 from flint_graph.application.query_orchestration import (
     AnswerCitation,
@@ -494,6 +495,7 @@ def _build_answer_generation_prompt(request: AnswerGenerationRequest) -> str:
             request.query,
             "Context:",
             context,
+            *verified_calculation_lines(request.policy),
         ]
     )
 

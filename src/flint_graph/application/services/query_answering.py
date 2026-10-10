@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.financial_arithmetic import prepare_verified_calculation
 from flint_graph.application.query_orchestration import (
     AnswerFaithfulnessReport,
     AnswerGenerationRequest,
@@ -83,12 +84,19 @@ async def generate_query_answer(
             filters=filters if isinstance(filters, dict) else {},
         )
         model = generator or DeterministicAnswerGenerator()
+        calculation_hint = prepare_verified_calculation(run.query_text, context_pack)
         generation_request = AnswerGenerationRequest(
             tenant_id=tenant_id,
             query=run.query_text,
             retrieval_index_version_id=run.retrieval_index_version_id,
             context_pack=context_pack,
+            policy={"verified_calculation": calculation_hint}
+            if calculation_hint is not None
+            else {},
         )
+        if calculation_hint is not None:
+            run.metadata_ = {**run.metadata_, "arithmetic_preparation": calculation_hint}
+            await session.flush()
         stage = "generate_answer"
         if clarification is not None:
             draft_answer = GeneratedAnswer(
@@ -167,6 +175,14 @@ async def generate_query_answer(
             query_run_id=query_run_id,
             report=verification.report,
         )
+        if verification.arithmetic_audit is not None:
+            # Tenant-owned audit only: never put operand quotations/provider reasons in logs
+            # or aggregate telemetry. Claims retain the original draft text separately.
+            run.metadata_ = {
+                **run.metadata_,
+                "arithmetic_verification": verification.arithmetic_audit,
+            }
+            await session.flush()
         await append_query_run_event(
             session,
             tenant_id=tenant_id,
