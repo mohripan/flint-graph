@@ -22,7 +22,9 @@ from flint_graph.application.query_orchestration import (
 )
 
 _SAFE_ABSTENTION_ANSWER = "The available context is insufficient to answer this query."
-_CITATION_MARKER_RE = re.compile(r"\s*[\[(]\s*[A-Za-z0-9_-]+\s*[\])]")
+_CITATION_MARKER_RE = re.compile(
+    r"\s*[\[(]\s*(?:c[0-9]+|ctx-[0-9]+)\s*[\])]", re.IGNORECASE
+)
 # Narrow English commentary patterns, not a general semantic/completeness judge.
 # Explicit negative facts ("Acme does not manufacture ...") do not match.
 _CONTEXT_GAP_RE = re.compile(
@@ -58,7 +60,7 @@ async def verify_generated_answer(
 ) -> QueryFaithfulnessResult:
     active_policy = policy or QueryFaithfulnessPolicy()
     checker = support_checker or DeterministicSupportChecker()
-    draft_claims, repairs, structured_draft = _repair_draft_claims(
+    draft_claims, repairs, _structured_draft = _repair_draft_claims(
         draft_answer=draft_answer,
         context_pack=context_pack,
     )
@@ -128,11 +130,7 @@ async def verify_generated_answer(
     citations = _answer_citations(surviving_claims, context_pack)
     return QueryFaithfulnessResult(
         answer=GeneratedAnswer(
-            text=(
-                _structured_answer_text(surviving_claims)
-                if structured_draft
-                else draft_answer.text
-            ),
+            text=_structured_answer_text(surviving_claims),
             citations=citations,
             insufficient_context=False,
             metadata=_answer_metadata(draft_answer, report),
@@ -159,6 +157,10 @@ def _repair_draft_claims(
             raw_markers = _string_list(raw_claim.get("raw_citation_markers"))
             if not raw_markers:
                 raw_markers = _string_list(raw_claim.get("citations"))
+            raw_markers.extend(marker.strip() for marker in _CITATION_MARKER_RE.findall(text))
+            text = _strip_citation_markers(text)
+            if not text:
+                continue
             claim_index = raw_claim.get("claim_index")
             if not isinstance(claim_index, int) or claim_index < 0:
                 claim_index = fallback_index
@@ -172,7 +174,9 @@ def _repair_draft_claims(
             repairs.extend(claim_repairs)
         return repaired_claims, repairs, True
 
-    raw_markers = [citation.marker for citation in draft_answer.citations]
+    raw_markers = [marker.strip() for marker in _CITATION_MARKER_RE.findall(draft_answer.text)]
+    if not raw_markers:
+        raw_markers = [citation.marker for citation in draft_answer.citations]
     text = _strip_citation_markers(draft_answer.text)
     repaired, repairs = repair_claim_citations(
         claim_index=0,

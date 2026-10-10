@@ -78,6 +78,28 @@ async def test_explicit_negative_fact_is_not_context_insufficiency_commentary() 
     assert result.report.claims[0].support_status == "supported"
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("structured", [True, False])
+async def test_inline_citations_are_repaired_without_stripping_factual_parentheses(structured):
+    text = "Acme Corporation is headquartered in Berlin (Germany). [c1] [c999]"
+    pack = _context_pack()
+    pack = pack.model_copy(update={"records": [pack.records[0].model_copy(update={
+        "text": "Acme Corporation is headquartered in Berlin (Germany)."
+    })]})
+    draft = GeneratedAnswer(
+        text=text,
+        citations=[AnswerCitation(citation_id="c1", context_id="ctx-0001", marker="[c1]",
+                                  source_ids={"chunk_id": "chunk-acme"})],
+        metadata={"draft_claims": [{"text": text, "citations": ["c1"]}]} if structured else {},
+    )
+    result = await verify_generated_answer(tenant_id=uuid4(), query="Where is Acme headquartered?",
+                                           context_pack=pack, draft_answer=draft)
+    assert result.answer.text == "Acme Corporation is headquartered in Berlin (Germany). [c1]"
+    assert result.report.claims[0].text == "Acme Corporation is headquartered in Berlin (Germany)."
+    assert any(repair.action == "dropped_unknown" and "c999" in repair.original_marker
+               for repair in result.report.repairs)
+
+
 def _context_pack() -> QueryContextPack:
     return QueryContextPack(
         pack_id="pack-1",
@@ -227,7 +249,7 @@ async def test_verify_generated_answer_abstains_when_support_is_insufficient() -
 
 
 @pytest.mark.anyio
-async def test_verify_generated_answer_preserves_legacy_generated_answer_shape() -> None:
+async def test_verify_generated_answer_preserves_legacy_text_without_unused_citations() -> None:
     draft = GeneratedAnswer(
         text="Acme Corporation is headquartered in Berlin. [c1]",
         citations=[
@@ -257,6 +279,6 @@ async def test_verify_generated_answer_preserves_legacy_generated_answer_shape()
     )
 
     assert result.answer.text == "Acme Corporation is headquartered in Berlin. [c1]"
-    assert [citation.citation_id for citation in result.answer.citations] == ["c1", "c2"]
+    assert [citation.citation_id for citation in result.answer.citations] == ["c1"]
     assert result.report.abstained is False
     assert result.report.supported_claim_count == 1

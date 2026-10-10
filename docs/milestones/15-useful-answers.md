@@ -210,3 +210,14 @@ The configured hosted default `claude-opus-4-8` is listed as available in
 (checked 2026-10-10); this is not a live credential/account/request validation.
 No hosted calls or automatic model migration were performed. The real end-to-end
 answer rehearsals used the installed local Ollama model.
+
+## Canonical inline and legacy citation rendering
+
+[Issue #33](https://github.com/mohripan/flint-graph/issues/33) repairs reserved
+inline citation/context markers before support checking and renders both legacy
+and structured drafts from supported repaired claims. Unknown inline `c999`
+references are dropped and recorded; known inline references do not duplicate
+rendered markers. Ordinary factual parentheses remain intact. Legacy drafts with
+inline citations use those references rather than unused citation-array entries;
+drafts without inline markers can still use the declared citation array.
+The original unverified legacy text is never the final rendering source.
