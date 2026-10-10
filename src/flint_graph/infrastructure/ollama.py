@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import Any, cast
 
 import httpx
@@ -353,7 +354,7 @@ class OllamaSupportChecker:
                     "model": self._model,
                     "prompt": _build_support_check_prompt(request),
                     "stream": False,
-                    "format": _support_check_schema(),
+                    "format": _support_check_schema(request),
                     "options": {
                         "temperature": self._temperature,
                         "num_predict": self._max_tokens,
@@ -640,16 +641,21 @@ def _answer_generation_schema(request: AnswerGenerationRequest) -> dict[str, Any
     }
 
 
-def _support_check_schema() -> dict[str, Any]:
+def _support_check_schema(request: SupportCheckRequest) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
             "judgements": {
                 "type": "array",
+                "minItems": len(request.claims),
+                "maxItems": len(request.claims),
                 "items": {
                     "type": "object",
                     "properties": {
-                        "claim_index": {"type": "integer"},
+                        "claim_index": {
+                            "type": "integer",
+                            "enum": [claim.claim_index for claim in request.claims],
+                        },
                         "support_status": {
                             "type": "string",
                             "enum": ["supported", "partial", "unsupported"],
@@ -678,12 +684,17 @@ def _support_result_from_ollama_draft(
     usage: dict[str, Any] | None = None,
 ) -> SupportCheckResult:
     judgements_by_index = {judgement.claim_index: judgement for judgement in draft.judgements}
+    judgement_counts = Counter(judgement.claim_index for judgement in draft.judgements)
     claims: list[AnswerClaim] = []
 
     for claim in request.claims:
         judgement = judgements_by_index.get(claim.claim_index)
-        if judgement is None:
+        if judgement_counts[claim.claim_index] > 1:
             status: SupportStatus = "unsupported"
+            score = 0.0
+            reason = "duplicate judgements returned for this claim"
+        elif judgement is None:
+            status = "unsupported"
             score = 0.0
             reason = "no judgement returned for this claim"
         else:

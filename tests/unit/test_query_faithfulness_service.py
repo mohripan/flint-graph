@@ -5,14 +5,77 @@ import pytest
 from flint_graph.application.query_faithfulness import DeterministicSupportChecker
 from flint_graph.application.query_orchestration import (
     AnswerCitation,
+    AnswerClaim,
     GeneratedAnswer,
     PackedContextRecord,
     QueryContextPack,
+    SupportCheckRequest,
+    SupportCheckResult,
 )
 from flint_graph.application.services.query_faithfulness import (
     QueryFaithfulnessPolicy,
     verify_generated_answer,
 )
+
+
+class _ApprovingChecker:
+    async def check(self, request: SupportCheckRequest) -> SupportCheckResult:
+        return SupportCheckResult(
+            method="approving-fixture",
+            claims=[
+                AnswerClaim(
+                    claim_index=claim.claim_index,
+                    text=claim.text,
+                    citation_ids=claim.citation_ids,
+                    support_status="supported",
+                    support_score=1.0,
+                    support_reason="approved",
+                    method="approving-fixture",
+                )
+                for claim in request.claims
+            ],
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("text", [
+    "Acme Corporation's annual revenue is not mentioned in the context.",
+    "The context does not provide the name of Initech's chief executive officer.",
+    "The provided context does not contain Acme's annual revenue.",
+])
+async def test_context_insufficiency_commentary_cannot_be_a_supported_answer(text: str) -> None:
+    result = await verify_generated_answer(
+        tenant_id=uuid4(),
+        query="What is Acme's annual revenue?",
+        context_pack=_context_pack(),
+        draft_answer=GeneratedAnswer(
+            text=text,
+            metadata={"draft_claims": [{"text": text, "citations": ["c1"]}]},
+        ),
+        support_checker=_ApprovingChecker(),
+    )
+    assert result.answer.insufficient_context is True
+    assert result.answer.citations == []
+    assert result.report.claims[0].support_status == "unsupported"
+    assert result.report.claims[0].support_reason == "context_insufficiency_commentary"
+
+
+@pytest.mark.anyio
+async def test_explicit_negative_fact_is_not_context_insufficiency_commentary() -> None:
+    text = "Acme Corporation does not manufacture consumer appliances."
+    pack = _context_pack()
+    pack = pack.model_copy(update={"records": [
+        pack.records[0].model_copy(update={"text": text})
+    ]})
+    result = await verify_generated_answer(
+        tenant_id=uuid4(), query="Does Acme manufacture consumer appliances?",
+        context_pack=pack,
+        draft_answer=GeneratedAnswer(
+            text=text, metadata={"draft_claims": [{"text": text, "citations": ["c1"]}]}
+        ),
+    )
+    assert result.answer.insufficient_context is False
+    assert result.report.claims[0].support_status == "supported"
 
 
 def _context_pack() -> QueryContextPack:

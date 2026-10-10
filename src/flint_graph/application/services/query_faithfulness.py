@@ -23,6 +23,15 @@ from flint_graph.application.query_orchestration import (
 
 _SAFE_ABSTENTION_ANSWER = "The available context is insufficient to answer this query."
 _CITATION_MARKER_RE = re.compile(r"\s*[\[(]\s*[A-Za-z0-9_-]+\s*[\])]")
+# Narrow English commentary patterns, not a general semantic/completeness judge.
+# Explicit negative facts ("Acme does not manufacture ...") do not match.
+_CONTEXT_GAP_RE = re.compile(
+    r"^(?:the\s+)?(?:(?:provided|available|cited)\s+)?context\s+"
+    r"(?:does\s+not|doesn't)\s+(?:provide|mention|contain|state)\b"
+    r"|\b(?:is|are)\s+not\s+(?:mentioned|provided|stated|specified)\s+in\s+"
+    r"(?:the\s+)?(?:(?:provided|available|cited)\s+)?context\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +70,17 @@ async def verify_generated_answer(
             claims=draft_claims,
         )
     )
+    support_result = support_result.model_copy(update={
+        "claims": [
+            claim.model_copy(update={
+                "support_status": "unsupported",
+                "support_score": 0.0,
+                "support_reason": "context_insufficiency_commentary",
+            })
+            if _CONTEXT_GAP_RE.search(claim.text.strip()) else claim
+            for claim in support_result.claims
+        ]
+    })
     supported_count = sum(
         1 for claim in support_result.claims if claim.support_status == "supported"
     )

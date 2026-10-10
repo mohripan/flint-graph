@@ -126,7 +126,11 @@ async def test_ollama_support_checker_sends_schema_and_maps_judgements() -> None
     assert "claim_index 0" in payload["prompt"]
     assert "cited context: Acme Corporation is headquartered in Berlin." in payload["prompt"]
     assert "Missing information is not evidence" in payload["prompt"]
-    assert result.metadata["support_prompt_version"] == "grounded-support-v2"
+    assert result.metadata["support_prompt_version"] == "grounded-support-v3"
+    judgements = payload["format"]["properties"]["judgements"]
+    assert judgements["minItems"] == judgements["maxItems"] == 2
+    assert judgements["items"]["properties"]["claim_index"]["enum"] == [0, 1]
+    assert "Do not judge a premise by whether it answers the whole query" in payload["prompt"]
 
 
 @pytest.mark.anyio
@@ -261,3 +265,23 @@ async def test_ollama_support_checker_rejects_malformed_response() -> None:
 
         with pytest.raises(ValueError, match="Ollama support response did not match"):
             await checker.check(_support_request())
+
+
+@pytest.mark.anyio
+async def test_duplicate_support_judgements_are_not_selected_by_order() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"response": json.dumps({"judgements": [
+            {"claim_index": 0, "support_status": "unsupported", "support_score": 0,
+             "reason": "no"},
+            {"claim_index": 0, "support_status": "supported", "support_score": 1,
+             "reason": "yes"},
+        ]})}, request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    ) as client:
+        checker = _checker_cls()(model="fixture", timeout_seconds=12, temperature=0,
+                                 max_tokens=256, http_client=client)
+        result = await checker.check(_support_request())
+    assert result.claims[0].support_status == "unsupported"
+    assert result.claims[0].support_reason == "duplicate judgements returned for this claim"

@@ -1,7 +1,7 @@
 """Shared, versioned grounding instructions; verification remains a separate step."""
 
 ANSWER_PROMPT_VERSION = "grounded-answer-v2"
-SUPPORT_PROMPT_VERSION = "grounded-support-v2"
+SUPPORT_PROMPT_VERSION = "grounded-support-v3"
 
 ANSWER_RULES = (
     "- Answer the attribute actually requested, not merely a related fact. "
@@ -20,6 +20,10 @@ ANSWER_RULES = (
 )
 
 SUPPORT_RULES = (
+    "- Judge each numbered claim independently against its own cited text. "
+    "Do not judge a premise by whether it answers the whole query. A correctly "
+    "cited acquisition fact is supported even if another claim supplies the headquarters. "
+    "Return a separate judgement for every listed claim, including supporting premises.",
     "- Missing information is not evidence for a factual claim. Statements saying "
     "the requested answer is not mentioned or not provided are insufficiency "
     "commentary, not supported answers. Mark that commentary unsupported.",

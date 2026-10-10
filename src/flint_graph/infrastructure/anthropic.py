@@ -14,6 +14,7 @@ with pydantic, mirroring ``OllamaAnswerGenerator`` (structured-output hardening 
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -297,12 +298,17 @@ def _result_from_support_draft(
     usage: dict[str, Any] | None = None,
 ) -> SupportCheckResult:
     judgements_by_index = {judgement.claim_index: judgement for judgement in draft.judgements}
+    judgement_counts = Counter(judgement.claim_index for judgement in draft.judgements)
     claims: list[AnswerClaim] = []
 
     for claim in request.claims:
         judgement = judgements_by_index.get(claim.claim_index)
-        if judgement is None:
+        if judgement_counts[claim.claim_index] > 1:
             status: SupportStatus = "unsupported"
+            score = 0.0
+            reason = "duplicate judgements returned for this claim"
+        elif judgement is None:
+            status = "unsupported"
             score = 0.0
             reason = "no judgement returned for this claim"
         else:

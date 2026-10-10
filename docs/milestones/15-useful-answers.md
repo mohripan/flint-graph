@@ -196,3 +196,11 @@ commentary as an answer. Context remains untrusted evidence, not instructions.
 Adapter metadata identifies `grounded-answer-v2` and `grounded-support-v2`.
 Support thresholds and offline providers are unchanged. Prompt rules guide models;
 they do not mechanically prove completeness or replace the M20 coverage contract.
+
+[Issue #30](https://github.com/mohripan/flint-graph/issues/30) further separates
+per-claim entailment from whole-question completeness (`grounded-support-v3`).
+Ollama's request-specific schema constrains the number of judgements and allowed
+claim indices. Both adapters fail closed on missing/duplicate judgements.
+A narrow English policy rejects context-insufficiency commentary even if the
+model approves it; explicit negative source facts remain eligible. This guard is
+not a multilingual semantic coverage checker. Rejected claims remain inspectable.

@@ -333,7 +333,20 @@ async def test_support_checker_maps_judgements_to_claims() -> None:
     assert "claim_index 0" in user_content
     assert "cited context: Acme Corporation is headquartered in Berlin." in user_content
     assert "Missing information is not evidence" in messages.create_calls[0]["system"]
-    assert result.metadata["support_prompt_version"] == "grounded-support-v2"
+    assert result.metadata["support_prompt_version"] == "grounded-support-v3"
+
+
+@pytest.mark.anyio
+async def test_duplicate_support_judgements_fail_closed() -> None:
+    messages = _RecordingMessages(_message(json.dumps({"judgements": [
+        {"claim_index": 0, "status": "unsupported", "score": 0, "reason": "no"},
+        {"claim_index": 0, "status": "supported", "score": 1, "reason": "yes"},
+    ]})))
+    checker = AnthropicSupportChecker(model="fixture", max_tokens=256, effort="medium",
+                                     timeout_seconds=12, client=_FakeClient(messages))
+    result = await checker.check(_support_request())
+    assert result.claims[0].support_status == "unsupported"
+    assert result.claims[0].support_reason == "duplicate judgements returned for this claim"
 
 
 @pytest.mark.anyio
