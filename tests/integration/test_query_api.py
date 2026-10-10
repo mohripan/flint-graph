@@ -360,6 +360,154 @@ async def test_history_search_cursor_is_stable_literal_and_tenant_scoped(
 
 
 @pytest.mark.asyncio
+async def test_readiness_and_query_creation_include_older_searchable_documents(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_searchable_content(session)
+        old_document = await session.get(Document, UUID("11111111-1111-4111-8111-111111111111"))
+        assert old_document is not None
+        old_document.updated_at = datetime(2020, 1, 1, tzinfo=UTC)
+        for number in range(30):
+            document = Document(tenant_id=tenant.id, title=f"New pending {number}",
+                                source_type=SourceType.UPLOAD, next_version_number=2)
+            session.add(document)
+            await session.flush()
+            session.add(DocumentVersion(document_id=document.id, version_number=1,
+                                        status=DocumentVersionStatus.PENDING))
+        await session.commit()
+    response = await client.get("/v1/search-readiness", headers=_headers(tenant.id))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["completed_coverage_count"] == 1
+    assert len(body["documents"]) == 25
+    assert str(old_document.id) not in {row["document_id"] for row in body["documents"]}
+    created = await client.post("/v1/query-runs", headers=_headers(tenant.id), json={
+        "query": "Can I still ask about the older document?",
+        "retrieval_index_version_id": str(index_id),
+    })
+    assert created.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_readiness_preview_deduplicates_before_limit_and_retains_active_version(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+        active_document = await session.get(Document, UUID("11111111-1111-4111-8111-111111111111"))
+        assert active_document is not None
+        active_document.updated_at = datetime(2030, 1, 1, tzinfo=UTC)
+        for number in range(2, 32):
+            session.add(DocumentVersion(document_id=active_document.id, version_number=number,
+                                        status=DocumentVersionStatus.FAILED))
+        older_document = Document(tenant_id=tenant.id, title="Another document",
+                                  source_type=SourceType.UPLOAD, next_version_number=2)
+        session.add(older_document)
+        await session.flush()
+        session.add(DocumentVersion(document_id=older_document.id, version_number=1,
+                                    status=DocumentVersionStatus.PENDING))
+        await session.commit()
+    response = await client.get("/v1/search-readiness", headers=_headers(tenant.id))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["completed_coverage_count"] == 1
+    assert {row["document_id"] for row in body["documents"]} == {
+        str(active_document.id), str(older_document.id),
+    }
+    latest = next(row for row in body["documents"] if row["document_id"] == str(active_document.id))
+    assert latest["version_number"] == 31
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version_status", [
+    DocumentVersionStatus.PENDING, DocumentVersionStatus.FAILED,
+    DocumentVersionStatus.CANCELLED, DocumentVersionStatus.DELETED,
+    DocumentVersionStatus.SUPERSEDED,
+])
+async def test_completed_coverage_on_nonactive_version_is_not_searchable(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+    version_status: DocumentVersionStatus,
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+        version = await session.get(DocumentVersion, UUID("22222222-2222-4222-8222-222222222222"))
+        assert version is not None
+        version.status = version_status
+        await session.commit()
+    response = await client.get("/v1/search-readiness", headers=_headers(tenant.id))
+    assert response.status_code == 200
+    assert response.json()["ready"] is False
+    assert response.json()["completed_coverage_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_readiness_totals_exclude_foreign_deleted_and_other_index_coverage(
+    query_api_env: tuple[
+        httpx.AsyncClient, async_sessionmaker[AsyncSession], QueryOpenSearchClient, QueryNeo4jClient
+    ],
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_active_index(session)
+        tenant.name = "readiness-counts-main"
+        await session.flush()
+        other, other_index_id = await _tenant_with_active_index(session)
+        inactive = await create_retrieval_index_version(
+            session, scope=RetrievalIndexScope.TENANT, tenant_id=tenant.id, spec=_index_spec(),
+        )
+        active = DocumentVersionStatus.ACTIVE
+        completed = DocumentIndexCoverageStatus.COMPLETED
+        buckets = [
+            (30, tenant.id, index_id, active, completed, False),
+            (7, tenant.id, index_id, active, DocumentIndexCoverageStatus.RUNNING, False),
+            (4, tenant.id, index_id, active, DocumentIndexCoverageStatus.FAILED, False),
+            (2, tenant.id, index_id, active, DocumentIndexCoverageStatus.CANCELLED, False),
+            (3, tenant.id, index_id, DocumentVersionStatus.DELETED, completed, False),
+            (3, tenant.id, index_id, DocumentVersionStatus.SUPERSEDED, completed, False),
+            (4, tenant.id, index_id, active, completed, True),
+            (5, other.id, other_index_id, active, completed, False),
+            (4, tenant.id, inactive.id, active, completed, False),
+        ]
+        for count, owner, index, version_status, coverage_status, deleted in buckets:
+            for number in range(count):
+                document = Document(tenant_id=owner, title=f"Count fixture {number}",
+                                    source_type=SourceType.UPLOAD, next_version_number=2,
+                                    deleted_at=datetime.now(UTC) if deleted else None)
+                session.add(document)
+                await session.flush()
+                version = DocumentVersion(document_id=document.id, version_number=1,
+                                          status=version_status)
+                session.add(version)
+                await session.flush()
+                session.add(DocumentIndexCoverage(
+                    tenant_id=owner, document_id=document.id, document_version_id=version.id,
+                    retrieval_index_version_id=index, status=coverage_status,
+                ))
+        await session.commit()
+    response = await client.get("/v1/search-readiness", headers=_headers(tenant.id))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["completed_coverage_count"] == 30
+    assert body["running_coverage_count"] == 7
+    assert body["failed_coverage_count"] == 4
+    assert body["cancelled_coverage_count"] == 2
+    assert len(body["documents"]) == 25
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("provider", "answer_model", "support_model"),
     [

@@ -131,6 +131,18 @@ Coverage is a control-plane record in PostgreSQL. It is the future source for
 index coverage APIs and for backfill/reconcile decisions. Neo4j and OpenSearch
 remain rebuildable projections and do not define authoritative coverage state.
 
+Search readiness aggregates PostgreSQL coverage independently of its bounded
+recent-document preview. Completed coverage contributes only for active versions
+of nondeleted documents in the authorized tenant and selected visible active
+index, matching retrieval's source visibility. Running/failed/cancelled coverage
+totals include nondeleted, nonsuperseded versions, so they describe outstanding
+version-level indexing attempts rather than just the latest preview row. An
+older active version remains searchable while a newer attempt is pending/failed.
+The recent preview chooses one latest nonsuperseded/nondeleted version per
+document before applying its limit; a preview row's status need not equal the
+status of that document's older still-active searchable version. No projection
+health or zero-latency search visibility is implied by completed coverage.
+
 ## Indexing Workflow
 
 `IndexDocumentVersionWorkflow` indexes one document version into one retrieval

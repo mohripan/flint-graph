@@ -221,3 +221,14 @@ rendered markers. Ordinary factual parentheses remain intact. Legacy drafts with
 inline citations use those references rather than unused citation-array entries;
 drafts without inline markers can still use the declared citation array.
 The original unverified legacy text is never the final rendering source.
+
+## Complete search-readiness accounting
+
+[#66](https://github.com/mohripan/flint-graph/issues/66) separates authoritative
+workspace/active-index coverage totals from the bounded recent-document preview.
+Older active searchable content is not hidden by newer pending/failed attempts.
+Completed coverage requires an active source version, matching retrieval filters;
+deleted/superseded sources, other indexes and foreign tenants do not contribute.
+The preview selects the latest visible version per document before limiting rows.
+The live 100-document financial workspace now shows 100 searchable versions with
+25 preview rows; see [the readiness report](../reports/2026-10-10-complete-search-readiness.md).

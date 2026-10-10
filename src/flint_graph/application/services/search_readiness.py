@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import Subquery
 
 from flint_graph.application.services.indexing import select_active_retrieval_index_version
 from flint_graph.application.services.retrieval import require_visible_index_version
@@ -91,26 +92,11 @@ async def get_search_readiness(
         index_version=index_version,
         limit=recent_document_limit,
     )
-    completed_count = sum(
-        1
-        for document in documents
-        if document.coverage_status == DocumentIndexCoverageStatus.COMPLETED
-    )
-    running_count = sum(
-        1
-        for document in documents
-        if document.coverage_status == DocumentIndexCoverageStatus.RUNNING
-    )
-    failed_count = sum(
-        1
-        for document in documents
-        if document.coverage_status == DocumentIndexCoverageStatus.FAILED
-    )
-    cancelled_count = sum(
-        1
-        for document in documents
-        if document.coverage_status == DocumentIndexCoverageStatus.CANCELLED
-    )
+    counts = await _load_coverage_totals(session, tenant_id=tenant_id, index_version=index_version)
+    completed_count = counts[DocumentIndexCoverageStatus.COMPLETED]
+    running_count = counts[DocumentIndexCoverageStatus.RUNNING]
+    failed_count = counts[DocumentIndexCoverageStatus.FAILED]
+    cancelled_count = counts[DocumentIndexCoverageStatus.CANCELLED]
 
     ready = completed_count > 0
     reason = _readiness_reason(
@@ -165,6 +151,60 @@ async def _resolve_readiness_index_version(
     )
 
 
+async def _load_coverage_totals(
+    session: AsyncSession, *, tenant_id: UUID, index_version: RetrievalIndexVersion,
+) -> dict[DocumentIndexCoverageStatus, int]:
+    # Aggregate the full ledger independently of the recent-document UI preview.
+    # Completed coverage is searchable only for currently active source versions,
+    # matching primitive/query retrieval's authoritative source visibility filter.
+    rows = await session.execute(
+        select(DocumentIndexCoverage.status, DocumentVersion.status, func.count())
+        .join(DocumentVersion, DocumentVersion.id == DocumentIndexCoverage.document_version_id)
+        .join(Document, Document.id == DocumentVersion.document_id)
+        .where(
+            Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
+            DocumentIndexCoverage.tenant_id == tenant_id,
+            DocumentIndexCoverage.document_id == Document.id,
+            DocumentIndexCoverage.retrieval_index_version_id == index_version.id,
+            DocumentVersion.status.notin_(
+                [DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED]
+            ),
+        )
+        .group_by(DocumentIndexCoverage.status, DocumentVersion.status)
+    )
+    counts = {status: 0 for status in DocumentIndexCoverageStatus}
+    for coverage_status, version_status, count in rows:
+        if (
+            coverage_status == DocumentIndexCoverageStatus.COMPLETED
+            and version_status != DocumentVersionStatus.ACTIVE
+        ):
+            continue
+        counts[coverage_status] += count
+    return counts
+
+
+def _ranked_visible_versions(tenant_id: UUID) -> Subquery:
+    return (
+        select(
+            DocumentVersion.id.label("version_id"),
+            func.row_number().over(
+                partition_by=DocumentVersion.document_id,
+                order_by=(DocumentVersion.version_number.desc(), DocumentVersion.id.desc()),
+            ).label("version_rank"),
+        )
+        .join(Document, Document.id == DocumentVersion.document_id)
+        .where(
+            Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
+            DocumentVersion.status.notin_(
+                [DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED]
+            ),
+        )
+        .subquery()
+    )
+
+
 async def _load_recent_document_statuses(
     session: AsyncSession,
     *,
@@ -172,30 +212,32 @@ async def _load_recent_document_statuses(
     index_version: RetrievalIndexVersion,
     limit: int,
 ) -> list[SearchReadinessDocument]:
+    ranked_versions = _ranked_visible_versions(tenant_id)
     rows = await session.execute(
         select(Document, DocumentVersion, DocumentIndexCoverage)
         .join(DocumentVersion, DocumentVersion.document_id == Document.id)
+        .join(ranked_versions, ranked_versions.c.version_id == DocumentVersion.id)
         .outerjoin(
             DocumentIndexCoverage,
             (DocumentIndexCoverage.document_version_id == DocumentVersion.id)
-            & (DocumentIndexCoverage.retrieval_index_version_id == index_version.id),
+            & (DocumentIndexCoverage.retrieval_index_version_id == index_version.id)
+            & (DocumentIndexCoverage.tenant_id == tenant_id)
+            & (DocumentIndexCoverage.document_id == Document.id),
+            # Projection/ledger ownership is explicit even if a malformed legacy
+            # row has valid but cross-tenant foreign keys.
         )
-        .where(Document.tenant_id == tenant_id)
+        .where(Document.tenant_id == tenant_id, ranked_versions.c.version_rank == 1)
         .where(Document.deleted_at.is_(None))
         .where(
             DocumentVersion.status.notin_(
                 [DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED]
             )
         )
-        .order_by(Document.updated_at.desc(), DocumentVersion.version_number.desc())
+        .order_by(Document.updated_at.desc(), Document.id.desc())
         .limit(limit)
     )
     statuses: list[SearchReadinessDocument] = []
-    seen_documents: set[UUID] = set()
     for document, version, coverage in rows:
-        if document.id in seen_documents:
-            continue
-        seen_documents.add(document.id)
         statuses.append(
             SearchReadinessDocument(
                 document_id=document.id,
