@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from asyncio import to_thread
 from contextlib import AbstractAsyncContextManager
 from hashlib import sha256
@@ -14,6 +15,8 @@ from temporalio import activity
 
 from flint_graph.application.chunking import ChunkingConfig
 from flint_graph.application.extraction_proposals import (
+    MAX_EXTRACTION_INPUT_CHUNKS,
+    PROPOSAL_SCHEMA_VERSION,
     DeterministicExtractionModel,
     ExtractionBatchRequest,
     ExtractionInputChunk,
@@ -238,9 +241,7 @@ async def run_ingestion_pipeline(payload: IngestionJobQueuedPayload) -> None:
     chunking_config = _chunking_config_from_settings(settings)
     extraction_config = _extraction_config_from_settings(settings)
     async with httpx.AsyncClient(base_url=settings.ollama_base_url) as http_client:
-        extraction_model = _proposal_model_from_settings(
-            settings, http_client=http_client
-        )
+        extraction_model = _proposal_model_from_settings(settings, http_client=http_client)
         async with SessionFactory() as session:
             try:
                 await run_ingestion_pipeline_for_payload(
@@ -409,8 +410,18 @@ async def _run_provenance_extraction(
     if not config.enabled or config.mode == "disabled":
         return None
 
-    request = ExtractionBatchRequest(chunks=chunks)
-    request_hash = _content_hash(request.model_dump_json().encode("utf-8"))
+    # Hash the complete intended input even when it exceeds the provider contract.
+    # This serialization matches the existing Pydantic request representation.
+    request_hash = _content_hash(
+        json.dumps(
+            {
+                "schema_version": PROPOSAL_SCHEMA_VERSION,
+                "chunks": [chunk.model_dump() for chunk in chunks],
+            },
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
     metadata = ProvenanceExtractionMetadata(
         prompt_version=PROVENANCE_EXTRACTION_PROMPT_VERSION,
         extractor_version=PROVENANCE_EXTRACTOR_VERSION,
@@ -421,6 +432,11 @@ async def _run_provenance_extraction(
     started = perf_counter()
     response_hash: str | None = None
     try:
+        if len(chunks) > MAX_EXTRACTION_INPUT_CHUNKS:
+            # No model calls, no silent first-100 truncation, no source text in
+            # a Pydantic validation exception. Optional mode can still index all chunks.
+            raise ValueError("Document exceeds the bounded extraction request chunk limit.")
+        request = ExtractionBatchRequest(chunks=chunks)
         batch = await extraction_model.extract_batch(request)
         response_bytes = batch.model_dump_json(exclude_none=True).encode("utf-8")
         response_hash = _content_hash(response_bytes)
@@ -457,7 +473,11 @@ async def _run_provenance_extraction(
                     "latency_ms": _elapsed_ms(started),
                 }
             ),
-            error_code="extraction_failed",
+            error_code=(
+                "extraction_input_limit_exceeded"
+                if len(chunks) > MAX_EXTRACTION_INPUT_CHUNKS
+                else "extraction_failed"
+            ),
             error_message=_exception_message(exc),
         )
         if config.mode == "required":

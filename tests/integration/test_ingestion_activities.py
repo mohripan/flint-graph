@@ -56,13 +56,64 @@ from flint_graph.worker.activities.ingestion import (
 
 
 @pytest.mark.parametrize("mode", ["optional", "required"])
+async def test_large_corpus_keeps_all_chunks_and_records_extraction_limit_without_model_call(
+    extraction_db_session,
+    mode,
+):
+    session = extraction_db_session
+    store = FakeObjectStore()
+    payload = await _create_upload_payload(
+        session,
+        store=store,
+        idempotency_key="large-chunk-limit",
+        data=(b"Bounded math proof.\n\n" * 120),
+    )
+    model = FakeProposalExtractionModel(error=RuntimeError("provider must not be called"))
+
+    async def run():
+        await run_ingestion_pipeline_for_payload(
+            session,
+            payload,
+            object_store=store,
+            bucket="flint-graph",
+            parser_runner=BoundedParserRunner(
+                limits=ParserLimits(
+                    timeout_seconds=10,
+                    max_raw_bytes=10000,
+                    max_normalized_bytes=100000,
+                    max_elements=200,
+                )
+            ),
+            chunking_config=ChunkingConfig(max_chunk_chars=19, overlap_chars=0),
+            extraction_config=ExtractionServiceConfig(mode=mode, model="fixture"),
+            extraction_model=model,
+        )
+
+    if mode == "required":
+        with pytest.raises(RequiredExtractionFailedError):
+            await run()
+    else:
+        await run()
+    await session.flush()
+    runs = list(await session.scalars(select(ExtractionRun)))
+    assert len(runs) == 1 and runs[0].status == ExtractionRunStatus.FAILED
+    assert runs[0].errors[0]["code"] == "extraction_input_limit_exceeded"
+    chunks = list(await session.scalars(select(DocumentChunk)))
+    assert len(chunks) == 120
+    assert model.requests == []
+
+
+@pytest.mark.parametrize("mode", ["optional", "required"])
 async def test_extraction_database_failure_rolls_back_only_proposals_and_records_failure(
-    extraction_db_session: AsyncSession, mode: str,
+    extraction_db_session: AsyncSession,
+    mode: str,
 ) -> None:
     db_session = extraction_db_session
     store = FakeObjectStore()
     payload = await _create_upload_payload(
-        db_session, store=store, idempotency_key="duplicate-staged-proposals",
+        db_session,
+        store=store,
+        idempotency_key="duplicate-staged-proposals",
         data=b"# Pipeline\n\nAcme Corporation is headquartered in Berlin.",
     )
     # Two local proposals resolve to the same unique staged identity. Exercise a real DB
@@ -70,14 +121,22 @@ async def test_extraction_database_failure_rolls_back_only_proposals_and_records
     model = _success_proposal_model()
     assert model.batch is not None
     entity = model.batch.entities[0]
-    model.batch = model.batch.model_copy(update={
-        "entities": [entity, entity.model_copy(update={"local_id": "duplicate"})],
-        "relations": [], "claims": [],
-    })
+    model.batch = model.batch.model_copy(
+        update={
+            "entities": [entity, entity.model_copy(update={"local_id": "duplicate"})],
+            "relations": [],
+            "claims": [],
+        }
+    )
+
     async def run():
         await run_ingestion_pipeline_for_payload(
-            db_session, payload, object_store=store, bucket="flint-graph",
-            parser_runner=_parser_runner(), chunking_config=ChunkingConfig(),
+            db_session,
+            payload,
+            object_store=store,
+            bucket="flint-graph",
+            parser_runner=_parser_runner(),
+            chunking_config=ChunkingConfig(),
             extraction_config=ExtractionServiceConfig(mode=mode, model="fixture"),
             extraction_model=model,
         )
@@ -258,9 +317,7 @@ def _success_proposal_model() -> FakeProposalExtractionModel:
                     name="Berlin",
                     entity_type="place",
                     confidence=0.9,
-                    evidence=[
-                        EvidenceProposal(chunk_id="chunk-000001", quote="Berlin")
-                    ],
+                    evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="Berlin")],
                 ),
             ],
             relations=[
@@ -394,9 +451,7 @@ async def test_ingestion_pipeline_persists_provenance_extracts_candidates_and_re
     job = await db_session.get(IngestionJob, UUID(payload["ingestion_job_id"]))
     version = await db_session.get(DocumentVersion, UUID(payload["document_version_id"]))
     artifacts = list(
-        await db_session.scalars(
-            select(DocumentArtifact).order_by(DocumentArtifact.artifact_type)
-        )
+        await db_session.scalars(select(DocumentArtifact).order_by(DocumentArtifact.artifact_type))
     )
     chunks = list(
         await db_session.scalars(select(DocumentChunk).order_by(DocumentChunk.chunk_index))
@@ -420,9 +475,7 @@ async def test_ingestion_pipeline_persists_provenance_extracts_candidates_and_re
         "chunk_manifest",
         "normalized",
     ]
-    assert [chunk.text for chunk in chunks] == [
-        "Acme Corporation is headquartered in Berlin."
-    ]
+    assert [chunk.text for chunk in chunks] == ["Acme Corporation is headquartered in Berlin."]
     assert run.status == ExtractionRunStatus.READY
     assert run.accepted_entity_count == 2
     assert run.accepted_relation_count == 1
@@ -462,9 +515,7 @@ async def test_ingestion_pipeline_optional_extraction_failure_still_completes(
         parser_runner=_parser_runner(),
         chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=24),
         extraction_config=ExtractionServiceConfig(mode="optional", model="gemma3:1b"),
-        extraction_model=FakeProposalExtractionModel(
-            error=RuntimeError("ollama unavailable")
-        ),
+        extraction_model=FakeProposalExtractionModel(error=RuntimeError("ollama unavailable")),
     )
     await mark_ingestion_job_completed_for_payload(db_session, payload)
 
@@ -527,9 +578,7 @@ async def test_ingestion_pipeline_optional_local_validation_failure_still_comple
                 local_id="e1",
                 name="Missing Quote",
                 entity_type="other",
-                evidence=[
-                    EvidenceProposal(chunk_id="chunk-000001", quote="not in chunk")
-                ],
+                evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="not in chunk")],
             )
         ],
     )
@@ -554,9 +603,7 @@ async def test_ingestion_pipeline_optional_local_validation_failure_still_comple
     assert extraction_run is not None
     assert job.status == IngestionJobStatus.COMPLETED
     assert extraction_run.status == ExtractionRunStatus.FAILED
-    assert extraction_run.errors[0]["message"] == (
-        "evidence quote was not found in chunk text"
-    )
+    assert extraction_run.errors[0]["message"] == ("evidence quote was not found in chunk text")
 
 
 async def test_ingestion_pipeline_required_extraction_failure_fails_version(

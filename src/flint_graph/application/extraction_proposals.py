@@ -6,6 +6,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PROPOSAL_SCHEMA_VERSION: Literal["1"] = "1"
+MAX_EXTRACTION_INPUT_CHUNKS = 100
 
 EntityTypeName = Literal["person", "organization", "place", "concept", "other"]
 
@@ -24,7 +25,7 @@ class ExtractionBatchRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     schema_version: Literal["1"] = PROPOSAL_SCHEMA_VERSION
-    chunks: list[ExtractionInputChunk] = Field(min_length=1, max_length=100)
+    chunks: list[ExtractionInputChunk] = Field(min_length=1, max_length=MAX_EXTRACTION_INPUT_CHUNKS)
 
 
 class StructuredExtractionModel(Protocol):

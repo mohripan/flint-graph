@@ -53,8 +53,11 @@ User live testing found NUL-containing PDF ingestion (#57), a delete-during-
 ingestion job-settlement bug (#58), and the 100-chunk extraction limit for large
 documents (#61). Parser NUL normalization is implemented and the two-file
 synthetic ingestion/readiness smoke passed; the deleted user document was only
-parsed read-only, not restored. Large-book ingestion is not claimed until #61.
+parsed read-only, not restored. Optional large-document ingestion now preserves
+all chunks while recording the extraction limit failure; the 1,085-chunk
+synthetic retrieval smoke passed. Full multi-batch graph extraction remains #64.
 See [the parser delivery report](../reports/2026-10-10-nul-parser-delivery.md).
+See [the large-document report](../reports/2026-10-10-large-document-ingestion.md).
 
 A new developer runs explicit offline/local-real profiles, obtains doctor
 diagnostics, uploads/queries a small corpus and inspects traces. CI validates
