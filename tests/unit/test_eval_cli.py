@@ -297,3 +297,23 @@ def test_capture_cli_rejects_insecure_remote_url(tmp_path: Path) -> None:
         ]
     )
     assert result == 1
+
+
+def test_prepare_cli_never_overwrites_manifest(tmp_path: Path) -> None:
+    output = tmp_path / "manifest.json"
+    output.write_text("existing", encoding="utf-8")
+    assert (
+        main(
+            [
+                "prepare",
+                "--dataset",
+                "missing",
+                "--base-url",
+                "http://localhost:8000",
+                "--output",
+                str(output),
+            ]
+        )
+        == 1
+    )
+    assert output.read_text(encoding="utf-8") == "existing"

@@ -46,3 +46,16 @@ Tests exercise the public HTTP boundary and capture a real in-process query run
 (deterministic providers and fixture projections), with optional PostgreSQL
 coverage. This is not evidence of full upload-to-answer ingestion quality or
 hosted-provider health. See the [capture runbook](../runbooks/fresh-query-evaluation.md).
+
+## Dedicated corpus preparation
+
+[Issue #27](https://github.com/mohripan/flint-graph/issues/27) adds opt-in
+`flint-graph-eval prepare`. It validates the bounded local corpus, creates a
+dedicated workspace, uploads through the real intake API, waits for every job
+and coverage row, and probes lexical/vector projection visibility before
+returning a new manifest. Source labels derive from upload IDs and canonical
+entity identities, never expected answers. Failed/time-limited preparations leave
+their workspace/job evidence inspectable and never delete unrelated data.
+
+This automates the upload/control-plane path; quality claims still require actual
+capture/scoring, not merely successfully prepared documents.

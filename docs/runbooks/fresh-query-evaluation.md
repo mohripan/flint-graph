@@ -8,6 +8,33 @@ in recordings intended for GitHub or CI artifacts.
 
 ## Label manifest
 
+To automate corpus upload in a **new dedicated workspace**, run:
+
+```powershell
+uv run flint-graph-eval prepare --dataset evals/datasets/acme-smoke --base-url http://localhost:8000 --output notes/acme-capture-manifest.json
+```
+
+Preparation validates the local corpus first (supported formats, unique filename
+stems, contained paths, at most 100 files/10 MiB per file/64 MiB total). It creates
+a new workspace, bootstraps an index, uploads each file with its stem as the
+logical external ID, waits for every ingestion job and positive-chunk coverage,
+then probes **both lexical and vector APIs** for each document version. PostgreSQL
+coverage alone is not projection visibility. The whole preparation timeout
+defaults to 600 seconds (`--prepare-timeout` overrides it).
+
+The resulting manifest includes exact document mappings, canonical entity names,
+job/version/index identities and readiness/provider snapshots. No existing
+workspace is modified or deleted, and the output is never overwritten. Failure
+leaves the newly created workspace/jobs inspectable; its ID is printed early.
+Retries create another dedicated workspace. Configured extraction and embedding
+providers may incur cost. Keep the local worker/relay/Temporal/index services
+running throughout preparation.
+
+Automatic label mapping is intended for the smoke dataset's document-granularity
+labels. For other labeling schemes, review/edit the new manifest before capture.
+Graph-summary citations still require explicit relationship label mappings when
+no document identity is available; preparation does not fabricate graph provenance.
+
 Create a local JSON manifest after indexing the golden corpus:
 
 ```json
@@ -66,7 +93,7 @@ counted, including partial/unsupported draft claims. Invalid/inactive final
 citations are counted as invalid, never replaced with fabricated sources.
 
 Provider token/cost accounting and exact model fingerprints are not added by this
-capture command. Corpus import, projection-readiness polling, hosted live-model
-capture in CI, and strategy comparisons remain milestone work. The offline PR
+capture command. Hosted live-model capture in CI and strategy comparisons remain
+milestone work. The offline PR
 gate still uses its reviewed deterministic recording and cannot prove that a
 deployment's ingestion/indexing/model services are healthy.

@@ -28,6 +28,7 @@ from flint_graph.evaluation.comparison import comparison_table, run_comparison
 from flint_graph.evaluation.datasets import load_dataset
 from flint_graph.evaluation.experiment import run_experiment
 from flint_graph.evaluation.experiments import load_experiment
+from flint_graph.evaluation.prepare import load_corpus, prepare_corpus
 from flint_graph.evaluation.recorded import load_recorded_evaluations, recorded_evaluator
 from flint_graph.evaluation.report import ExperimentReport, read_report, write_report
 
@@ -128,35 +129,78 @@ def baseline_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _api_connection_options(args: argparse.Namespace) -> tuple[str, dict[str, str]]:
+    url = httpx.URL(args.base_url)
+    local = url.host in {"localhost", "127.0.0.1", "::1"}
+    if (
+        url.scheme not in {"https", "http"}
+        or not url.host
+        or (url.scheme == "http" and not local)
+        or url.username
+        or url.password
+        or url.query
+        or url.fragment
+    ):
+        raise ValueError("Evaluation API access requires HTTPS or credential-free loopback HTTP.")
+    token = os.getenv(args.token_env)
+    return str(url), {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def prepare_command(args: argparse.Namespace) -> int:
+    output = Path(args.output)
+    try:
+        if output.exists() or output.is_symlink():
+            raise ValueError("Manifest output already exists; choose a new path.")
+        base_url, headers = _api_connection_options(args)
+        dataset = load_dataset(Path(args.dataset))
+        sources = load_corpus(Path(args.dataset), dataset)
+
+        async def prepare() -> str:
+            async with httpx.AsyncClient(
+                base_url=base_url,
+                headers=headers,
+                timeout=60,
+                follow_redirects=False,
+            ) as client:
+                manifest = await prepare_corpus(
+                    client,
+                    dataset,
+                    sources,
+                    timeout_seconds=args.prepare_timeout,
+                    on_workspace_created=lambda workspace_id: print(
+                        f"Created evaluation workspace {workspace_id}"
+                    ),
+                )
+            return manifest.model_dump_json(indent=2) + "\n"
+
+        content = asyncio.run(prepare())
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("x", encoding="utf-8") as manifest_file:
+            manifest_file.write(content)
+        print(f"Prepared {len(sources)} documents; wrote capture manifest to {output}")
+        return 0
+    except httpx.HTTPError as exc:
+        print(f"Preparation failed: {type(exc).__name__}. Inspect the created workspace/jobs.")
+        return 1
+    except (ValueError, OSError) as exc:
+        print(f"Preparation failed: {exc}")
+        return 1
+
+
 def capture_command(args: argparse.Namespace) -> int:
     output = Path(args.output)
     try:
-        if output.exists():
+        if output.exists() or output.is_symlink():
             raise ValueError("Capture output already exists; choose a new recording path.")
-        url = httpx.URL(args.base_url)
-        local = url.host in {"localhost", "127.0.0.1", "::1"}
-        if (
-            url.scheme not in {"https", "http"}
-            or not url.host
-            or (url.scheme == "http" and not local)
-            or url.username
-            or url.password
-            or url.query
-            or url.fragment
-        ):
-            raise ValueError(
-                "Capture requires HTTPS (or literal loopback HTTP), without URL credentials."
-            )
+        base_url, headers = _api_connection_options(args)
         dataset = load_dataset(Path(args.dataset))
         manifest = CaptureManifest.model_validate_json(
             Path(args.manifest).read_text(encoding="utf-8")
         )
-        token = os.getenv(args.token_env)
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
 
         async def capture() -> str:
             async with httpx.AsyncClient(
-                base_url=str(url),
+                base_url=base_url,
                 headers=headers,
                 timeout=args.query_timeout,
                 follow_redirects=False,
@@ -188,6 +232,16 @@ def capture_command(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="flint-graph-eval")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    prepare_parser = subparsers.add_parser(
+        "prepare", help="ingest a fresh dedicated evaluation corpus"
+    )
+    prepare_parser.add_argument("--dataset", required=True)
+    prepare_parser.add_argument("--base-url", required=True)
+    prepare_parser.add_argument("--output", required=True, help="new capture manifest JSON")
+    prepare_parser.add_argument("--token-env", default="FLINT_GRAPH_EVAL_TOKEN")
+    prepare_parser.add_argument("--prepare-timeout", type=float, default=600.0)
+    prepare_parser.set_defaults(func=prepare_command)
 
     capture_parser = subparsers.add_parser("capture", help="capture fresh public-API query runs")
     capture_parser.add_argument("--dataset", required=True)

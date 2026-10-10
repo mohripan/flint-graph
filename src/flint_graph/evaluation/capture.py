@@ -26,6 +26,7 @@ class CaptureManifest(BaseModel):
     document_labels: dict[str, str] = Field(default_factory=dict)
     entity_labels: dict[str, str] = Field(default_factory=dict)
     relationship_labels: dict[str, str] = Field(default_factory=dict)
+    preparation: dict[str, Any] = Field(default_factory=dict)
 
 
 class CapturedEvaluation(RecordedEvaluation):
@@ -95,6 +96,7 @@ async def capture_dataset(
                     "retrieval_index_version_id": run["retrieval_index_version_id"],
                     "retrieval_stage": "post_rerank",
                     "query_diagnostics": run.get("query_diagnostics", {}),
+                "preparation": manifest.preparation,
                 },
             )
         )
