@@ -197,6 +197,14 @@ def _headers(tenant_id: UUID) -> dict[str, str]:
     return {"X-Tenant-ID": str(tenant_id)}
 
 
+def _expected_acme_source_ids() -> dict[str, str]:
+    return {
+        "document_id": "11111111-1111-4111-8111-111111111111",
+        "document_version_id": "22222222-2222-4222-8222-222222222222",
+        "chunk_id": "chunk-acme",
+    }
+
+
 def _index_spec() -> RetrievalIndexVersionSpec:
     return RetrievalIndexVersionSpec(
         embedding_provider="deterministic",
@@ -549,7 +557,7 @@ async def test_query_run_api_streams_execution_and_persists_inspection_records(
             "citation_id": "c1",
             "context_id": "ctx-0001",
             "marker": "[c1]",
-            "source_ids": {"chunk_id": "chunk-acme"},
+            "source_ids": _expected_acme_source_ids(),
         }
     ]
     assert inspected_body["candidate_count"] == 2
@@ -742,9 +750,11 @@ async def test_query_run_api_returns_answer_provenance(
     assert [citation["citation_id"] for citation in claim["citations"]] == ["c1"]
     citation = claim["citations"][0]
     assert citation["context_id"] == "ctx-0001"
-    assert citation["candidate_id"] == "lexical:chunk:chunk-acme"
+    assert citation["candidate_id"] == (
+        "lexical:chunk:22222222-2222-4222-8222-222222222222:chunk-acme"
+    )
     assert citation["text"] == "Acme Corporation is headquartered in Berlin."
-    assert citation["source_ids"] == {"chunk_id": "chunk-acme"}
+    assert citation["source_ids"] == _expected_acme_source_ids()
     assert body["citations"] == [citation]
 
 
@@ -918,7 +928,7 @@ async def test_query_retrieval_trace_is_persisted_and_tenant_scoped(query_api_en
     rows = inspected.json()["candidates"]
     assert len(rows) == 2  # Includes uncited retriever duplicates, not just answer citations.
     assert {row["source"] for row in rows} == {"lexical", "vector"}
-    assert all(row["source_ids"] == {"chunk_id": "chunk-acme"} for row in rows)
+    assert all(row["source_ids"] == _expected_acme_source_ids() for row in rows)
     assert sorted(row["rerank_rank"] for row in rows if row["rerank_rank"] is not None) == [1]
     assert all(row["document_id"] == "11111111-1111-4111-8111-111111111111" for row in rows)
     assert "Berlin" not in inspected.text  # Inspection does not duplicate source text/prompts.
@@ -988,6 +998,54 @@ async def test_query_inspection_does_not_wait_for_stream_authentication_lock(
     finally:
         released.set()
         await stream_task
+
+
+@pytest.mark.asyncio
+async def test_same_named_chunks_from_different_documents_do_not_collide(
+    query_api_env: Any,
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    other_document_id, other_version_id = uuid4(), uuid4()
+    async with session_factory() as session:
+        tenant, _index_id = await _tenant_with_searchable_content(session)
+        document = Document(
+            id=other_document_id, tenant_id=tenant.id, title="Globex",
+            source_type=SourceType.UPLOAD, next_version_number=2,
+        )
+        session.add(document)
+        await session.flush()
+        session.add(DocumentVersion(
+            id=other_version_id, document_id=document.id, version_number=1,
+            status=DocumentVersionStatus.ACTIVE, content_hash="sha256:globex",
+        ))
+        await session.commit()
+
+    class MultipleDocumentSearch(QueryOpenSearchClient):
+        async def search(self, *, index_name: str, body: dict[str, Any]) -> list[dict[str, Any]]:
+            hits = await super().search(index_name=index_name, body=body)
+            hits.append({"id": "globex-hit", "score": 1.5, "source": {
+                **hits[0]["source"], "document_id": str(other_document_id),
+                "document_version_id": str(other_version_id), "title": "Globex",
+                "text": "Globex Industries is based in Osaka.",
+            }})
+            return hits
+
+    app.dependency_overrides[dependencies.get_opensearch_client] = lambda: MultipleDocumentSearch()
+    created = await client.post(
+        "/v1/query-runs", headers=_headers(tenant.id),
+        json={"query": "Where is Acme Corporation headquartered?"},
+    )
+    path = f"/v1/query-runs/{created.json()['id']}"
+    await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    inspected = await client.get(path, headers=_headers(tenant.id))
+    assert inspected.json()["status"] == "completed"
+    assert "Berlin" in inspected.json()["answer_text"]
+    trace = (await client.get(f"{path}/retrieval", headers=_headers(tenant.id))).json()
+    rows = trace["candidates"]
+    assert len(rows) == 3
+    assert len({row["candidate_id"] for row in rows}) == 3
+    assert len({row["source_ids"]["document_version_id"] for row in rows}) == 2
+    assert {row["source_ids"]["chunk_id"] for row in rows} == {"chunk-acme"}
 
 
 @pytest.mark.asyncio

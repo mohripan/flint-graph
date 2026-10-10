@@ -740,12 +740,16 @@ def _chunk_candidate(
     rank: int,
 ) -> QueryCandidate:
     return QueryCandidate(
-        candidate_id=f"{source}:chunk:{chunk.chunk_id}",
+        candidate_id=f"{source}:chunk:{chunk.document_version_id}:{chunk.chunk_id}",
         source=cast(Any, source),
         candidate_type="chunk",
         tenant_id=tenant_id,
         retrieval_index_version_id=retrieval_index_version_id,
-        source_ids={"chunk_id": chunk.chunk_id},
+        source_ids={
+            "document_id": str(chunk.document_id),
+            "document_version_id": str(chunk.document_version_id),
+            "chunk_id": chunk.chunk_id,
+        },
         text_preview=chunk.text,
         raw_score=chunk.score,
         normalized_score=_normalize_score(chunk.score),

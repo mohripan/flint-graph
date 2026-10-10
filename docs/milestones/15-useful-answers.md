@@ -175,3 +175,13 @@ authorization are completed first; execution uses its existing owned sessions.
 A real PostgreSQL test pauses answer generation and requires simultaneous status
 inspection to succeed while the provider remains paused. This does not make
 query execution durable; disconnect/replay behavior is unchanged.
+
+## Document-version-scoped chunk identity
+
+[Issue #28](https://github.com/mohripan/flint-graph/issues/28) fixes candidate
+collisions and cross-document fusion when different documents both contain
+`chunk-000001`. New candidate IDs include the document version; source/citation
+references include document, immutable version and local chunk name. The public
+API regression retrieves same-named chunks from two active documents, requires
+successful execution and verifies distinct persisted identities. Existing stored
+query/citation records retain their original identities and remain readable.
