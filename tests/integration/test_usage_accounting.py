@@ -6,11 +6,14 @@ traffic produces no cost figure at all.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID
 
+import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from flint_graph.application.query_orchestration import (
     AnswerGenerationRequest,
@@ -186,6 +189,258 @@ async def _usage_events(session: AsyncSession, run_id) -> list[ProviderUsageEven
     )
 
 
+async def test_query_embedding_attempt_is_durable_and_payload_free(
+    extraction_db_session: AsyncSession,
+) -> None:
+    from flint_graph.application.embeddings import (
+        DeterministicEmbeddingModel,
+        EmbeddingBatchRequest,
+        EmbeddingInput,
+    )
+    from flint_graph.application.services.query_usage import (
+        QueryUsageRecorder,
+        list_query_provider_invocations,
+    )
+
+    session = extraction_db_session
+    tenant = Tenant(name="embedding-usage")
+    session.add(tenant)
+    await session.flush()
+    run = await _run_with_context(session, tenant)
+    run_id, tenant_id = run.id, tenant.id
+    await session.commit()
+    recorder = QueryUsageRecorder(
+        async_sessionmaker(session.bind, expire_on_commit=False),
+        tenant_id=tenant_id,
+        query_run_id=run_id,
+    )
+    request = EmbeddingBatchRequest(
+        provider="deterministic",
+        model="fixture-embedder",
+        dimensions=4,
+        inputs=[EmbeddingInput(input_id="query", text="PRIVATE QUERY")],
+    )
+    result = await recorder.invoke(
+        lambda: DeterministicEmbeddingModel().embed_batch(request),
+        operation=ProviderUsageOperation.EMBEDDING,
+        provider="deterministic",
+        model="fixture-embedder",
+        clause_index=0,
+    )
+    assert len(result.embeddings) == 1
+    # Rollback the caller's unrelated transaction; accounting owns its commits.
+    await session.rollback()
+    events = await list_query_provider_invocations(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=run_id,
+    )
+    assert len(events) == 1
+    assert events[0].operation is ProviderUsageOperation.EMBEDDING
+    assert events[0].metadata_["status"] == "completed"
+    assert events[0].metadata_["usage_known"] is True
+    assert events[0].metadata_["execution_attempt_id"] == str(recorder.execution_attempt_id)
+    assert events[0].metadata_["clause_index"] == 0
+    assert events[0].input_tokens == events[0].output_tokens == 0
+    assert "PRIVATE QUERY" not in str(events[0].metadata_)
+    assert "vector" not in str(events[0].metadata_)
+
+
+async def test_usage_summary_distinguishes_unknown_counts_from_known_zero(
+    extraction_db_session: AsyncSession,
+) -> None:
+    from flint_graph.application.usage import usage_from_metadata
+
+    session = extraction_db_session
+    tenant = Tenant(name="unknown-usage-summary")
+    session.add(tenant)
+    await session.flush()
+    for provider in ("ollama", "deterministic"):
+        await record_provider_usage(
+            session,
+            tenant_id=tenant.id,
+            usage=usage_from_metadata(
+                {"provider": provider, "model": "embed"}, operation=ProviderUsageOperation.EMBEDDING
+            ),
+            pricing={"ollama:*": {"input_per_million": 0.0}},
+        )
+    summary = await summarize_usage(session, tenant_id=tenant.id)
+    assert summary.totals.event_count == 2
+    assert summary.totals.unknown_event_count == 1
+    assert summary.totals.estimated_cost_micros is None
+
+
+async def test_query_usage_reconciliation_detects_missing_clauses_and_is_idempotent(
+    extraction_db_session: AsyncSession,
+) -> None:
+    from flint_graph.application.services.query_usage import QueryUsageRecorder
+    from flint_graph.domain.errors import NotFoundError
+
+    session = extraction_db_session
+    tenant = Tenant(name="embedding-completeness")
+    foreign = Tenant(name="embedding-foreign")
+    session.add_all([tenant, foreign])
+    await session.flush()
+    run = await _run_with_context(session, tenant)
+    run_id, tenant_id, foreign_id = run.id, tenant.id, foreign.id
+    await session.commit()
+    factory = async_sessionmaker(session.bind, expire_on_commit=False)
+    recorder = QueryUsageRecorder(factory, tenant_id=tenant_id, query_run_id=run_id)
+    recorder.expected = {
+        ProviderUsageOperation.EMBEDDING: 2,
+        ProviderUsageOperation.ANSWER: 0,
+        ProviderUsageOperation.FAITHFULNESS: 0,
+    }
+
+    async def embed():
+        return SimpleNamespace(
+            metadata={"provider": "ollama", "model": "embed", "usage": {"input_tokens": 17}}
+        )
+
+    foreign_recorder = QueryUsageRecorder(factory, tenant_id=foreign_id, query_run_id=run_id)
+    with pytest.raises(NotFoundError):
+        await foreign_recorder.invoke(embed, operation=ProviderUsageOperation.EMBEDDING)
+    await recorder.invoke(embed, operation=ProviderUsageOperation.EMBEDDING, clause_index=0)
+    await recorder.reconcile(session)
+    assert run.provider_usage_complete is False
+    assert run.provider_input_tokens == 17
+    await recorder.reconcile(session)
+    assert run.provider_input_tokens == 17
+    await session.commit()
+    await recorder.invoke(embed, operation=ProviderUsageOperation.EMBEDDING, clause_index=1)
+    await recorder.reconcile(session)
+    assert run.provider_usage_complete is True
+    assert run.provider_input_tokens == 34
+
+
+async def test_cancelling_in_flight_embedding_keeps_the_committed_attempt(
+    extraction_db_session: AsyncSession,
+) -> None:
+    from flint_graph.application.services.query_usage import (
+        QueryUsageRecorder,
+        list_query_provider_invocations,
+    )
+
+    session = extraction_db_session
+    tenant = Tenant(name="embedding-in-flight")
+    session.add(tenant)
+    await session.flush()
+    run = await _run_with_context(session, tenant)
+    run_id, tenant_id = run.id, tenant.id
+    await session.commit()
+    recorder = QueryUsageRecorder(
+        async_sessionmaker(session.bind, expire_on_commit=False),
+        tenant_id=tenant_id,
+        query_run_id=run_id,
+    )
+    dispatched = asyncio.Event()
+
+    async def blocked():
+        dispatched.set()
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(
+        recorder.invoke(
+            blocked,
+            operation=ProviderUsageOperation.EMBEDDING,
+            provider="ollama",
+            model="embed",
+            clause_index=0,
+        )
+    )
+    await asyncio.wait_for(dispatched.wait(), timeout=5)
+    before = await list_query_provider_invocations(
+        session, tenant_id=tenant_id, query_run_id=run_id
+    )
+    assert len(before) == 1 and before[0].metadata_["status"] == "started"
+    await session.rollback()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=5)
+    after = await list_query_provider_invocations(session, tenant_id=tenant_id, query_run_id=run_id)
+    assert len(after) == 1 and after[0].metadata_["status"] == "cancelled"
+    assert after[0].metadata_["usage_known"] is False
+
+
+@pytest.mark.parametrize("failure", [ConnectionError, asyncio.CancelledError])
+async def test_failed_query_embedding_and_retry_remain_separate_attempts(
+    extraction_db_session: AsyncSession,
+    failure: type[BaseException],
+) -> None:
+    from flint_graph.application.services.query_usage import (
+        QueryUsageRecorder,
+        list_query_provider_invocations,
+    )
+
+    session = extraction_db_session
+    tenant = Tenant(name="embedding-retry")
+    session.add(tenant)
+    await session.flush()
+    run = await _run_with_context(session, tenant)
+    run_id, tenant_id = run.id, tenant.id
+    await session.commit()
+    recorder = QueryUsageRecorder(
+        async_sessionmaker(session.bind, expire_on_commit=False),
+        tenant_id=tenant_id,
+        query_run_id=run_id,
+        pricing={"ollama:*": {"input_per_million": 1.0}},
+    )
+
+    async def failed_call():
+        raise failure("PRIVATE QUERY secret-key")
+
+    with pytest.raises(failure):
+        await recorder.invoke(
+            failed_call,
+            operation=ProviderUsageOperation.EMBEDDING,
+            provider="ollama",
+            model="embed",
+            clause_index=1,
+        )
+
+    async def successful_call():
+        return SimpleNamespace(
+            metadata={
+                "provider": "ollama",
+                "model": "embed",
+                "usage": {"input_tokens": 7},
+            }
+        )
+
+    await recorder.invoke(
+        successful_call,
+        operation=ProviderUsageOperation.EMBEDDING,
+        provider="ollama",
+        model="embed",
+        clause_index=1,
+    )
+    events = await list_query_provider_invocations(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=run_id,
+    )
+    assert len(events) == 2
+    by_status = {event.metadata_["status"]: event for event in events}
+    status = "cancelled" if failure is asyncio.CancelledError else "failed"
+    assert status in by_status
+    assert by_status[status].metadata_["usage_known"] is False
+    assert by_status[status].estimated_cost_micros is None
+    assert by_status["completed"].input_tokens == 7
+    assert by_status["completed"].estimated_cost_micros == 7
+    assert len({event.id for event in events}) == 2
+    assert all(event.metadata_["clause_index"] == 1 for event in events)
+    assert "PRIVATE QUERY" not in str([event.metadata_ for event in events])
+    await recorder.finish(
+        by_status["completed"].id,
+        result=None,
+        status="failed",
+        duration_ms=999,
+    )
+    await session.refresh(by_status["completed"])
+    assert by_status["completed"].metadata_["status"] == "completed"
+    assert by_status["completed"].input_tokens == 7
+
+
 async def test_answer_and_support_usage_are_recorded_separately(
     db_session: AsyncSession,
 ) -> None:
@@ -249,9 +504,7 @@ async def test_query_run_rollups_match_the_underlying_usage_rows(
     assert stored.provider_input_tokens == sum(event.input_tokens for event in events)
     assert stored.provider_output_tokens == sum(event.output_tokens for event in events)
     assert stored.provider_duration_ms == sum(event.duration_ms for event in events)
-    assert stored.provider_cost_micros == sum(
-        event.estimated_cost_micros or 0 for event in events
-    )
+    assert stored.provider_cost_micros == sum(event.estimated_cost_micros or 0 for event in events)
     # The packing estimate is a different number and must not be conflated.
     assert stored.context_token_count != stored.provider_input_tokens
 
@@ -272,9 +525,7 @@ async def test_deterministic_offline_run_still_records_usage(
     )
 
     events = await _usage_events(db_session, run.id)
-    answer = next(
-        event for event in events if event.operation is ProviderUsageOperation.ANSWER
-    )
+    answer = next(event for event in events if event.operation is ProviderUsageOperation.ANSWER)
     assert answer.provider == "deterministic"
     assert answer.input_tokens == 0
     assert answer.estimated_cost_micros is None

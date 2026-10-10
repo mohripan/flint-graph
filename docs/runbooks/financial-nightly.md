@@ -15,7 +15,9 @@ uv run flint-graph-eval nightly --dataset evals/datasets/financial-nightly --cor
 Inspection performs GET requests only and reports `inspected_not_evaluated`.
 Review its model fingerprint; pass it as `--model-fingerprint <SHA256>` in place
 of `--inspect` to execute fresh queries, using a new output file. The API must
-advertise `query_usage_rollups` and expose actual per-run provider tokens.
+advertise `query_usage_rollups` and `query_usage_invocations`, expose actual per-run
+provider token lower bounds, and attest complete embedding/answer/support usage.
+Inspection rejects older capability contracts before making a model call.
 `FLINT_GRAPH_EVAL_TOKEN` supplies a bearer token where OIDC is configured.
 HTTP is allowed only for credential-free loopback URLs; remote access needs HTTPS.
 
@@ -29,13 +31,23 @@ converting units automatically; these assertions cannot detect every contradicti
 
 Rubric review #71 adds only the explicit source-used plural `rrps` to the two
 RRP concept groups; it does not add general stemming or change numeric groups.
-Reports emitted by the updated client use `format_version: 2` and include
+Reports emitted after #71 used `format_version: 2` and included
 `dataset_name`, `dataset_version`, `rubric_fingerprint` and `policy_fingerprint`.
 Fingerprints hash canonical, sorted-key JSON of the validated rubric mapping and
 policy. Compare them before comparing scores: a new rubric is a scoring revision,
 not an answer-model improvement. Corpus dataset/version and existing recordings
 are unchanged. Older format-1 reports have no rubric/policy attestation; do not
 backfill those fields or overwrite recordings. External human review remains pending.
+
+After #94, fresh capture uses format 2 and financial nightly reports use format 3,
+with `usage_scope: query-invocations-v1`. This expands accounting beyond the
+answer/support-only rollups in older reports. The gate requires true per-run
+completeness, the expected embedding/answer/faithfulness operation keys, matching
+recorded counts and zero unknown usage events. An integer zero alone is not
+evidence of a free real-provider call. Known deterministic embeddings are
+explicit fixture computation; local model usage can be complete but unpriced.
+Old reports and captures remain unchanged; compare their accounting scope before
+comparing token totals. These checks are not an atomic parent cost reservation.
 
 `policy.json` specifies useful-answer rate >=0.8, abstention accuracy 1.0 and
 p95 latency <=90 seconds. Every non-abstained answer needs supported claims,

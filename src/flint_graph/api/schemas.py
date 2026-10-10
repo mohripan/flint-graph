@@ -235,6 +235,7 @@ class UsageRollupResponse(BaseModel):
     duration_ms: int
     estimated_cost_micros: int | None
     unpriced_event_count: int
+    unknown_event_count: int = 0
 
 
 class UsageSummaryResponse(BaseModel):
@@ -552,6 +553,7 @@ class QueryRunResponse(BaseModel):
     provider_output_tokens: int
     provider_duration_ms: int
     provider_cost_micros: int | None
+    provider_usage_complete: bool | None = None
     started_at: datetime | None
     completed_at: datetime | None
     failed_at: datetime | None

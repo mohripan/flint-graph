@@ -30,6 +30,7 @@ class ProviderUsage:
     output_tokens: int = 0
     embedded_item_count: int = 0
     duration_ms: int = 0
+    usage_known: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -43,23 +44,32 @@ def usage_from_metadata(
     """Build a usage record from an adapter result's metadata.
 
     Adapters already carry ``provider`` and ``model`` in metadata for provenance;
-    Milestone 14 adds an optional ``usage`` sub-mapping with token counts. A
-    result without token counts still produces a usage row: a deterministic or
-    offline provider consuming zero tokens is a fact worth recording, and a
-    missing row would be indistinguishable from a missing call.
+    Milestone 14 adds an optional ``usage`` sub-mapping with token counts.
+    Counts are known lower bounds. Only an explicitly deterministic provider has
+    known zero usage without reported counts. Missing real-provider counts are
+    unavailable, not a free call; embeddings have no generated output tokens.
     """
     source = metadata or {}
     usage = source.get("usage")
     usage_map: dict[str, Any] = usage if isinstance(usage, dict) else {}
+    provider = _text(source.get("provider"), UNKNOWN_PROVIDER)
+    usage_known = provider == "deterministic" or (
+        _valid_token_count(usage_map.get("input_tokens"))
+        and (
+            operation is ProviderUsageOperation.EMBEDDING
+            or _valid_token_count(usage_map.get("output_tokens"))
+        )
+    )
     return ProviderUsage(
         operation=operation,
-        provider=_text(source.get("provider"), UNKNOWN_PROVIDER),
+        provider=provider,
         model=_text(source.get("model") or source.get("response_model"), UNKNOWN_MODEL),
         input_tokens=_non_negative_int(usage_map.get("input_tokens")),
         output_tokens=_non_negative_int(usage_map.get("output_tokens")),
         embedded_item_count=embedded_item_count
         or _non_negative_int(usage_map.get("embedded_item_count")),
         duration_ms=duration_ms or _non_negative_int(usage_map.get("duration_ms")),
+        usage_known=usage_known,
     )
 
 
@@ -76,6 +86,8 @@ def estimate_cost_micros(
     A ``<provider>:*`` entry acts as a fallback so an operator does not have to
     enumerate every model of a provider they price uniformly.
     """
+    if not usage.usage_known:
+        return None
     rates = pricing.get(pricing_key(usage.provider, usage.model)) or pricing.get(
         pricing_key(usage.provider, "*")
     )
@@ -96,6 +108,10 @@ def _text(value: Any, fallback: str) -> str:
 
 
 def _non_negative_int(value: Any) -> int:
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if not _valid_token_count(value):
         return 0
-    return max(0, int(value))
+    return int(value)
+
+
+def _valid_token_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 2**31 - 1

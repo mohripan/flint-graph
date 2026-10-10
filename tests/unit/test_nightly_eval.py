@@ -123,7 +123,10 @@ def fixture_target(*, provider="ollama", isolation_status=404, answer="Revenue w
             return httpx.Response(
                 200,
                 json={
-                    "setup_capabilities": {"query_usage_rollups": True},
+                    "setup_capabilities": {
+                        "query_usage_rollups": True,
+                        "query_usage_invocations": True,
+                    },
                     "search_readiness": {"ready": True, "active_index_version": {"id": index}},
                 },
             )
@@ -187,10 +190,88 @@ def fixture_target(*, provider="ollama", isolation_status=404, answer="Revenue w
                 "retrieval_index_version_id": index,
                 "provider_input_tokens": 100,
                 "provider_output_tokens": 20,
+                "provider_usage_complete": True,
+                "metadata": {
+                    "usage_accounting": {
+                        "version": "query-invocations-v1",
+                        "complete": True,
+                        "expected": {"embedding": 1, "answer": 1, "faithfulness": 1},
+                        "recorded": {"embedding": 1, "answer": 1, "faithfulness": 1},
+                        "unknown_event_count": 0,
+                    }
+                },
             },
         )
 
     return dataset, manifest, isolation, label, rubrics, models, seen, handler
+
+
+@pytest.mark.parametrize("gap", ["legacy", "unknown", "mismatch", "missing_embedding"])
+async def test_nightly_refuses_partial_accounting_even_with_integer_rollups(gap):
+    dataset, manifest, isolation, label, rubrics, _, _, handler = fixture_target()
+
+    def partial(request):
+        response = handler(request)
+        if (
+            request.url.path.startswith("/v1/query-runs/")
+            and request.url.path.count("/") == 3
+            and request.headers.get("X-Tenant-ID") != isolation
+        ):
+            body = response.json()
+            if gap == "legacy":
+                body.pop("provider_usage_complete")
+            elif gap == "unknown":
+                body["provider_usage_complete"] = False
+            elif gap == "mismatch":
+                body["metadata"]["usage_accounting"]["recorded"]["embedding"] = 0
+            else:
+                body["metadata"]["usage_accounting"]["expected"].pop("embedding")
+                body["metadata"]["usage_accounting"]["recorded"].pop("embedding")
+            return httpx.Response(200, json=body)
+        return response
+
+    async with httpx.AsyncClient(
+        base_url="http://test", transport=httpx.MockTransport(partial)
+    ) as client:
+        snapshot = await inspect_nightly_target(
+            client,
+            manifest,
+            approved_labels={label},
+            isolation_workspace_id=isolation,
+        )
+        result = await run_nightly(
+            client,
+            dataset,
+            manifest,
+            rubrics,
+            approved_labels={label},
+            isolation_workspace_id=isolation,
+            expected_model_fingerprint=snapshot["model_fingerprint"],
+            policy=NightlyPolicy(),
+        )
+    assert result["status"] == "failed"
+    assert result["usage_complete"] is False
+
+
+async def test_nightly_rejects_legacy_usage_capability_before_any_model_call():
+    _, manifest, isolation, label, _, _, seen, handler = fixture_target()
+
+    def legacy(request):
+        response = handler(request)
+        if request.url.path == "/v1/system-readiness":
+            body = response.json()
+            body["setup_capabilities"].pop("query_usage_invocations")
+            return httpx.Response(200, json=body)
+        return response
+
+    async with httpx.AsyncClient(
+        base_url="http://test", transport=httpx.MockTransport(legacy)
+    ) as client:
+        with pytest.raises(NightlyError):
+            await inspect_nightly_target(
+                client, manifest, approved_labels={label}, isolation_workspace_id=isolation
+            )
+    assert not any(method == "POST" for method, _ in seen)
 
 
 async def test_fresh_nightly_run_is_serialized_redacted_and_uses_real_usage_and_isolation():
@@ -219,7 +300,7 @@ async def test_fresh_nightly_run_is_serialized_redacted_and_uses_real_usage_and_
     assert result["aggregate"]["useful_answer_rate"] == 1
     assert result["cost_status"] == "unpriced_local_compute"
     assert result["estimated_cost_usd"] is None
-    assert result["format_version"] == 2
+    assert result["format_version"] == 3
     assert result["dataset_name"] == dataset.metadata.name
     assert result["dataset_version"] == dataset.metadata.version
     assert len(result["rubric_fingerprint"]) == 64

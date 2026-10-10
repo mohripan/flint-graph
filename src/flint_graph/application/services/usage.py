@@ -33,6 +33,7 @@ class UsageRollupRow:
     duration_ms: int
     estimated_cost_micros: int | None
     unpriced_event_count: int
+    unknown_event_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +75,7 @@ async def record_provider_usage(
         document_version_id=document_version_id,
         request_id=request_id,
         workflow_id=workflow_id,
-        metadata_={**usage.metadata, **(metadata or {})},
+        metadata_={**usage.metadata, **(metadata or {}), "usage_known": usage.usage_known},
     )
     session.add(event)
     await session.flush()
@@ -107,7 +108,7 @@ def _record_usage_metrics(usage: ProviderUsage, *, cost_micros: int | None) -> N
                     "flint_graph.token.direction": direction,
                 },
             )
-    if cost_micros is None and (usage.input_tokens or usage.output_tokens):
+    if cost_micros is None and (not usage.usage_known or usage.input_tokens or usage.output_tokens):
         # Only tokens that could have been priced count as unpriced. A
         # deterministic provider burning zero tokens is not a pricing gap.
         metrics.add(
@@ -166,6 +167,9 @@ async def summarize_usage(
         func.count(ProviderUsageEvent.id)
         .filter(ProviderUsageEvent.estimated_cost_micros.is_(None))
         .label("unpriced_event_count"),
+        func.count(ProviderUsageEvent.id)
+        .filter(ProviderUsageEvent.metadata_["usage_known"].as_boolean().is_not(True))
+        .label("unknown_event_count"),
     ).where(ProviderUsageEvent.tenant_id == tenant_id)
     if created_after is not None:
         stmt = stmt.where(ProviderUsageEvent.created_at >= created_after)
@@ -182,11 +186,10 @@ async def summarize_usage(
             embedded_item_count=int(row.embedded_item_count),
             duration_ms=int(row.duration_ms),
             estimated_cost_micros=(
-                int(row.estimated_cost_micros)
-                if row.estimated_cost_micros is not None
-                else None
+                int(row.estimated_cost_micros) if row.estimated_cost_micros is not None else None
             ),
             unpriced_event_count=int(row.unpriced_event_count),
+            unknown_event_count=int(row.unknown_event_count),
         )
         for row in (await session.execute(stmt)).all()
     )
@@ -211,11 +214,7 @@ def _group_column(group_by: UsageGroupBy) -> Any:
 
 
 def _totals(rows: tuple[UsageRollupRow, ...]) -> UsageRollupRow:
-    priced = [
-        row.estimated_cost_micros
-        for row in rows
-        if row.estimated_cost_micros is not None
-    ]
+    priced = [row.estimated_cost_micros for row in rows if row.estimated_cost_micros is not None]
     return UsageRollupRow(
         group="total",
         event_count=sum(row.event_count for row in rows),
@@ -225,4 +224,5 @@ def _totals(rows: tuple[UsageRollupRow, ...]) -> UsageRollupRow:
         duration_ms=sum(row.duration_ms for row in rows),
         estimated_cost_micros=sum(priced) if priced else None,
         unpriced_event_count=sum(row.unpriced_event_count for row in rows),
+        unknown_event_count=sum(row.unknown_event_count for row in rows),
     )

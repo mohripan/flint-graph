@@ -79,9 +79,10 @@ async def inspect_nightly_target(
     readiness = await read("/v1/system-readiness")
     if (
         not readiness.get("setup_capabilities", {}).get("query_usage_rollups")
+        or not readiness.get("setup_capabilities", {}).get("query_usage_invocations")
         or not readiness["search_readiness"]["ready"]
     ):
-        raise NightlyError("Require searchable corpus and provider usage rollup capability.")
+        raise NightlyError("Require searchable corpus and complete query invocation accounting.")
     models = await read("/v1/model-readiness")
     roles = {row["role"]: row for row in models}
     if len(models) != 3 or set(roles) != {"answer", "support", "embedding"}:
@@ -138,7 +139,8 @@ async def run_nightly(
 ) -> dict[str, Any]:
     """Fresh serialized requests; token stop is post-query, not a hard spending reservation."""
     report: dict[str, Any] = {
-        "format_version": 2,
+        "format_version": 3,
+        "usage_scope": "query-invocations-v1",
         "dataset_name": dataset.metadata.name,
         "dataset_version": dataset.metadata.version,
         "rubric_fingerprint": _fingerprint(
@@ -204,7 +206,8 @@ async def run_nightly(
                 evaluation = record.evaluation
                 report["query_count"] += 1
                 if (
-                    evaluation.input_tokens is None
+                    record.capture.get("provider_usage_complete") is not True
+                    or evaluation.input_tokens is None
                     or evaluation.output_tokens is None
                     or min(evaluation.input_tokens, evaluation.output_tokens) < 0
                 ):

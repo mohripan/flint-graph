@@ -170,6 +170,12 @@ Table `provider_usage_events`. One row per provider call.
 | `query_run_id`, `ingestion_job_id`, `document_version_id` | Nullable links |
 | `request_id`, `workflow_id`, `metadata` | Correlation |
 
+Query invocations additionally carry server-owned `accounting_version`,
+`execution_attempt_id`, zero-based `clause_index` (embedding only), `status` and
+`usage_known` in metadata. The row UUID is the invocation ID. Started rows commit
+before dispatch independently of retrieval readers and survive caller rollback.
+See [ADR 0024](../adr/0024-durable-query-invocation-accounting.md).
+
 Rollups on `query_runs`: `provider_input_tokens`, `provider_output_tokens`,
 `provider_duration_ms`, `provider_cost_micros`. Distinct from
 `context_token_count`, which is a pre-generation packing estimate.
@@ -177,6 +183,10 @@ Rollups on `query_runs`: `provider_input_tokens`, `provider_output_tokens`,
 Read API: `GET /v1/usage?group_by=day|operation|model` (admin/owner,
 workspace-scoped). Responses include `unpriced_event_count` so a total is never
 mistaken for complete.
+They also include `unknown_event_count`; legacy rows without a usage attestation
+remain unknown. Query GET/history return nullable `provider_usage_complete`.
+Tenant-authorized `GET /v1/query-runs/{id}/usage` provides whitelisted invocation
+details without prompts, vectors or arbitrary provider metadata.
 
 ### Adapter contract
 
@@ -191,9 +201,14 @@ metadata = {
 }
 ```
 
-Missing token counts are recorded as zero rather than dropped: a deterministic or
-offline provider consuming no tokens is a fact, and a missing row would be
-indistinguishable from a call that never happened.
+Numeric token columns are known lower bounds, not proof of complete accounting.
+Only explicitly deterministic calls have known zero usage without reported
+counts. Missing real-provider counts set `usage_known=false`, cannot be priced,
+and make query completeness false. Embeddings require reported input counts;
+generated output tokens are not applicable. Successful real generation/support
+calls require both input and output counts. Failed/cancelled calls retain unknown
+usage even if a later retry succeeds. Cost completeness is separate from token
+completeness: null price is not a free call.
 
 ## Logs
 

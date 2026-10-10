@@ -29,7 +29,8 @@ from flint_graph.application.services.query_runs import (
     persist_query_diagnostics,
     transition_query_run,
 )
-from flint_graph.domain.enums import QueryRunStatus
+from flint_graph.application.services.query_usage import QueryUsageRecorder
+from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus
 from flint_graph.observability import metrics
 from flint_graph.observability.instruments import (
     QUERY_RUN_TERMINAL_STATES,
@@ -167,6 +168,7 @@ async def run_query_retrieval_graph(
     retrieval_session_factory: async_sessionmaker[AsyncSession] | None = None,
     commit_after_node: bool = False,
     after_node_commit: Callable[[], Awaitable[None]] | None = None,
+    usage_recorder: QueryUsageRecorder | None = None,
 ) -> QueryRetrievalGraphResult:
     graph = _build_retrieval_graph(
         session=session,
@@ -185,6 +187,7 @@ async def run_query_retrieval_graph(
         retrieval_session_factory=retrieval_session_factory,
         commit_after_node=commit_after_node,
         after_node_commit=after_node_commit,
+        usage_recorder=usage_recorder,
     )
     state = await graph.ainvoke(
         {
@@ -248,6 +251,7 @@ def _build_retrieval_graph(
     retrieval_session_factory: async_sessionmaker[AsyncSession] | None,
     commit_after_node: bool,
     after_node_commit: Callable[[], Awaitable[None]] | None,
+    usage_recorder: QueryUsageRecorder | None,
 ) -> Any:
     builder = StateGraph(_GraphState)
 
@@ -298,6 +302,12 @@ def _build_retrieval_graph(
         enabled = list(classification.retrieval_plan.enabled_retrievers)
         if "graph" in enabled and not state.get("linked_entity_ids"):
             enabled.remove("graph")
+        if usage_recorder is not None:
+            clauses = classification.metadata.get("retrieval_queries") or [state["query"]]
+            usage_recorder.expected[ProviderUsageOperation.EMBEDDING] = (
+                len(clauses) if "vector" in enabled else 0
+            )
+            await usage_recorder.reconcile(session)
         return {
             "enabled_retrievers": enabled,
             "candidate_limits": {
@@ -475,6 +485,7 @@ def _build_retrieval_graph(
             min_context_relevance=min_context_relevance,
             usage_pricing=usage_pricing,
             usage_currency=usage_currency,
+            usage_recorder=usage_recorder,
         )
         await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {

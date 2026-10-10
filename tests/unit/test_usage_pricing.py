@@ -99,6 +99,39 @@ def test_missing_metadata_falls_back_to_unknown_identity() -> None:
     assert usage.model == "unknown"
 
 
+def test_missing_real_provider_usage_cannot_be_priced_as_zero() -> None:
+    usage = usage_from_metadata(
+        {"provider": "ollama", "model": "local-embedder"},
+        operation=ProviderUsageOperation.EMBEDDING,
+        embedded_item_count=1,
+    )
+
+    assert usage.usage_known is False
+    assert estimate_cost_micros(usage, _PRICING) is None
+
+
+@pytest.mark.parametrize("reported", [None, True, -1, 2.5, "12", float("inf"), float("nan"), 2**40])
+def test_invalid_embedding_token_usage_is_explicitly_unknown(reported: object) -> None:
+    usage = usage_from_metadata(
+        {"provider": "ollama", "model": "embed", "usage": {"input_tokens": reported}},
+        operation=ProviderUsageOperation.EMBEDDING,
+    )
+    assert usage.usage_known is False
+    assert estimate_cost_micros(usage, _PRICING) is None
+    assert usage.input_tokens == 0
+
+
+def test_embedding_reported_input_has_no_generated_output_tokens() -> None:
+    usage = usage_from_metadata(
+        {"provider": "ollama", "model": "embed", "usage": {"input_tokens": 42}},
+        operation=ProviderUsageOperation.EMBEDDING,
+    )
+    assert usage.usage_known is True
+    assert usage.input_tokens == 42
+    assert usage.output_tokens == 0
+    assert estimate_cost_micros(usage, _PRICING) == 0
+
+
 def test_garbage_token_counts_are_ignored_rather_than_trusted() -> None:
     usage = usage_from_metadata(
         {

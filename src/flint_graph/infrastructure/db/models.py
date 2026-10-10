@@ -577,6 +577,14 @@ class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         diagnostics = self.metadata_.get("diagnostics")
         return diagnostics if isinstance(diagnostics, dict) else {}
 
+    @property
+    def provider_usage_complete(self) -> bool | None:
+        accounting = self.metadata_.get("usage_accounting")
+        if not isinstance(accounting, dict):
+            return None
+        complete = accounting.get("complete")
+        return complete if isinstance(complete, bool) else None
+
 
 class QueryAnswerClaim(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "query_answer_claims"

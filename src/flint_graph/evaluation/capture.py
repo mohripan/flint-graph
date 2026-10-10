@@ -83,16 +83,20 @@ async def capture_dataset(
             manifest,
             (perf_counter() - started) * 1000,
         )
-        evaluation = evaluation.model_copy(update={
-            "input_tokens": run.get("provider_input_tokens"),
-            "output_tokens": run.get("provider_output_tokens"),
-        })
+        evaluation = evaluation.model_copy(
+            update={
+                "input_tokens": run.get("provider_input_tokens"),
+                "output_tokens": run.get("provider_output_tokens"),
+            }
+        )
         records.append(
             CapturedEvaluation(
                 query_id=query.id,
                 evaluation=evaluation,
                 capture={
-                    "format_version": 1,
+                    "format_version": 2,
+                    "provider_usage_complete": has_complete_query_usage(run),
+                    "usage_scope": "query-invocations-v1",
                     "dataset_name": dataset.metadata.name,
                     "dataset_version": dataset.metadata.version,
                     "captured_at": datetime.now(UTC).isoformat(),
@@ -102,11 +106,33 @@ async def capture_dataset(
                     "retrieval_index_version_id": run["retrieval_index_version_id"],
                     "retrieval_stage": "post_rerank",
                     "query_diagnostics": run.get("query_diagnostics", {}),
-                "preparation": manifest.preparation,
+                    "preparation": manifest.preparation,
                 },
             )
         )
     return records
+
+
+def has_complete_query_usage(run: dict[str, Any]) -> bool:
+    """Legacy totals are lower bounds, not an attestation of complete usage."""
+    metadata = run.get("metadata")
+    accounting = metadata.get("usage_accounting") if isinstance(metadata, dict) else None
+    if not isinstance(accounting, dict):
+        return False
+    expected, recorded = accounting.get("expected"), accounting.get("recorded")
+    return (
+        run.get("provider_usage_complete") is True
+        and accounting.get("version") == "query-invocations-v1"
+        and accounting.get("complete") is True
+        and type(accounting.get("unknown_event_count")) is int
+        and accounting["unknown_event_count"] == 0
+        and isinstance(expected, dict)
+        and isinstance(recorded, dict)
+        and set(expected) == {"embedding", "answer", "faithfulness"}
+        and expected == recorded
+        and all(type(value) is int and value >= 0 for value in expected.values())
+        and all(type(value) is int and value >= 0 for value in recorded.values())
+    )
 
 
 def _evaluation(

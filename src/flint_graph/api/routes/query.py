@@ -55,6 +55,10 @@ from flint_graph.application.services.query_runs import (
     list_query_runs,
     transition_query_run,
 )
+from flint_graph.application.services.query_usage import (
+    QueryUsageRecorder,
+    list_query_provider_invocations,
+)
 from flint_graph.application.services.retrieval import (
     VECTOR_SEARCH_CYPHER,
     EntityNeighborhood,
@@ -64,8 +68,12 @@ from flint_graph.application.services.retrieval import (
     resolve_index_version,
 )
 from flint_graph.application.services.search_readiness import require_searchable_content
-from flint_graph.domain.enums import QueryRunStatus
+from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus
 from flint_graph.domain.errors import BadRequestError, ConflictError
+from flint_graph.infrastructure.answer_generator_factory import (
+    answer_generator_model,
+    support_checker_model,
+)
 from flint_graph.infrastructure.db.models import QueryRunEvent
 
 router = APIRouter(prefix="/v1", tags=["query"])
@@ -87,7 +95,11 @@ async def list_query_runs_endpoint(
     q: str | None = Query(default=None, max_length=200),
 ) -> list[QueryRunResponse]:
     runs = await list_query_runs(
-        session, tenant_id=tenant_id, limit=limit, before_id=before_id, query=q,
+        session,
+        tenant_id=tenant_id,
+        limit=limit,
+        before_id=before_id,
+        query=q,
     )
     return [QueryRunResponse.model_validate(run) for run in runs]
 
@@ -155,10 +167,14 @@ async def get_query_run_endpoint(
 
 @router.get("/query-runs/{query_run_id}/retrieval", response_model=QueryRetrievalInspectionResponse)
 async def inspect_query_retrieval_endpoint(
-    query_run_id: UUID, tenant_id: TenantIdDep, session: SessionDep,
+    query_run_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
 ) -> QueryRetrievalInspectionResponse:
     inspection = await inspect_query_retrieval(
-        session, tenant_id=tenant_id, query_run_id=query_run_id,
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
     )
     return QueryRetrievalInspectionResponse.model_validate(inspection)
 
@@ -237,10 +253,29 @@ async def stream_query_run_events_endpoint(
         opensearch_index_name=index_version.opensearch_index_name,
     )
     session_factory = _session_factory_from(session)
+    usage_recorder = QueryUsageRecorder(
+        session_factory,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
+        pricing=settings.usage_pricing,
+        currency=settings.usage_currency,
+        identities={
+            ProviderUsageOperation.ANSWER: (
+                settings.query_answer_provider or "unknown",
+                answer_generator_model(settings),
+            ),
+            ProviderUsageOperation.FAITHFULNESS: (
+                settings.query_support_provider or "unknown",
+                support_checker_model(settings),
+            ),
+        },
+    )
     filters = dict(run.metadata_.get("filters") or {})
     retrievers = QueryRetrieverBundle(
         lexical=_LexicalQueryRetriever(opensearch_client, index_snapshot, filters),
-        vector=_VectorQueryRetriever(neo4j_client, embedding_model, index_snapshot, filters),
+        vector=_VectorQueryRetriever(
+            neo4j_client, embedding_model, index_snapshot, filters, usage_recorder=usage_recorder
+        ),
         graph=_GraphQueryRetriever(filters),
     )
     initial_status = run.status
@@ -265,12 +300,52 @@ async def stream_query_run_events_endpoint(
         usage_pricing=settings.usage_pricing,
         usage_currency=settings.usage_currency,
         poll_interval_seconds=poll_interval_seconds,
+        usage_recorder=usage_recorder,
     )
     return StreamingResponse(
         stream,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/query-runs/{query_run_id}/usage")
+async def query_provider_usage_endpoint(
+    query_run_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> list[dict[str, Any]]:
+    events = await list_query_provider_invocations(
+        session,
+        tenant_id=tenant_id,
+        query_run_id=query_run_id,
+    )
+    return [
+        {
+            "id": str(event.id),
+            "operation": event.operation.value,
+            "provider": event.provider,
+            "model": event.model,
+            "input_tokens": event.input_tokens,
+            "output_tokens": event.output_tokens,
+            "embedded_item_count": event.embedded_item_count,
+            "duration_ms": event.duration_ms,
+            "estimated_cost_micros": event.estimated_cost_micros,
+            "currency": event.currency,
+            "metadata": {
+                key: event.metadata_[key]
+                for key in (
+                    "accounting_version",
+                    "execution_attempt_id",
+                    "clause_index",
+                    "status",
+                    "usage_known",
+                )
+                if key in event.metadata_
+            },
+        }
+        for event in events
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,11 +417,15 @@ class _VectorQueryRetriever:
         embedding_model: Any,
         index_version: _IndexVersionSnapshot,
         filters: dict[str, Any] | None = None,
+        *,
+        usage_recorder: QueryUsageRecorder | None = None,
     ) -> None:
         self._neo4j_client = neo4j_client
         self._embedding_model = embedding_model
         self._index_version = index_version
         self._filters = filters or {}
+        self._usage_recorder = usage_recorder
+        self._clause_index = 0
 
     async def retrieve_vector(
         self,
@@ -357,22 +436,32 @@ class _VectorQueryRetriever:
         retrieval_index_version_id: UUID,
         limit: int,
     ) -> list[QueryCandidate]:
-        embedding_result = await self._embedding_model.embed_batch(
-            EmbeddingBatchRequest(
-                provider=cast(Any, self._index_version.embedding_provider),
-                model=self._index_version.embedding_model,
-                dimensions=self._index_version.vector_dimension,
-                inputs=[
-                    EmbeddingInput(
-                        input_id="query",
-                        text=query,
-                        metadata={"purpose": "query_orchestration_vector_retrieval"},
-                    )
-                ],
-                max_batch_size=1,
-                config={"index_version_id": str(retrieval_index_version_id)},
-            )
+        request = EmbeddingBatchRequest(
+            provider=cast(Any, self._index_version.embedding_provider),
+            model=self._index_version.embedding_model,
+            dimensions=self._index_version.vector_dimension,
+            inputs=[
+                EmbeddingInput(
+                    input_id="query",
+                    text=query,
+                    metadata={"purpose": "query_orchestration_vector_retrieval"},
+                )
+            ],
+            max_batch_size=1,
+            config={"index_version_id": str(retrieval_index_version_id)},
         )
+        if self._usage_recorder is None:
+            embedding_result = await self._embedding_model.embed_batch(request)
+        else:
+            clause_index = self._clause_index
+            self._clause_index += 1
+            embedding_result = await self._usage_recorder.invoke(
+                lambda: self._embedding_model.embed_batch(request),
+                operation=ProviderUsageOperation.EMBEDDING,
+                provider=self._index_version.embedding_provider,
+                model=self._index_version.embedding_model,
+                clause_index=clause_index,
+            )
         rows = await self._neo4j_client.execute(
             VECTOR_SEARCH_CYPHER,
             {
@@ -469,6 +558,7 @@ async def _stream_query_events(
     usage_pricing: dict[str, dict[str, float]] | None = None,
     usage_currency: str = "USD",
     poll_interval_seconds: float,
+    usage_recorder: QueryUsageRecorder | None = None,
 ) -> AsyncIterator[str]:
     if initial_status != QueryRunStatus.QUEUED:
         async for event in _replay_query_events(
@@ -496,6 +586,7 @@ async def _stream_query_events(
             min_context_relevance=min_context_relevance,
             usage_pricing=usage_pricing,
             usage_currency=usage_currency,
+            usage_recorder=usage_recorder,
             queue=queue,
         )
     )
@@ -543,6 +634,7 @@ async def _execute_query_run(
     usage_pricing: dict[str, dict[str, float]] | None = None,
     usage_currency: str = "USD",
     queue: asyncio.Queue[str | None],
+    usage_recorder: QueryUsageRecorder | None = None,
 ) -> None:
     async with session_factory() as execution_session:
         last_sequence = 0
@@ -578,7 +670,10 @@ async def _execute_query_run(
                 retrieval_session_factory=session_factory,
                 commit_after_node=True,
                 after_node_commit=emit_new_events,
+                usage_recorder=usage_recorder,
             )
+            if usage_recorder is not None:
+                await usage_recorder.reconcile(execution_session)
             await execution_session.commit()
             await emit_new_events()
         except Exception as exc:
@@ -589,6 +684,8 @@ async def _execute_query_run(
                 query_run_id=query_run_id,
                 exc=exc,
             )
+            if usage_recorder is not None:
+                await usage_recorder.reconcile(execution_session)
             await execution_session.commit()
             await emit_new_events()
         except asyncio.CancelledError:
@@ -598,6 +695,8 @@ async def _execute_query_run(
                 tenant_id=tenant_id,
                 query_run_id=query_run_id,
             )
+            if usage_recorder is not None:
+                await usage_recorder.reconcile(execution_session)
             await execution_session.commit()
             await emit_new_events()
             raise

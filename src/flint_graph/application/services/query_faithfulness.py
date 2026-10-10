@@ -22,7 +22,10 @@ from flint_graph.application.query_orchestration import (
     SupportCheckClaim,
     SupportChecker,
     SupportCheckRequest,
+    SupportCheckResult,
 )
+from flint_graph.application.services.query_usage import QueryUsageRecorder
+from flint_graph.domain.enums import ProviderUsageOperation
 
 _SAFE_ABSTENTION_ANSWER = "The available context is insufficient to answer this query."
 _CITATION_MARKER_RE = re.compile(r"\s*[\[(]\s*(?:c[0-9]+|ctx-[0-9]+)\s*[\])]", re.IGNORECASE)
@@ -59,6 +62,7 @@ async def verify_generated_answer(
     support_checker: SupportChecker | None = None,
     policy: QueryFaithfulnessPolicy | None = None,
     best_context_relevance: float | None = None,
+    usage_recorder: QueryUsageRecorder | None = None,
 ) -> QueryFaithfulnessResult:
     active_policy = policy or QueryFaithfulnessPolicy()
     checker = support_checker or DeterministicSupportChecker()
@@ -66,14 +70,24 @@ async def verify_generated_answer(
         draft_answer=draft_answer,
         context_pack=context_pack,
     )
-    support_result = await checker.check(
-        SupportCheckRequest(
-            tenant_id=tenant_id,
-            query=query,
-            context_pack=context_pack,
-            claims=draft_claims,
-        )
+    support_request = SupportCheckRequest(
+        tenant_id=tenant_id,
+        query=query,
+        context_pack=context_pack,
+        claims=draft_claims,
     )
+    if usage_recorder is not None and not draft_claims:
+        usage_recorder.expected[ProviderUsageOperation.FAITHFULNESS] = 0
+        support_result = SupportCheckResult(
+            claims=[], method="no-claims", metadata={"not_invoked": True}
+        )
+    elif usage_recorder is not None:
+        support_result = await usage_recorder.invoke(
+            lambda: checker.check(support_request),
+            operation=ProviderUsageOperation.FAITHFULNESS,
+        )
+    else:
+        support_result = await checker.check(support_request)
     provider_claims = list(support_result.claims)
     support_result = support_result.model_copy(
         update={

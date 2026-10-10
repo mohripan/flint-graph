@@ -14,7 +14,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
 import flint_graph.api.dependencies as dependencies
 from flint_graph.api.routes import query as query_routes
@@ -144,6 +143,7 @@ class QueryAnswerGenerator:
 )
 async def query_api_env(
     request: pytest.FixtureRequest,
+    tmp_path,
 ) -> AsyncIterator[
     tuple[
         httpx.AsyncClient,
@@ -166,9 +166,8 @@ async def query_api_env(
         engine = engine.execution_options(schema_translate_map={None: schema})
     else:
         engine = create_async_engine(
-            "sqlite+aiosqlite://",
+            f"sqlite+aiosqlite:///{tmp_path / 'query-api.sqlite'}",
             connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
         )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as connection:
@@ -301,6 +300,114 @@ def _sse_event_types(body: str) -> list[str]:
     return [
         line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
     ]
+
+
+@pytest.mark.parametrize(
+    "query,expected_embeddings",
+    [
+        ("Where is Acme Corporation headquartered?", 1),
+        ("Compare Acme's revenue and Beta's revenue.", 2),
+        ("Compare Acme's revenue and Beta's revenue and Gamma's revenue.", 3),
+    ],
+)
+async def test_query_api_accounts_each_embedding_clause_and_generation(
+    query_api_env,
+    query: str,
+    expected_embeddings: int,
+) -> None:
+    client, session_factory, _, _ = query_api_env
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+        tenant.name = "usage-api-main"
+        await session.flush()
+        other, _ = await _tenant_with_active_index(session)
+    created = await client.post(
+        "/v1/query-runs", headers=_headers(tenant.id), json={"query": query}
+    )
+    assert created.status_code == 201
+    path = f"/v1/query-runs/{created.json()['id']}"
+    streamed = await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    assert streamed.status_code == 200
+    inspected = await client.get(path, headers=_headers(tenant.id))
+    assert inspected.json()["status"] == "completed"
+    assert inspected.json()["provider_usage_complete"] is True, inspected.json()["metadata"].get(
+        "usage_accounting"
+    )
+    ledger = await client.get(f"{path}/usage", headers=_headers(tenant.id))
+    assert ledger.status_code == 200
+    events = ledger.json()
+    embeddings = [event for event in events if event["operation"] == "embedding"]
+    assert len(embeddings) == expected_embeddings
+    assert sorted(event["metadata"]["clause_index"] for event in embeddings) == list(
+        range(expected_embeddings)
+    )
+    assert len({event["metadata"]["execution_attempt_id"] for event in events}) == 1
+    assert all(event["metadata"]["status"] == "completed" for event in events)
+    assert all(event["metadata"]["usage_known"] is True for event in events)
+    assert {event["operation"] for event in events} == {"embedding", "answer", "faithfulness"}
+    assert (await client.get(f"{path}/usage", headers=_headers(other.id))).status_code == 404
+
+    await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    replayed = await client.get(f"{path}/usage", headers=_headers(tenant.id))
+    assert replayed.json() == events
+
+
+@pytest.mark.parametrize("failure", [False, True])
+async def test_query_api_missing_embedding_usage_is_not_a_free_complete_run(
+    query_api_env, failure: bool,
+) -> None:
+    from flint_graph.application.embeddings import DeterministicEmbeddingModel
+    from flint_graph.infrastructure.db.models import RetrievalIndexVersion
+
+    class UnreportedProvider:
+        async def embed_batch(self, request):
+            if failure:
+                raise ConnectionError("unreported provider failure")
+            fixture = await DeterministicEmbeddingModel().embed_batch(request)
+            return fixture.model_copy(update={"metadata": {"provider": "ollama"}})
+
+    client, session_factory, _, _ = query_api_env
+    app.dependency_overrides[dependencies.get_embedding_model] = lambda: UnreportedProvider()
+    async with session_factory() as session:
+        tenant, index_id = await _tenant_with_searchable_content(session)
+        index = await session.get(RetrievalIndexVersion, index_id)
+        index.embedding_provider = "ollama"
+        await session.commit()
+    created = await client.post("/v1/query-runs", headers=_headers(tenant.id),
+                                json={"query": "Where is Acme Corporation headquartered?"})
+    path = f"/v1/query-runs/{created.json()['id']}"
+    await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    run = (await client.get(path, headers=_headers(tenant.id))).json()
+    assert run["provider_usage_complete"] is False
+    assert run["metadata"]["usage_accounting"]["unknown_event_count"] == 1
+    events = (await client.get(f"{path}/usage", headers=_headers(tenant.id))).json()
+    (embedding,) = [event for event in events if event["operation"] == "embedding"]
+    assert embedding["provider"] == "ollama"
+    assert embedding["metadata"]["status"] == ("failed" if failure else "completed")
+    assert embedding["metadata"]["usage_known"] is False
+    assert embedding["estimated_cost_micros"] is None
+
+
+async def test_streaming_answer_releases_event_locks_before_support_accounting(query_api_env):
+    class StreamingFixture(QueryAnswerGenerator):
+        async def stream_generate(self, request, on_delta):
+            await on_delta("provisional draft")
+            answer = await self.generate(request)
+            return answer.model_copy(update={"metadata": {"provider": "deterministic"}})
+
+    client, session_factory, _, _ = query_api_env
+    app.dependency_overrides[dependencies.get_answer_generator] = lambda: StreamingFixture()
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+    created = await client.post("/v1/query-runs", headers=_headers(tenant.id),
+                                json={"query": "Where is Acme Corporation headquartered?"})
+    path = f"/v1/query-runs/{created.json()['id']}"
+    async with asyncio.timeout(10):
+        streamed = await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    assert streamed.status_code == 200
+    run = (await client.get(path, headers=_headers(tenant.id))).json()
+    assert run["status"] == "completed"
+    assert run["provider_usage_complete"] is True
 
 
 @pytest.mark.asyncio

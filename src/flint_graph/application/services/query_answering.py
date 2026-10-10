@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -35,6 +36,7 @@ from flint_graph.application.services.query_runs import (
     transition_query_run,
 )
 from flint_graph.application.services.query_scope import financial_scope_clarification
+from flint_graph.application.services.query_usage import QueryUsageRecorder
 from flint_graph.application.services.usage import record_provider_usage
 from flint_graph.application.usage import usage_from_metadata
 from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus
@@ -66,6 +68,7 @@ async def generate_query_answer(
     min_context_relevance: float = 0.0,
     usage_pricing: dict[str, dict[str, float]] | None = None,
     usage_currency: str = "USD",
+    usage_recorder: QueryUsageRecorder | None = None,
 ) -> QueryAnswerResult:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
     stage = "load_context"
@@ -98,7 +101,35 @@ async def generate_query_answer(
             run.metadata_ = {**run.metadata_, "arithmetic_preparation": calculation_hint}
             await session.flush()
         stage = "generate_answer"
+
+        async def generate_draft() -> GeneratedAnswer:
+            try:
+                if isinstance(model, StreamingAnswerGenerator):
+                    answer = await model.stream_generate(
+                        generation_request,
+                        _provisional_delta_recorder(
+                            session=session,
+                            tenant_id=tenant_id,
+                            query_run_id=query_run_id,
+                        ),
+                    )
+                else:
+                    answer = await model.generate(generation_request)
+            except (Exception, asyncio.CancelledError):
+                if usage_recorder is not None:
+                    await session.rollback()
+                raise
+            if usage_recorder is not None:
+                # Draft-event appends acquire a parent FOR UPDATE lock. Release
+                # it before independent finalization/support inserts need FK
+                # key-share locks. The events remain explicitly provisional.
+                await session.commit()
+            return answer
+
         if clarification is not None:
+            if usage_recorder is not None:
+                usage_recorder.expected[ProviderUsageOperation.ANSWER] = 0
+                usage_recorder.expected[ProviderUsageOperation.FAITHFULNESS] = 0
             draft_answer = GeneratedAnswer(
                 text=clarification.text,
                 insufficient_context=True,
@@ -129,17 +160,16 @@ async def generate_query_answer(
                     "missing_scope": clarification.missing_scope,
                 },
             )
-        elif isinstance(model, StreamingAnswerGenerator):
-            draft_answer = await model.stream_generate(
-                generation_request,
-                _provisional_delta_recorder(
-                    session=session,
-                    tenant_id=tenant_id,
-                    query_run_id=query_run_id,
-                ),
+        elif usage_recorder is not None:
+            # Hint/preparation writes must not retain a writer transaction while
+            # a separate session commits the pre-dispatch attempt.
+            await session.commit()
+            draft_answer = await usage_recorder.invoke(
+                generate_draft,
+                operation=ProviderUsageOperation.ANSWER,
             )
         else:
-            draft_answer = await model.generate(generation_request)
+            draft_answer = await generate_draft()
         if clarification is None:
             stage = "support_check"
             verification = await verify_generated_answer(
@@ -148,6 +178,7 @@ async def generate_query_answer(
                 context_pack=context_pack,
                 draft_answer=draft_answer,
                 support_checker=support_checker,
+                usage_recorder=usage_recorder,
                 policy=QueryFaithfulnessPolicy(
                     min_supported_claim_ratio=min_supported_claim_ratio,
                     min_context_relevance=min_context_relevance,
@@ -157,7 +188,7 @@ async def generate_query_answer(
         answer = verification.answer
         faithfulness = faithfulness_summary(verification.report)
         answer_provider = _answer_provider(draft_answer)
-        if clarification is None:
+        if clarification is None and usage_recorder is None:
             await _record_answer_usage(
                 session,
                 tenant_id=tenant_id,

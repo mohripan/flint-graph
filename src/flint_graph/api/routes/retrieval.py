@@ -74,7 +74,11 @@ async def get_system_readiness_endpoint(
 ) -> dict[str, Any]:
     readiness = await get_search_readiness(session, tenant_id=tenant_id)
     return {
-        "setup_capabilities": {"preserve_active_bootstrap": True, "query_usage_rollups": True},
+        "setup_capabilities": {
+            "preserve_active_bootstrap": True,
+            "query_usage_rollups": True,
+            "query_usage_invocations": True,
+        },
         "auth": {
             "mode": settings.auth_mode,
             "oidc_issuer": settings.oidc_issuer,
