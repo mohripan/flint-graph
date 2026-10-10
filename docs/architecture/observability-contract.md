@@ -116,6 +116,14 @@ row, and the relay continues that trace when it publishes. Verified by
 
 Span attributes never contain prompts, answers, or document text.
 
+Provider-call spans also carry OpenInference metadata: `LLM` with
+`llm.model_name`/`llm.provider` for answer/extraction/support, `EMBEDDING` with
+`embedding.model_name`, and `RERANKER` with `reranker.model_name`. One shared
+provider span owns these attributes; no auto-instrumentation dependency is added.
+Provider exceptions emit only ERROR status and a bounded `error.type`; automatic
+message/stack events are disabled. Other instrumentation must be reviewed before
+production trace export (M24 #43).
+
 ## Audit events
 
 Table `audit_events`. Append-only; written in the mutation's transaction.

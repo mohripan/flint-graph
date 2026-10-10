@@ -12,13 +12,15 @@ from contextlib import asynccontextmanager
 from time import monotonic
 from typing import Any
 
+from opentelemetry.trace import StatusCode
+
 from flint_graph.domain.enums import ProviderUsageOperation
 from flint_graph.observability import metrics
 from flint_graph.observability.instruments import (
     PROVIDER_CALL_DURATION,
     PROVIDER_CALL_ERRORS,
 )
-from flint_graph.observability.tracing import async_span
+from flint_graph.observability.tracing import tracer
 
 
 class ProviderCall:
@@ -41,17 +43,36 @@ async def provider_call(
     operation: ProviderUsageOperation,
 ) -> AsyncIterator[ProviderCall]:
     call = ProviderCall()
-    async with async_span(
+    attributes = {
+        "flint_graph.provider": provider,
+        "flint_graph.model": model,
+        "flint_graph.operation": operation.value,
+    }
+    if operation is ProviderUsageOperation.EMBEDDING:
+        attributes.update(
+            {"openinference.span.kind": "EMBEDDING", "embedding.model_name": model}
+        )
+    elif operation is ProviderUsageOperation.RERANK:
+        attributes.update(
+            {"openinference.span.kind": "RERANKER", "reranker.model_name": model}
+        )
+    else:
+        attributes.update(
+            {"openinference.span.kind": "LLM", "llm.model_name": model, "llm.provider": provider}
+        )
+    # OTel's automatic exception recording includes the raw message and stack.
+    # Provider errors may echo credentials, prompts or private response text.
+    with tracer().start_as_current_span(
         f"provider.{operation.value}",
-        **{
-            "flint_graph.provider": provider,
-            "flint_graph.model": model,
-            "flint_graph.operation": operation.value,
-        },
-    ):
+        attributes=attributes,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as current:
         try:
             yield call
-        except Exception:
+        except Exception as error:
+            current.set_status(StatusCode.ERROR)
+            current.set_attribute("error.type", type(error).__name__[:128])
             metrics.add(
                 PROVIDER_CALL_ERRORS,
                 **{
