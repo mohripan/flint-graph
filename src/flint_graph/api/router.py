@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from flint_graph.api.routes import (
+    conversations,
     documents,
     graph,
     health,
@@ -20,3 +21,4 @@ api_router.include_router(documents.router)
 api_router.include_router(graph.router)
 api_router.include_router(retrieval.router)
 api_router.include_router(query.router)
+api_router.include_router(conversations.router)

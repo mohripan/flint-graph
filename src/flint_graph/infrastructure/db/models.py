@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -497,9 +498,26 @@ class IndexBackfillJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_conversations_id_tenant"),
+        Index("ix_conversations_tenant_created", "tenant_id", "created_at", "id"),
+        CheckConstraint("next_turn_number > 0", name="ck_conversations_next_turn_positive"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    next_turn_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "query_runs"
     __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_query_runs_id_tenant"),
         Index("ix_query_runs_tenant_status_created", "tenant_id", "status", "created_at"),
         Index(
             "ix_query_runs_tenant_hash_created",
@@ -584,6 +602,32 @@ class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             return None
         complete = accounting.get("complete")
         return complete if isinstance(complete, bool) else None
+
+
+class ConversationTurn(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "conversation_turns"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "tenant_id"], ["conversations.id", "conversations.tenant_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["query_run_id", "tenant_id"], ["query_runs.id", "query_runs.tenant_id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("conversation_id", "turn_number", name="uq_conversation_turn_number"),
+        UniqueConstraint("conversation_id", "idempotency_key", name="uq_conversation_turn_key"),
+        UniqueConstraint("query_run_id", name="uq_conversation_turn_run"),
+        CheckConstraint("turn_number > 0", name="ck_conversation_turn_positive"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    conversation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    query_run_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    run: Mapped[QueryRun] = relationship(lazy="raise")
 
 
 class QueryAnswerClaim(UUIDPrimaryKeyMixin, Base):

@@ -511,6 +511,27 @@ class EntityNeighborhoodResponse(BaseModel):
     relationships: list[EntityRelationshipSummary]
 
 
+class ConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(default="New conversation", min_length=1, max_length=200)
+
+
+class ConversationArchiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    archived: bool
+
+
+class ConversationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    tenant_id: UUID
+    title: str
+    next_turn_number: int
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class QueryRunCreateRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     retrieval_index_version_id: UUID | None = None
@@ -565,6 +586,22 @@ class QueryRunResponse(BaseModel):
     metadata_: dict[str, Any] = Field(serialization_alias="metadata")
     created_at: datetime
     updated_at: datetime
+
+
+class ConversationTurnCreateRequest(QueryRunCreateRequest):
+    model_config = ConfigDict(extra="forbid")
+    idempotency_key: UUID
+
+
+class ConversationTurnResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    tenant_id: UUID
+    conversation_id: UUID
+    turn_number: int
+    idempotency_key: UUID
+    created_at: datetime
+    run: QueryRunResponse
 
 
 class QueryRetrievalCandidateResponse(BaseModel):

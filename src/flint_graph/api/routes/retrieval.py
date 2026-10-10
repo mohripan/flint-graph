@@ -78,6 +78,8 @@ async def get_system_readiness_endpoint(
             "preserve_active_bootstrap": True,
             "query_usage_rollups": True,
             "query_usage_invocations": True,
+            "conversation_ledger": True,
+            "chained_conversations": False,
         },
         "auth": {
             "mode": settings.auth_mode,

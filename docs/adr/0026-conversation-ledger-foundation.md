@@ -36,6 +36,12 @@ uses increasing ordinals and an authorized turn-ID cursor. Page limits are
 1..100. Reads expose authoritative current run state, not a second stale turn
 status. Neither list response embeds arbitrary full conversation history.
 
+A member can cancel a queued turn under conversation/run locks so an abandoned
+submission does not permanently block the thread. Repeated cancellation is
+idempotent. Running/completed/failed turns are refused by this narrow endpoint;
+running cancellation still uses request-bound SSE behavior. Cancellation appends
+the existing terminal event and never creates a model invocation.
+
 Archival is reversible organization, not deletion or privacy erasure. It blocks
 new submissions and is refused while a turn is active. Default lists omit archived
 conversations; explicit archived inspection remains membership-authorized. No

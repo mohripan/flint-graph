@@ -1,6 +1,6 @@
 # ADR 0019: Conversation state and reference-only execution
 
-- Status: proposed; not implemented
+- Status: proposed for grounded memory/durable execution; ledger foundation delivered in #96
 - Date: 2026-10-10
 - Tracks: product / durable execution and platform performance
 - Issues: [#62 conversations](https://github.com/mohripan/flint-graph/issues/62),
@@ -10,6 +10,9 @@
 
 Each query run is independent: creation accepts a question, retrieval index,
 filters and stream flag, without a conversation or previous-turn identifier.
+Separate conversation/turn APIs now persist ordered run references and replay;
+their runs remain explicitly independent. See
+[ADR 0026](0026-conversation-ledger-foundation.md) for the delivered foundation.
 Question history reopens persisted results; it does not supply follow-up memory.
 Query execution remains request-bound SSE/LangGraph. Milestone 18's Temporal
 query execution is planned, not already available.
