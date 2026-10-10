@@ -322,6 +322,31 @@ tests cover every strategy; operators recover stalled work without DB edits.
 Acceptance: new operators deploy/recover using runbooks; new users obtain useful
 cited answers; rollout/rollback is proven; no unexplained quality regression.
 
+## Platform and developer-experience tracks
+
+These tracks run alongside product milestones 15–23; their numbers are not a
+requirement to wait until M23. M14 observability is the baseline, not a blank slate.
+
+| Track | Milestone | Outcome | Dependencies |
+| --- | --- | --- | --- |
+| Platform | [24: observability](milestones/24-platform-observability.md) | Phoenix, provisioned Grafana, Alertmanager, privacy-safe traces, evaluated ELK/logging and production telemetry | 14; coordinate 18/22 |
+| Platform | [25: search/inference](milestones/25-search-inference-platform.md) | Measured large-corpus retrieval and optional vLLM serving | 16/17; coordinate 21/22 |
+| Developer experience | [26: reproducible environments](milestones/26-developer-experience.md) | Doctor, explicit local profiles, native infra validation, pinned upgrades and debug handoff | 15; coordinate 16/24 |
+
+[ADR 0013](adr/0013-layered-platform-observability.md) keeps OpenTelemetry as the
+common boundary: Phoenix inspects AI traces, Grafana displays operational metrics,
+and Prometheus plus Alertmanager handles incidents. OpenLLMetry needs explicit
+content-capture disabling and duplicate-span evaluation. Email notification stays
+disabled until an operator supplies destination/SMTP configuration.
+
+ELK is tracked as an explicit logging-backend evaluation against OpenSearch
+observability and existing Loki. Do not add a duplicate cluster or confuse log
+search with tenant corpus retrieval. [ADR 0014](adr/0014-measured-search-and-inference-platform.md)
+retains Ollama locally and gates optional vLLM adoption on real quality/capacity
+benchmarks. [ADR 0015](adr/0015-reproducible-developer-experience.md) defines safe,
+read-only diagnostics before bootstrap automation. Proposed tools are not
+implemented merely because they are named here.
+
 ## GitHub implementation queue
 
 - [Milestone 15: useful answers and explainable failures](https://github.com/mohripan/flint-graph/issues/1)
@@ -333,6 +358,9 @@ cited answers; rollout/rollback is proven; no unexplained quality regression.
 - [Milestone 21: corpus and graph quality](https://github.com/mohripan/flint-graph/issues/7)
 - [Milestone 22: scale, security and recovery](https://github.com/mohripan/flint-graph/issues/8)
 - [Milestone 23: release qualification](https://github.com/mohripan/flint-graph/issues/9)
+- [Milestone 24: platform observability and incident response](https://github.com/mohripan/flint-graph/issues/34)
+- [Milestone 25: search and inference platform performance](https://github.com/mohripan/flint-graph/issues/35)
+- [Milestone 26: developer experience and reproducible environments](https://github.com/mohripan/flint-graph/issues/36)
 
 Create milestone-tracking issues plus focused implementation issues carrying the
 observed problem, dependencies, acceptance tests and documentation scope. Link
