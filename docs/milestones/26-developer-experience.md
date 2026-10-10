@@ -59,6 +59,12 @@ all chunks while recording the extraction limit failure; the 1,085-chunk
 synthetic retrieval smoke passed. Full multi-batch graph extraction remains #64.
 See [the parser delivery report](../reports/2026-10-10-nul-parser-delivery.md).
 See [the large-document report](../reports/2026-10-10-large-document-ingestion.md).
+Deletion now settles in-flight jobs with idempotent durable cancellation and
+document-first lifecycle locking. Final queued/running synthetic API/Temporal
+checks passed; see [the deletion-race report](../reports/2026-10-10-ingestion-deletion-race.md)
+and [ADR 20](../adr/0020-document-first-lifecycle-locking.md). Private deleted
+sources were untouched; delayed deletion and partial projection cleanup remain
+explicit operational limits.
 
 A new developer runs explicit offline/local-real profiles, obtains doctor
 diagnostics, uploads/queries a small corpus and inspects traces. CI validates

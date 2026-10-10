@@ -16,6 +16,7 @@ from flint_graph.application.extraction_proposals import (
 )
 from flint_graph.application.outbox_contracts import IngestionJobQueuedPayload
 from flint_graph.application.parsing import BoundedParserRunner, ParserLimits
+from flint_graph.application.services.document_lifecycle import delete_document
 from flint_graph.application.services.documents import create_document
 from flint_graph.application.services.extraction import ExtractionServiceConfig
 from flint_graph.application.services.ingestion_jobs import create_ingestion_job
@@ -31,6 +32,7 @@ from flint_graph.domain.enums import (
     SourceType,
     StagedResolutionStatus,
 )
+from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     CanonicalEntity,
     DocumentArtifact,
@@ -53,6 +55,34 @@ from flint_graph.worker.activities.ingestion import (
     mark_ingestion_job_running_for_payload,
     run_ingestion_pipeline_for_payload,
 )
+
+
+@pytest.mark.parametrize("mode", ["optional", "required"])
+async def test_deleted_upload_cannot_read_source_or_persist_new_pipeline_output(
+    extraction_db_session: AsyncSession, mode: str,
+) -> None:
+    session = extraction_db_session
+    store = FakeObjectStore()
+    payload = await _create_upload_payload(
+        session, store=store, idempotency_key="deleted-source-guard",
+        data=b"Acme Corporation is headquartered in Berlin.",
+    )
+    await delete_document(session, tenant_id=UUID(payload["tenant_id"]),
+                          document_id=UUID(payload["document_id"]))
+    await session.commit()
+    raw_uri = next(iter(store.objects))
+    del store.objects[raw_uri]  # A source read would fail with KeyError, not the lifecycle guard.
+    model = _success_proposal_model()
+    with pytest.raises((ConflictError, NotFoundError)):
+        await run_ingestion_pipeline_for_payload(
+            session, payload, object_store=store, bucket="flint-graph",
+            parser_runner=_parser_runner(),
+            chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=0),
+            extraction_config=ExtractionServiceConfig(mode=mode), extraction_model=model,
+        )
+    assert model.requests == []
+    assert list(await session.scalars(select(DocumentChunk))) == []
+    assert list(await session.scalars(select(DocumentArtifact))) == []
 
 
 @pytest.mark.parametrize("mode", ["optional", "required"])

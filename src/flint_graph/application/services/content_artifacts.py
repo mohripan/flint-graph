@@ -13,8 +13,8 @@ from flint_graph.application.chunking import (
     chunk_normalized_document,
 )
 from flint_graph.application.parsing import NormalizedDocument
-from flint_graph.domain.enums import DocumentArtifactType
-from flint_graph.domain.errors import NotFoundError
+from flint_graph.domain.enums import DocumentArtifactType, DocumentVersionStatus
+from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     Document,
     DocumentArtifact,
@@ -125,6 +125,16 @@ async def _ensure_version_exists(
     document_id: UUID,
     version_id: UUID,
 ) -> None:
+    # Acquire the lifecycle lock before derived-object writes or FK row locks.
+    # Retained through the caller's transaction; deletion either wins before this
+    # step or waits and then cleans up the committed result, never a late publish.
+    document = await session.scalar(select(Document).where(
+        Document.id == document_id, Document.tenant_id == tenant_id,
+    ).with_for_update().execution_options(populate_existing=True))
+    if document is None:
+        raise NotFoundError(f"Document version '{version_id}' was not found.")
+    if document.deleted_at is not None:
+        raise ConflictError("Cannot persist content for a deleted document.")
     exists = await session.scalar(
         select(DocumentVersion.id)
         .join(Document, Document.id == DocumentVersion.document_id)
@@ -132,6 +142,10 @@ async def _ensure_version_exists(
             DocumentVersion.id == version_id,
             DocumentVersion.document_id == document_id,
             Document.tenant_id == tenant_id,
+            DocumentVersion.status.notin_([
+                DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED,
+                DocumentVersionStatus.CANCELLED,
+            ]),
         )
     )
     if exists is None:

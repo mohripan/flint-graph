@@ -1,6 +1,8 @@
+import asyncio
 from uuid import UUID
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.services.document_lifecycle import (
@@ -43,6 +45,9 @@ from flint_graph.infrastructure.db.models import (
     DocumentLifecycleEvent,
     DocumentProjectionCleanup,
     DocumentVersion,
+    IngestionJob,
+    IngestionJobEvent,
+    OutboxMessage,
 )
 
 
@@ -55,6 +60,93 @@ class CapturingCypherClient:
     ) -> list[dict[str, object]]:
         self.calls.append((query, parameters or {}))
         return []
+
+
+@pytest.mark.parametrize("initial", [IngestionJobStatus.QUEUED, IngestionJobStatus.RUNNING])
+@pytest.mark.parametrize("late", [IngestionJobStatus.COMPLETED, IngestionJobStatus.FAILED])
+@pytest.mark.parametrize("autoflush", [True, False])
+async def test_delete_settles_inflight_job_and_ignores_late_worker_outcome(
+    extraction_db_session: AsyncSession, initial: IngestionJobStatus, late: IngestionJobStatus,
+    autoflush: bool,
+) -> None:
+    session = extraction_db_session
+    session.autoflush = autoflush
+    tenant_id, version_ids = await _create_document_with_jobs(
+        session, tenant_name="Deletion race tenant", document_external_id="deletion-race",
+        job_keys=["deletion-race-job"],
+    )
+    job = await session.scalar(select(IngestionJob))
+    assert job is not None
+    if initial == IngestionJobStatus.RUNNING:
+        await transition_ingestion_job(session, tenant_id=tenant_id, job_id=job.id,
+                                       target_status=initial, event_type="job.started", details={})
+    await delete_document(session, tenant_id=tenant_id, document_id=job.document_id)
+    await session.commit()
+    await session.refresh(job)
+    assert job.status == IngestionJobStatus.CANCELLED
+    assert job.completed_at is not None
+    await transition_ingestion_job(session, tenant_id=tenant_id, job_id=job.id,
+                                   target_status=late, event_type=f"job.{late.value}", details={})
+    await delete_document(session, tenant_id=tenant_id, document_id=job.document_id)
+    await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job.id)
+    await session.commit()
+    version = await session.get(DocumentVersion, version_ids[0])
+    assert version is not None and version.status == DocumentVersionStatus.DELETED
+    assert job.status == IngestionJobStatus.CANCELLED
+    events = list(await session.scalars(select(IngestionJobEvent).where(
+        IngestionJobEvent.job_id == job.id, IngestionJobEvent.event_type == "job.cancelled",
+    )))
+    messages = list(await session.scalars(select(OutboxMessage).where(
+        OutboxMessage.aggregate_id == job.id, OutboxMessage.topic == "ingestion.job_cancelled",
+    )))
+    assert len(events) == len(messages) == 1
+
+
+@pytest.mark.parametrize("late", [IngestionJobStatus.COMPLETED, IngestionJobStatus.FAILED])
+async def test_postgres_delete_and_stale_worker_sessions_serialize_without_deadlock(
+    extraction_db_session: AsyncSession, late: IngestionJobStatus,
+) -> None:
+    session = extraction_db_session
+    assert session.bind is not None
+    if session.bind.dialect.name != "postgresql":
+        pytest.skip("Row-lock and stale-session proof requires real PostgreSQL.")
+    tenant_id, _ = await _create_document_with_jobs(
+        session, tenant_name="Concurrent deletion tenant", document_external_id="concurrent-delete",
+        job_keys=["concurrent-delete-job"],
+    )
+    job = await session.scalar(select(IngestionJob))
+    assert job is not None
+    await transition_ingestion_job(session, tenant_id=tenant_id, job_id=job.id,
+                                   target_status=IngestionJobStatus.RUNNING,
+                                   event_type="job.started", details={})
+    await session.commit()
+    locked = asyncio.Event()
+    attempted = asyncio.Event()
+    async with AsyncSession(bind=session.bind, expire_on_commit=False) as worker:
+        stale_job = await worker.get(IngestionJob, job.id)
+        assert stale_job is not None and stale_job.status == IngestionJobStatus.RUNNING
+        await worker.commit()
+
+        async def deleting() -> None:
+            await session.execute(text("SET LOCAL lock_timeout = '2s'"))
+            await delete_document(session, tenant_id=tenant_id, document_id=job.document_id)
+            locked.set()
+            await attempted.wait()
+            await session.commit()
+
+        async def notifying() -> None:
+            await locked.wait()
+            await worker.execute(text("SET LOCAL lock_timeout = '2s'"))
+            attempted.set()
+            outcome = await transition_ingestion_job(
+                worker, tenant_id=tenant_id, job_id=job.id, target_status=late,
+                event_type=f"job.{late.value}", details={"worker": "late"},
+            )
+            assert outcome.status == IngestionJobStatus.CANCELLED
+            await worker.commit()
+
+        await asyncio.wait_for(asyncio.gather(deleting(), notifying()), timeout=5)
+        assert stale_job.status == IngestionJobStatus.CANCELLED
 
 
 class CapturingOpenSearchBulkClient:

@@ -14,7 +14,7 @@ from flint_graph.application.services.document_versions import (
 from flint_graph.domain.enums import IngestionJobStatus
 from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.domain.transitions import can_transition_job
-from flint_graph.infrastructure.db.models import IngestionJob, IngestionJobEvent
+from flint_graph.infrastructure.db.models import Document, IngestionJob, IngestionJobEvent
 from flint_graph.observability import metrics
 from flint_graph.observability.instruments import INGESTION_JOB_TRANSITIONS
 
@@ -37,15 +37,37 @@ async def transition_ingestion_job(
     error_code: str | None = None,
     error_message: str | None = None,
 ) -> IngestionJob:
+    # Serialize all lifecycle mutations on the owning document first. Deletion
+    # already locks Document before versions; job-first locking deadlocks with it.
+    document = await session.scalar(
+        select(Document)
+        .join(IngestionJob, IngestionJob.document_id == Document.id)
+        .where(IngestionJob.id == job_id, IngestionJob.tenant_id == tenant_id,
+               Document.tenant_id == tenant_id)
+        .with_for_update(of=Document)
+        .execution_options(populate_existing=True)
+    )
+    if document is None:
+        raise NotFoundError(f"Ingestion job '{job_id}' was not found.")
     job = await session.scalar(
         select(IngestionJob)
         .where(IngestionJob.id == job_id, IngestionJob.tenant_id == tenant_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if job is None:
         raise NotFoundError(f"Ingestion job '{job_id}' was not found.")
 
     current_status = job.status
+    if document.deleted_at is not None:
+        if current_status == IngestionJobStatus.CANCELLED:
+            # A late worker notification cannot overturn the deletion outcome.
+            return job
+        if current_status not in _TERMINAL_STATUSES:
+            target_status = IngestionJobStatus.CANCELLED
+            event_type = "job.cancelled"
+            details = {**details, "reason": "document_deleted"}
+            expected_current_statuses = {IngestionJobStatus.QUEUED, IngestionJobStatus.RUNNING}
     if current_status == target_status:
         return job
 
@@ -71,7 +93,11 @@ async def transition_ingestion_job(
         job.error_code = error_code
         job.error_message = error_message
 
-    if target_status == IngestionJobStatus.COMPLETED:
+    if document.deleted_at is not None:
+        # The document/version tombstone is authoritative. Settle the job without
+        # attempting DELETED -> FAILED/CANCELLED/ACTIVE version transitions.
+        pass
+    elif target_status == IngestionJobStatus.COMPLETED:
         await activate_document_version(
             session,
             tenant_id=tenant_id,

@@ -13,7 +13,7 @@ from flint_graph.application.services.job_transitions import transition_ingestio
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
 from flint_graph.domain.enums import IngestionJobStatus
 from flint_graph.domain.errors import NotFoundError
-from flint_graph.infrastructure.db.models import DocumentVersion, IngestionJob
+from flint_graph.infrastructure.db.models import DocumentVersion, IngestionJob, OutboxMessage
 
 
 async def cancel_ingestion_job(
@@ -45,6 +45,13 @@ async def cancel_ingestion_job(
             IngestionJobStatus.RUNNING,
         },
     )
+    existing_dispatch = await session.scalar(select(OutboxMessage.id).where(
+        OutboxMessage.tenant_id == tenant_id,
+        OutboxMessage.topic == INGESTION_JOB_CANCELLED_TOPIC,
+        OutboxMessage.aggregate_id == job.id,
+    ))
+    if existing_dispatch is not None:
+        return JobRecord(job=job, version_number=version_number, created=False)
     trace_context = capture_trace_context()
     payload = IngestionJobCancelledPayload(
         tenant_id=str(tenant_id),

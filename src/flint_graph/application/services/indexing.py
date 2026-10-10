@@ -426,6 +426,11 @@ async def _require_indexable_document_version(
     document_id: UUID,
     document_version_id: UUID,
 ) -> DocumentVersion:
+    document = await session.scalar(select(Document).where(
+        Document.id == document_id, Document.tenant_id == tenant_id,
+    ).with_for_update().execution_options(populate_existing=True))
+    if document is None:
+        raise NotFoundError(f"Document version '{document_version_id}' was not found.")
     row = await session.execute(
         select(DocumentVersion, Document)
         .join(Document, Document.id == DocumentVersion.document_id)
@@ -434,7 +439,8 @@ async def _require_indexable_document_version(
             Document.id == document_id,
             DocumentVersion.id == document_version_id,
         )
-        .with_for_update()
+        .with_for_update(of=DocumentVersion)
+        .execution_options(populate_existing=True)
     )
     version_and_document = row.one_or_none()
     if version_and_document is None:
@@ -612,6 +618,20 @@ async def _require_coverage(
     document_version_id: UUID,
     retrieval_index_version_id: UUID,
 ) -> DocumentIndexCoverage:
+    # Completion/failure used to lock coverage before the document, opposite
+    # deletion's order. All indexing mutations now take Document first.
+    document = await session.scalar(
+        select(Document)
+        .join(DocumentIndexCoverage, DocumentIndexCoverage.document_id == Document.id)
+        .where(
+            Document.tenant_id == tenant_id,
+            DocumentIndexCoverage.tenant_id == tenant_id,
+            DocumentIndexCoverage.document_version_id == document_version_id,
+            DocumentIndexCoverage.retrieval_index_version_id == retrieval_index_version_id,
+        ).with_for_update(of=Document).execution_options(populate_existing=True)
+    )
+    if document is None:
+        raise NotFoundError("Document index coverage was not found.")
     coverage = await session.scalar(
         select(DocumentIndexCoverage)
         .where(
@@ -620,6 +640,7 @@ async def _require_coverage(
             DocumentIndexCoverage.retrieval_index_version_id == retrieval_index_version_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if coverage is None:
         raise NotFoundError(

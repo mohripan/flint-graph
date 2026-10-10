@@ -81,11 +81,21 @@ async def _get_version_for_update(
     tenant_id: UUID,
     version_id: UUID,
 ) -> DocumentVersion:
+    document = await session.scalar(
+        select(Document).join(DocumentVersion, DocumentVersion.document_id == Document.id)
+        .where(DocumentVersion.id == version_id, Document.tenant_id == tenant_id)
+        .with_for_update(of=Document).execution_options(populate_existing=True)
+    )
+    if document is None:
+        raise NotFoundError(f"Document version '{version_id}' was not found.")
+    if document.deleted_at is not None:
+        raise ConflictError("Cannot change a version of a deleted document.")
     version = await session.scalar(
         select(DocumentVersion)
         .join(Document, Document.id == DocumentVersion.document_id)
         .where(DocumentVersion.id == version_id, Document.tenant_id == tenant_id)
-        .with_for_update()
+        .with_for_update(of=DocumentVersion)
+        .execution_options(populate_existing=True)
     )
     if version is None:
         raise NotFoundError(f"Document version '{version_id}' was not found.")

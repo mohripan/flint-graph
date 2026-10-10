@@ -21,6 +21,7 @@ from flint_graph.domain.enums import (
     DocumentLifecycleEventType,
     DocumentProjectionCleanupStatus,
     DocumentVersionStatus,
+    IngestionJobStatus,
     MentionResolutionStatus,
     RelationshipStatus,
 )
@@ -35,6 +36,7 @@ from flint_graph.infrastructure.db.models import (
     DocumentVersion,
     EntityMention,
     EntityRelationship,
+    IngestionJob,
     RetrievalIndexVersion,
 )
 from flint_graph.infrastructure.opensearch import build_delete_chunks_bulk_body
@@ -88,6 +90,25 @@ async def delete_document(
         if version.status in mutable_statuses:
             version.status = DocumentVersionStatus.DELETED
             deleted_versions.append(version)
+
+    # Runtime sessions use autoflush=False. Persist the locked tombstones before
+    # transition helpers refresh their rows; otherwise populate_existing would
+    # overwrite these pending deletion markers with the old database values.
+    await session.flush()
+
+    # Import locally: document-version transitions also use this lifecycle
+    # module for cleanup, so importing cancellation at module load forms a cycle.
+    from flint_graph.application.services.job_cancellation import cancel_ingestion_job
+
+    in_flight_job_ids = list(await session.scalars(
+        select(IngestionJob.id).where(
+            IngestionJob.tenant_id == tenant_id,
+            IngestionJob.document_id == document_id,
+            IngestionJob.status.in_([IngestionJobStatus.QUEUED, IngestionJobStatus.RUNNING]),
+        ).order_by(IngestionJob.id)
+    ))
+    for job_id in in_flight_job_ids:
+        await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job_id)
 
     deleted_version_ids = [version.id for version in deleted_versions]
     if deleted_version_ids:

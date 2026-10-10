@@ -41,7 +41,8 @@ from flint_graph.application.services.provenance_extraction import (
     persist_provenance_extraction_run,
 )
 from flint_graph.config import Settings, get_settings
-from flint_graph.domain.enums import IngestionJobStatus
+from flint_graph.domain.enums import DocumentVersionStatus, IngestionJobStatus
+from flint_graph.domain.errors import NotFoundError
 from flint_graph.infrastructure.db.models import Document, DocumentVersion
 from flint_graph.infrastructure.db.session import SessionFactory
 from flint_graph.infrastructure.object_store import ObjectStore, create_object_store
@@ -311,12 +312,17 @@ async def _get_document_version(
         .join(Document, Document.id == DocumentVersion.document_id)
         .where(
             Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
             DocumentVersion.document_id == document_id,
             DocumentVersion.id == version_id,
+            DocumentVersion.status.notin_([
+                DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED,
+                DocumentVersionStatus.CANCELLED,
+            ]),
         )
     )
     if version is None:
-        raise RuntimeError("document version was not found")
+        raise NotFoundError("Ingestible document version was not found.")
     return version
 
 
