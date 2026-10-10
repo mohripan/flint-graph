@@ -29,6 +29,36 @@ def _manifest() -> CaptureManifest:
     )
 
 
+async def test_capture_records_actual_run_token_rollups_not_zero_fixture_usage():
+    def respond(request):
+        response = _response(request)
+        if request.method == "GET" and request.url.path.endswith("/run-1"):
+            body = response.json()
+            body.update(provider_input_tokens=900, provider_output_tokens=120)
+            return httpx.Response(200, json=body)
+        return response
+
+    async with httpx.AsyncClient(
+        base_url="http://test", transport=httpx.MockTransport(respond)
+    ) as client:
+        records = await capture_dataset(client, _dataset(), _manifest())
+    assert records[0].evaluation.input_tokens == 900
+    assert records[0].evaluation.output_tokens == 120
+    assert records[0].evaluation.estimated_cost_usd is None
+
+
+async def test_capture_sse_read_timeout_uses_query_budget_not_short_client_default():
+    def respond(request):
+        if request.url.path.endswith("/events/stream"):
+            assert request.extensions["timeout"]["read"] == 90
+        return _response(request)
+
+    async with httpx.AsyncClient(
+        base_url="http://test", transport=httpx.MockTransport(respond), timeout=30
+    ) as client:
+        await capture_dataset(client, _dataset(), _manifest(), query_timeout_seconds=90)
+
+
 def _response(request: httpx.Request, *, status: str = "completed") -> httpx.Response:
     assert request.headers["X-Tenant-ID"] == str(_manifest().tenant_id)
     path = request.url.path

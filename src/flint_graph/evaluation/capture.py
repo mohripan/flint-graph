@@ -60,7 +60,9 @@ async def capture_dataset(
             run_id = str(created.json()["id"])
             path = f"/v1/query-runs/{run_id}"
             # SSE currently starts execution. Consume it, but never turn draft JSON into answers.
-            async with client.stream("GET", f"{path}/events/stream", headers=headers) as stream:
+            async with client.stream(
+                "GET", f"{path}/events/stream", headers=headers, timeout=query_timeout_seconds
+            ) as stream:
                 stream.raise_for_status()
                 async for _line in stream.aiter_lines():
                     pass
@@ -81,6 +83,10 @@ async def capture_dataset(
             manifest,
             (perf_counter() - started) * 1000,
         )
+        evaluation = evaluation.model_copy(update={
+            "input_tokens": run.get("provider_input_tokens"),
+            "output_tokens": run.get("provider_output_tokens"),
+        })
         records.append(
             CapturedEvaluation(
                 query_id=query.id,

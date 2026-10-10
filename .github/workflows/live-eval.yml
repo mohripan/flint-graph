@@ -1,35 +1,67 @@
-name: Live Eval
+name: Nightly Financial Black Box
 
 'on':
   schedule:
-    - cron: "17 7 * * *"
+    - cron: "17 19 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: financial-black-box
+  cancel-in-progress: false
+
 jobs:
-  live-claude-eval:
+  configuration-status:
     runs-on: ubuntu-latest
+    steps:
+      - name: Explain disabled deployment checks
+        if: ${{ vars.FLINT_GRAPH_RUN_LIVE_EVAL != 'true' }}
+        run: echo 'UNCONFIGURED - live quality evaluation skipped, not a quality pass. Configure an approved reachable HTTPS evaluation deployment first.'
+
+  financial-black-box:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: ${{ vars.FLINT_GRAPH_RUN_LIVE_EVAL == 'true' }}
+    env:
+      FLINT_GRAPH_EVAL_BASE_URL: ${{ secrets.FLINT_GRAPH_EVAL_BASE_URL }}
+      FLINT_GRAPH_EVAL_TOKEN: ${{ secrets.FLINT_GRAPH_EVAL_TOKEN }}
+      FLINT_GRAPH_EVAL_MANIFEST: ${{ secrets.FLINT_GRAPH_EVAL_MANIFEST }}
+      FLINT_GRAPH_EVAL_ISOLATION_WORKSPACE: ${{ vars.FLINT_GRAPH_EVAL_ISOLATION_WORKSPACE }}
+      FLINT_GRAPH_EVAL_MODEL_FINGERPRINT: ${{ vars.FLINT_GRAPH_EVAL_MODEL_FINGERPRINT }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Install dependencies
-        run: uv sync --all-groups
-      - name: Require live eval recording
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-groups
+      - name: Require explicit deployment configuration
         run: |
-          test -n "$ANTHROPIC_API_KEY"
-          test -f "$FLINT_GRAPH_LIVE_EVAL_RECORDINGS"
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          FLINT_GRAPH_LIVE_EVAL_RECORDINGS: ${{ vars.FLINT_GRAPH_LIVE_EVAL_RECORDINGS || 'evals/reports/acme-smoke/live-claude-recorded.jsonl' }}
-      - name: Gate live-claude eval
+          test -n "$FLINT_GRAPH_EVAL_BASE_URL"
+          test -n "$FLINT_GRAPH_EVAL_TOKEN"
+          test -n "$FLINT_GRAPH_EVAL_MANIFEST"
+          test -n "$FLINT_GRAPH_EVAL_ISOLATION_WORKSPACE"
+          test -n "$FLINT_GRAPH_EVAL_MODEL_FINGERPRINT"
+          case "$FLINT_GRAPH_EVAL_BASE_URL" in https://*) ;; *) exit 1 ;; esac
+          mkdir -p notes
+          printf '%s' "$FLINT_GRAPH_EVAL_MANIFEST" > notes/nightly-manifest.json
+      - name: Download and independently verify pinned public evidence
+        run: uv run flint-graph-corpus download --output notes/nightly-corpus
+      - name: Fresh API SSE provenance and tenant quality gate
         run: >
-          uv run flint-graph-eval run
-          --dataset evals/datasets/acme-smoke
-          --evaluations "$FLINT_GRAPH_LIVE_EVAL_RECORDINGS"
-          --experiment evals/experiments/acme-smoke.yaml
-          --baseline evals/reports/acme-smoke/baselines.json
-          --config-name live-claude
-          --report evals/reports/acme-smoke/live-claude-latest.json
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          FLINT_GRAPH_LIVE_EVAL_RECORDINGS: ${{ vars.FLINT_GRAPH_LIVE_EVAL_RECORDINGS || 'evals/reports/acme-smoke/live-claude-recorded.jsonl' }}
+          uv run flint-graph-eval nightly
+          --dataset evals/datasets/financial-nightly
+          --corpus notes/nightly-corpus
+          --manifest notes/nightly-manifest.json
+          --base-url "$FLINT_GRAPH_EVAL_BASE_URL"
+          --isolation-workspace-id "$FLINT_GRAPH_EVAL_ISOLATION_WORKSPACE"
+          --model-fingerprint "$FLINT_GRAPH_EVAL_MODEL_FINGERPRINT"
+          --git-sha "$GITHUB_SHA"
+          --output notes/nightly-report.json
+      - name: Publish redacted report only
+        if: ${{ always() && hashFiles('notes/nightly-report.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-black-box-redacted
+          path: notes/nightly-report.json
+          retention-days: 7

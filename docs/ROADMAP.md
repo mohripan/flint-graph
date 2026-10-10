@@ -10,6 +10,12 @@ behavior. GitHub milestones 15–23 and their linked issues track remaining work
 Authoritative chunk packing has also started under
 [Milestone 17](milestones/17-retrieval-and-evidence.md); native vector search remains pending.
 
+The [financial nightly rehearsal](reports/2026-10-10-financial-nightly-delivery.md)
+now captures fresh 12-case public-API checks. Its strict quality gate fails on
+multi-report synthesis and ambiguous queries (#59/#60); deployment activation and
+human rubric review are pending. Live user PDF testing also exposed ingestion
+NUL normalization and deletion-race bugs (#57/#58), prioritized next.
+
 This roadmap turns the current GraphRAG platform into a useful, measurable,
 agent-driven product. Proposed features are not implemented merely because they
 appear here. Each milestone needs passing acceptance criteria, linked GitHub

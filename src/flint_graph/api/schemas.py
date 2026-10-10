@@ -548,6 +548,10 @@ class QueryRunResponse(BaseModel):
     answer_citations: list[dict[str, Any]]
     candidate_count: int
     context_token_count: int
+    provider_input_tokens: int
+    provider_output_tokens: int
+    provider_duration_ms: int
+    provider_cost_micros: int | None
     started_at: datetime | None
     completed_at: datetime | None
     failed_at: datetime | None

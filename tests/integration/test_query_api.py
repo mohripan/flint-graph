@@ -570,6 +570,10 @@ async def test_query_run_api_streams_execution_and_persists_inspection_records(
     ]
     assert inspected_body["candidate_count"] == 2
     assert inspected_body["context_token_count"] == 6
+    assert inspected_body["provider_input_tokens"] == 0
+    assert inspected_body["provider_output_tokens"] == 0
+    assert inspected_body["provider_duration_ms"] >= 0
+    assert inspected_body["provider_cost_micros"] is None
     diagnostics = inspected_body["query_diagnostics"]
     assert diagnostics["retriever_candidate_counts"] == {"lexical": 1, "vector": 1}
     assert diagnostics["failed_retrievers"] == []

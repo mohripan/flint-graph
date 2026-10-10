@@ -1,0 +1,9 @@
+{
+  "max_queries": 16,
+  "query_timeout_seconds": 90,
+  "total_timeout_seconds": 1200,
+  "max_provider_tokens": 100000,
+  "min_useful_answer_rate": 0.8,
+  "min_abstention_accuracy": 1,
+  "max_latency_ms_p95": 90000
+}

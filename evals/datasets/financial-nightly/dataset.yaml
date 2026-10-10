@@ -1,0 +1,6 @@
+{
+  "name": "finqa-0f16e286-batch-0",
+  "version": 1,
+  "tenant": "public-financial",
+  "description": "Source-checked historical financial smoke cases; external human review pending. Public FinQA excerpt hashes, not full reports."
+}

@@ -90,14 +90,14 @@ def test_ci_workflows_define_offline_and_secrets_gated_live_eval() -> None:
     live_env = {
         key
         for job in live_workflow["jobs"].values()
-        for step in job.get("steps", [])
-        for key in step.get("env", {})
+        for key in job.get("env", {})
     }
     assert "schedule" in live_workflow["on"]
     assert "workflow_dispatch" in live_workflow["on"]
-    assert "ANTHROPIC_API_KEY" in live_env
-    assert "uv run flint-graph-eval run" in live_commands
-    assert "live-claude" in live_commands
+    assert "FLINT_GRAPH_EVAL_TOKEN" in live_env
+    assert "ANTHROPIC_API_KEY" not in live_env
+    assert "uv run flint-graph-eval nightly" in live_commands
+    assert "UNCONFIGURED" in live_commands
 
 
 def test_compose_local_services_are_no_cost_by_default() -> None:

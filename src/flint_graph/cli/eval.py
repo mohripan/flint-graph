@@ -17,6 +17,7 @@ from uuid import UUID
 
 import httpx
 
+from flint_graph.cli.nightly import register_nightly
 from flint_graph.evaluation.baselines import (
     ThresholdViolation,
     check_regressions,
@@ -251,6 +252,7 @@ def capture_command(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="flint-graph-eval")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    register_nightly(subparsers)
 
     prepare_parser = subparsers.add_parser(
         "prepare", help="ingest a fresh dedicated evaluation corpus"

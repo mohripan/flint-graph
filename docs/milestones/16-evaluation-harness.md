@@ -66,3 +66,18 @@ See the [2026-10-10 comparison report](../reports/2026-10-10-local-answer-qualit
 for three fresh ten-query captures on the same real-ingested corpus. Answer
 match/abstention improved, but the strict graph-retrieval/draft-support gate still
 fails. Milestone 16 remains in progress; accepted baselines are unchanged.
+
+## Nightly public financial black-box harness
+
+[#53](https://github.com/mohripan/flint-graph/issues/53) now has an opt-in fresh
+public-API gate, source-checked 12-case financial suite, real per-run usage,
+model/corpus/index fingerprints, cross-workspace probes and redacted reports.
+It replaces stale-recording scheduled scoring. Missing remote deployment settings
+are explicitly unconfigured, not a pass. Activation, external human rubric
+review and accepted performance baselines remain pending.
+
+The full local rehearsal completed all 12 cases with useful-answer rate 0.9,
+abstention accuracy 0.9167 and p95 latency 16.47 seconds; the strict gate failed.
+[#59](https://github.com/mohripan/flint-graph/issues/59) and
+[#60](https://github.com/mohripan/flint-graph/issues/60) track two-source synthesis
+and ambiguous-query failures. See [the runbook](../runbooks/financial-nightly.md).

@@ -1,0 +1,123 @@
+{
+  "devon-gabon": {
+    "groups": [
+      [
+        "gabon"
+      ],
+      [
+        "205.5 million",
+        "0.2055 billion"
+      ]
+    ]
+  },
+  "pm-operating-income": {
+    "groups": [
+      [
+        "operating income"
+      ],
+      [
+        "11503 million",
+        "11.503 billion"
+      ]
+    ]
+  },
+  "pm-operating-change": {
+    "groups": [
+      [
+        "operating income"
+      ],
+      [
+        "688 million",
+        "0.688 billion"
+      ]
+    ]
+  },
+  "pm-rrp-2017": {
+    "groups": [
+      [
+        "rrp",
+        "reduced risk"
+      ],
+      [
+        "3.6 billion",
+        "3600 million"
+      ]
+    ]
+  },
+  "pm-rrp-2016": {
+    "groups": [
+      [
+        "rrp",
+        "reduced risk"
+      ],
+      [
+        "733 million",
+        "0.733 billion"
+      ]
+    ]
+  },
+  "amex-volume": {
+    "groups": [
+      [
+        "american express"
+      ],
+      [
+        "637 billion"
+      ]
+    ]
+  },
+  "amex-average": {
+    "groups": [
+      [
+        "american express"
+      ],
+      [
+        "127.4"
+      ]
+    ]
+  },
+  "cross-report": {
+    "groups": [
+      [
+        "gabon"
+      ],
+      [
+        "205.5 million"
+      ],
+      [
+        "operating income"
+      ],
+      [
+        "11503 million",
+        "11.503 billion"
+      ]
+    ]
+  },
+  "devon-gas-forecast": {
+    "groups": [
+      [
+        "894 bcf",
+        "894 billion cubic feet"
+      ],
+      [
+        "estimate",
+        "estimated",
+        "forecast",
+        "projected"
+      ]
+    ]
+  },
+  "pm-tax-forecast": {
+    "groups": [
+      [
+        "28"
+      ],
+      [
+        "estimate",
+        "estimated",
+        "forecast",
+        "projected"
+      ]
+    ]
+  }
+}
