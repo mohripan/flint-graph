@@ -174,6 +174,20 @@ bounded retriever error details.
 
 ## Fusion And Reranking
 
+### Explicit coordinated sources
+
+For two or three distinct capitalized possessive source names, the bounded
+`coordinated-possessive-v1` rule records derived `retrieval_queries` alongside the
+unchanged original question. Lexical/vector calls share their existing parent
+candidate limit across clauses, merge results round-robin and deduplicate stable
+candidate IDs with inspectable `retrieval_clause_indices`. Graph retrieval and
+answer/support generation retain the original question. A narrow trailing
+source-attribution display instruction is omitted only from retrieval clauses;
+substantive qualifiers remain. Unsupported classifications and unsupported
+syntax do not expand. Existing scope, evidence and failure gates still apply.
+See [ADR 0022](../adr/0022-bounded-coordinated-source-retrieval.md) for limits; this
+does not guarantee every requested facet fits the final context budget.
+
 Fusion deduplicates candidates by stable source identity and combines retriever
 signals with query-strategy weights. Reranking reorders fused candidates for
 answer usefulness.

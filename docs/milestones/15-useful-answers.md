@@ -243,3 +243,17 @@ deleted/superseded sources, other indexes and foreign tenants do not contribute.
 The preview selects the latest visible version per document before limiting rows.
 The live 100-document financial workspace now shows 100 searchable versions with
 25 preview rows; see [the readiness report](../reports/2026-10-10-complete-search-readiness.md).
+
+## Bounded explicit multi-source retrieval
+
+[#59](https://github.com/mohripan/flint-graph/issues/59) adds inspectable syntactic
+retrieval clauses for two/three explicit named sources without increasing the
+parent candidate allowance. The strict public Devon/Philip Morris cross-report
+case now returns both supported figures and exact required sources. A first live
+failure exposed source-attribution display words dominating lexical ranking;
+only that narrow suffix is omitted from derived retrieval queries. Original
+answer intent, scope and evidence/support gates remain unchanged. See
+[ADR 0022](../adr/0022-bounded-coordinated-source-retrieval.md) and
+[the delivery report](../reports/2026-10-10-coordinated-source-retrieval.md).
+The final nightly gate meets its unchanged 0.8 useful-answer threshold, but two
+individual cases still fail (#70/#71); this is not full release qualification.

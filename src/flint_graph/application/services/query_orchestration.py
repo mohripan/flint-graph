@@ -519,6 +519,75 @@ async def _retrieve_source(
 ) -> list[QueryCandidate]:
     limit = state.get("candidate_limits", {}).get(source, 10)
     query = _require_query(state)
+    classification = _require_classification(state)
+    queries = classification.metadata.get("retrieval_queries", [query])
+    if (
+        source == "graph"
+        or classification.label == "unsupported"
+        or not isinstance(queries, list)
+        or not 2 <= len(queries) <= min(3, limit)
+        or not all(isinstance(item, str) and 0 < len(item) <= 1000 for item in queries)
+    ):
+        return await _retrieve_single_source(
+            session=session,
+            state=state,
+            retrievers=retrievers,
+            source=source,
+            graph_depth=graph_depth,
+            query=query,
+            limit=limit,
+        )
+    groups = []
+    # Subqueries share the parent budget, not a fresh full budget each. Calls on
+    # one read session are sequential; retriever sources still run in parallel.
+    for index, clause in enumerate(queries):
+        allocated = limit // len(queries) + int(index < limit % len(queries))
+        result = await _retrieve_single_source(
+            session=session,
+            state=state,
+            retrievers=retrievers,
+            source=source,
+            graph_depth=graph_depth,
+            query=clause,
+            limit=allocated,
+        )
+        groups.append(result[:allocated])
+    ordered_ids: list[str] = []
+    candidates: dict[str, QueryCandidate] = {}
+    # Round-robin gives each explicit source clause a fair parent rank. Duplicates
+    # keep one identity plus all matching clause indices; no evidence is invented.
+    for offset in range(max(map(len, groups), default=0)):
+        for clause_index, group in enumerate(groups):
+            if offset >= len(group):
+                continue
+            candidate = group[offset]
+            previous = candidates.get(candidate.candidate_id)
+            indices = [clause_index]
+            if previous is not None:
+                indices = sorted(set(previous.metadata["retrieval_clause_indices"] + indices))
+                if previous.normalized_score >= candidate.normalized_score:
+                    candidate = previous
+            else:
+                ordered_ids.append(candidate.candidate_id)
+            candidates[candidate.candidate_id] = candidate.model_copy(
+                update={
+                    "rank": ordered_ids.index(candidate.candidate_id) + 1,
+                    "metadata": {**candidate.metadata, "retrieval_clause_indices": indices},
+                }
+            )
+    return [candidates[identifier] for identifier in ordered_ids[:limit]]
+
+
+async def _retrieve_single_source(
+    *,
+    session: AsyncSession,
+    state: _GraphState,
+    retrievers: QueryRetrieverBundle,
+    source: RetrieverName,
+    graph_depth: int,
+    query: str,
+    limit: int,
+) -> list[QueryCandidate]:
     retrieval_index_version_id = _require_retrieval_index_version_id(state)
     if source == "lexical":
         if retrievers.lexical is None:

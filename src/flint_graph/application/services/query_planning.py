@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.entity_resolution import normalize_name
+from flint_graph.application.query_decomposition import coordinated_retrieval_queries
 from flint_graph.application.query_orchestration import (
     DeterministicQueryClassifier,
     QueryClassification,
@@ -73,6 +74,17 @@ async def classify_query_run(
             retrieval_index_version_id=run.retrieval_index_version_id,
         )
     )
+    queries = coordinated_retrieval_queries(run.query_text)
+    if classification.label != "unsupported" and len(queries) > 1:
+        classification = classification.model_copy(
+            update={
+                "metadata": {
+                    **classification.metadata,
+                    "retrieval_queries": queries,
+                    "decomposition_method": "coordinated-possessive-v1",
+                }
+            }
+        )
     await record_query_classification(
         session,
         tenant_id=tenant_id,
@@ -100,6 +112,11 @@ async def classify_query_run(
             "label": classification.label,
             "strategy": classification.retrieval_plan.strategy,
             "confidence": classification.confidence,
+            **(
+                {"retrieval_query_count": len(queries)}
+                if classification.label != "unsupported" and len(queries) > 1
+                else {}
+            ),
         },
     )
     return classification
@@ -211,9 +228,7 @@ async def _load_entity_surfaces(
         for entity in entities
     ]
     aliases = list(
-        await session.scalars(
-            select(EntityAlias).where(EntityAlias.tenant_id == tenant_id)
-        )
+        await session.scalars(select(EntityAlias).where(EntityAlias.tenant_id == tenant_id))
     )
     surfaces.extend(
         _EntitySurface(
