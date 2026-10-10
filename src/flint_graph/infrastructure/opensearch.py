@@ -57,12 +57,21 @@ class OpenSearchClient:
         _raise_for_status(response)
 
     async def bulk(self, *, body: str) -> None:
+        actions = _bulk_actions(body)
+        if not actions:
+            return
         response = await self._http_client.post(
             "/_bulk",
             content=body,
             headers={"Content-Type": "application/x-ndjson"},
         )
-        _raise_for_status(response)
+        if not response.is_success:
+            raise httpx.HTTPStatusError(
+                f"OpenSearch bulk HTTP failure ({response.status_code}).",
+                request=response.request,
+                response=response,
+            )
+        _validate_bulk_response(response, actions)
 
     async def search(self, *, index_name: str, body: dict[str, Any]) -> list[dict[str, Any]]:
         response = await self._http_client.post(f"/{index_name}/_search", json=body)
@@ -147,9 +156,7 @@ def build_upsert_chunks_bulk_body(
             )
         )
         lines.append(
-            _json_line(
-                build_opensearch_chunk_document(record, index_version_id=index_version_id)
-            )
+            _json_line(build_opensearch_chunk_document(record, index_version_id=index_version_id))
         )
     return "\n".join(lines) + ("\n" if lines else "")
 
@@ -177,12 +184,62 @@ def _json_line(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
+def _bulk_actions(body: str) -> list[str]:
+    """Read action lines, skipping sources even if they contain action-like keys."""
+    lines = iter(body.splitlines())
+    actions: list[str] = []
+    try:
+        for line in lines:
+            metadata = json.loads(line)
+            if not isinstance(metadata, dict) or len(metadata) != 1:
+                raise ValueError
+            action = next(iter(metadata))
+            if action not in {"index", "create", "update", "delete"}:
+                raise ValueError
+            if not isinstance(metadata[action], dict):
+                raise ValueError
+            if action != "delete":
+                if not isinstance(json.loads(next(lines)), dict):
+                    raise ValueError
+            actions.append(action)
+    except (ValueError, StopIteration):
+        raise ValueError("OpenSearch bulk request is malformed.") from None
+    return actions
+
+
+def _validate_bulk_response(response: httpx.Response, actions: list[str]) -> None:
+    # Never persist provider reasons, document bodies or identifiers in errors.
+    try:
+        payload = response.json()
+    except ValueError:
+        raise ValueError("OpenSearch bulk response is malformed.") from None
+    if not isinstance(payload, dict) or type(payload.get("errors")) is not bool:
+        raise ValueError("OpenSearch bulk response is malformed.")
+    items = payload.get("items")
+    if not isinstance(items, list) or len(items) != len(actions):
+        raise ValueError("OpenSearch bulk response item count mismatch.")
+    failures = 0
+    for action, item in zip(actions, items, strict=True):
+        if not isinstance(item, dict) or set(item) != {action}:
+            raise ValueError("OpenSearch bulk response action mismatch.")
+        details = item[action]
+        if not isinstance(details, dict) or type(details.get("status")) is not int:
+            raise ValueError("OpenSearch bulk response item is malformed.")
+        status = details["status"]
+        success = 200 <= status < 300 or (
+            action == "delete" and status == 404 and details.get("result") == "not_found"
+        )
+        if not success or "error" in details:
+            failures += 1
+    if failures or payload["errors"]:
+        raise ValueError(f"OpenSearch bulk failed ({failures}/{len(actions)} items unsuccessful).")
+
+
 def _raise_for_status(response: httpx.Response) -> None:
     if response.is_success:
         return
     message = (
-        f"{response.status_code} {response.reason_phrase} from OpenSearch: "
-        f"{response.text[:500]}"
+        f"{response.status_code} {response.reason_phrase} from OpenSearch: {response.text[:500]}"
     )
     raise httpx.HTTPStatusError(message, request=response.request, response=response)
 

@@ -1,5 +1,15 @@
 # Milestone 22: production hardening
 
+## Projection acknowledgement correctness
+
+[Issue #68](https://github.com/mohripan/flint-graph/issues/68) validates all
+OpenSearch bulk results rather than treating HTTP 200 as successful projection or
+cleanup. Partial writes propagate redacted failure and missing deletes remain
+idempotent. A disposable live synthetic index verified both behaviors; see the
+[delivery report](../reports/2026-10-10-opensearch-bulk-acknowledgements.md).
+Partial-version cleanup scheduling is tracked separately in
+[issue #67](https://github.com/mohripan/flint-graph/issues/67).
+
 Status: in progress. Tracking: [issue #8](https://github.com/mohripan/flint-graph/issues/8).
 Full acceptance criteria are in the [roadmap](../ROADMAP.md).
 

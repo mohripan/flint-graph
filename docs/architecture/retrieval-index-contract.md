@@ -298,6 +298,15 @@ by depth and relationship limit.
 - Backfill failure preserves checkpoint and last error.
 - Failed index versions are not used by default endpoints.
 
+OpenSearch bulk acknowledgements validate every result against the submitted
+action sequence and item count; HTTP 200 alone is not success. Missing or malformed
+results, item errors, unsuccessful statuses and a true aggregate `errors` flag
+raise a redacted failure. Deleting an already-missing record is idempotent only
+when the delete result is `not_found` with status 404 and no error. Bulk failures
+do not include provider reasons, record identifiers or source text in their
+exception message. Successful items in a partially failed bulk can already be
+persisted: this is not an atomic batch or automatic retry guarantee.
+
 ## Security Boundary
 
 `X-Tenant-ID` remains local tenant routing, not authentication. Every retrieval

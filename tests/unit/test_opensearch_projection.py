@@ -146,6 +146,12 @@ async def test_opensearch_client_sends_mapping_alias_bulk_and_search_requests() 
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.url.path == "/_bulk":
+            return httpx.Response(
+                200,
+                json={"errors": False, "items": [{"index": {"status": 201}}]},
+                request=request,
+            )
         if request.url.path.endswith("/_search"):
             return httpx.Response(
                 200,
@@ -228,3 +234,152 @@ async def test_opensearch_client_includes_error_body() -> None:
 
         with pytest.raises(httpx.HTTPStatusError, match="cluster unavailable"):
             await client.create_index(index_name="flint_graph_chunks_v000001", mapping={})
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"errors": True, "items": [{"index": {"status": 429, "error": {"reason": "PRIVATE"}}}]},
+        {"errors": False, "items": [{"index": {"status": 400}}]},
+        {"errors": False, "items": [{"index": {"status": 201, "error": "PRIVATE"}}]},
+        {"errors": True, "items": [{"index": {"status": 201}}]},
+        {"errors": False, "items": []},
+        {"errors": False, "items": [{"delete": {"status": 200}}]},
+        {"errors": False, "items": [{"index": {"status": True}}]},
+        {"errors": False, "items": [{"index": {"status": "201"}}]},
+        {"errors": False, "items": [{"index": {}}]},
+        {"errors": False, "items": [{"index": None}]},
+        {"errors": False, "items": [None]},
+        {"errors": False, "items": {}},
+        {"items": [{"index": {"status": 201}}]},
+        [],
+    ],
+)
+async def test_bulk_rejects_failed_or_malformed_items_without_payload_leaks(
+    payload: object,
+) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    async with httpx.AsyncClient(transport=transport, base_url="http://opensearch") as http_client:
+        with pytest.raises(ValueError, match="OpenSearch bulk") as caught:
+            await OpenSearchClient(http_client=http_client).bulk(
+                body='{"index":{}}\n{"text":"PRIVATE"}\n'
+            )
+        assert "PRIVATE" not in str(caught.value)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "details,accepted",
+    [
+        ({"status": 200, "result": "deleted"}, True),
+        ({"status": 404, "result": "not_found"}, True),
+        ({"status": 404, "error": {"reason": "PRIVATE"}}, False),
+        ({"status": 404}, False),
+        ({"status": 429}, False),
+    ],
+)
+async def test_bulk_delete_not_found_is_idempotent_only_without_error(
+    details: dict[str, object],
+    accepted: bool,
+) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"errors": False, "items": [{"delete": details}]},
+        )
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://opensearch") as http_client:
+        client = OpenSearchClient(http_client=http_client)
+        if accepted:
+            await client.bulk(body='{"delete":{}}\n')
+        else:
+            with pytest.raises(ValueError, match="OpenSearch bulk"):
+                await client.bulk(body='{"delete":{}}\n')
+
+
+@pytest.mark.anyio
+async def test_bulk_checks_all_mixed_actions_and_empty_body() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "errors": False,
+                "items": [
+                    {"index": {"status": 201}},
+                    {"delete": {"status": 404, "result": "not_found"}},
+                    {"create": {"status": 201}},
+                    {"update": {"status": 200}},
+                ],
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://opensearch"
+    ) as http_client:
+        client = OpenSearchClient(http_client=http_client)
+        await client.bulk(body="")
+        await client.bulk(
+            body='{"index":{}}\n{}\n{"delete":{}}\n{"create":{}}\n{}\n{"update":{}}\n{}\n'
+        )
+    assert len(requests) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status", [200, 503])
+async def test_bulk_errors_do_not_include_http_or_invalid_json_payload(status: int) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, text="PRIVATE"))
+    async with httpx.AsyncClient(transport=transport, base_url="http://opensearch") as http_client:
+        with pytest.raises((ValueError, httpx.HTTPStatusError)) as caught:
+            await OpenSearchClient(http_client=http_client).bulk(body='{"delete":{}}\n')
+        assert "PRIVATE" not in str(caught.value)
+
+
+@pytest.mark.anyio
+async def test_bulk_checks_later_items_and_rejects_extra_results() -> None:
+    for items in [
+        [{"index": {"status": 201}}, {"index": {"status": 429}}],
+        [{"index": {"status": 201}}] * 3,
+    ]:
+        transport = httpx.MockTransport(
+            lambda request, items=items: httpx.Response(
+                200,
+                json={"errors": False, "items": items},
+            )
+        )
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://opensearch"
+        ) as http_client:
+            with pytest.raises(ValueError, match="OpenSearch bulk"):
+                await OpenSearchClient(http_client=http_client).bulk(
+                    body='{"index":{}}\n{}\n{"index":{}}\n{}\n'
+                )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "body",
+    [
+        "PRIVATE",
+        '{"index":{}}\n',
+        '{"delete":null}\n',
+        '{"unknown":{}}\n',
+        '{"index":{}}\n[]\n',
+    ],
+)
+async def test_bulk_rejects_malformed_request_before_http(body: str) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://opensearch"
+    ) as http_client:
+        with pytest.raises(ValueError, match="OpenSearch bulk request is malformed"):
+            await OpenSearchClient(http_client=http_client).bulk(body=body)
+    assert not requests
