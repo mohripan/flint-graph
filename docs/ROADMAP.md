@@ -380,6 +380,14 @@ prove it. Report commands passed, failed and skipped explicitly.
 
 ## Evidence needed for later decisions
 
+User-requested live/black-box verification and business/financial corpora are
+tracked in [#53: fresh nightly quality tests](https://github.com/mohripan/flint-graph/issues/53)
+and [#54: pinned public financial corpus](https://github.com/mohripan/flint-graph/issues/54).
+Use independently annotated questions/evidence, keep answers out of ingested
+documents, and distinguish real model-quality results from fixture/health checks.
+Every implemented slice should include relevant live verification, with missing
+services, credentials, models, budgets and skipped checks reported explicitly.
+
 Actual failing runs/effective deployment; corpus size/languages/formats/churn;
 hardware/concurrency/spend; embedding/chunking choices; filtered ANN benchmarks;
 strategy quality/cost/latency thresholds; provider cache support; recovery and

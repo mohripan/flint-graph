@@ -44,6 +44,7 @@ dev = [
 [project.scripts]
 flint-graph-eval = "flint_graph.cli.eval:main"
 flint-graph-doctor = "flint_graph.cli.doctor:main"
+flint-graph-dev = "flint_graph.cli.dev:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

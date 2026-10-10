@@ -6,6 +6,12 @@ See the [roadmap](docs/ROADMAP.md) for useful-answer reliability, embeddings,
 agent strategies, whole-corpus CAG, delegated research, production delivery,
 and the platform/developer-experience tracks (Milestones 24–26).
 
+Use the [explicit developer profiles](docs/runbooks/developer-profiles.md) for
+deterministic offline-model setup or installed local-real models with reviewed
+SHA-256 fingerprints. Guarded bootstrap preserves existing indexes; tiny-corpus
+ingestion is opt-in and repeatable. Financial-report corpus collection and fresh
+nightly user-question testing are tracked in issues #54 and #53.
+
 ## Why these milestones come first
 
 The early milestones establish durable identities, tenant boundaries, version semantics, idempotency, inspectable job state, a safe asynchronous dispatch path, canonical graph mutation, retrieval primitives, and query-time orchestration. LangGraph orchestrates query execution; it does not replace the ingestion or indexing control planes.

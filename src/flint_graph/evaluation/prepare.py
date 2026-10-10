@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -81,6 +83,8 @@ async def prepare_corpus(
     timeout_seconds: float = 600,
     poll_interval_seconds: float = 1,
     on_workspace_created: Callable[[UUID], None] | None = None,
+    workspace_id: UUID | None = None,
+    index_version_id: UUID | None = None,
 ) -> CaptureManifest:
     if (
         not sources
@@ -95,34 +99,75 @@ async def prepare_corpus(
         or any(not source.content or len(source.content) > _MAX_FILE_BYTES for source in sources)
     ):
         raise ValueError("Preparation requires unique labels and bounded nonempty source bytes.")
-    workspace_id: UUID | None = None
+    if (workspace_id is None) != (index_version_id is None):
+        raise ValueError("Existing workspace preparation requires an explicit active index UUID.")
+    existing_workspace = workspace_id is not None
     try:
         async with asyncio.timeout(timeout_seconds):
-            workspace_name = (
-                f"eval-{dataset.metadata.name[:100]}-v{dataset.metadata.version}-{uuid4().hex[:8]}"
-            )
-            workspace = await client.post(
-                "/v1/workspaces",
-                json={
-                    "name": workspace_name,
-                },
-            )
-            workspace.raise_for_status()
-            workspace_id = UUID(workspace.json()["id"])
-            if on_workspace_created is not None:
-                on_workspace_created(workspace_id)
+            if workspace_id is None:
+                workspace_name = (
+                    f"eval-{dataset.metadata.name[:100]}-v{dataset.metadata.version}-"
+                    f"{uuid4().hex[:8]}"
+                )
+                workspace = await client.post("/v1/workspaces", json={"name": workspace_name})
+                workspace.raise_for_status()
+                workspace_id = UUID(workspace.json()["id"])
+                if on_workspace_created is not None:
+                    on_workspace_created(workspace_id)
             headers = {"X-Tenant-ID": str(workspace_id)}
-            index = await client.post("/v1/retrieval-index/bootstrap", headers=headers)
-            index.raise_for_status()
-            index_id = str(index.json()["id"])
+            if existing_workspace:
+                readiness = await client.get("/v1/system-readiness", headers=headers)
+                readiness.raise_for_status()
+                active = readiness.json()["search_readiness"]["active_index_version"]
+                if active is None or UUID(active["id"]) != index_version_id:
+                    raise ValueError(
+                        "Active index changed; preparation stopped without switching it."
+                    )
+                index_id = str(index_version_id)
+            else:
+                index = await client.post("/v1/retrieval-index/bootstrap", headers=headers)
+                index.raise_for_status()
+                index_id = str(index.json()["id"])
             document_labels: dict[str, str] = {}
             versions: dict[str, str] = {}
             jobs: dict[str, str] = {}
             for source in sources:
+                identity = json.dumps(
+                    [
+                        str(workspace_id),
+                        dataset.metadata.name,
+                        dataset.metadata.version,
+                        source.label,
+                        source.filename,
+                        source.content_type,
+                        sha256(source.content).hexdigest(),
+                    ],
+                    separators=(",", ":"),
+                ).encode()
+                idempotency_key = (
+                    "dev-smoke-" + sha256(identity).hexdigest()
+                    if existing_workspace
+                    else f"eval-{uuid4().hex}"
+                )
+                external_id = (
+                    "dev-smoke-"
+                    + sha256(
+                        json.dumps(
+                            [
+                                dataset.metadata.name,
+                                dataset.metadata.version,
+                                source.label,
+                            ],
+                            separators=(",", ":"),
+                        ).encode()
+                    ).hexdigest()
+                    if existing_workspace
+                    else source.label
+                )
                 uploaded = await client.post(
                     "/v1/documents/uploads",
-                    headers={**headers, "Idempotency-Key": f"eval-{uuid4().hex}"},
-                    data={"title": source.label, "external_id": source.label},
+                    headers={**headers, "Idempotency-Key": idempotency_key},
+                    data={"title": source.label, "external_id": external_id},
                     files={"file": (source.filename, source.content, source.content_type)},
                 )
                 uploaded.raise_for_status()

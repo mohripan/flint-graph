@@ -97,3 +97,30 @@ async def test_bare_inventory_name_matches_explicit_latest_tag() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(tags)) as client:
         report = await get_model_readiness(settings, http_client=client)
     assert report[1].status == "available"
+
+
+async def test_model_inventory_reports_only_valid_sha256_fingerprints() -> None:
+    def tags(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "models": [
+                    {"name": "answer:latest", "digest": "a" * 64, "private": "private-secret"},
+                    {"name": "support:latest", "digest": "private-secret"},
+                ]
+            },
+        )
+
+    settings = Settings(
+        env="test",
+        query_answer_provider="ollama",
+        query_answer_model="answer",
+        query_support_provider="ollama",
+        query_support_model="support",
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(tags)) as client:
+        report = await get_model_readiness(settings, http_client=client)
+    assert report[1].digest == "sha256:" + "a" * 64
+    assert report[2].status == "available"
+    assert report[2].digest is None
+    assert "private-secret" not in str(report)

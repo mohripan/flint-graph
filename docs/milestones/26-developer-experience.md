@@ -10,7 +10,7 @@ Design: [ADR 15](../adr/0015-reproducible-developer-experience.md).
 | Issue | Scope | State |
 | --- | --- | --- |
 | [#48](https://github.com/mohripan/flint-graph/issues/48) | Add a read-only developer doctor command with actionable readiness diagnostics | implemented |
-| [#49](https://github.com/mohripan/flint-graph/issues/49) | Add reproducible offline and local-real bootstrap profiles | planned |
+| [#49](https://github.com/mohripan/flint-graph/issues/49) | Add reproducible offline and local-real bootstrap profiles | implemented |
 | [#50](https://github.com/mohripan/flint-graph/issues/50) | Pin service images and modernize CI runtimes with reviewed upgrade policy | planned |
 | [#51](https://github.com/mohripan/flint-graph/issues/51) | Validate observability assets with native tools in CI | implemented |
 | [#52](https://github.com/mohripan/flint-graph/issues/52) | Improve query and ingestion debugging handoff from the product UI | planned |
@@ -34,6 +34,18 @@ hosted availability remains explicitly unverified. See the
 exit codes and limitations. Bootstrap/runtime upgrades remain separately tracked.
 The [doctor delivery report](../reports/2026-10-10-developer-doctor-delivery.md)
 records exact checks and the live smoke's deployment boundary.
+
+Explicit offline/local-real Compose overlays and `flint-graph-dev` now extend the
+existing public-API preparation flow. Setup checks provider config and model
+inventory before mutation; local-real requires a reviewed SHA-256 model lock.
+Guarded bootstrap refuses to replace an incompatible active index under the
+workspace lock. Optional tiny-corpus preparation is repeatable and preserves
+document/version/job identities for unchanged input. The real offline ingestion
+smoke and ten fresh query captures are recorded in the
+[profile delivery report](../reports/2026-10-10-developer-profiles-delivery.md).
+Local-real positive end-to-end hardware/model verification remains unavailable
+without a separately installed embedding model; this is not claimed as proven.
+See the [profile runbook](../runbooks/developer-profiles.md).
 
 ## Milestone-wide target (not yet achieved)
 

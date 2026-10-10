@@ -15,7 +15,7 @@ from flint_graph.application.services.retrieval_index_versions import (
 )
 from flint_graph.config import Settings
 from flint_graph.domain.enums import RetrievalIndexScope, RetrievalIndexVersionStatus
-from flint_graph.domain.errors import NotFoundError
+from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.infrastructure.db.models import RetrievalIndexVersion, Tenant
 
 _CHUNKING_SCHEMA_VERSION = "1"
@@ -27,6 +27,7 @@ async def bootstrap_retrieval_index(
     *,
     settings: Settings,
     tenant_id: UUID | None,
+    preserve_active: bool = False,
 ) -> RetrievalIndexVersion:
     # None is an explicit internal operator choice, never the workspace API default.
     scope = RetrievalIndexScope.GLOBAL if tenant_id is None else RetrievalIndexScope.TENANT
@@ -51,6 +52,8 @@ async def bootstrap_retrieval_index(
     )
     if active is not None and _matches_spec(active, spec):
         return active
+    if active is not None and preserve_active:
+        raise ConflictError("Incompatible active index; guarded bootstrap will not replace it.")
 
     building = await session.scalar(
         select(RetrievalIndexVersion).where(

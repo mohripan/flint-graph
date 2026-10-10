@@ -30,6 +30,15 @@ jobs:
           docker compose --profile metrics config > /dev/null
           docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
           docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability --profile metrics config > /dev/null
+          docker compose -f compose.yaml -f compose.offline.yaml config > /dev/null
+          docker compose -f compose.yaml -f compose.offline.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
+          docker compose -f compose.yaml -f compose.local-real.yaml config > /dev/null
+          docker compose -f compose.yaml -f compose.local-real.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
+        env:
+          FLINT_GRAPH_LOCAL_EMBEDDING_MODEL: fixture-embedding:1
+          FLINT_GRAPH_LOCAL_EMBEDDING_DIMENSIONS: '768'
+          FLINT_GRAPH_LOCAL_ANSWER_MODEL: fixture-answer:1
+          FLINT_GRAPH_LOCAL_SUPPORT_MODEL: fixture-answer:1
       - name: Offline deterministic eval gate
         run: >
           uv run flint-graph-eval run

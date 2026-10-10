@@ -1,6 +1,8 @@
 from uuid import uuid4
 
 from flint_graph.api.dependencies import get_index_backfill_workflow_starter
+from flint_graph.config import Settings, get_settings
+from flint_graph.main import app
 
 # The oidc_auth / oidc_settings_override fixtures live in conftest.py so other
 # suites (audit, usage) can authenticate as distinct real users too.
@@ -12,6 +14,21 @@ class CapturingBackfillStarter:
 
     async def start_index_backfill_workflow(self, *, job_id: object) -> None:
         self.started.append(str(job_id))
+
+
+async def test_guarded_bootstrap_refuses_to_replace_an_existing_active_index(client):
+    workspace = (await client.post("/v1/workspaces", json={"name": "Guarded setup"})).json()
+    headers = {"X-Tenant-ID": workspace["id"]}
+    first = (await client.post("/v1/retrieval-index/bootstrap", headers=headers)).json()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        env="test", embedding_model="changed-model", embedding_dimensions=64
+    )
+    guarded = await client.post(
+        "/v1/retrieval-index/bootstrap?preserve_active=true", headers=headers
+    )
+    assert guarded.status_code == 409
+    indexes = (await client.get("/v1/index-versions", headers=headers)).json()
+    assert [(index["id"], index["status"]) for index in indexes] == [(first["id"], "active")]
 
 
 async def test_model_readiness_requires_authorized_workspace_access(client, oidc_auth) -> None:

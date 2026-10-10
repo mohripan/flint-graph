@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from typing import Literal
 
 import httpx
@@ -19,6 +20,7 @@ class ModelReadiness(BaseModel):
     provider: str
     model: str
     status: Literal["available", "missing", "unavailable", "unknown", "offline"]
+    digest: str | None = None
 
 
 def _canonical_name(model: str) -> str:
@@ -56,10 +58,11 @@ async def get_model_readiness(
             settings.ollama_base_url,
         ),
     ]
-    inventories: dict[str, set[str] | None] = {}
+    inventories: dict[str, dict[str, str | None] | None] = {}
     report = []
     for role, provider, model, base_url in models:
         status = "unknown"
+        digest = None
         if provider == "deterministic":
             status = "offline"
         elif provider == "ollama":
@@ -71,13 +74,16 @@ async def get_model_readiness(
                 status = "unavailable"
             else:
                 status = "available" if _canonical_name(model) in names else "missing"
-        report.append(ModelReadiness(role=role, provider=provider, model=model, status=status))
+                digest = names.get(_canonical_name(model))
+        report.append(
+            ModelReadiness(role=role, provider=provider, model=model, status=status, digest=digest)
+        )
     return report
 
 
 async def _inventory(
     client: httpx.AsyncClient, endpoint: str, settings: Settings
-) -> set[str] | None:
+) -> dict[str, str | None] | None:
     try:
         async with asyncio.timeout(settings.readiness_probe_timeout_seconds):
             async with client.stream(
@@ -96,12 +102,18 @@ async def _inventory(
         items = payload["models"]
         if not isinstance(items, list):
             return None
-        names = set()
+        names = {}
         for item in items:
             name = item.get("name") if isinstance(item, dict) else None
             if not isinstance(name, str):
                 return None
-            names.add(_canonical_name(name))
+            digest = item.get("digest")
+            fingerprint = None
+            if isinstance(digest, str):
+                digest = digest.removeprefix("sha256:")
+                if re.fullmatch(r"[a-fA-F0-9]{64}", digest):
+                    fingerprint = "sha256:" + digest.lower()
+            names[_canonical_name(name)] = fingerprint
         return names
     except (httpx.HTTPError, TimeoutError, ValueError, KeyError, TypeError):
         # Provider response bodies, URLs and exception messages are never diagnostics.

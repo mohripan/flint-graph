@@ -201,3 +201,90 @@ async def test_prepare_times_out_with_inspectable_workspace_not_a_false_success(
                 timeout_seconds=0.05,
                 poll_interval_seconds=0.01,
             )
+
+
+async def test_prepare_can_resume_an_existing_workspace_without_switching_its_index(tmp_path):
+    directory = _corpus(tmp_path)
+    dataset = load_dataset(directory)
+    workspace_id, index_id, document_id, version_id, job_id = (uuid4() for _ in range(5))
+    keys = []
+    external_ids = []
+
+    def respond(request):
+        assert request.method != "DELETE"
+        assert request.headers["X-Tenant-ID"] == str(workspace_id)
+        path = request.url.path
+        if path.endswith("/system-readiness"):
+            return httpx.Response(
+                200,
+                json={
+                    "search_readiness": {
+                        "active_index_version": {"id": str(index_id)},
+                    }
+                },
+            )
+        if path.endswith("/uploads"):
+            keys.append(request.headers["Idempotency-Key"])
+            external_ids.append(
+                request.content.split(b'name="external_id"')[1]
+                .split(b"\r\n\r\n")[1]
+                .split(b"\r\n")[0]
+            )
+            return httpx.Response(
+                201,
+                json={
+                    "document_id": str(document_id),
+                    "document_version_id": str(version_id),
+                    "ingestion_job_id": str(job_id),
+                },
+            )
+        if "/ingestion-jobs/" in path:
+            return httpx.Response(200, json={"status": "completed"})
+        if path.endswith("/index-coverage"):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "document_version_id": str(version_id),
+                        "retrieval_index_version_id": str(index_id),
+                        "status": "completed",
+                        "chunk_count": 1,
+                    }
+                ],
+            )
+        if "/search/" in path:
+            return httpx.Response(200, json={"results": [{"document_version_id": str(version_id)}]})
+        if path.endswith("/entities"):
+            return httpx.Response(200, json=[])
+        pytest.fail(f"Unexpected mutation or request: {request.method} {path}")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), base_url="http://test"
+    ) as c:
+        first = await prepare_corpus(
+            c,
+            dataset,
+            load_corpus(directory, dataset),
+            workspace_id=workspace_id,
+            index_version_id=index_id,
+        )
+        second = await prepare_corpus(
+            c,
+            dataset,
+            load_corpus(directory, dataset),
+            workspace_id=workspace_id,
+            index_version_id=index_id,
+        )
+        (directory / "corpus" / "acme.md").write_text("# Acme\n\nAcme is now in Paris.\n")
+        await prepare_corpus(
+            c,
+            dataset,
+            load_corpus(directory, dataset),
+            workspace_id=workspace_id,
+            index_version_id=index_id,
+        )
+    assert first.tenant_id == second.tenant_id == workspace_id
+    assert first.document_labels == second.document_labels == {str(document_id): "acme"}
+    assert keys[0] == keys[1]
+    assert keys[2] != keys[1]
+    assert external_ids[0] == external_ids[1] == external_ids[2]

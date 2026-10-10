@@ -1,0 +1,24 @@
+# Embeddings/answers/support use installed local models. Extraction stays a fixture.
+# No model service, pull command or fallback is introduced.
+x-local-models: &local-models
+  FLINT_GRAPH_LLM_PROVIDER: deterministic
+  FLINT_GRAPH_EMBEDDING_PROVIDER: ollama
+  FLINT_GRAPH_EMBEDDING_MODEL: ${FLINT_GRAPH_LOCAL_EMBEDDING_MODEL:?Set an installed tagged embedding model}
+  FLINT_GRAPH_EMBEDDING_DIMENSIONS: ${FLINT_GRAPH_LOCAL_EMBEDDING_DIMENSIONS:?Set that model's actual dimensions}
+  FLINT_GRAPH_EMBEDDING_OLLAMA_BASE_URL: ${FLINT_GRAPH_LOCAL_OLLAMA_URL:-http://host.docker.internal:11434}
+  FLINT_GRAPH_OLLAMA_BASE_URL: ${FLINT_GRAPH_LOCAL_OLLAMA_URL:-http://host.docker.internal:11434}
+  FLINT_GRAPH_QUERY_ANSWER_PROVIDER: ollama
+  FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: ollama
+  FLINT_GRAPH_QUERY_ANSWER_MODEL: ${FLINT_GRAPH_LOCAL_ANSWER_MODEL:?Set an installed tagged answer model}
+  FLINT_GRAPH_QUERY_SUPPORT_MODEL: ${FLINT_GRAPH_LOCAL_SUPPORT_MODEL:?Set an installed tagged support model}
+
+services:
+  api:
+    environment: *local-models
+    extra_hosts: ["host.docker.internal:host-gateway"]
+  ingestion-worker:
+    environment: *local-models
+    extra_hosts: ["host.docker.internal:host-gateway"]
+  outbox-relay:
+    environment: *local-models
+    extra_hosts: ["host.docker.internal:host-gateway"]

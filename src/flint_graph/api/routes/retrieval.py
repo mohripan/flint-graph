@@ -74,6 +74,7 @@ async def get_system_readiness_endpoint(
 ) -> dict[str, Any]:
     readiness = await get_search_readiness(session, tenant_id=tenant_id)
     return {
+        "setup_capabilities": {"preserve_active_bootstrap": True},
         "auth": {
             "mode": settings.auth_mode,
             "oidc_issuer": settings.oidc_issuer,
@@ -104,8 +105,11 @@ async def bootstrap_retrieval_index_endpoint(
     session: SessionDep,
     settings: SettingsDep,
     actor: AuditActorDep,
+    preserve_active: bool = Query(default=False),
 ) -> RetrievalIndexVersionResponse:
-    version = await bootstrap_retrieval_index(session, settings=settings, tenant_id=tenant_id)
+    version = await bootstrap_retrieval_index(
+        session, settings=settings, tenant_id=tenant_id, preserve_active=preserve_active
+    )
     await record_audit_event(
         session,
         action=AuditAction.RETRIEVAL_INDEX_BOOTSTRAPPED,

@@ -1,6 +1,6 @@
 # ADR 0015: Reproducible developer experience
 
-- Status: accepted; doctor and native observability validation implemented, remaining tools planned
+- Status: accepted; doctor, guarded profiles and native validation implemented; pins/debugging planned
 - Date: 2026-10-10
 - Track: developer experience; Milestone 26; epic [#36](https://github.com/mohripan/flint-graph/issues/36)
 
@@ -31,8 +31,10 @@ an alternate route around the workspace access boundary.
 [#50 pins and CI](https://github.com/mohripan/flint-graph/issues/50),
 [#51 native observability validation](https://github.com/mohripan/flint-graph/issues/51),
 [#52 debugging handoff](https://github.com/mohripan/flint-graph/issues/52).
-The read-only doctor and native observability validation are implemented.
+The read-only doctor, explicit guarded profiles and native observability validation are implemented.
 See the [doctor runbook](../runbooks/developer-doctor.md) and
 [Milestone 26](../milestones/26-developer-experience.md) for delivered behavior;
-profiles, version upgrades and product debugging handoff remain separate issues.
+The [profile runbook](../runbooks/developer-profiles.md) documents the guarded
+extension of M16 preparation, model locks and verification limits. Version
+upgrades and product debugging handoff remain separate issues.
 

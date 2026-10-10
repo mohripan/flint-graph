@@ -1,0 +1,18 @@
+# Explicit model-offline profile. Local infrastructure still uses networking.
+x-offline-models: &offline-models
+  FLINT_GRAPH_LLM_PROVIDER: deterministic
+  FLINT_GRAPH_EMBEDDING_PROVIDER: deterministic
+  FLINT_GRAPH_EMBEDDING_MODEL: deterministic-test
+  FLINT_GRAPH_EMBEDDING_DIMENSIONS: "384"
+  FLINT_GRAPH_QUERY_ANSWER_PROVIDER: deterministic
+  FLINT_GRAPH_QUERY_SUPPORT_PROVIDER: deterministic
+  FLINT_GRAPH_QUERY_ANSWER_MODEL: deterministic
+  FLINT_GRAPH_QUERY_SUPPORT_MODEL: deterministic
+
+services:
+  api:
+    environment: *offline-models
+  ingestion-worker:
+    environment: *offline-models
+  outbox-relay:
+    environment: *offline-models
