@@ -62,6 +62,14 @@ inhibits ticket-severity duplicates when a matching page is active, and retains
 silences/notification state in its own volume. **The default receiver sends
 nothing**, even when an alert fires. This is not a production HA deployment.
 
+The standalone scrape profile reads the API only, not the worker/relay OTLP
+metrics in LGTM. It requires the API scrape setting and matching local token
+above; otherwise its target is down and application alerts lack data. Starting
+Alertmanager alone proves neither rule coverage nor healthy scraping. Fleet-wide
+production rules need a common all-process metric source or federation plus
+missing-telemetry alerts under #43. The provisioned Grafana datasource already
+uses LGTM's all-process metric store, independently of this rehearsal profile.
+
 Validate configs using the actual pinned tools:
 
 ```powershell

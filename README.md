@@ -3,7 +3,8 @@
 A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, adds an OIDC-backed workspace access boundary for MVP use, and hardens the public API boundary for controlled deployments. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 See the [roadmap](docs/ROADMAP.md) for useful-answer reliability, embeddings,
-agent strategies, whole-corpus CAG, delegated research, and production delivery.
+agent strategies, whole-corpus CAG, delegated research, production delivery,
+and the platform/developer-experience tracks (Milestones 24–26).
 
 ## Why these milestones come first
 
@@ -129,7 +130,8 @@ To rehearse a pull-based metrics deployment:
 $env:FLINT_GRAPH_METRICS_ENABLED = "true"
 $env:FLINT_GRAPH_METRICS_TOKEN = "local-scrape-token"
 docker compose --profile metrics up -d
-# Prometheus on http://localhost:9090; alert rules from ops/observability/alerts.yml
+# Prometheus: http://127.0.0.1:9090; Alertmanager: http://127.0.0.1:9093
+# The default Alertmanager receiver sends nothing.
 ```
 
 Cost requires pricing configuration; unpriced calls are recorded with a null cost
@@ -139,7 +141,14 @@ rather than a guessed one:
 $env:FLINT_GRAPH_USAGE_PRICING = '{"anthropic:claude-opus-4-8":{"input_per_million":15.0,"output_per_million":75.0}}'
 ```
 
-Logs never contain prompts, answers, or document text.
+Grafana automatically provisions the [operations dashboard](http://localhost:3000/d/flint-graph-operations)
+against LGTM's all-process metrics. The optional standalone scrape profile above
+reads the API only. [Local Phoenix and trace fan-out](docs/runbooks/ai-observability.md)
+adds AI trace inspection without model calls or changing provider defaults;
+email delivery, ELK/log pipeline selection and vLLM qualification remain tracked
+issues, not completed production features.
+
+Logs redact prompts, answers, and document text by default.
 `FLINT_GRAPH_LOG_PAYLOADS=true` exists for local prompt debugging only and is
 rejected in staging and production. See
 `docs/runbooks/operations-observability.md` and

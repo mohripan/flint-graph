@@ -16,7 +16,10 @@ Design: [ADR 14](../adr/0014-measured-search-and-inference-platform.md).
 
 ## Acceptance and boundaries
 
-Run reproducible 10k/100k/1m-chunk comparisons as hardware permits; isolate tenant/deletion filters; qualify optional vLLM with grounded-answer and support tests; publish latency, recall, quality and resource evidence. Ollama remains supported.
+Run reproducible 10k/100k/1m-chunk comparisons as hardware permits; isolate
+tenant/deletion filters; qualify optional vLLM with grounded-answer and support
+tests; publish latency, recall, quality and resource evidence. Ollama remains
+supported.
 
 Coordinate M16/M17/M21/M22. Capacity targets and vLLM adoption require hardware/workload evidence; do not claim performance from the tiny smoke corpus.
 

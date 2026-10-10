@@ -50,7 +50,12 @@ Exported-span tests cover all five operation kinds and failures. This is a
 provider-span guarantee, not a claim that every third-party HTTP/SQL/framework
 instrumentation is fully sanitized; production telemetry hardening remains #43.
 
-Phoenix receives privacy-safe AI traces; Grafana dashboards provision automatically; alerts reach Alertmanager; a log-backend ADR and production retention/auth boundaries are recorded. SMTP is separately operator-configured, never enabled by guessing an email.
+## Milestone-wide target (not yet achieved)
+
+Phoenix receives privacy-safe AI traces; Grafana dashboards provision
+automatically; alerts reach Alertmanager; a log-backend ADR and production
+retention/auth boundaries are recorded. SMTP is separately operator-configured,
+never enabled by guessing an email.
 
 Deliver privacy-safe spans first, then alert delivery and dashboard provisioning, then Phoenix. ELK and email remain explicit follow-ups. Local Compose tools are not production-ready merely because they start.
 

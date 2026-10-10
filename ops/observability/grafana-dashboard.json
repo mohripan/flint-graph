@@ -865,7 +865,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "tps",
+          "unit": "suffix: tokens/s",
           "noValue": "No samples",
           "color": {
             "mode": "palette-classic"
