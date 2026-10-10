@@ -1,0 +1,12 @@
+apiVersion: 1
+providers:
+  - name: FlintGraph operations
+    orgId: 1
+    folder: FlintGraph
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/flint-graph/dashboards
+      foldersFromFilesStructure: false

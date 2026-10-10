@@ -293,6 +293,9 @@ services:
       retries: 20
     volumes:
       - observability_data:/data
+      - ./ops/observability/grafana/provisioning/dashboards/flint-graph.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/flint-graph.yml:ro
+      - ./ops/observability/grafana/provisioning/datasources/flint-graph.yml:/otel-lgtm/grafana/conf/provisioning/datasources/flint-graph.yml:ro
+      - ./ops/observability/grafana-dashboard.json:/etc/flint-graph/dashboards/flint-graph-operations.json:ro
 
   # Opt-in scrape path for rehearsing a deployment that pulls metrics instead of
   # receiving them over OTLP. Requires the API to be started with
@@ -305,7 +308,7 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=6h
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     environment:
       FLINT_GRAPH_METRICS_TOKEN: ${FLINT_GRAPH_METRICS_TOKEN:-}
     volumes:
@@ -315,8 +318,26 @@ services:
     depends_on:
       api:
         condition: service_started
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    profiles: ["metrics"]
+    image: prom/alertmanager:v0.34.1
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --data.retention=120h
+      # This is one local instance, not a production HA cluster.
+      - --cluster.listen-address=
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./ops/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
 
 volumes:
+  alertmanager_data:
   prometheus_data:
   postgres_data:
   minio_data:

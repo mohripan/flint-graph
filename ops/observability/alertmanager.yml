@@ -1,0 +1,19 @@
+# Developer rehearsal only: alerts are visible in the UI but send nothing.
+# Real SMTP/webhook receivers belong in an operator-owned, secret-mounted config.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: local-no-delivery
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: local-no-delivery
+
+inhibit_rules:
+  - source_matchers: ['severity="page"']
+    target_matchers: ['severity="ticket"']
+    equal: [alertname, service]

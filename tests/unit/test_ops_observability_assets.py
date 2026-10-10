@@ -22,6 +22,24 @@ ALERTS = Path("ops/observability/alerts.yml")
 DASHBOARD = Path("ops/observability/grafana-dashboard.json")
 PROMETHEUS_CONFIG = Path("ops/observability/prometheus.yml")
 
+
+def test_alerts_reach_an_opt_in_loopback_alertmanager_without_external_delivery() -> None:
+    compose = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
+    service = compose["services"]["alertmanager"]
+    assert service["profiles"] == ["metrics"]
+    assert service["ports"] == ["127.0.0.1:9093:9093"]
+    assert service["image"].startswith("prom/alertmanager:v")
+    assert "latest" not in service["image"]
+    assert "alertmanager_data:/alertmanager" in service["volumes"]
+    prometheus = yaml.safe_load(PROMETHEUS_CONFIG.read_text(encoding="utf-8"))
+    targets = prometheus["alerting"]["alertmanagers"][0]["static_configs"][0]["targets"]
+    assert targets == ["alertmanager:9093"]
+    config = yaml.safe_load(Path("ops/observability/alertmanager.yml").read_text("utf-8"))
+    assert config["route"]["group_by"] == ["alertname", "service"]
+    assert config["route"]["receiver"] == "local-no-delivery"
+    assert config["receivers"] == [{"name": "local-no-delivery"}]
+    assert config["inhibit_rules"][0]["equal"] == ["alertname", "service"]
+
 # Names that appear in queries but are produced by PromQL, not by our exporter.
 _PROMQL_FUNCTIONS = frozenset(
     {
@@ -144,6 +162,35 @@ def test_dashboard_panels_are_uniquely_identified_and_titled() -> None:
     assert len(ids) == len(set(ids))
     assert dashboard["uid"] == "flint-graph-operations"
     assert all(panel["title"] for panel in dashboard["panels"])
+
+
+def test_operations_dashboard_is_provisioned_with_a_default_datasource_and_clear_units() -> None:
+    compose = yaml.safe_load(Path("compose.yaml").read_text("utf-8"))
+    volumes = compose["services"]["observability"]["volumes"]
+    assert any("grafana/provisioning/dashboards" in mount for mount in volumes)
+    assert any("grafana/provisioning/datasources" in mount for mount in volumes)
+    assert any("grafana-dashboard.json" in mount for mount in volumes)
+    provisioning = yaml.safe_load(
+        Path("ops/observability/grafana/provisioning/dashboards/flint-graph.yml").read_text("utf-8")
+    )
+    assert provisioning["providers"][0]["folder"] == "FlintGraph"
+    assert provisioning["providers"][0]["disableDeletion"] is True
+    datasource = yaml.safe_load(
+        Path("ops/observability/grafana/provisioning/datasources/flint-graph.yml").read_text("utf-8")
+    )["datasources"][0]
+    assert datasource["uid"] == "flint-graph-metrics"
+    assert datasource["url"] == "http://127.0.0.1:9090"
+    dashboard = json.loads(DASHBOARD.read_text("utf-8"))
+    assert dashboard["templating"]["list"][0]["current"]["value"] == datasource["uid"]
+    for panel in dashboard["panels"]:
+        targets = panel.get("targets", [])
+        if not targets:
+            continue
+        expressions = " ".join(target["expr"] for target in targets)
+        if "histogram_quantile" in expressions:
+            assert all("histogram_quantile" in target["expr"] for target in targets)
+            assert panel["fieldConfig"]["defaults"]["unit"] == "ms"
+        assert panel["fieldConfig"]["defaults"]["noValue"] == "No samples"
 
 
 def test_alert_runbook_anchors_exist_in_the_runbook() -> None:

@@ -38,8 +38,55 @@ docker compose --profile metrics up -d
 # Prometheus: http://localhost:9090
 ```
 
-Import `ops/observability/grafana-dashboard.json` into Grafana and point it at a
-Prometheus datasource.
+The FlintGraph operations dashboard now provisions automatically in the
+FlintGraph folder at <http://localhost:3000/d/flint-graph-operations>. Its default
+`FlintGraph metrics` datasource reads LGTM's internal Prometheus, including
+worker/relay OTLP metrics. It does not point at the separate API-only scrape
+profile on host port 9090. Existing LGTM datasources/dashboards remain intact.
+Latency, rate and backlog panels have separate units; absent samples show
+`No samples` rather than being treated as zero or healthy.
+
+Dashboard assets are mounted read-only and reloaded every 30 seconds. Initial
+provisioning mounts require `docker compose up -d --no-deps observability`;
+this recreates the telemetry container but preserves its existing data volume.
+For another Grafana deployment, import the JSON or install the provisioning
+files and point the datasource at that deployment's Prometheus. Provisioning
+paths are specific to the pinned local LGTM image, not production defaults.
+
+### Alert delivery rehearsal
+
+The `metrics` profile forwards the checked-in rules to Alertmanager on
+<http://127.0.0.1:9093>. Prometheus is at <http://127.0.0.1:9090>. Both new
+operator endpoints bind loopback. Alertmanager groups by alert name/service,
+inhibits ticket-severity duplicates when a matching page is active, and retains
+silences/notification state in its own volume. **The default receiver sends
+nothing**, even when an alert fires. This is not a production HA deployment.
+
+Validate configs using the actual pinned tools:
+
+```powershell
+docker compose --profile metrics run --rm --no-deps --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml
+docker compose --profile metrics run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
+```
+
+Start only Alertmanager without changing existing application containers:
+
+```powershell
+docker compose --profile metrics up -d --no-deps alertmanager
+```
+
+A synthetic local alert can be POSTed to `/api/v2/alerts` with labels
+`alertname=FlintGraphLocalRehearsal`, `service=flint-graph`, `severity=ticket`,
+a summary and explicit `startsAt`/`endsAt` timestamps. Confirm it appears via
+`GET /api/v2/alerts`, then resolve it by POSTing the same labels with `endsAt`
+in the past. This rehearses lifecycle without touching model services or sending
+mail. It does not prove that every production rule will fire under load.
+
+For email/webhook delivery, [issue #41](https://github.com/mohripan/flint-graph/issues/41)
+requires an operator-owned recipient/relay configuration, TLS and external
+secret files. Never place SMTP passwords in this file or guess a personal email.
+Mount a separate deployment config, validate it with amtool, and test only an
+approved mailbox. Actual notifications are not implemented by this rehearsal.
 
 ### Deployed
 
