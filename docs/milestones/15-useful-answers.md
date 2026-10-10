@@ -164,3 +164,14 @@ segmentation for LF/CRLF and trailing whitespace. Source offsets end at the exac
 trimmed paragraph, preserving decoded-text evidence coordinates. Regressions cover
 the pure parser and its real bounded subprocess. Historical failed attempts remain
 inspectable; a retry must create a new immutable document version/ingestion attempt.
+
+## Streaming setup transaction
+
+[Issue #26](https://github.com/mohripan/flint-graph/issues/26) releases the request
+authentication/setup transaction before returning the SSE body. Previously its
+`last_login_at` update held the user's row lock during model generation, causing
+other requests by that principal to wait. Run/index/filter snapshots and tenant
+authorization are completed first; execution uses its existing owned sessions.
+A real PostgreSQL test pauses answer generation and requires simultaneous status
+inspection to succeed while the provider remains paused. This does not make
+query execution durable; disconnect/replay behavior is unchanged.

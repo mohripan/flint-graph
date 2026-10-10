@@ -239,11 +239,16 @@ async def stream_query_run_events_endpoint(
         vector=_VectorQueryRetriever(neo4j_client, embedding_model, index_snapshot, filters),
         graph=_GraphQueryRetriever(filters),
     )
+    initial_status = run.status
+    # Authentication updates last_login_at in this dependency session. Do not
+    # retain its user-row lock (or an idle connection) for the whole SSE body.
+    # All authorized run/index/filter values have been materialized above.
+    await session.commit()
     stream = _stream_query_events(
         session_factory=session_factory,
         tenant_id=tenant_id,
         query_run_id=query_run_id,
-        initial_status=run.status,
+        initial_status=initial_status,
         retrievers=retrievers,
         graph_depth=settings.query_graph_depth,
         rerank_max_results=settings.query_max_candidate_limit,

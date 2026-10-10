@@ -954,6 +954,43 @@ async def test_fresh_evaluation_capture_runs_public_query_pipeline(query_api_env
 
 
 @pytest.mark.asyncio
+async def test_query_inspection_does_not_wait_for_stream_authentication_lock(
+    query_api_env: Any,
+) -> None:
+    client, session_factory, _opensearch, _neo4j = query_api_env
+    async with session_factory() as session:
+        if session.get_bind().dialect.name != "postgresql":
+            pytest.skip("Requires PostgreSQL row locks; enable FLINT_GRAPH_PG_INTEGRATION.")
+        tenant, _index_id = await _tenant_with_searchable_content(session)
+    entered = asyncio.Event()
+    released = asyncio.Event()
+
+    class PausedAnswerGenerator(QueryAnswerGenerator):
+        async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer:
+            entered.set()
+            await released.wait()
+            return await super().generate(request)
+
+    app.dependency_overrides[dependencies.get_answer_generator] = lambda: PausedAnswerGenerator()
+    created = await client.post(
+        "/v1/query-runs", headers=_headers(tenant.id),
+        json={"query": "Where is Acme headquartered?"},
+    )
+    path = f"/v1/query-runs/{created.json()['id']}"
+    stream_task = asyncio.create_task(
+        client.get(f"{path}/events/stream", headers=_headers(tenant.id)),
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=10)
+        inspected = await asyncio.wait_for(client.get(path, headers=_headers(tenant.id)), timeout=2)
+        assert inspected.status_code == 200
+        assert inspected.json()["status"] == "running"
+    finally:
+        released.set()
+        await stream_task
+
+
+@pytest.mark.asyncio
 async def test_query_run_creation_rejects_active_index_without_searchable_content(
     query_api_env: tuple[
         httpx.AsyncClient,
