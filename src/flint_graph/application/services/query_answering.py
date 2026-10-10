@@ -9,9 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.query_orchestration import (
+    AnswerFaithfulnessReport,
     AnswerGenerationRequest,
     AnswerGenerator,
     DeterministicAnswerGenerator,
+    GeneratedAnswer,
     PackedContextRecord,
     StreamingAnswerGenerator,
     SupportChecker,
@@ -21,6 +23,7 @@ from flint_graph.application.query_orchestration import (
 )
 from flint_graph.application.services.query_faithfulness import (
     QueryFaithfulnessPolicy,
+    QueryFaithfulnessResult,
     faithfulness_summary,
     verify_generated_answer,
 )
@@ -30,6 +33,7 @@ from flint_graph.application.services.query_runs import (
     persist_query_answer_claims,
     transition_query_run,
 )
+from flint_graph.application.services.query_scope import financial_scope_clarification
 from flint_graph.application.services.usage import record_provider_usage
 from flint_graph.application.usage import usage_from_metadata
 from flint_graph.domain.enums import ProviderUsageOperation, QueryRunStatus
@@ -70,6 +74,14 @@ async def generate_query_answer(
             tenant_id=tenant_id,
             query_run_id=query_run_id,
         )
+        filters = run.metadata_.get("filters", {})
+        clarification = await financial_scope_clarification(
+            session,
+            tenant_id=tenant_id,
+            query=run.query_text,
+            retrieval_index_version_id=run.retrieval_index_version_id,
+            filters=filters if isinstance(filters, dict) else {},
+        )
         model = generator or DeterministicAnswerGenerator()
         generation_request = AnswerGenerationRequest(
             tenant_id=tenant_id,
@@ -78,7 +90,38 @@ async def generate_query_answer(
             context_pack=context_pack,
         )
         stage = "generate_answer"
-        if isinstance(model, StreamingAnswerGenerator):
+        if clarification is not None:
+            draft_answer = GeneratedAnswer(
+                text=clarification.text,
+                insufficient_context=True,
+                metadata={"provider": "scope-policy", "model": "financial-scope-v1"},
+            )
+            verification = QueryFaithfulnessResult(
+                answer=draft_answer,
+                report=AnswerFaithfulnessReport(
+                    supported_claim_count=0,
+                    unsupported_claim_count=0,
+                    abstained=True,
+                    abstain_reason="ambiguous_financial_scope",
+                    support_method="scope-policy",
+                    metadata={
+                        "policy_version": "financial-scope-v1",
+                        "missing_scope": clarification.missing_scope,
+                    },
+                ),
+            )
+            await append_query_run_event(
+                session,
+                tenant_id=tenant_id,
+                query_run_id=query_run_id,
+                event_type="query.clarification_required",
+                payload={
+                    "reason": "ambiguous_financial_scope",
+                    "policy_version": "financial-scope-v1",
+                    "missing_scope": clarification.missing_scope,
+                },
+            )
+        elif isinstance(model, StreamingAnswerGenerator):
             draft_answer = await model.stream_generate(
                 generation_request,
                 _provisional_delta_recorder(
@@ -89,31 +132,33 @@ async def generate_query_answer(
             )
         else:
             draft_answer = await model.generate(generation_request)
-        stage = "support_check"
-        verification = await verify_generated_answer(
-            tenant_id=tenant_id,
-            query=run.query_text,
-            context_pack=context_pack,
-            draft_answer=draft_answer,
-            support_checker=support_checker,
-            policy=QueryFaithfulnessPolicy(
-                min_supported_claim_ratio=min_supported_claim_ratio,
-                min_context_relevance=min_context_relevance,
-            ),
-        )
+        if clarification is None:
+            stage = "support_check"
+            verification = await verify_generated_answer(
+                tenant_id=tenant_id,
+                query=run.query_text,
+                context_pack=context_pack,
+                draft_answer=draft_answer,
+                support_checker=support_checker,
+                policy=QueryFaithfulnessPolicy(
+                    min_supported_claim_ratio=min_supported_claim_ratio,
+                    min_context_relevance=min_context_relevance,
+                ),
+            )
         stage = "persist_answer"
         answer = verification.answer
         faithfulness = faithfulness_summary(verification.report)
         answer_provider = _answer_provider(draft_answer)
-        await _record_answer_usage(
-            session,
-            tenant_id=tenant_id,
-            query_run_id=query_run_id,
-            draft_answer=draft_answer,
-            support_metadata=verification.report.metadata.get("support"),
-            pricing=usage_pricing or {},
-            currency=usage_currency,
-        )
+        if clarification is None:
+            await _record_answer_usage(
+                session,
+                tenant_id=tenant_id,
+                query_run_id=query_run_id,
+                draft_answer=draft_answer,
+                support_metadata=verification.report.metadata.get("support"),
+                pricing=usage_pricing or {},
+                currency=usage_currency,
+            )
         _record_answer_metrics(verification.report)
         answer_citations = [citation.model_dump(mode="json") for citation in answer.citations]
         await persist_query_answer_claims(

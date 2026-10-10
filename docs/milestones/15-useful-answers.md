@@ -1,5 +1,16 @@
 # Milestone 15: useful answers and explainable failures
 
+## Financial scope clarification
+
+[Issue #60](https://github.com/mohripan/flint-graph/issues/60) returns an inspectable
+clarification for bare financial-value questions spanning multiple searchable
+documents. Answer/support calls are skipped; the run completes abstained without
+claims/citations and the frontend asks the user to narrow the question. Named,
+scoped and other-language semantic ambiguity are not fully solved. Rejected drafts
+remain in audit and evaluation metrics, and nightly thresholds are unchanged.
+See [ADR 0021](../adr/0021-clarifying-bare-financial-values.md) and the
+[verification report](../reports/2026-10-10-financial-scope-clarification.md).
+
 Status: in progress. Tracking: [issue #1](https://github.com/mohripan/flint-graph/issues/1).
 See the [roadmap](../ROADMAP.md) for the complete acceptance criteria.
 

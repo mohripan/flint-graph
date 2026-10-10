@@ -38,11 +38,14 @@ class _ApprovingChecker:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("text", [
-    "Acme Corporation's annual revenue is not mentioned in the context.",
-    "The context does not provide the name of Initech's chief executive officer.",
-    "The provided context does not contain Acme's annual revenue.",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Acme Corporation's annual revenue is not mentioned in the context.",
+        "The context does not provide the name of Initech's chief executive officer.",
+        "The provided context does not contain Acme's annual revenue.",
+    ],
+)
 async def test_context_insufficiency_commentary_cannot_be_a_supported_answer(text: str) -> None:
     result = await verify_generated_answer(
         tenant_id=uuid4(),
@@ -64,11 +67,10 @@ async def test_context_insufficiency_commentary_cannot_be_a_supported_answer(tex
 async def test_explicit_negative_fact_is_not_context_insufficiency_commentary() -> None:
     text = "Acme Corporation does not manufacture consumer appliances."
     pack = _context_pack()
-    pack = pack.model_copy(update={"records": [
-        pack.records[0].model_copy(update={"text": text})
-    ]})
+    pack = pack.model_copy(update={"records": [pack.records[0].model_copy(update={"text": text})]})
     result = await verify_generated_answer(
-        tenant_id=uuid4(), query="Does Acme manufacture consumer appliances?",
+        tenant_id=uuid4(),
+        query="Does Acme manufacture consumer appliances?",
         context_pack=pack,
         draft_answer=GeneratedAnswer(
             text=text, metadata={"draft_claims": [{"text": text, "citations": ["c1"]}]}
@@ -83,21 +85,39 @@ async def test_explicit_negative_fact_is_not_context_insufficiency_commentary() 
 async def test_inline_citations_are_repaired_without_stripping_factual_parentheses(structured):
     text = "Acme Corporation is headquartered in Berlin (Germany). [c1] [c999]"
     pack = _context_pack()
-    pack = pack.model_copy(update={"records": [pack.records[0].model_copy(update={
-        "text": "Acme Corporation is headquartered in Berlin (Germany)."
-    })]})
+    pack = pack.model_copy(
+        update={
+            "records": [
+                pack.records[0].model_copy(
+                    update={"text": "Acme Corporation is headquartered in Berlin (Germany)."}
+                )
+            ]
+        }
+    )
     draft = GeneratedAnswer(
         text=text,
-        citations=[AnswerCitation(citation_id="c1", context_id="ctx-0001", marker="[c1]",
-                                  source_ids={"chunk_id": "chunk-acme"})],
+        citations=[
+            AnswerCitation(
+                citation_id="c1",
+                context_id="ctx-0001",
+                marker="[c1]",
+                source_ids={"chunk_id": "chunk-acme"},
+            )
+        ],
         metadata={"draft_claims": [{"text": text, "citations": ["c1"]}]} if structured else {},
     )
-    result = await verify_generated_answer(tenant_id=uuid4(), query="Where is Acme headquartered?",
-                                           context_pack=pack, draft_answer=draft)
+    result = await verify_generated_answer(
+        tenant_id=uuid4(),
+        query="Where is Acme headquartered?",
+        context_pack=pack,
+        draft_answer=draft,
+    )
     assert result.answer.text == "Acme Corporation is headquartered in Berlin (Germany). [c1]"
     assert result.report.claims[0].text == "Acme Corporation is headquartered in Berlin (Germany)."
-    assert any(repair.action == "dropped_unknown" and "c999" in repair.original_marker
-               for repair in result.report.repairs)
+    assert any(
+        repair.action == "dropped_unknown" and "c999" in repair.original_marker
+        for repair in result.report.repairs
+    )
 
 
 def _context_pack() -> QueryContextPack:
@@ -148,6 +168,28 @@ async def test_verified_answer_omits_partially_supported_claims() -> None:
 
     assert [claim.support_status for claim in result.report.claims] == ["supported", "partial"]
     assert result.answer.text == "Acme Corporation is headquartered in Berlin. [c1]"
+    assert [citation.citation_id for citation in result.answer.citations] == ["c1"]
+
+
+@pytest.mark.anyio
+async def test_unsupported_draft_is_not_rendered_or_hidden_from_audit() -> None:
+    result = await verify_generated_answer(
+        tenant_id=uuid4(),
+        query="Where does Acme operate?",
+        context_pack=_context_pack(),
+        draft_answer=GeneratedAnswer(
+            text="Provisional",
+            metadata={
+                "draft_claims": [
+                    {"text": "Acme Corporation is headquartered in Berlin.", "citations": ["c1"]},
+                    {"text": "Elephants invented quantum submarines.", "citations": ["c2"]},
+                ]
+            },
+        ),
+    )
+    assert result.answer.text == "Acme Corporation is headquartered in Berlin. [c1]"
+    assert result.report.unsupported_claim_count == 1
+    assert result.report.claims[1].support_status == "unsupported"
     assert [citation.citation_id for citation in result.answer.citations] == ["c1"]
 
 

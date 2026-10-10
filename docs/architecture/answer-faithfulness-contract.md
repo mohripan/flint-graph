@@ -136,6 +136,14 @@ judge by `query_support_provider`. `deterministic` is the default for both.
 
 ## Expected Invariants
 
+Bare financial-value questions spanning multiple searchable documents can complete
+with `ambiguous_financial_scope` and a clarification instead of a generated answer.
+The bounded scope policy emits a persisted `query.clarification_required` event,
+uses `scope-policy` for answer/support attribution, and creates no model usage,
+claims or citations. Retrieval usage is still recorded. This narrow English policy
+is not a general ambiguity detector; see
+[ADR 0021](../adr/0021-clarifying-bare-financial-values.md).
+
 - Every surviving citation maps to a packed context record.
 - Every persisted answer claim carries a support decision.
 - Repair records every change to model-emitted citation markers.

@@ -297,9 +297,15 @@ export function AskPage() {
             {abstainReason && (
               <Card className="border-amber-200 bg-amber-50 p-5">
                 <p className="mb-1 text-sm font-semibold text-amber-800">
-                  Not enough evidence to answer
+                  {abstainReason === "ambiguous_financial_scope"
+                    ? "Please narrow your question"
+                    : "Not enough evidence to answer"}
                 </p>
-                <p className="text-sm text-amber-700">{abstainReason}</p>
+                <p className="text-sm text-amber-700">
+                  {abstainReason === "ambiguous_financial_scope"
+                    ? "Several workspace reports could match this question."
+                    : abstainReason}
+                </p>
               </Card>
             )}
 

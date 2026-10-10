@@ -131,18 +131,18 @@ try {
         if (tenant !== 'qa-workspace') return json([]);
         if (u.searchParams.get('q') === 'missing') return json([]);
         if (u.searchParams.get('q') === 'needle' || u.searchParams.has('before_id')) return json([saved]);
-        return json(Array.from({length:25}, (_,n) => ({...saved,id:n===0?'failed-run':n===1?'abstained-run':n===2?'slow-run':n===3?'pending-run':'page-'+n,
-          query_text:n===0?'Failed saved question':n===1?'Abstained saved question':n===2?'Slow saved question':n===3?'Pending saved question':'Saved question '+n,
+        return json(Array.from({length:25}, (_,n) => ({...saved,id:n===0?'failed-run':n===1?'abstained-run':n===2?'slow-run':n===3?'pending-run':n===4?'clarification-run':'page-'+n,
+          query_text:n===0?'Failed saved question':n===1?'Abstained saved question':n===2?'Slow saved question':n===3?'Pending saved question':n===4?'Clarification saved question':'Saved question '+n,
           status:n===0?'failed':n===3?'running':'completed'})));
       }
       if (u.pathname.startsWith('/v1/query-runs/')) {
         const id = u.pathname.split('/')[3];
-        if (u.pathname.endsWith('/provenance')) return json({answer_text:id==='abstained-run'?null:saved.answer_text,
-          abstained:id==='abstained-run',abstain_reason:'Synthetic insufficient evidence.',citations:[],supported_claim_count:0,unsupported_claim_count:0});
+        if (u.pathname.endsWith('/provenance')) return json({answer_text:id==='abstained-run'?null:id==='clarification-run'?'Which company or document should I use?':saved.answer_text,
+          abstained:id==='abstained-run'||id==='clarification-run',abstain_reason:id==='clarification-run'?'ambiguous_financial_scope':'Synthetic insufficient evidence.',citations:[],supported_claim_count:0,unsupported_claim_count:0});
         if (id==='slow-run') await new Promise(resolve=>setTimeout(resolve,1800));
         return json({...saved,id,query_text:id==='slow-run'?'Slow saved question':saved.query_text,
           status:id==='failed-run'?'failed':id==='pending-run'?'running':'completed',
-          answer_text:id==='slow-run'?'STALE WORKSPACE ANSWER':id==='abstained-run'?null:saved.answer_text,
+          answer_text:id==='slow-run'?'STALE WORKSPACE ANSWER':id==='abstained-run'?null:id==='clarification-run'?'Which company or document should I use?':saved.answer_text,
           error_message:'Synthetic provider failure.'});
       }
       return original(input, init);
@@ -161,6 +161,7 @@ try {
     ["Failed saved question", "Synthetic provider failure."],
     ["Abstained saved question", "Synthetic insufficient evidence."],
     ["Pending saved question", "This saved question is running."],
+    ["Clarification saved question", "Please narrow your question"],
   ]) {
     run("find", "text", "Question history", "click", "--exact");
     run("find", "role", "button", "click", "--name", name, "--exact");

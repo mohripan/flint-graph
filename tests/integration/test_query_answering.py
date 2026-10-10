@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,13 +21,130 @@ from flint_graph.application.services.query_runs import (
     create_query_run,
     persist_query_context_pack,
 )
+from flint_graph.application.services.query_scope import financial_scope_clarification
 from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
-from flint_graph.domain.enums import QueryRunStatus, RetrievalIndexScope
-from flint_graph.infrastructure.db.models import QueryAnswerClaim, QueryRun, QueryRunEvent, Tenant
+from flint_graph.domain.enums import (
+    DocumentIndexCoverageStatus,
+    DocumentVersionStatus,
+    QueryRunStatus,
+    RetrievalIndexScope,
+    SourceType,
+)
+from flint_graph.infrastructure.db.models import (
+    Document,
+    DocumentIndexCoverage,
+    DocumentVersion,
+    ProviderUsageEvent,
+    QueryAnswerClaim,
+    QueryRun,
+    QueryRunEvent,
+    Tenant,
+)
+
+
+@pytest.mark.parametrize("query", ["What was revenue?", "What was revenue in 2019?"])
+async def test_ambiguous_financial_query_clarifies_without_model_calls(
+    extraction_db_session: AsyncSession,
+    query: str,
+) -> None:
+    session = extraction_db_session
+    tenant = Tenant(name="Ambiguous financial scope")
+    session.add(tenant)
+    await session.flush()
+    index_id = await _active_index_id(session, tenant.id)
+    for number in range(2):
+        document = Document(
+            tenant_id=tenant.id, title=f"Synthetic report {number}", source_type=SourceType.UPLOAD
+        )
+        session.add(document)
+        await session.flush()
+        version = DocumentVersion(
+            document_id=document.id, version_number=1, status=DocumentVersionStatus.ACTIVE
+        )
+        session.add(version)
+        await session.flush()
+        session.add(
+            DocumentIndexCoverage(
+                tenant_id=tenant.id,
+                document_id=document.id,
+                document_version_id=version.id,
+                retrieval_index_version_id=index_id,
+                status=DocumentIndexCoverageStatus.COMPLETED,
+            )
+        )
+    run = await create_query_run(
+        session,
+        QueryRunCreate(tenant_id=tenant.id, query_text=query, retrieval_index_version_id=index_id),
+    )
+    run.status = QueryRunStatus.RUNNING
+    await persist_query_context_pack(
+        session,
+        tenant_id=tenant.id,
+        query_run_id=run.id,
+        context_pack=ApplicationQueryContextPack(
+            pack_id="ambiguous-pack",
+            token_budget=100,
+            records=[
+                PackedContextRecord(
+                    context_id="ctx-1",
+                    candidate_id="lexical:chunk:1",
+                    citation_id="c1",
+                    text="Synthetic revenue was 123.",
+                    token_count=5,
+                    source_ids={"chunk_id": "1"},
+                )
+            ],
+        ),
+    )
+
+    class ForbiddenGenerator:
+        async def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswer:
+            raise AssertionError("Ambiguous query must not invoke the answer model")
+
+    class ForbiddenChecker:
+        async def check(self, request):
+            raise AssertionError("Clarification must not invoke the support model")
+
+    result = await generate_query_answer(
+        session,
+        tenant_id=tenant.id,
+        query_run_id=run.id,
+        generator=ForbiddenGenerator(),
+        support_checker=ForbiddenChecker(),
+    )
+    await session.commit()
+    assert result.status == QueryRunStatus.COMPLETED
+    assert result.insufficient_context is True
+    assert "Which company or document" in (result.answer_text or "")
+    assert run.abstained is True and run.abstain_reason == "ambiguous_financial_scope"
+    assert run.answer_provider == "scope-policy" and run.support_method == "scope-policy"
+    assert run.answer_citations == []
+    assert run.supported_claim_count == run.unsupported_claim_count == 0
+    assert not list(
+        await session.scalars(
+            select(QueryAnswerClaim).where(QueryAnswerClaim.query_run_id == run.id)
+        )
+    )
+    assert not list(
+        await session.scalars(
+            select(ProviderUsageEvent).where(ProviderUsageEvent.query_run_id == run.id)
+        )
+    )
+    events = list(
+        await session.scalars(
+            select(QueryRunEvent)
+            .where(QueryRunEvent.query_run_id == run.id)
+            .order_by(QueryRunEvent.sequence)
+        )
+    )
+    assert [event.sequence for event in events] == list(range(1, len(events) + 1))
+    assert any(event.event_type == "query.clarification_required" for event in events)
+    assert not any(event.payload.get("provisional") for event in events)
+    assert events[-1].event_type == "query.completed"
 
 
 class DraftAnswerGenerator:
@@ -43,6 +161,104 @@ class DraftAnswerGenerator:
                 ]
             },
         )
+
+
+@pytest.mark.parametrize(
+    "case,expected",
+    [
+        ("two_current", True),
+        ("one_current", False),
+        ("foreign_tenant", False),
+        ("deleted", False),
+        ("superseded", False),
+        ("failed_coverage", False),
+        ("other_index", False),
+        ("same_document", False),
+        ("document_filter", False),
+        ("version_filter", False),
+        ("malformed_filter", True),
+    ],
+)
+async def test_financial_scope_uses_authorized_current_distinct_documents(
+    extraction_db_session: AsyncSession,
+    case: str,
+    expected: bool,
+) -> None:
+    from datetime import UTC, datetime
+
+    session = extraction_db_session
+    tenant = Tenant(name="Scope ownership")
+    other = Tenant(name="Foreign scope")
+    session.add_all([tenant, other])
+    await session.flush()
+    index_id = await _active_index_id(session, tenant.id)
+    other_index_id = await _active_index_id(session, other.id)
+    first_id = None
+    first_version_id = None
+    for number in range(2):
+        owner = other.id if number and case == "foreign_tenant" else tenant.id
+        if number and case == "same_document":
+            document = await session.get(Document, first_id)
+            assert document is not None
+        else:
+            document = Document(
+                tenant_id=owner, title="Synthetic scope", source_type=SourceType.UPLOAD
+            )
+            if number and case == "deleted":
+                document.deleted_at = datetime.now(UTC)
+            session.add(document)
+            await session.flush()
+        version = DocumentVersion(
+            document_id=document.id,
+            version_number=number + 1,
+            status=DocumentVersionStatus.SUPERSEDED
+            if number and case == "superseded"
+            else DocumentVersionStatus.ACTIVE,
+        )
+        session.add(version)
+        await session.flush()
+        if not number:
+            first_id, first_version_id = document.id, version.id
+        if number and case == "one_current":
+            continue
+        session.add(
+            DocumentIndexCoverage(
+                tenant_id=owner,
+                document_id=document.id,
+                document_version_id=version.id,
+                retrieval_index_version_id=other_index_id
+                if number and case == "other_index"
+                else index_id,
+                status=DocumentIndexCoverageStatus.FAILED
+                if number and case == "failed_coverage"
+                else DocumentIndexCoverageStatus.COMPLETED,
+            )
+        )
+    await session.flush()
+    filters = {}
+    if case == "document_filter":
+        filters = {"document_id": str(first_id)}
+    elif case == "version_filter":
+        filters = {"document_version_id": str(first_version_id)}
+    elif case == "malformed_filter":
+        filters = {"document_id": "not-a-uuid"}
+    result = await financial_scope_clarification(
+        session,
+        tenant_id=tenant.id,
+        retrieval_index_version_id=index_id,
+        query="What was revenue?",
+        filters=filters,
+    )
+    assert (result is not None) is expected
+    # Foreign/missing selectors never expand scope into another tenant's sources.
+    foreign = await financial_scope_clarification(
+        session,
+        tenant_id=tenant.id,
+        retrieval_index_version_id=index_id,
+        query="What was revenue?",
+        filters={"document_id": str(uuid4())},
+    )
+    assert foreign is None
 
 
 class StreamingDraftAnswerGenerator(DraftAnswerGenerator):
