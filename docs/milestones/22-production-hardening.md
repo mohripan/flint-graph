@@ -10,6 +10,12 @@ idempotent. A disposable live synthetic index verified both behaviors; see the
 Partial-version cleanup scheduling is tracked separately in
 [issue #67](https://github.com/mohripan/flint-graph/issues/67).
 
+[Issue #67](https://github.com/mohripan/flint-graph/issues/67) now schedules cleanup
+for every recorded stale-version/index identity, including interrupted attempts,
+and prevents reconciliation from replaying stale sources. Live isolated-schema
+tests verify partial Neo4j/OpenSearch removal and tenant/index preservation. See
+the [delivery report](../reports/2026-10-10-partial-projection-cleanup.md).
+
 Status: in progress. Tracking: [issue #8](https://github.com/mohripan/flint-graph/issues/8).
 Full acceptance criteria are in the [roadmap](../ROADMAP.md).
 

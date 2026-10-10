@@ -1,12 +1,16 @@
 import asyncio
-from uuid import UUID
+import os
+from dataclasses import replace
+from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.services.document_lifecycle import (
     delete_document,
+    retry_projection_cleanups,
     run_projection_cleanup,
 )
 from flint_graph.application.services.document_versions import (
@@ -18,16 +22,27 @@ from flint_graph.application.services.documents import create_document
 from flint_graph.application.services.indexing import (
     begin_document_indexing,
     complete_document_indexing,
+    reconcile_completed_index_projections,
+    reconcile_document_index_projection,
 )
 from flint_graph.application.services.ingestion_jobs import create_ingestion_job
 from flint_graph.application.services.job_cancellation import cancel_ingestion_job
 from flint_graph.application.services.job_transitions import transition_ingestion_job
+from flint_graph.application.services.lexical_projection import (
+    LexicalChunkRecord,
+    opensearch_chunk_document_id,
+)
 from flint_graph.application.services.retrieval_index_versions import (
     RetrievalIndexVersionSpec,
     activate_retrieval_index_version,
     create_retrieval_index_version,
 )
 from flint_graph.application.services.tenants import create_tenant
+from flint_graph.application.services.vector_projection import (
+    VectorChunkRecord,
+    project_chunk_vectors,
+)
+from flint_graph.config import Settings
 from flint_graph.domain.enums import (
     DocumentIndexCoverageStatus,
     DocumentLifecycleEventType,
@@ -48,6 +63,13 @@ from flint_graph.infrastructure.db.models import (
     IngestionJob,
     IngestionJobEvent,
     OutboxMessage,
+    RetrievalIndexVersion,
+)
+from flint_graph.infrastructure.neo4j import create_neo4j_client
+from flint_graph.infrastructure.opensearch import (
+    OpenSearchClient,
+    build_chunk_index_mapping,
+    build_upsert_chunks_bulk_body,
 )
 
 
@@ -66,59 +88,93 @@ class CapturingCypherClient:
 @pytest.mark.parametrize("late", [IngestionJobStatus.COMPLETED, IngestionJobStatus.FAILED])
 @pytest.mark.parametrize("autoflush", [True, False])
 async def test_delete_settles_inflight_job_and_ignores_late_worker_outcome(
-    extraction_db_session: AsyncSession, initial: IngestionJobStatus, late: IngestionJobStatus,
+    extraction_db_session: AsyncSession,
+    initial: IngestionJobStatus,
+    late: IngestionJobStatus,
     autoflush: bool,
 ) -> None:
     session = extraction_db_session
     session.autoflush = autoflush
     tenant_id, version_ids = await _create_document_with_jobs(
-        session, tenant_name="Deletion race tenant", document_external_id="deletion-race",
+        session,
+        tenant_name="Deletion race tenant",
+        document_external_id="deletion-race",
         job_keys=["deletion-race-job"],
     )
     job = await session.scalar(select(IngestionJob))
     assert job is not None
     if initial == IngestionJobStatus.RUNNING:
-        await transition_ingestion_job(session, tenant_id=tenant_id, job_id=job.id,
-                                       target_status=initial, event_type="job.started", details={})
+        await transition_ingestion_job(
+            session,
+            tenant_id=tenant_id,
+            job_id=job.id,
+            target_status=initial,
+            event_type="job.started",
+            details={},
+        )
     await delete_document(session, tenant_id=tenant_id, document_id=job.document_id)
     await session.commit()
     await session.refresh(job)
     assert job.status == IngestionJobStatus.CANCELLED
     assert job.completed_at is not None
-    await transition_ingestion_job(session, tenant_id=tenant_id, job_id=job.id,
-                                   target_status=late, event_type=f"job.{late.value}", details={})
+    await transition_ingestion_job(
+        session,
+        tenant_id=tenant_id,
+        job_id=job.id,
+        target_status=late,
+        event_type=f"job.{late.value}",
+        details={},
+    )
     await delete_document(session, tenant_id=tenant_id, document_id=job.document_id)
     await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job.id)
     await session.commit()
     version = await session.get(DocumentVersion, version_ids[0])
     assert version is not None and version.status == DocumentVersionStatus.DELETED
     assert job.status == IngestionJobStatus.CANCELLED
-    events = list(await session.scalars(select(IngestionJobEvent).where(
-        IngestionJobEvent.job_id == job.id, IngestionJobEvent.event_type == "job.cancelled",
-    )))
-    messages = list(await session.scalars(select(OutboxMessage).where(
-        OutboxMessage.aggregate_id == job.id, OutboxMessage.topic == "ingestion.job_cancelled",
-    )))
+    events = list(
+        await session.scalars(
+            select(IngestionJobEvent).where(
+                IngestionJobEvent.job_id == job.id,
+                IngestionJobEvent.event_type == "job.cancelled",
+            )
+        )
+    )
+    messages = list(
+        await session.scalars(
+            select(OutboxMessage).where(
+                OutboxMessage.aggregate_id == job.id,
+                OutboxMessage.topic == "ingestion.job_cancelled",
+            )
+        )
+    )
     assert len(events) == len(messages) == 1
 
 
 @pytest.mark.parametrize("late", [IngestionJobStatus.COMPLETED, IngestionJobStatus.FAILED])
 async def test_postgres_delete_and_stale_worker_sessions_serialize_without_deadlock(
-    extraction_db_session: AsyncSession, late: IngestionJobStatus,
+    extraction_db_session: AsyncSession,
+    late: IngestionJobStatus,
 ) -> None:
     session = extraction_db_session
     assert session.bind is not None
     if session.bind.dialect.name != "postgresql":
         pytest.skip("Row-lock and stale-session proof requires real PostgreSQL.")
     tenant_id, _ = await _create_document_with_jobs(
-        session, tenant_name="Concurrent deletion tenant", document_external_id="concurrent-delete",
+        session,
+        tenant_name="Concurrent deletion tenant",
+        document_external_id="concurrent-delete",
         job_keys=["concurrent-delete-job"],
     )
     job = await session.scalar(select(IngestionJob))
     assert job is not None
-    await transition_ingestion_job(session, tenant_id=tenant_id, job_id=job.id,
-                                   target_status=IngestionJobStatus.RUNNING,
-                                   event_type="job.started", details={})
+    await transition_ingestion_job(
+        session,
+        tenant_id=tenant_id,
+        job_id=job.id,
+        target_status=IngestionJobStatus.RUNNING,
+        event_type="job.started",
+        details={},
+    )
     await session.commit()
     locked = asyncio.Event()
     attempted = asyncio.Event()
@@ -139,8 +195,12 @@ async def test_postgres_delete_and_stale_worker_sessions_serialize_without_deadl
             await worker.execute(text("SET LOCAL lock_timeout = '2s'"))
             attempted.set()
             outcome = await transition_ingestion_job(
-                worker, tenant_id=tenant_id, job_id=job.id, target_status=late,
-                event_type=f"job.{late.value}", details={"worker": "late"},
+                worker,
+                tenant_id=tenant_id,
+                job_id=job.id,
+                target_status=late,
+                event_type=f"job.{late.value}",
+                details={"worker": "late"},
             )
             assert outcome.status == IngestionJobStatus.CANCELLED
             await worker.commit()
@@ -155,6 +215,348 @@ class CapturingOpenSearchBulkClient:
 
     async def bulk(self, *, body: str) -> None:
         self.bulk_bodies.append(body)
+
+
+@pytest.mark.skipif(
+    not os.getenv("FLINT_GRAPH_LIVE_PROJECTION_INTEGRATION"),
+    reason="Opt-in synthetic live PostgreSQL/Neo4j/OpenSearch lifecycle test.",
+)
+@pytest.mark.parametrize("lifecycle", ["deleted", "superseded"])
+async def test_partial_projection_cleanup_live(
+    extraction_db_session: AsyncSession,
+    lifecycle: str,
+) -> None:
+    session = extraction_db_session
+    if session.get_bind().dialect.name != "postgresql":
+        pytest.skip("Live verification uses an isolated PostgreSQL schema.")
+    session.autoflush = False
+    tenant_id, versions = await _create_document_with_jobs(
+        session,
+        tenant_name="Disposable live cleanup",
+        document_external_id="live-cleanup",
+        job_keys=["live-v1", "live-v2"],
+    )
+    await activate_document_version(session, tenant_id=tenant_id, version_id=versions[0])
+    version = await session.get(DocumentVersion, versions[0])
+    assert version is not None
+    index_id = await _create_active_index_coverage(
+        session, tenant_id=tenant_id, version=version, chunk_count=0
+    )
+    index = await session.get(RetrievalIndexVersion, index_id)
+    assert index is not None
+    physical_index_name = f"flintgraph-cleanup-verification-{uuid4().hex}"
+    index.opensearch_index_name = physical_index_name
+    coverage = await session.scalar(
+        select(DocumentIndexCoverage).where(
+            DocumentIndexCoverage.document_version_id == version.id,
+        )
+    )
+    assert coverage is not None
+    coverage.status = DocumentIndexCoverageStatus.RUNNING
+    for number in range(2):
+        session.add(
+            DocumentChunk(
+                tenant_id=tenant_id,
+                document_id=version.document_id,
+                document_version_id=version.id,
+                chunk_id=f"live-{number}",
+                chunk_index=number,
+                text="Synthetic cleanup record",
+                chunk_hash=f"live-{number}",
+                metadata_={},
+            )
+        )
+    await session.commit()
+    foreign_tenant, other_index = uuid4(), uuid4()
+    vector = VectorChunkRecord(
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        document_version_id=version.id,
+        chunk_id="live-0",
+        chunk_hash="live-0",
+        retrieval_index_version_id=index_id,
+        vector=[1.0, 0.0, 0.0, 0.0],
+    )
+    lexical = LexicalChunkRecord(
+        tenant_id=tenant_id,
+        document_id=version.document_id,
+        document_version_id=version.id,
+        chunk_id="live-0",
+        chunk_hash="live-0",
+        title="Disposable",
+        text="Synthetic cleanup record",
+        heading_path=[],
+        page_start=None,
+        page_end=None,
+        source_uri=None,
+        metadata={},
+    )
+    foreign_lexical = replace(lexical, tenant_id=foreign_tenant)
+    neo4j = create_neo4j_client(Settings(env="test"))
+    async with httpx.AsyncClient(base_url="http://localhost:9200", timeout=30) as http:
+        search = OpenSearchClient(http_client=http)
+        await search.create_index(
+            index_name=index.opensearch_index_name, mapping=build_chunk_index_mapping()
+        )
+        try:
+            # Only one of two chunks exists externally, and PG counters are zero.
+            await project_chunk_vectors(
+                neo4j,
+                records=[
+                    vector,
+                    replace(vector, tenant_id=foreign_tenant),
+                    replace(vector, retrieval_index_version_id=other_index),
+                ],
+                vector_property_name="live_cleanup_embedding",
+            )
+            await search.bulk(
+                body=build_upsert_chunks_bulk_body(
+                    index_name=index.opensearch_index_name,
+                    records=[lexical, foreign_lexical],
+                    index_version_id=index_id,
+                )
+            )
+            if lifecycle == "deleted":
+                await delete_document(session, tenant_id=tenant_id, document_id=version.document_id)
+            else:
+                await activate_document_version(
+                    session, tenant_id=tenant_id, version_id=versions[1]
+                )
+            await session.commit()
+            cleanup = await session.scalar(
+                select(DocumentProjectionCleanup).where(
+                    DocumentProjectionCleanup.document_version_id == version.id,
+                )
+            )
+            assert cleanup is not None
+            result = await run_projection_cleanup(
+                session, cleanup_id=cleanup.id, neo4j_client=neo4j, opensearch_client=search
+            )
+            assert result.status == DocumentProjectionCleanupStatus.COMPLETED
+            assert result.chunk_count == result.vector_count == result.lexical_count == 2
+            await session.commit()
+            rows = await neo4j.execute(
+                "MATCH (c:Chunk {document_version_id: $version}) RETURN c.tenant_id AS tenant, "
+                "c.retrieval_index_version_id AS idx",
+                {"version": str(version.id)},
+            )
+            assert {(row["tenant"], row["idx"]) for row in rows} == {
+                (str(foreign_tenant), str(index_id)),
+                (str(tenant_id), str(other_index)),
+            }
+            target = f"/{index.opensearch_index_name}/_doc/{opensearch_chunk_document_id(lexical)}"
+            foreign = (
+                f"/{index.opensearch_index_name}/_doc/"
+                f"{opensearch_chunk_document_id(foreign_lexical)}"
+            )
+            assert (await http.get(target)).status_code == 404
+            assert (await http.get(foreign)).status_code == 200
+            with pytest.raises(ConflictError):
+                await reconcile_document_index_projection(
+                    session,
+                    tenant_id=tenant_id,
+                    document_version_id=version.id,
+                    retrieval_index_version_id=index_id,
+                    neo4j_client=neo4j,
+                    opensearch_client=search,
+                )
+            await session.rollback()
+            assert (await http.get(target)).status_code == 404
+        finally:
+            # Targets are UUID-scoped synthetic version/index identities only.
+            await neo4j.execute(
+                "MATCH (c:Chunk {document_version_id: $version}) DETACH DELETE c",
+                {"version": str(versions[0])},
+            )
+            assert physical_index_name.startswith("flintgraph-cleanup-verification-")
+            response = await http.delete(f"/{physical_index_name}")
+            response.raise_for_status()
+            await neo4j.close()
+
+
+@pytest.mark.parametrize("status", list(DocumentIndexCoverageStatus))
+@pytest.mark.parametrize("lifecycle", ["deleted", "superseded"])
+async def test_partial_coverage_cleanup_uses_all_chunks_and_retries(
+    extraction_db_session: AsyncSession,
+    status: DocumentIndexCoverageStatus,
+    lifecycle: str,
+) -> None:
+    session = extraction_db_session
+    session.autoflush = False
+    tenant_id, versions = await _create_document_with_jobs(
+        session,
+        tenant_name="Partial cleanup",
+        document_external_id="partial-cleanup",
+        job_keys=["partial-v1", "partial-v2"],
+    )
+    await activate_document_version(session, tenant_id=tenant_id, version_id=versions[0])
+    version = await session.get(DocumentVersion, versions[0])
+    assert version is not None
+    index_id = await _create_active_index_coverage(
+        session, tenant_id=tenant_id, version=version, chunk_count=0
+    )
+    coverage = await session.scalar(
+        select(DocumentIndexCoverage).where(
+            DocumentIndexCoverage.document_version_id == version.id,
+        )
+    )
+    assert coverage is not None
+    coverage.status = status
+    # Projection counts can be zero even after a partial external write.
+    for number in range(2):
+        session.add(
+            DocumentChunk(
+                tenant_id=tenant_id,
+                document_id=version.document_id,
+                document_version_id=version.id,
+                chunk_id=f"partial-{number}",
+                chunk_index=number,
+                text="Synthetic partial projection",
+                chunk_hash=f"partial-{number}",
+                metadata_={},
+            )
+        )
+    await session.flush()
+    if lifecycle == "deleted":
+        await delete_document(session, tenant_id=tenant_id, document_id=version.document_id)
+        await delete_document(session, tenant_id=tenant_id, document_id=version.document_id)
+    else:
+        await activate_document_version(session, tenant_id=tenant_id, version_id=versions[1])
+        await activate_document_version(session, tenant_id=tenant_id, version_id=versions[1])
+    await session.commit()
+    cleanups = list(
+        await session.scalars(
+            select(DocumentProjectionCleanup).where(
+                DocumentProjectionCleanup.document_version_id == version.id,
+            )
+        )
+    )
+    assert len(cleanups) == 1
+    cleanup = cleanups[0]
+    assert cleanup.retrieval_index_version_id == index_id
+    assert cleanup.tenant_id == tenant_id
+    cypher = CapturingCypherClient()
+
+    class OnceFailingBulk(CapturingOpenSearchBulkClient):
+        async def bulk(self, *, body: str) -> None:
+            await super().bulk(body=body)
+            if len(self.bulk_bodies) == 1:
+                raise ValueError("OpenSearch bulk failed (1/2 items unsuccessful).")
+
+    search = OnceFailingBulk()
+    failed = await run_projection_cleanup(
+        session, cleanup_id=cleanup.id, neo4j_client=cypher, opensearch_client=search
+    )
+    assert failed.status == DocumentProjectionCleanupStatus.FAILED
+    await retry_projection_cleanups(session, tenant_id=tenant_id, document_id=version.document_id)
+    completed = await run_projection_cleanup(
+        session, cleanup_id=cleanup.id, neo4j_client=cypher, opensearch_client=search
+    )
+    assert completed.status == DocumentProjectionCleanupStatus.COMPLETED
+    assert completed.chunk_count == completed.vector_count == completed.lexical_count == 2
+    assert completed.attempt_count == 2
+    assert search.bulk_bodies[0] == search.bulk_bodies[1]
+    assert all(f"partial-{number}" in search.bulk_bodies[1] for number in range(2))
+    assert str(versions[1]) not in search.bulk_bodies[1]
+    calls = len(cypher.calls), len(search.bulk_bodies)
+    await run_projection_cleanup(
+        session, cleanup_id=cleanup.id, neo4j_client=cypher, opensearch_client=search
+    )
+    assert calls == (len(cypher.calls), len(search.bulk_bodies))
+    await session.refresh(coverage)
+    if status == DocumentIndexCoverageStatus.RUNNING:
+        assert coverage.status == DocumentIndexCoverageStatus.CANCELLED
+
+
+@pytest.mark.parametrize("lifecycle", ["deleted", "superseded"])
+async def test_reconcile_cannot_recreate_stale_projection(
+    extraction_db_session: AsyncSession,
+    lifecycle: str,
+) -> None:
+    session = extraction_db_session
+    tenant_id, versions = await _create_document_with_jobs(
+        session,
+        tenant_name="Stale reconcile",
+        document_external_id="stale-reconcile",
+        job_keys=["stale-v1", "stale-v2"],
+    )
+    await activate_document_version(session, tenant_id=tenant_id, version_id=versions[0])
+    version = await session.get(DocumentVersion, versions[0])
+    assert version is not None
+    index_id = await _create_active_index_coverage(session, tenant_id=tenant_id, version=version)
+    if lifecycle == "deleted":
+        await delete_document(session, tenant_id=tenant_id, document_id=version.document_id)
+    else:
+        await activate_document_version(session, tenant_id=tenant_id, version_id=versions[1])
+    cypher = CapturingCypherClient()
+    search = CapturingOpenSearchBulkClient()
+    with pytest.raises(ConflictError):
+        await reconcile_document_index_projection(
+            session,
+            tenant_id=tenant_id,
+            document_version_id=version.id,
+            retrieval_index_version_id=index_id,
+            neo4j_client=cypher,
+            opensearch_client=search,
+        )
+    assert (
+        await reconcile_completed_index_projections(
+            session, tenant_id=tenant_id, neo4j_client=cypher, opensearch_client=search
+        )
+        == 0
+    )
+    assert not cypher.calls and not search.bulk_bodies
+
+
+@pytest.mark.parametrize("lifecycle", ["deleted", "superseded"])
+async def test_concurrent_reconcile_waits_for_lifecycle_and_refuses_replay(
+    extraction_db_session: AsyncSession,
+    lifecycle: str,
+) -> None:
+    session = extraction_db_session
+    if session.get_bind().dialect.name != "postgresql":
+        pytest.skip("PostgreSQL row-lock concurrency verification.")
+    tenant_id, versions = await _create_document_with_jobs(
+        session,
+        tenant_name="Replay race",
+        document_external_id="replay-race",
+        job_keys=["race-v1", "race-v2"],
+    )
+    await activate_document_version(session, tenant_id=tenant_id, version_id=versions[0])
+    version = await session.get(DocumentVersion, versions[0])
+    assert version is not None
+    document_id = version.document_id
+    index_id = await _create_active_index_coverage(session, tenant_id=tenant_id, version=version)
+    await session.commit()
+    async with AsyncSession(session.bind, expire_on_commit=False, autoflush=False) as worker:
+        await worker.get(Document, document_id)  # Preloaded stale identity map.
+        if lifecycle == "deleted":
+            await delete_document(session, tenant_id=tenant_id, document_id=document_id)
+        else:
+            await activate_document_version(session, tenant_id=tenant_id, version_id=versions[1])
+        attempted = asyncio.Event()
+        cypher = CapturingCypherClient()
+        search = CapturingOpenSearchBulkClient()
+
+        async def replay() -> None:
+            await worker.execute(text("SET LOCAL lock_timeout = '2s'"))
+            attempted.set()
+            with pytest.raises(ConflictError):
+                await reconcile_document_index_projection(
+                    worker,
+                    tenant_id=tenant_id,
+                    document_version_id=versions[0],
+                    retrieval_index_version_id=index_id,
+                    neo4j_client=cypher,
+                    opensearch_client=search,
+                )
+
+        async def commit_lifecycle() -> None:
+            await attempted.wait()
+            await session.commit()
+
+        await asyncio.wait_for(asyncio.gather(replay(), commit_lifecycle()), timeout=5)
+        assert not cypher.calls and not search.bulk_bodies
 
 
 async def _create_document_with_jobs(

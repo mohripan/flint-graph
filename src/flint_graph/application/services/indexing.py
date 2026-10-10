@@ -97,9 +97,7 @@ async def select_active_retrieval_index_version(
             select(RetrievalIndexVersion).where(
                 RetrievalIndexVersion.id == configured_index_version_id,
                 RetrievalIndexVersion.status == RetrievalIndexVersionStatus.ACTIVE,
-                (
-                    RetrievalIndexVersion.scope == RetrievalIndexScope.GLOBAL
-                )
+                (RetrievalIndexVersion.scope == RetrievalIndexScope.GLOBAL)
                 | (
                     (RetrievalIndexVersion.scope == RetrievalIndexScope.TENANT)
                     & (RetrievalIndexVersion.tenant_id == tenant_id)
@@ -322,9 +320,7 @@ async def index_document_version_batch(
     )
     request_hash = _content_hash(embedding_request.model_dump_json().encode("utf-8"))
     embedding_result = await embedding_model.embed_batch(embedding_request)
-    embeddings_by_id = {
-        embedding.input_id: embedding for embedding in embedding_result.embeddings
-    }
+    embeddings_by_id = {embedding.input_id: embedding for embedding in embedding_result.embeddings}
 
     vector_records: list[VectorChunkRecord] = []
     lexical_records: list[LexicalChunkRecord] = []
@@ -426,9 +422,15 @@ async def _require_indexable_document_version(
     document_id: UUID,
     document_version_id: UUID,
 ) -> DocumentVersion:
-    document = await session.scalar(select(Document).where(
-        Document.id == document_id, Document.tenant_id == tenant_id,
-    ).with_for_update().execution_options(populate_existing=True))
+    document = await session.scalar(
+        select(Document)
+        .where(
+            Document.id == document_id,
+            Document.tenant_id == tenant_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if document is None:
         raise NotFoundError(f"Document version '{document_version_id}' was not found.")
     row = await session.execute(
@@ -451,8 +453,7 @@ async def _require_indexable_document_version(
         raise ConflictError(f"Document '{document_id}' has been deleted.")
     if version.status not in _INDEXABLE_DOCUMENT_VERSION_STATUSES:
         raise ConflictError(
-            f"Cannot index document version '{document_version_id}' in "
-            f"'{version.status}' status."
+            f"Cannot index document version '{document_version_id}' in '{version.status}' status."
         )
     return version
 
@@ -628,7 +629,9 @@ async def _require_coverage(
             DocumentIndexCoverage.tenant_id == tenant_id,
             DocumentIndexCoverage.document_version_id == document_version_id,
             DocumentIndexCoverage.retrieval_index_version_id == retrieval_index_version_id,
-        ).with_for_update(of=Document).execution_options(populate_existing=True)
+        )
+        .with_for_update(of=Document)
+        .execution_options(populate_existing=True)
     )
     if document is None:
         raise NotFoundError("Document index coverage was not found.")
@@ -644,8 +647,7 @@ async def _require_coverage(
     )
     if coverage is None:
         raise NotFoundError(
-            "Document index coverage was not found for document version "
-            f"'{document_version_id}'."
+            f"Document index coverage was not found for document version '{document_version_id}'."
         )
     return coverage
 
@@ -668,6 +670,22 @@ async def reconcile_document_index_projection(
     neo4j_client: SupportsCypher,
     opensearch_client: SupportsOpenSearchBulk,
 ) -> ReconcileIndexProjectionResult:
+    document_id = await session.scalar(
+        select(DocumentVersion.document_id)
+        .join(Document, Document.id == DocumentVersion.document_id)
+        .where(DocumentVersion.id == document_version_id, Document.tenant_id == tenant_id)
+    )
+    if document_id is None:
+        raise NotFoundError("Document version was not found.")
+    # Same Document-first lock and lifecycle guard as indexing. Retain it
+    # throughout both external writes so deletion/supersession cannot overtake
+    # a replay and then have stale projections recreated after cleanup.
+    await _require_indexable_document_version(
+        session,
+        tenant_id=tenant_id,
+        document_id=document_id,
+        document_version_id=document_version_id,
+    )
     index_version = await _load_index_version(
         session,
         tenant_id=tenant_id,
@@ -683,10 +701,7 @@ async def reconcile_document_index_projection(
                 & (ChunkEmbedding.document_version_id == DocumentChunk.document_version_id)
                 & (ChunkEmbedding.chunk_id == DocumentChunk.chunk_id)
                 & (ChunkEmbedding.chunk_hash == DocumentChunk.chunk_hash)
-                & (
-                    ChunkEmbedding.retrieval_index_version_id
-                    == retrieval_index_version_id
-                ),
+                & (ChunkEmbedding.retrieval_index_version_id == retrieval_index_version_id),
             )
             .where(
                 DocumentChunk.tenant_id == tenant_id,
@@ -765,19 +780,25 @@ async def reconcile_completed_index_projections(
     tenant_id: UUID | None = None,
     retrieval_index_version_id: UUID | None = None,
 ) -> int:
-    statement = select(DocumentIndexCoverage).where(
-        DocumentIndexCoverage.status == DocumentIndexCoverageStatus.COMPLETED
+    statement = (
+        select(DocumentIndexCoverage)
+        .join(Document, Document.id == DocumentIndexCoverage.document_id)
+        .join(DocumentVersion, DocumentVersion.id == DocumentIndexCoverage.document_version_id)
+        .where(
+            DocumentIndexCoverage.status == DocumentIndexCoverageStatus.COMPLETED,
+            Document.tenant_id == DocumentIndexCoverage.tenant_id,
+            DocumentVersion.document_id == Document.id,
+            Document.deleted_at.is_(None),
+            DocumentVersion.status == DocumentVersionStatus.ACTIVE,
+        )
     )
     if tenant_id is not None:
         statement = statement.where(DocumentIndexCoverage.tenant_id == tenant_id)
     if retrieval_index_version_id is not None:
         statement = statement.where(
-            DocumentIndexCoverage.retrieval_index_version_id
-            == retrieval_index_version_id
+            DocumentIndexCoverage.retrieval_index_version_id == retrieval_index_version_id
         )
-    coverages = list(
-        await session.scalars(statement.order_by(DocumentIndexCoverage.created_at))
-    )
+    coverages = list(await session.scalars(statement.order_by(DocumentIndexCoverage.created_at)))
 
     reconciled = 0
     for coverage in coverages:

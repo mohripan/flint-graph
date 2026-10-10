@@ -39,7 +39,7 @@ boundaries in Milestone 18. Do not remove the lock without replacing the atomic
 publication/deletion guard.
 
 Logical deletion prevents authoritative retrieval; partial physical projection
-cleanup remains [#67](https://github.com/mohripan/flint-graph/issues/67). Raw
+cleanup is extended by [#67](https://github.com/mohripan/flint-graph/issues/67). Raw
 objects and prior records are retained, not securely erased. Existing orphaned
 jobs are not automatically repaired by this code deployment. Use authorized
 public cancellation after verifying the precise deleted document/job identity;
@@ -48,3 +48,11 @@ never reactivate a deleted source to repair a job status.
 Acceptance evidence covers queued/running deletion, late completion/failure,
 repeated dispatch, runtime autoflush settings, stale PostgreSQL sessions and live
 Temporal cancellation; see [the delivery report](../reports/2026-10-10-ingestion-deletion-race.md).
+
+Projection replay also takes the same Document-first lock through external writes.
+Deletion/supersession schedules cleanup for every recorded coverage identity,
+regardless of completion status or counters, and cancels running coverage.
+Completed-coverage scanners exclude non-active/deleted sources; direct replay
+refuses them after acquiring and refreshing the lifecycle lock. If a source
+changes after scanner selection, replay fails safely rather than silently
+publishing stale content. The transaction-wait caveat above still applies.

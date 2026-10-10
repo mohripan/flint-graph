@@ -100,34 +100,21 @@ async def delete_document(
     # module for cleanup, so importing cancellation at module load forms a cycle.
     from flint_graph.application.services.job_cancellation import cancel_ingestion_job
 
-    in_flight_job_ids = list(await session.scalars(
-        select(IngestionJob.id).where(
-            IngestionJob.tenant_id == tenant_id,
-            IngestionJob.document_id == document_id,
-            IngestionJob.status.in_([IngestionJobStatus.QUEUED, IngestionJobStatus.RUNNING]),
-        ).order_by(IngestionJob.id)
-    ))
+    in_flight_job_ids = list(
+        await session.scalars(
+            select(IngestionJob.id)
+            .where(
+                IngestionJob.tenant_id == tenant_id,
+                IngestionJob.document_id == document_id,
+                IngestionJob.status.in_([IngestionJobStatus.QUEUED, IngestionJobStatus.RUNNING]),
+            )
+            .order_by(IngestionJob.id)
+        )
+    )
     for job_id in in_flight_job_ids:
         await cancel_ingestion_job(session, tenant_id=tenant_id, job_id=job_id)
 
     deleted_version_ids = [version.id for version in deleted_versions]
-    if deleted_version_ids:
-        running_coverages = list(
-            await session.scalars(
-                select(DocumentIndexCoverage)
-                .where(
-                    DocumentIndexCoverage.tenant_id == tenant_id,
-                    DocumentIndexCoverage.document_version_id.in_(deleted_version_ids),
-                    DocumentIndexCoverage.status == DocumentIndexCoverageStatus.RUNNING,
-                )
-                .with_for_update()
-            )
-        )
-        for coverage in running_coverages:
-            coverage.status = DocumentIndexCoverageStatus.CANCELLED
-            coverage.error_code = "document_deleted"
-            coverage.error_message = "Document was deleted before indexing completed."
-
     event = DocumentLifecycleEvent(
         tenant_id=tenant_id,
         document_id=document.id,
@@ -195,18 +182,30 @@ async def create_projection_cleanup_records_for_version(
 ) -> int:
     coverages = list(
         await session.scalars(
-            select(DocumentIndexCoverage).where(
+            select(DocumentIndexCoverage)
+            .where(
                 DocumentIndexCoverage.tenant_id == tenant_id,
                 DocumentIndexCoverage.document_id == document_id,
                 DocumentIndexCoverage.document_version_id == document_version_id,
-                DocumentIndexCoverage.status == DocumentIndexCoverageStatus.COMPLETED,
             )
+            .with_for_update()
         )
     )
     created = 0
     for coverage in coverages:
+        # Callers hold the owning Document lock. Any external write could have
+        # succeeded before the batch counters or status were committed, so every
+        # coverage identity needs cleanup regardless of its recorded counts.
+        if coverage.status == DocumentIndexCoverageStatus.RUNNING:
+            coverage.status = DocumentIndexCoverageStatus.CANCELLED
+            coverage.error_code = stale_reason
+            coverage.error_message = (
+                "Document version became unavailable before indexing completed."
+            )
         existing = await session.scalar(
             select(DocumentProjectionCleanup).where(
+                DocumentProjectionCleanup.tenant_id == tenant_id,
+                DocumentProjectionCleanup.document_id == document_id,
                 DocumentProjectionCleanup.document_version_id == document_version_id,
                 DocumentProjectionCleanup.retrieval_index_version_id
                 == coverage.retrieval_index_version_id,
@@ -229,8 +228,7 @@ async def create_projection_cleanup_records_for_version(
             )
         )
         created += 1
-    if created:
-        await session.flush()
+    await session.flush()
     return created
 
 
@@ -345,8 +343,9 @@ async def run_next_projection_cleanup(
 async def record_projection_cleanup_backlog(session: AsyncSession) -> dict[str, int]:
     """Publish the cleanup backlog gauge, by status.
 
-    A projection cleanup that never drains means deleted content stays queryable,
-    so the backlog is a correctness signal, not just a queue depth.
+    Authoritative lifecycle filters exclude stale content from retrieval even
+    before physical cleanup. The backlog measures retained stale projection
+    records and repair work, not evidence that deleted content is queryable.
     """
     rows = await session.execute(
         select(

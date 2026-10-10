@@ -15,8 +15,9 @@ Implemented behavior:
   `superseded`.
 - Deletion and replacement create durable lifecycle records in
   `document_lifecycle_events`.
-- Completed retrieval index coverage for stale versions creates durable cleanup
-  records in `document_projection_cleanups`.
+- Every recorded retrieval index coverage identity for stale versions creates
+  durable cleanup records in `document_projection_cleanups`, including partial,
+  failed and cancelled attempts with zero recorded counters.
 - Cleanup status is inspectable through
   `GET /v1/documents/{document_id}/projection-cleanups`.
 - Failed or pending cleanup can be requeued through
@@ -51,3 +52,15 @@ Operational notes:
   source document is deleted; new queries cannot use deleted or superseded chunk
   projections.
 - Raw object hard deletion is still out of scope.
+
+## Interrupted indexing cleanup
+
+[Issue #67](https://github.com/mohripan/flint-graph/issues/67) extends cleanup to
+partial attempts and guards projection replay with Document-first lifecycle locks.
+Running coverage is cancelled on deletion or supersession. Cleanup targets all
+persisted chunk identities rather than trusting incomplete batch counters;
+reported cleanup counts are target counts, not measured physical deletions.
+Completed-coverage reconciliation selects only active, non-deleted sources and
+direct stale-source replay fails before writing. See the
+[verification report](../reports/2026-10-10-partial-projection-cleanup.md) and
+[runbook](../runbooks/partial-projection-cleanup.md).
