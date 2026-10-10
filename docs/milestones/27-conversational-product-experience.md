@@ -10,6 +10,7 @@ Status: in progress; epic [#84](https://github.com/mohripan/flint-graph/issues/8
 | [#62](https://github.com/mohripan/flint-graph/issues/62) | Broader grounded follow-up execution | in progress; narrow prior-year slice only |
 | [#99](https://github.com/mohripan/flint-graph/issues/99) | Capability-gated thread UI, discovery, evidence and request-bound recovery | implemented and locally qualified; CI recorded in the issue |
 | [#100](https://github.com/mohripan/flint-graph/issues/100) | Member-only queued conversation stream execution | implemented; verification and CI recorded separately |
+| [#101](https://github.com/mohripan/flint-graph/issues/101) | Named transcript and keyboard focus lifecycle | implemented; browser/live qualification recorded separately |
 | [#73](https://github.com/mohripan/flint-graph/issues/73) | Accessible new/reopen/thread Ask UI | in progress; first UI slice #99, full acceptance remains open |
 | [#74](https://github.com/mohripan/flint-graph/issues/74) | Fresh multi-turn quality and isolation gates | planned |
 | [#75](https://github.com/mohripan/flint-graph/issues/75) | Memory architecture, invalidation and lifecycle qualification | planned |

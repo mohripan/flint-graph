@@ -131,6 +131,12 @@ the bottom follow new turn content; readers inspecting older content can jump
 to latest. Page loading and lazy evidence expansion do not trigger auto-follow.
 Each turn loads its own authorized provenance, scopes citation DOM IDs by run,
 and can expand full excerpts in the same scroller. Text is not rendered as HTML.
+The transcript is a named keyboard-focusable region, not an unsolicited live
+history log. Explicit chat selection focuses its loaded heading; New chat
+focuses the composer. Passive restoration stays quiet. Rename Save/Cancel
+returns focus to Rename, and citation activation focuses the turn's own evidence
+before the next Tab reaches its full excerpt. These browser-qualified focus
+rules do not imply production accessibility certification (#101/#73).
 Diagnostics are collapsed; clarification, abstention, partial support, queued,
 running, failed and cancelled states are differentiated. Draft SSE text is not
 presented as a verified answer.

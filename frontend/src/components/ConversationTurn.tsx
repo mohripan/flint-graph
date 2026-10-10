@@ -19,7 +19,9 @@ export function ConversationTurn({ tenantId, turn, onAccessDenied, onInspectEvid
   useEffect(() => () => request.current?.abort(), [tenantId, run.id]);
   useEffect(() => {
     if (!provenance || !focusedCitation) return;
-    document.getElementById(`${prefix}citation-${focusedCitation}`)?.scrollIntoView({
+    const citation = document.getElementById(`${prefix}citation-${focusedCitation}`);
+    citation?.focus({ preventScroll: true });
+    citation?.scrollIntoView({
       block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
     setFocusedCitation(null);

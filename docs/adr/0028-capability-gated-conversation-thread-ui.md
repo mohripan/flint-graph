@@ -41,6 +41,17 @@ Jump to latest. Loading older/page content and opening evidence must not yank
 the reader. Label controls, keep visible keyboard focus, honor reduced motion.
 Recheck screenshots at 390px and desktop, with long content and unbroken titles.
 
+Keyboard qualification (#101) keeps the primary transcript a named, focusable
+region rather than a generic labelled div or a live log. Explicit history
+selection focuses the loaded heading, including after mobile history closes;
+passive saved-thread restoration does not move focus. New chat focuses the
+composer without creating server work. Rename Save/Cancel returns focus to
+Rename. Citation activation focuses that turn's programmatically focusable
+evidence item; Tab then reaches its full-excerpt disclosure. Focus moves avoid
+implicit scroll jumps, and existing citation scrolling honors reduced motion.
+Automated axe violations and incomplete results are recorded separately; clean
+automation is not a claim of assistive-technology or full WCAG certification.
+
 ## State, authority and recovery
 
 Separate the dispatcher, sidebar, transcript/message evidence and API wrappers.

@@ -122,6 +122,10 @@ types, scoped sources, queued recovery, stop/refresh, revocation, stale chat/sou
 responses, viewer access, safe text and bottom-aware long-content scrolling.
 Focused development runs accept `-- --discovery-only`, `-- --recovery-only`, or
 `-- --scroll-only`; use the unfiltered command for complete qualification.
+`npm run test:chat-a11y` checks the named transcript region, actual keyboard
+selection/New chat, quiet passive restoration, rename focus return and per-turn
+citation/full-excerpt focus on desktop/mobile HTTP fixtures. It does not certify
+screen-reader compatibility or full accessibility. History is not a live log.
 
 ## Real vs. Stub Answers
 

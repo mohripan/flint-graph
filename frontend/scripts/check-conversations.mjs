@@ -178,7 +178,9 @@ try {
       }return original(input,init);
     };return true;
   })()`);
+  run("wait","--fn","[...document.querySelectorAll('button')].some(button=>button.textContent.trim()==='Rename'&&!button.disabled)");
   run("find","role","button","click","--name","Rename","--exact");
+  run("wait","--fn","!!document.querySelector('input[maxlength=\"200\"]:not([aria-label])')");
   run("find","label","Conversation title","fill","Renamed research");
   run("find","role","button","click","--name","Save title","--exact");
   run("wait","--fn","document.querySelector('h1').textContent==='Renamed research'");

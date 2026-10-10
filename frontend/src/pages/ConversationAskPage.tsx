@@ -25,6 +25,9 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
   const [retryLost, setRetryLost] = useState(false);
   const [streamingRun, setStreamingRun] = useState<string | null>(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [focusTarget, setFocusTarget] = useState<"heading" | "composer" | null>(null);
+  const heading = useRef<HTMLHeadingElement | null>(null);
+  const composer = useRef<HTMLTextAreaElement | null>(null);
   const selectionRequest = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const pendingSend = useRef<{ conversationId: string; query: string; key: string } | null>(null);
@@ -32,6 +35,13 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
   const active = turns.some((turn) => turn.run.status === "queued" || turn.run.status === "running");
   const remainingTurns = !!selected && (turns.at(-1)?.turn_number ?? 0) < selected.next_turn_number - 1;
   const scroll = useTranscriptScroll(turns.at(-1)?.run);
+
+  useEffect(() => {
+    if (loading || accessDenied || !focusTarget) return;
+    const target = focusTarget === "heading" ? heading.current : composer.current;
+    target?.focus({ preventScroll: true });
+    setFocusTarget(null);
+  }, [focusTarget, loading, accessDenied]);
 
   useEffect(() => {
     if (accessDenied) return;
@@ -68,6 +78,7 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
 
   async function selectConversation(row: Conversation | string) {
     const id = typeof row === "string" ? row : row.id;
+    setFocusTarget(null);
     selectionRequest.current?.abort(); scroll.reset();
     const controller = new AbortController();
     selectionRequest.current = controller;
@@ -80,6 +91,8 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
       ]);
       if (controller.signal.aborted) return;
       setSelected(conversation); setTurns(messages); saveSelection(conversation.id);
+      // Only explicit history selection moves focus; passive restore is quiet.
+      if (typeof row !== "string") setFocusTarget("heading");
     } catch (err) {
       if (!controller.signal.aborted) {
         setSelected(null); saveSelection(null);
@@ -89,15 +102,16 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
     } finally { if (!controller.signal.aborted) setLoading(false); }
   }
 
-  function newChat() {
+  function newChat(focusComposer = true) {
     selectionRequest.current?.abort(); scroll.reset();
     pendingSend.current = null; sendingRef.current = false; saveSelection(null);
     setSelected(null); setTurns([]); setInput(""); setError(null);
     setSending(false); setRetryLost(false); setLoading(false); setHistoryOpen(false); setStreamingRun(null);
+    setFocusTarget(focusComposer && !viewer ? "composer" : null);
   }
 
   function clearDeniedAccess() {
-    newChat(); setAccessDenied(true); setReadiness(null);
+    newChat(false); setAccessDenied(true); setReadiness(null);
     setError("Workspace access was denied. Conversation data has been cleared.");
   }
 
@@ -263,8 +277,8 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="min-w-0 truncate text-lg font-semibold text-slate-900 [font-family:'Segoe_UI_Variable_Display','Segoe_UI',sans-serif]">{selected?.title ?? "New conversation"}</h1>
-          <Button type="button" variant="secondary" className="shrink-0 whitespace-nowrap" disabled={viewer} onClick={newChat}>New chat</Button>
+          <h1 ref={heading} tabIndex={-1} className="min-w-0 truncate text-lg font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-brand-500 [font-family:'Segoe_UI_Variable_Display','Segoe_UI',sans-serif]">{selected?.title ?? "New conversation"}</h1>
+          <Button type="button" variant="secondary" className="shrink-0 whitespace-nowrap" disabled={viewer} onClick={() => newChat()}>New chat</Button>
         </div>
         {selected && <button disabled={loading || sending} onClick={() => void refreshConversation()}
           className="mr-2 rounded px-2 py-1 text-xs text-brand-700 underline underline-offset-2 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-500">Refresh conversation</button>}
@@ -278,7 +292,7 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
           className="mt-2 rounded py-1 text-xs text-brand-700 underline underline-offset-2 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-500">Load remaining turns</button>}
       </header>
       {error && <p role="alert" className="shrink-0 border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 [overflow-wrap:anywhere] sm:px-6">{error}</p>}
-      <div ref={scroll.element} onScroll={scroll.onScroll} aria-label="Conversation transcript" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 focus-visible:outline-2 focus-visible:outline-brand-500 sm:px-6">
+      <div ref={scroll.element} onScroll={scroll.onScroll} role="region" aria-label="Conversation transcript" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 focus-visible:outline-2 focus-visible:outline-brand-500 sm:px-6">
         <div className="mx-auto max-w-3xl space-y-8">
           {loading && <p role="status" className="text-sm text-slate-500">Opening conversation…</p>}
           {!loading && turns.length === 0 && <div className="py-12"><h2 className="text-xl font-semibold text-slate-800">Research with your documents</h2>
@@ -292,7 +306,7 @@ export function ConversationAskPage({ capabilities }: { capabilities: NonNullabl
       <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="mx-auto max-w-3xl">
           <label className="sr-only" htmlFor="conversation-question">Your question</label>
-          <textarea id="conversation-question" value={input} onChange={(event) => setInput(event.target.value)} rows={2} maxLength={1000}
+          <textarea ref={composer} id="conversation-question" value={input} onChange={(event) => setInput(event.target.value)} rows={2} maxLength={1000}
             readOnly={viewer || retryLost} disabled={sending || loading}
             onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void send(); } }}
             placeholder="Ask about the documents in this workspace…" className="w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-2 focus:outline-brand-500" />

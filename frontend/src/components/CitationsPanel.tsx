@@ -98,6 +98,8 @@ function CitationItem({
   return (
     <li
       id={`${idPrefix}citation-${citation.citation_id}`}
+      tabIndex={fullExcerpts ? -1 : undefined}
+      className={fullExcerpts ? "rounded-xl focus-visible:outline-2 focus-visible:outline-brand-500" : undefined}
       onMouseEnter={() => onHover?.(citation.citation_id)}
       onMouseLeave={() => onHover?.(null)}
     >
