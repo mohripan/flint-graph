@@ -11,13 +11,23 @@ Design: [ADR 13](../adr/0013-layered-platform-observability.md).
 | --- | --- | --- |
 | [#37](https://github.com/mohripan/flint-graph/issues/37) | Wire Prometheus rules to a local Alertmanager profile | implemented |
 | [#38](https://github.com/mohripan/flint-graph/issues/38) | Provision Grafana operations dashboards and split misleading mixed-unit panels | implemented |
-| [#39](https://github.com/mohripan/flint-graph/issues/39) | Add an opt-in Phoenix and OpenTelemetry collector fan-out profile | planned |
+| [#39](https://github.com/mohripan/flint-graph/issues/39) | Add an opt-in Phoenix and OpenTelemetry collector fan-out profile | implemented locally |
 | [#40](https://github.com/mohripan/flint-graph/issues/40) | Emit privacy-safe OpenInference metadata and suppress provider exception payloads | implemented |
 | [#41](https://github.com/mohripan/flint-graph/issues/41) | Configure operator-owned Alertmanager email or webhook delivery | planned |
 | [#42](https://github.com/mohripan/flint-graph/issues/42) | Select and implement an ELK or OpenSearch structured-log pipeline | planned |
 | [#43](https://github.com/mohripan/flint-graph/issues/43) | Harden production telemetry with authentication, retention and delivery budgets | planned |
 
 ## Acceptance and boundaries
+
+An explicit two-file Compose overlay adds pinned Phoenix and Collector services
+with loopback ingress, retained Phoenix data and bounded gateway memory/queues/
+retries. Resource/span keys are allowlisted, status messages cleared and events
+removed before trace fan-out. Native Collector validation and a real OTLP
+fan-out/privacy test passed: the same provider-error trace arrived in Phoenix and
+Tempo without the private sentinel. No model request was made. The existing
+application containers were not silently reconfigured; the
+[AI observability runbook](../runbooks/ai-observability.md) explains opting in,
+preserving model settings and rollback. Authentication/retention remain open.
 
 The metrics profile has a version-pinned loopback Alertmanager, grouped routes,
 ticket inhibition, persistent silences/state and no external receiver. Native

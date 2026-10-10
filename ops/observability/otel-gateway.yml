@@ -1,0 +1,75 @@
+# Local fan-out. This is not an authenticated production OTLP boundary.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  filter/drop_events:
+    error_mode: propagate
+    traces:
+      spanevent: ['true']
+  transform/privacy:
+    # Fail closed if privacy transformations fail, rather than export originals.
+    error_mode: propagate
+    trace_statements:
+      - context: resource
+        statements:
+          - keep_keys(attributes, ["service.name", "service.version", "deployment.environment.name", "flint_graph.service.role"])
+          - set(attributes["openinference.project.name"], "flint-graph")
+      - context: span
+        statements:
+          - keep_keys(attributes, ["openinference.span.kind", "llm.model_name", "llm.provider", "embedding.model_name", "reranker.model_name", "flint_graph.provider", "flint_graph.model", "flint_graph.operation", "flint_graph.stage", "flint_graph.outbox.topic", "flint_graph.outbox.message_id", "flint_graph.outbox.attempt", "http.route", "http.request.method", "http.response.status_code", "error.type"])
+          - set(status.message, "")
+  batch:
+    timeout: 1s
+    send_batch_size: 256
+    send_batch_max_size: 512
+
+exporters:
+  otlp/lgtm:
+    endpoint: observability:4317
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 256
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 60s
+  otlp/phoenix:
+    endpoint: phoenix:4317
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 256
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 60s
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/drop_events, transform/privacy, batch]
+      exporters: [otlp/lgtm, otlp/phoenix]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/lgtm]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/lgtm]

@@ -1,0 +1,44 @@
+# Explicit local overlay; never enable this unauthenticated profile in production.
+# docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability up -d
+services:
+  api:
+    environment:
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-gateway:4317
+  outbox-relay:
+    environment:
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-gateway:4317
+  ingestion-worker:
+    environment:
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-gateway:4317
+  projection-cleanup:
+    environment:
+      FLINT_GRAPH_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-gateway:4317
+
+  phoenix:
+    profiles: ["ai-observability"]
+    image: arizephoenix/phoenix:20.20.0
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    ports:
+      - "127.0.0.1:6006:6006"
+    volumes:
+      - phoenix_data:/mnt/data
+    mem_limit: 1g
+
+  otel-gateway:
+    profiles: ["ai-observability"]
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command: ["--config=/etc/otelcol/config.yml"]
+    ports:
+      - "127.0.0.1:14317:4317"
+    volumes:
+      - ./ops/observability/otel-gateway.yml:/etc/otelcol/config.yml:ro
+    mem_limit: 768m
+    depends_on:
+      observability:
+        condition: service_healthy
+      phoenix:
+        condition: service_started
+
+volumes:
+  phoenix_data:
