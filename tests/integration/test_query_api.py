@@ -6,17 +6,19 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import flint_graph.api.dependencies as dependencies
 from flint_graph.api.routes import query as query_routes
+from flint_graph.application.query_faithfulness import DeterministicSupportChecker
 from flint_graph.application.query_orchestration import (
     AnswerCitation,
     AnswerGenerationRequest,
@@ -201,6 +203,140 @@ async def query_api_env(
 
 def _headers(tenant_id: UUID) -> dict[str, str]:
     return {"X-Tenant-ID": str(tenant_id)}
+
+
+@pytest.mark.asyncio
+async def test_new_conversation_followup_clarifies_without_provider_dispatch(query_api_env):
+    client, session_factory, opensearch, neo4j = query_api_env
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+    conversation = await client.post(
+        "/v1/conversations", headers=_headers(tenant.id), json={"title": "New thread"}
+    )
+    assert conversation.status_code == 201
+    turn = await client.post(
+        f"/v1/conversations/{conversation.json()['id']}/turns",
+        headers=_headers(tenant.id),
+        json={"query": "What about the prior year?", "idempotency_key": str(uuid4())},
+    )
+    assert turn.status_code == 201
+    path = f"/v1/query-runs/{turn.json()['run']['id']}"
+    await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    run = (await client.get(path, headers=_headers(tenant.id))).json()
+    assert run["status"] == "completed"
+    assert run["metadata"]["conversation_context"]["mode"] == "clarification"
+    assert run["query_text"] == "What about the prior year?"
+    assert "self-contained" in run["answer_text"]
+    assert opensearch.searches == []
+    assert neo4j.calls == []
+    assert (await client.get(f"{path}/usage", headers=_headers(tenant.id))).json() == []
+    assert run["provider_usage_complete"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_changes_during_retrieval", [False, True])
+async def test_conversation_followup_retrieves_and_verifies_the_resolved_question(
+    query_api_env, source_changes_during_retrieval
+):
+    client, session_factory, _, _ = query_api_env
+    source = "Acme revenue was 100 million USD in 2017. Acme revenue was 90 million USD in 2016."
+    source_hash = "sha256:" + sha256(source.encode()).hexdigest()
+    async with session_factory() as session:
+        tenant, _ = await _tenant_with_searchable_content(session)
+        chunk = await session.scalar(
+            select(DocumentChunk).where(DocumentChunk.tenant_id == tenant.id)
+        )
+        chunk.text, chunk.chunk_hash = source, source_hash
+        await session.commit()
+
+    class RevenueSearch(QueryOpenSearchClient):
+        async def search(self, *, index_name, body):
+            hits = await super().search(index_name=index_name, body=body)
+            if source_changes_during_retrieval and len(self.searches) == 2:
+                async with session_factory() as changed_session:
+                    changed_chunk = await changed_session.scalar(
+                        select(DocumentChunk).where(DocumentChunk.tenant_id == tenant.id)
+                    )
+                    changed_chunk.text = "Replaced content without any revenue facts."
+                    changed_chunk.chunk_hash = (
+                        "sha256:" + sha256(changed_chunk.text.encode()).hexdigest()
+                    )
+                    await changed_session.commit()
+            hits[0]["source"].update(text=source, chunk_hash=source_hash)
+            return hits
+
+    class RevenueGenerator(QueryAnswerGenerator):
+        async def generate(self, request):
+            self.requests.append(request)
+            record = request.context_pack.records[0]
+            text = (
+                "Acme revenue was 90 million USD in 2016."
+                if "2016" in request.query
+                else "Acme revenue was 100 million USD in 2017."
+            )
+            return GeneratedAnswer(
+                text=text + f" [{record.citation_id}]",
+                citations=[
+                    AnswerCitation(
+                        citation_id=record.citation_id,
+                        context_id=record.context_id,
+                        marker=f"[{record.citation_id}]",
+                        source_ids=record.source_ids,
+                    )
+                ],
+                metadata={"provider": "test"},
+            )
+
+    class RecordingSupport(DeterministicSupportChecker):
+        def __init__(self):
+            self.requests = []
+
+        async def check(self, request):
+            self.requests.append(request)
+            return await super().check(request)
+
+    search, generator, support = RevenueSearch(), RevenueGenerator(), RecordingSupport()
+    app.dependency_overrides[dependencies.get_opensearch_client] = lambda: search
+    app.dependency_overrides[dependencies.get_answer_generator] = lambda: generator
+    app.dependency_overrides[dependencies.get_support_checker] = lambda: support
+    conversation = (
+        await client.post(
+            "/v1/conversations", headers=_headers(tenant.id), json={"title": "Revenue"}
+        )
+    ).json()
+    runs = []
+    for question in ["What was Acme revenue in 2017?", "What about the prior year?"]:
+        turn = await client.post(
+            f"/v1/conversations/{conversation['id']}/turns",
+            headers=_headers(tenant.id),
+            json={"query": question, "idempotency_key": str(uuid4())},
+        )
+        assert turn.status_code == 201
+        path = f"/v1/query-runs/{turn.json()['run']['id']}"
+        await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+        runs.append((await client.get(path, headers=_headers(tenant.id))).json())
+    assert all(run["status"] == "completed" for run in runs), runs
+    if source_changes_during_retrieval:
+        assert runs[1]["metadata"]["conversation_context"]["mode"] == "clarification"
+        assert "self-contained" in runs[1]["answer_text"]
+        assert len(generator.requests) == len(support.requests) == 1
+        assert runs[1]["provider_usage_complete"] is True
+        return
+    assert runs[1]["query_text"] == "What about the prior year?"
+    assert (
+        runs[1]["metadata"]["conversation_context"]["resolved_query"]
+        == "What was Acme revenue in 2016?"
+    )
+    assert "90 million USD in 2016" in runs[1]["answer_text"]
+    assert generator.requests[1].query == "What was Acme revenue in 2016?"
+    assert support.requests[1].query == "What was Acme revenue in 2016?"
+    assert "What was Acme revenue in 2016?" in json.dumps(search.searches[-1][1])
+    assert all(record.text == source for record in generator.requests[1].context_pack.records)
+    assert runs[1]["provider_usage_complete"] is False  # The external fake does not report tokens.
+    usage = (await client.get(f"{path}/usage", headers=_headers(tenant.id))).json()
+    await client.get(f"{path}/events/stream", headers=_headers(tenant.id))
+    assert (await client.get(f"{path}/usage", headers=_headers(tenant.id))).json() == usage
+    assert len(generator.requests) == 2
 
 
 def _expected_acme_source_ids() -> dict[str, str]:

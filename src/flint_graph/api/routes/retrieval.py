@@ -79,6 +79,7 @@ async def get_system_readiness_endpoint(
             "query_usage_rollups": True,
             "query_usage_invocations": True,
             "conversation_ledger": True,
+            "prior_year_followups": True,
             "chained_conversations": False,
         },
         "auth": {

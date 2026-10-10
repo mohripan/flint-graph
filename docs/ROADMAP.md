@@ -218,8 +218,10 @@ backend choice in an ADR; faster ANN cannot fix poor parsing or embeddings.
   are proposed in [ADR 19](adr/0019-conversation-state-and-reference-only-execution.md).
   The authorized ordered ledger is delivered separately in
   [#96](https://github.com/mohripan/flint-graph/issues/96) /
-  [ADR 26](adr/0026-conversation-ledger-foundation.md); grounded memory remains
-  disabled until the follow-up implementation and qualification pass.
+  [ADR 26](adr/0026-conversation-ledger-foundation.md). The revalidated prior-year
+  slice [#97](https://github.com/mohripan/flint-graph/issues/97) /
+  [ADR 27](adr/0027-bounded-prior-year-followups.md) adds narrow follow-ups;
+  broad memory, the thread UI and multi-turn quality qualification remain open.
 - Transactionally dispatch query runs through outbox/Temporal. SSE subscribes;
   disconnect does not cancel execution. Add explicit cancellation and cursor
   replay; prevent multiple subscribers executing the same run.

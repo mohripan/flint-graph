@@ -37,6 +37,7 @@ from flint_graph.application.query_orchestration import (
     QueryCandidate,
     SupportChecker,
 )
+from flint_graph.application.services.conversation_memory import conversation_policy_fingerprint
 from flint_graph.application.services.lexical_projection import build_lexical_search_body
 from flint_graph.application.services.query_orchestration import (
     QueryRetrieverBundle,
@@ -284,6 +285,7 @@ async def stream_query_run_events_endpoint(
     # All authorized run/index/filter values have been materialized above.
     await session.commit()
     stream = _stream_query_events(
+        conversation_fingerprint=conversation_policy_fingerprint(settings),
         session_factory=session_factory,
         tenant_id=tenant_id,
         query_run_id=query_run_id,
@@ -559,6 +561,7 @@ async def _stream_query_events(
     usage_currency: str = "USD",
     poll_interval_seconds: float,
     usage_recorder: QueryUsageRecorder | None = None,
+    conversation_fingerprint: str | None = None,
 ) -> AsyncIterator[str]:
     if initial_status != QueryRunStatus.QUEUED:
         async for event in _replay_query_events(
@@ -588,6 +591,7 @@ async def _stream_query_events(
             usage_currency=usage_currency,
             usage_recorder=usage_recorder,
             queue=queue,
+            conversation_fingerprint=conversation_fingerprint,
         )
     )
     try:
@@ -635,6 +639,7 @@ async def _execute_query_run(
     usage_currency: str = "USD",
     queue: asyncio.Queue[str | None],
     usage_recorder: QueryUsageRecorder | None = None,
+    conversation_fingerprint: str | None = None,
 ) -> None:
     async with session_factory() as execution_session:
         last_sequence = 0
@@ -670,6 +675,7 @@ async def _execute_query_run(
                 retrieval_session_factory=session_factory,
                 commit_after_node=True,
                 after_node_commit=emit_new_events,
+                conversation_fingerprint=conversation_fingerprint,
                 usage_recorder=usage_recorder,
             )
             if usage_recorder is not None:

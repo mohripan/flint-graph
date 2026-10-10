@@ -180,8 +180,7 @@ class QueryUsageRecorder:
             for operation in self.expected
         }
         complete = (
-            bool(current)
-            and actual == self.expected
+            actual == self.expected
             and all(
                 event.metadata_.get("status") == "completed"
                 and event.metadata_.get("usage_known") is True

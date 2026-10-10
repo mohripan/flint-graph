@@ -17,6 +17,7 @@ from flint_graph.application.query_orchestration import (
     QueryRerankRequest,
     RetrieverSource,
 )
+from flint_graph.application.services.conversation_memory import effective_query_text
 from flint_graph.application.services.query_runs import append_query_run_event, get_query_run
 from flint_graph.infrastructure.db.models import QueryRunCandidate
 
@@ -129,7 +130,7 @@ async def rerank_fused_query_candidates(
     rerank_model = reranker or DeterministicQueryReranker()
     rerank_result = await rerank_model.rerank(
         QueryRerankRequest(
-            query=run.query_text,
+            query=effective_query_text(run),
             candidates=representatives,
             max_results=result_limit,
         )

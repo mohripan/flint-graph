@@ -18,6 +18,7 @@ from flint_graph.application.query_orchestration import (
     QueryClassifier,
     QueryEntityLink,
 )
+from flint_graph.application.services.conversation_memory import effective_query_text
 from flint_graph.application.services.query_runs import (
     append_query_run_event,
     get_query_run,
@@ -70,11 +71,15 @@ async def classify_query_run(
     classification = await model.classify(
         QueryClassificationRequest(
             tenant_id=tenant_id,
-            query=run.query_text,
+            query=effective_query_text(run),
             retrieval_index_version_id=run.retrieval_index_version_id,
         )
     )
-    queries = coordinated_retrieval_queries(run.query_text)
+    queries = coordinated_retrieval_queries(effective_query_text(run))
+    if run.metadata_.get("conversation_context", {}).get("mode") == "clarification":
+        classification = classification.model_copy(
+            update={"metadata": {**classification.metadata, "conversation_clarification": True}}
+        )
     if classification.label != "unsupported" and len(queries) > 1:
         classification = classification.model_copy(
             update={
@@ -131,7 +136,11 @@ async def link_query_entities(
 ) -> list[QueryEntityLink]:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
     provider = linker or DeterministicEntityLinker()
-    links = await provider.link(session, tenant_id=tenant_id, query=run.query_text)
+    links = (
+        []
+        if run.metadata_.get("conversation_context", {}).get("mode") == "clarification"
+        else await provider.link(session, tenant_id=tenant_id, query=effective_query_text(run))
+    )
     for link in links:
         await persist_query_entity_link(
             session,

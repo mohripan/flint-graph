@@ -16,6 +16,9 @@ from flint_graph.application.query_orchestration import (
     QueryReranker,
     SupportChecker,
 )
+from flint_graph.application.services.conversation_memory import (
+    prepare_conversation_context,
+)
 from flint_graph.application.services.query_answering import generate_query_answer
 from flint_graph.application.services.query_context_packing import pack_query_context
 from flint_graph.application.services.query_fusion import (
@@ -169,6 +172,7 @@ async def run_query_retrieval_graph(
     commit_after_node: bool = False,
     after_node_commit: Callable[[], Awaitable[None]] | None = None,
     usage_recorder: QueryUsageRecorder | None = None,
+    conversation_fingerprint: str | None = None,
 ) -> QueryRetrievalGraphResult:
     graph = _build_retrieval_graph(
         session=session,
@@ -188,6 +192,7 @@ async def run_query_retrieval_graph(
         commit_after_node=commit_after_node,
         after_node_commit=after_node_commit,
         usage_recorder=usage_recorder,
+        conversation_fingerprint=conversation_fingerprint,
     )
     state = await graph.ainvoke(
         {
@@ -252,6 +257,7 @@ def _build_retrieval_graph(
     commit_after_node: bool,
     after_node_commit: Callable[[], Awaitable[None]] | None,
     usage_recorder: QueryUsageRecorder | None,
+    conversation_fingerprint: str | None,
 ) -> Any:
     builder = StateGraph(_GraphState)
 
@@ -264,9 +270,15 @@ def _build_retrieval_graph(
             event_type="query.started",
             payload={"node": "initialize_run"},
         )
+        interpretation = await prepare_conversation_context(
+            session,
+            tenant_id=state["tenant_id"],
+            query_run_id=state["query_run_id"],
+            policy_fingerprint=conversation_fingerprint,
+        )
         await _commit_if_requested(session, commit_after_node, after_node_commit)
         return {
-            "query": run.query_text,
+            "query": interpretation.query,
             "retrieval_index_version_id": run.retrieval_index_version_id,
             "status": run.status,
         }
@@ -300,6 +312,8 @@ def _build_retrieval_graph(
     async def plan_retrieval(state: _GraphState) -> _GraphStateUpdate:
         classification = _require_classification(state)
         enabled = list(classification.retrieval_plan.enabled_retrievers)
+        if classification.metadata.get("conversation_clarification") is True:
+            enabled = []
         if "graph" in enabled and not state.get("linked_entity_ids"):
             enabled.remove("graph")
         if usage_recorder is not None:
@@ -477,6 +491,7 @@ def _build_retrieval_graph(
             return {}
         result = await generate_query_answer(
             session,
+            conversation_fingerprint=conversation_fingerprint,
             tenant_id=state["tenant_id"],
             query_run_id=state["query_run_id"],
             generator=answer_generator,

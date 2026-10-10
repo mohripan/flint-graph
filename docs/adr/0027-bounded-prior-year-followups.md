@@ -16,7 +16,8 @@ failed or unrelated turns. Its run must be finalized, non-abstained, contain onl
 supported persisted claims with citations, and use the same active index and
 server-owned execution-policy fingerprint. Revalidate exact tenant document /
 active version / chunk hash and completed current-index coverage, with at most
-eight distinct citations. A missing, replaced or deleted source invalidates the
+eight supported claims and eight distinct citations from the latest context
+pack. Per-turn document filters must also match. A missing, replaced or deleted source invalidates the
 interpretation context. Previous answer text never enters a prompt or evidence
 pack; only the bounded question supplies reference scope.
 
@@ -29,7 +30,7 @@ remain mandatory. This is not a hard guarantee about concurrent deletion after
 the final authorization check; the existing source lifecycle boundary still applies.
 
 Bound interpretation to one question of at most 1000 characters, one explicit
-year and eight citations. Persist considered/omitted counts, prior turn/run IDs,
+year, eight supported claims and eight citations. Persist considered/omitted counts, prior turn/run IDs,
 reason, policy and fingerprint, not an answer transcript or new source copy.
 Interpretation makes zero additional model calls. Existing retrieval packing,
 output limits and invocation accounting apply to the resolved query; parent-wide

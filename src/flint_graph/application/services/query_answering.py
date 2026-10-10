@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.conversation_memory import MEMORY_POLICY_VERSION
 from flint_graph.application.financial_arithmetic import prepare_verified_calculation
 from flint_graph.application.query_orchestration import (
     AnswerFaithfulnessReport,
@@ -23,6 +24,10 @@ from flint_graph.application.query_orchestration import (
 from flint_graph.application.query_orchestration import (
     QueryContextPack as ApplicationQueryContextPack,
 )
+from flint_graph.application.services.conversation_memory import (
+    effective_query_text,
+    prepare_conversation_context,
+)
 from flint_graph.application.services.query_faithfulness import (
     QueryFaithfulnessPolicy,
     QueryFaithfulnessResult,
@@ -35,7 +40,10 @@ from flint_graph.application.services.query_runs import (
     persist_query_answer_claims,
     transition_query_run,
 )
-from flint_graph.application.services.query_scope import financial_scope_clarification
+from flint_graph.application.services.query_scope import (
+    FinancialScopeClarification,
+    financial_scope_clarification,
+)
 from flint_graph.application.services.query_usage import QueryUsageRecorder
 from flint_graph.application.services.usage import record_provider_usage
 from flint_graph.application.usage import usage_from_metadata
@@ -69,10 +77,19 @@ async def generate_query_answer(
     usage_pricing: dict[str, dict[str, float]] | None = None,
     usage_currency: str = "USD",
     usage_recorder: QueryUsageRecorder | None = None,
+    conversation_fingerprint: str | None = None,
 ) -> QueryAnswerResult:
     run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
     stage = "load_context"
     try:
+        if run.metadata_.get("conversation_context", {}).get("mode") == "resolved":
+            await prepare_conversation_context(
+                session,
+                tenant_id=tenant_id,
+                query_run_id=query_run_id,
+                policy_fingerprint=conversation_fingerprint,
+            )
+        query = effective_query_text(run)
         context_pack = await _load_latest_context_pack(
             session,
             tenant_id=tenant_id,
@@ -82,15 +99,25 @@ async def generate_query_answer(
         clarification = await financial_scope_clarification(
             session,
             tenant_id=tenant_id,
-            query=run.query_text,
+            query=query,
             retrieval_index_version_id=run.retrieval_index_version_id,
             filters=filters if isinstance(filters, dict) else {},
         )
+        clarification_reason = "ambiguous_financial_scope"
+        clarification_version = "financial-scope-v1"
+        if run.metadata_.get("conversation_context", {}).get("mode") == "clarification":
+            clarification = FinancialScopeClarification(
+                text="Please ask a self-contained question, including the subject and year. "
+                "I cannot safely resolve this follow-up from the preceding turn.",
+                missing_scope=["conversation_scope"],
+            )
+            clarification_reason = "ambiguous_conversation_scope"
+            clarification_version = MEMORY_POLICY_VERSION
         model = generator or DeterministicAnswerGenerator()
-        calculation_hint = prepare_verified_calculation(run.query_text, context_pack)
+        calculation_hint = prepare_verified_calculation(query, context_pack)
         generation_request = AnswerGenerationRequest(
             tenant_id=tenant_id,
-            query=run.query_text,
+            query=query,
             retrieval_index_version_id=run.retrieval_index_version_id,
             context_pack=context_pack,
             policy={"verified_calculation": calculation_hint}
@@ -133,7 +160,7 @@ async def generate_query_answer(
             draft_answer = GeneratedAnswer(
                 text=clarification.text,
                 insufficient_context=True,
-                metadata={"provider": "scope-policy", "model": "financial-scope-v1"},
+                metadata={"provider": "scope-policy", "model": clarification_version},
             )
             verification = QueryFaithfulnessResult(
                 answer=draft_answer,
@@ -141,10 +168,10 @@ async def generate_query_answer(
                     supported_claim_count=0,
                     unsupported_claim_count=0,
                     abstained=True,
-                    abstain_reason="ambiguous_financial_scope",
+                    abstain_reason=clarification_reason,
                     support_method="scope-policy",
                     metadata={
-                        "policy_version": "financial-scope-v1",
+                        "policy_version": clarification_version,
                         "missing_scope": clarification.missing_scope,
                     },
                 ),
@@ -155,8 +182,8 @@ async def generate_query_answer(
                 query_run_id=query_run_id,
                 event_type="query.clarification_required",
                 payload={
-                    "reason": "ambiguous_financial_scope",
-                    "policy_version": "financial-scope-v1",
+                    "reason": clarification_reason,
+                    "policy_version": clarification_version,
                     "missing_scope": clarification.missing_scope,
                 },
             )
@@ -174,7 +201,7 @@ async def generate_query_answer(
             stage = "support_check"
             verification = await verify_generated_answer(
                 tenant_id=tenant_id,
-                query=run.query_text,
+                query=query,
                 context_pack=context_pack,
                 draft_answer=draft_answer,
                 support_checker=support_checker,
