@@ -6,6 +6,7 @@
   "description": "Non-technical end-user UI for the FlintGraph GraphRAG platform (Ask + Documents).",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "test:browser": "node scripts/check-responsive.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

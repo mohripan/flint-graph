@@ -139,3 +139,28 @@ Browser QA with controlled network responses verifies the support-error message
 and diagnostics, cancelled and unfinished outcomes, verified Berlin output, and
 absence of raw draft JSON. `npm test`, `npm run typecheck`, and `npm run build`
 passed. Real incremental verified sections remain Milestone 20 work.
+
+## Responsive shell
+
+[Issue #24](https://github.com/mohripan/flint-graph/issues/24) repairs a pre-existing
+narrow-screen shell overflow. Header controls wrap, page navigation becomes a
+horizontal row below the medium breakpoint, and Ask gets a full-width scrollable
+panel. Desktop branding/layout remain in place. Workspace and page selectors
+also have accessible names.
+
+`npm run test:browser` runs an optional pinned agent-browser check against a local
+Vite server, with mocked public API responses. It checks document overflow,
+navigation clipping and Ask input width at 390px and 1280px. The check failed
+against the old shell (100px input, clipped Switch workspace) and passes after
+the repair. It does not test backend availability or answer quality. Start
+`npm run dev` first; the check creates and closes its own browser session.
+
+## Multiline plain-text ingestion
+
+The first real Compose rehearsal found that ordinary multiline text ending in a
+newline could produce no parser elements and fail ingestion before indexing.
+[Issue #25](https://github.com/mohripan/flint-graph/issues/25) repairs paragraph
+segmentation for LF/CRLF and trailing whitespace. Source offsets end at the exact
+trimmed paragraph, preserving decoded-text evidence coordinates. Regressions cover
+the pure parser and its real bounded subprocess. Historical failed attempts remain
+inspectable; a retry must create a new immutable document version/ingestion attempt.

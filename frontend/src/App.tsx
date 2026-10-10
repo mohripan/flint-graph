@@ -43,16 +43,16 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Logo className="h-9 w-9" />
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight text-slate-900">FlintGraph</p>
-            <p className="text-xs leading-tight text-slate-500">{workspace.name}</p>
+            <p className="max-w-64 truncate text-xs leading-tight text-slate-500">{workspace.name}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto sm:gap-4">
           <HealthDot healthy={healthy} />
           <select
             value={workspace.id}
@@ -60,7 +60,8 @@ export default function App() {
               const next = workspaces.find((item) => item.id === event.target.value);
               if (next) select(next);
             }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-600"
+            aria-label="Workspace"
+            className="min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-600 sm:max-w-64"
           >
             {workspaces.map((item) => (
               <option key={item.id} value={item.id}>
@@ -82,8 +83,8 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <nav className="flex w-52 shrink-0 flex-col gap-1 border-r border-slate-200 bg-white p-3">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <nav aria-label="Workspace pages" className="flex w-full shrink-0 gap-1 border-b border-slate-200 bg-white p-3 md:w-52 md:flex-col md:border-r md:border-b-0">
           <NavItem active={tab === "ask"} onClick={() => setTab("ask")} label="Ask" icon={<AskIcon />} />
           <NavItem
             active={tab === "documents"}
@@ -94,7 +95,7 @@ export default function App() {
           <NavItem active={tab === "setup"} onClick={() => setTab("setup")} label="Setup" icon={<SetupIcon />} />
         </nav>
 
-        <main className="min-h-0 flex-1 overflow-hidden bg-slate-50">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
           {tab === "ask" ? <AskPage /> : tab === "documents" ? <UploadPage /> : <SetupPage />}
         </main>
       </div>
@@ -116,7 +117,7 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+      className={`flex flex-1 items-center justify-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition md:flex-none md:justify-start ${
         active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"
       }`}
     >
