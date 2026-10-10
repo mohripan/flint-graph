@@ -125,6 +125,8 @@ async def test_ollama_support_checker_sends_schema_and_maps_judgements() -> None
     ]
     assert "claim_index 0" in payload["prompt"]
     assert "cited context: Acme Corporation is headquartered in Berlin." in payload["prompt"]
+    assert "Missing information is not evidence" in payload["prompt"]
+    assert result.metadata["support_prompt_version"] == "grounded-support-v2"
 
 
 @pytest.mark.anyio

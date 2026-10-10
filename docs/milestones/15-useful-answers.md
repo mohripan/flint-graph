@@ -185,3 +185,14 @@ references include document, immutable version and local chunk name. The public
 API regression retrieves same-named chunks from two active documents, requires
 successful execution and verifies distinct persisted identities. Existing stored
 query/citation records retain their original identities and remain readable.
+
+## Versioned grounded answer instructions
+
+[Issue #29](https://github.com/mohripan/flint-graph/issues/29) shares explicit,
+versioned answer/support rules between Ollama and Anthropic. Focused answers
+must address the requested attribute, cite every supporting premise for
+multi-record claims, and signal insufficient context rather than cite absence
+commentary as an answer. Context remains untrusted evidence, not instructions.
+Adapter metadata identifies `grounded-answer-v2` and `grounded-support-v2`.
+Support thresholds and offline providers are unchanged. Prompt rules guide models;
+they do not mechanically prove completeness or replace the M20 coverage contract.
