@@ -117,27 +117,62 @@ def test_parse_plain_text_into_paragraph_elements() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "source_type,content",
+    [
+        ("text/plain", b"First\x00paragraph.\n\nSecond paragraph."),
+        ("text/markdown", b"# Title\x00text\n\nMath\x00proof"),
+        ("text/html", b"<title>Title\x00text</title><p>Math\x00proof</p>"),
+        ("application/pdf", _text_pdf_bytes().replace(b"Flint PDF text", b"Flint\x00PDF text")),
+    ],
+)
+def test_parser_replaces_nul_with_visible_marker_and_records_warning(source_type, content):
+    artifact = parse_normalized_document(
+        content, metadata=_source_metadata(content_type=source_type)
+    )
+    assert "\x00" not in "".join(element.text for element in artifact.elements)
+    assert "\x00" not in (artifact.title or "")
+    assert "\ufffd" in "".join(element.text for element in artifact.elements)
+    assert any(warning.startswith("nul_characters_replaced:") for warning in artifact.warnings)
+    assert artifact.source.content_hash == CONTENT_HASH
+    for element in artifact.elements:
+        if element.source_offsets is not None and source_type == "text/plain":
+            decoded = content.decode()
+            assert (
+                decoded[element.source_offsets.start : element.source_offsets.end].replace(
+                    "\x00", "\ufffd"
+                )
+                == element.text
+            )
+
+
 @pytest.mark.parametrize("newline", ["\n", "\r\n"])
 def test_plain_text_preserves_multiline_paragraphs_and_exact_offsets(newline: str) -> None:
     text = f"First line.{newline}Second line.{newline}{newline}Final paragraph.{newline}  "
     artifact = parse_normalized_document(
-        text.encode(), metadata=_source_metadata(content_type="text/plain"),
+        text.encode(),
+        metadata=_source_metadata(content_type="text/plain"),
     )
     assert [element.text for element in artifact.elements] == [
-        f"First line.{newline}Second line.", "Final paragraph.",
+        f"First line.{newline}Second line.",
+        "Final paragraph.",
     ]
     for element in artifact.elements:
         assert element.source_offsets is not None
-        assert text[element.source_offsets.start:element.source_offsets.end] == element.text
+        assert text[element.source_offsets.start : element.source_offsets.end] == element.text
 
 
 def test_bounded_text_parser_accepts_a_normal_upload_ending_with_newline() -> None:
     content = b"Acme Corporation is headquartered in Berlin.\nAcme was founded by Elena Ruiz.\n"
     limits = ParserLimits(
-        timeout_seconds=10, max_raw_bytes=10000, max_normalized_bytes=10000, max_elements=100,
+        timeout_seconds=10,
+        max_raw_bytes=10000,
+        max_normalized_bytes=10000,
+        max_elements=100,
     )
     artifact = BoundedParserRunner(limits=limits).parse(
-        content, metadata=_source_metadata(content_type="text/plain"),
+        content,
+        metadata=_source_metadata(content_type="text/plain"),
     )
     assert len(artifact.elements) == 1
     assert artifact.elements[0].text == content.decode().rstrip()

@@ -17,6 +17,45 @@ from flint_graph.application.extraction_proposals import (
 VERSION_ID = UUID("87c13861-d4e4-4a75-9708-7b92b35a13e0")
 
 
+def test_exact_evidence_offsets_reference_nul_normalized_chunk_not_raw_pdf_text():
+    from flint_graph.application.chunking import ChunkingConfig, chunk_normalized_document
+    from flint_graph.application.parsing import SourceMetadata
+    from flint_graph.application.parsing.parsers import parse_normalized_document
+
+    artifact = parse_normalized_document(
+        b"Prefix\x00Acme proof.",
+        metadata=SourceMetadata(
+            document_id=VERSION_ID,
+            document_version_id=VERSION_ID,
+            content_hash="sha256:" + "a" * 64,
+            content_type="text/plain",
+        ),
+    )
+    manifest = chunk_normalized_document(
+        artifact, config=ChunkingConfig(max_chunk_chars=100, overlap_chars=0)
+    )
+    chunk = manifest.chunks[0]
+    batch = ExtractionBatch(
+        input_chunk_ids=[chunk.chunk_id],
+        entities=[
+            ExtractedEntityProposal(
+                local_id="e1",
+                name="Acme",
+                entity_type="organization",
+                evidence=[EvidenceProposal(chunk_id=chunk.chunk_id, quote="Acme proof")],
+            )
+        ],
+    )
+    resolved = resolve_batch_evidence(
+        batch,
+        chunks=[ExtractionInputChunk(chunk_id=chunk.chunk_id, text=chunk.text)],
+        document_version_id=VERSION_ID,
+    )
+    span = next(iter(resolved.spans_by_id.values()))
+    assert (span.start_offset, span.end_offset) == (7, 17)
+    assert chunk.text[span.start_offset : span.end_offset] == span.quote == "Acme proof"
+
+
 def test_resolve_batch_evidence_calculates_offsets_hashes_and_links() -> None:
     batch = ExtractionBatch(
         input_chunk_ids=["chunk-000001"],
@@ -25,9 +64,7 @@ def test_resolve_batch_evidence_calculates_offsets_hashes_and_links() -> None:
                 local_id="e1",
                 name="Acme Corporation",
                 entity_type="organization",
-                evidence=[
-                    EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")
-                ],
+                evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")],
             ),
             ExtractedEntityProposal(
                 local_id="e2",
@@ -73,9 +110,7 @@ def test_resolve_batch_evidence_calculates_offsets_hashes_and_links() -> None:
     assert acme_span.span_hash.startswith("sha256:")
     assert acme_span.stable_id.startswith("ev_")
     assert relation_span.start_offset == 0
-    assert relation_span.end_offset == len(
-        "Acme Corporation is headquartered in Berlin"
-    )
+    assert relation_span.end_offset == len("Acme Corporation is headquartered in Berlin")
 
 
 def test_resolve_batch_evidence_rejects_absent_quote() -> None:
@@ -112,9 +147,7 @@ def test_resolve_batch_evidence_rejects_repeated_quote_without_start_hint() -> N
                 local_id="e1",
                 name="Acme Corporation",
                 entity_type="organization",
-                evidence=[
-                    EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")
-                ],
+                evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")],
             )
         ],
     )
@@ -205,9 +238,7 @@ def test_resolve_batch_evidence_rejects_chunk_scope_mismatch() -> None:
                 local_id="e1",
                 name="Acme Corporation",
                 entity_type="organization",
-                evidence=[
-                    EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")
-                ],
+                evidence=[EvidenceProposal(chunk_id="chunk-000001", quote="Acme Corporation")],
             )
         ],
     )

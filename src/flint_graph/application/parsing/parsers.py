@@ -31,7 +31,23 @@ def parse_normalized_document(
 ) -> NormalizedDocument:
     source_format = detect_source_format(content, metadata)
     parser = _PARSERS[source_format]
-    return parser.parse(content, metadata)
+    document = parser.parse(content, metadata)
+    # PostgreSQL text/JSONB cannot represent U+0000. Preserve raw bytes and
+    # character offsets; a visible one-codepoint replacement avoids joining words.
+    replacements = sum(element.text.count("\x00") for element in document.elements)
+    replacements += (document.title or "").count("\x00")
+    if not replacements:
+        return document
+    return document.model_copy(
+        update={
+            "title": document.title.replace("\x00", "\ufffd") if document.title else None,
+            "elements": [
+                element.model_copy(update={"text": element.text.replace("\x00", "\ufffd")})
+                for element in document.elements
+            ],
+            "warnings": [*document.warnings, f"nul_characters_replaced:{replacements}"],
+        }
+    )
 
 
 class TextParser:
@@ -43,7 +59,8 @@ class TextParser:
                 element_type="paragraph",
                 text=match.group(0).strip(),
                 source_offsets=SourceOffsets(
-                    start=match.start(), end=match.start() + len(match.group(0).rstrip()),
+                    start=match.start(),
+                    end=match.start() + len(match.group(0).rstrip()),
                 ),
             )
             for index, match in enumerate(_paragraph_matches(text), start=1)

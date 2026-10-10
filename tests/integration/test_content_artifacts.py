@@ -10,13 +10,60 @@ from flint_graph.application.parsing import (
     NormalizedDocument,
     NormalizedElement,
     SourceFormat,
+    SourceMetadata,
     SourceReference,
 )
+from flint_graph.application.parsing.parsers import parse_normalized_document
 from flint_graph.application.services.content_artifacts import persist_content_artifacts
 from flint_graph.application.services.intake import create_upload_intake
 from flint_graph.application.services.tenants import create_tenant
 from flint_graph.infrastructure.db.models import DocumentArtifact, DocumentChunk
 from flint_graph.infrastructure.object_store import ObjectInfo
+
+
+async def test_nul_normalized_text_persists_and_retains_raw_source_and_warning(
+    extraction_db_session,
+):
+    session = extraction_db_session
+    store = FakeObjectStore()
+    tenant = await create_tenant(session, name="NUL parser regression")
+    raw = b"Math\x00proof has exact evidence."
+    intake = await create_upload_intake(
+        session,
+        object_store=store,
+        bucket="flint-graph",
+        tenant_id=tenant.id,
+        title="NUL fixture",
+        external_id="nul-fixture",
+        idempotency_key="nul-fixture-v1",
+        data=raw,
+        content_type="text/plain",
+        original_filename="nul.txt",
+    )
+    normalized = parse_normalized_document(
+        raw,
+        metadata=SourceMetadata(
+            document_id=intake.document.id,
+            document_version_id=intake.version.id,
+            content_hash=intake.version.content_hash,
+            content_type="text/plain",
+        ),
+    )
+    result = await persist_content_artifacts(
+        session,
+        object_store=store,
+        bucket="flint-graph",
+        tenant_id=tenant.id,
+        document_id=intake.document.id,
+        version_id=intake.version.id,
+        normalized_document=normalized,
+        chunking_config=ChunkingConfig(max_chunk_chars=200, overlap_chars=0),
+    )
+    await session.flush()
+    artifact = json.loads(await store.get_bytes(result.normalized_artifact_uri))
+    assert artifact["elements"][0]["text"] == "Math\ufffdproof has exact evidence."
+    assert artifact["warnings"] == ["nul_characters_replaced:1"]
+    assert await store.get_bytes(intake.version.object_uri) == raw
 
 
 class FakeObjectStore:
@@ -93,9 +140,7 @@ async def test_persist_content_artifacts_writes_objects_and_queryable_chunk_line
     )
 
     artifacts = list(
-        await db_session.scalars(
-            select(DocumentArtifact).order_by(DocumentArtifact.artifact_type)
-        )
+        await db_session.scalars(select(DocumentArtifact).order_by(DocumentArtifact.artifact_type))
     )
     chunks = list(
         await db_session.scalars(select(DocumentChunk).order_by(DocumentChunk.chunk_index))

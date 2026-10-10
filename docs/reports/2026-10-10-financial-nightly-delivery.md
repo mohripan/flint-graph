@@ -38,3 +38,11 @@ Frontend was already running at `http://127.0.0.1:5173`; left running unchanged.
 HTTP page/API proxy returned 200; isolated browser selected the financial workspace
 and showed `Documents (100)` and query history. Frontend tests (6), typecheck and
 production build passed. No frontend source changes were needed.
+
+Verification passed: `uv run pytest -q` (658 passed, 6 optional skips),
+`uv run ruff check .`, `uv run mypy` (151 files), `uv lock --check`, the exact
+deterministic acme-smoke gate from AGENTS.md, `FLINT_GRAPH_ENV=test uv run alembic
+upgrade head --sql` (1,026 SQL lines), `docker compose config --quiet`, and
+`git diff --check`. Focused PostgreSQL query API checks passed 43 cases with
+3 conditional skips. Default suite skips are optional external integrations;
+production OIDC and hosted providers were not verified.

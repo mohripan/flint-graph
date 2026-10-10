@@ -55,6 +55,19 @@ Element IDs are deterministic within an artifact and use `element-000001` style 
 
 Headings include `level` from 1 through 6. PDF elements may include a 1-based `page`. Text and Markdown elements include source offsets where the parser can produce them deterministically.
 
+## PostgreSQL-safe NUL normalization
+
+All supported parsers replace extracted U+0000 in element text and normalized
+titles with visible U+FFFD before chunking/persistence. PostgreSQL cannot store
+code-zero text ([official character-type contract](https://www.postgresql.org/docs/17/datatype-character.html)).
+Raw source bytes and their content hash remain unchanged. A one-codepoint marker
+preserves character positions and does not silently join adjacent tokens.
+`warnings` contains `nul_characters_replaced:N`; N counts replacements in parsed
+text representations, including title and heading if both contain the same NUL.
+It is not a count of distinct characters in the raw source. Normalized artifacts
+retain the warning; evidence spans refer to exact normalized chunk text, not
+byte offsets in the original PDF. No historical artifacts are rewritten.
+
 ## Format Detection
 
 Format detection uses:
