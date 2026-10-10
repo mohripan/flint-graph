@@ -7,6 +7,7 @@ import httpx
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.testing import capture_logs
 
 from flint_graph.application.services.document_lifecycle import (
     delete_document,
@@ -71,6 +72,108 @@ from flint_graph.infrastructure.opensearch import (
     build_chunk_index_mapping,
     build_upsert_chunks_bulk_body,
 )
+from flint_graph.processes.document_projection_cleanup import log_cleanup_outcome
+
+
+@pytest.mark.skipif(
+    not os.getenv("FLINT_GRAPH_LIVE_PROJECTION_INTEGRATION"),
+    reason="Opt-in live cleanup process outcome verification.",
+)
+async def test_cleanup_process_logs_committed_failure_then_retry_live(
+    extraction_db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from flint_graph.processes import document_projection_cleanup as process
+
+    session = extraction_db_session
+    if session.get_bind().dialect.name != "postgresql":
+        pytest.skip("Uses only an isolated PostgreSQL fixture schema.")
+    tenant_id, versions = await _create_document_with_jobs(
+        session,
+        tenant_name="Disposable outcome logging",
+        document_external_id="logging-live",
+        job_keys=["logging-live-v1"],
+    )
+    await activate_document_version(session, tenant_id=tenant_id, version_id=versions[0])
+    version = await session.get(DocumentVersion, versions[0])
+    assert version is not None
+    index_id = await _create_active_index_coverage(
+        session, tenant_id=tenant_id, version=version, chunk_count=0
+    )
+    index = await session.get(RetrievalIndexVersion, index_id)
+    assert index is not None
+    physical_name = f"flintgraph-cleanup-log-verification-{uuid4().hex}"
+    index.opensearch_index_name = physical_name
+    session.add(
+        DocumentChunk(
+            tenant_id=tenant_id,
+            document_id=version.document_id,
+            document_version_id=version.id,
+            chunk_id="logging-live",
+            chunk_index=0,
+            text="Synthetic cleanup log test",
+            chunk_hash="synthetic",
+            metadata_={},
+        )
+    )
+    await session.flush()
+    await delete_document(session, tenant_id=tenant_id, document_id=version.document_id)
+    await session.commit()
+    cleanup = await session.scalar(
+        select(DocumentProjectionCleanup).where(
+            DocumentProjectionCleanup.document_version_id == version.id,
+        )
+    )
+    assert cleanup is not None
+    document_id, cleanup_id = version.document_id, cleanup.id
+    await session.commit()
+    # The sole replacement is the DB connection boundary, backed by real PG in
+    # this fixture's schema. Process, clients, projection service and logs are real.
+    monkeypatch.setattr(
+        process,
+        "SessionFactory",
+        async_sessionmaker(
+            session.bind,
+            expire_on_commit=False,
+            autoflush=False,
+        ),
+    )
+    async with httpx.AsyncClient(base_url="http://localhost:9200", timeout=30) as http:
+        assert (await http.get(f"/{physical_name}")).status_code == 404
+        with capture_logs() as failed_logs:
+            assert await process.cleanup_once() == 1
+        await session.refresh(cleanup)
+        assert cleanup.status == DocumentProjectionCleanupStatus.FAILED
+        assert any(
+            log["event"] == "document_projection_cleanup.failed"
+            and log["cleanup_id"] == str(cleanup_id)
+            for log in failed_logs
+        )
+        assert not any(
+            log["event"] == "document_projection_cleanup.completed" for log in failed_logs
+        )
+        created = await http.put(f"/{physical_name}", json=build_chunk_index_mapping())
+        created.raise_for_status()
+        try:
+            await retry_projection_cleanups(session, tenant_id=tenant_id, document_id=document_id)
+            await session.commit()
+            with capture_logs() as completed_logs:
+                assert await process.cleanup_once() == 1
+            await session.refresh(cleanup)
+            assert cleanup.status == DocumentProjectionCleanupStatus.COMPLETED
+            assert cleanup.attempt_count == 2
+            assert any(
+                log["event"] == "document_projection_cleanup.completed"
+                and log["status"] == "completed"
+                for log in completed_logs
+            )
+            assert all("error_message" not in log for log in failed_logs + completed_logs)
+        finally:
+            assert physical_name.startswith("flintgraph-cleanup-log-verification-")
+            removed = await http.delete(f"/{physical_name}")
+            removed.raise_for_status()
 
 
 class CapturingCypherClient:
@@ -448,6 +551,11 @@ async def test_partial_coverage_cleanup_uses_all_chunks_and_retries(
         session, cleanup_id=cleanup.id, neo4j_client=cypher, opensearch_client=search
     )
     assert failed.status == DocumentProjectionCleanupStatus.FAILED
+    await session.commit()
+    with capture_logs() as failed_logs:
+        log_cleanup_outcome(failed)
+    assert failed_logs[0]["event"] == "document_projection_cleanup.failed"
+    assert failed_logs[0]["status"] == "failed"
     await retry_projection_cleanups(session, tenant_id=tenant_id, document_id=version.document_id)
     completed = await run_projection_cleanup(
         session, cleanup_id=cleanup.id, neo4j_client=cypher, opensearch_client=search
@@ -455,6 +563,11 @@ async def test_partial_coverage_cleanup_uses_all_chunks_and_retries(
     assert completed.status == DocumentProjectionCleanupStatus.COMPLETED
     assert completed.chunk_count == completed.vector_count == completed.lexical_count == 2
     assert completed.attempt_count == 2
+    await session.commit()
+    with capture_logs() as completed_logs:
+        log_cleanup_outcome(completed)
+    assert completed_logs[0]["event"] == "document_projection_cleanup.completed"
+    assert completed_logs[0]["status"] == "completed"
     assert search.bulk_bodies[0] == search.bulk_bodies[1]
     assert all(f"partial-{number}" in search.bulk_bodies[1] for number in range(2))
     assert str(versions[1]) not in search.bulk_bodies[1]

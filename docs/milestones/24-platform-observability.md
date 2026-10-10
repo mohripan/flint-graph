@@ -16,6 +16,12 @@ Design: [ADR 13](../adr/0013-layered-platform-observability.md).
 | [#41](https://github.com/mohripan/flint-graph/issues/41) | Configure operator-owned Alertmanager email or webhook delivery | planned |
 | [#42](https://github.com/mohripan/flint-graph/issues/42) | Select and implement an ELK or OpenSearch structured-log pipeline | planned |
 | [#43](https://github.com/mohripan/flint-graph/issues/43) | Harden production telemetry with authentication, retention and delivery budgets | planned |
+| [#69](https://github.com/mohripan/flint-graph/issues/69) | Report committed cleanup outcome without provider payloads in process logs | implemented |
+
+Cleanup logging is verified against a real failure and retry using an isolated
+PostgreSQL fixture and live Neo4j/OpenSearch clients. See the
+[delivery report](../reports/2026-10-10-cleanup-outcome-logging.md). This is a
+process-specific guarantee, not a claim that all third-party logs are redacted.
 
 ## Acceptance and boundaries
 

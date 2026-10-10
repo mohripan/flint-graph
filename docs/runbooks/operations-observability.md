@@ -205,6 +205,17 @@ Cleanups are not draining after 30 minutes.
 3. Neo4j and OpenSearch are rebuildable projections; if they are far behind, a
    reconcile is safe: `python -m flint_graph.processes.retrieval_index_reconcile`.
 
+Cleanup process events now follow the **committed** ledger outcome:
+`document_projection_cleanup.completed` (info), `.failed` (warning), or
+`.incomplete` (warning). Fields are cleanup ID, enum status and attempt count;
+warning codes are fixed. Provider messages/bodies and arbitrary persisted error
+codes are not copied into process logs. Unexpected iteration exceptions emit
+`.iteration_failed` with fixed code `cleanup_iteration_failed`, not exception
+payloads. Inspect the authorized ledger and service health for details.
+The process's return count means an attempt was processed, not that deletion
+succeeded. Failed rows still require an explicit retry; cleanup target counts
+do not measure actual physical removals.
+
 ### Provider errors
 
 A model provider is failing calls.
