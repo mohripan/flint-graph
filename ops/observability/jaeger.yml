@@ -1,0 +1,75 @@
+# Explicit local v2 config, not the bundled AI/MCP/legacy-receiver default.
+# Only sanitized gateway traces may use this backend once #106 is qualified.
+extensions:
+  jaeger_storage:
+    backends:
+      local:
+        memory:
+          max_traces: 10000
+  jaeger_query:
+    storage:
+      traces: local
+    http:
+      endpoint: 0.0.0.0:16686
+    grpc:
+      endpoint: 127.0.0.1:16685
+    max_clock_skew_adjust: 0s
+  healthcheckv2:
+    use_v2: true
+    component_health:
+      include_permanent_errors: true
+      include_recoverable_errors: true
+      recovery_duration: 10s
+    http:
+      endpoint: 127.0.0.1:13133
+      status:
+        enabled: true
+        path: /health/status
+        include_attributes: false
+      config:
+        enabled: false
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 4
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 384
+    spike_limit_mib: 96
+  batch:
+    timeout: 1s
+    send_batch_size: 256
+    send_batch_max_size: 512
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: local
+    queue:
+      num_consumers: 2
+      queue_size: 128
+    retry_on_failure:
+      enabled: false
+
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 8888

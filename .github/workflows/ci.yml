@@ -34,6 +34,8 @@ jobs:
           docker compose -f compose.yaml -f compose.offline.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
           docker compose -f compose.yaml -f compose.local-real.yaml config > /dev/null
           docker compose -f compose.yaml -f compose.local-real.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
+          docker compose -f compose.yaml -f compose.jaeger.yaml --profile jaeger config > /dev/null
+          docker compose -f compose.yaml -f compose.ai-observability.yaml -f compose.jaeger.yaml --profile ai-observability --profile jaeger config > /dev/null
         env:
           FLINT_GRAPH_LOCAL_EMBEDDING_MODEL: fixture-embedding:1
           FLINT_GRAPH_LOCAL_EMBEDDING_DIMENSIONS: '768'
@@ -61,6 +63,7 @@ jobs:
           docker compose --profile metrics run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
           docker compose --profile metrics run --rm --no-deps --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml
           docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability run --rm --no-deps otel-gateway validate --config=/etc/otelcol/config.yml
+          docker compose -f compose.yaml -f compose.jaeger.yaml --profile jaeger run --rm --no-deps jaeger validate --config=/etc/jaeger/config.yml
       - name: Reject semantically invalid YAML fixtures
         run: |
           if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" --entrypoint promtool prom/prometheus:v3.1.0 check rules /invalid/invalid-alerts.yml; then
@@ -75,6 +78,10 @@ jobs:
             echo "Collector accepted an unknown component"
             exit 1
           fi
+          if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" cr.jaegertracing.io/jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17 validate --config=/invalid/invalid-jaeger.yml; then
+            echo "Jaeger accepted an unknown component"
+            exit 1
+          fi
       - name: Start isolated local telemetry backends
         run: |
           docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability up -d --no-deps --wait --wait-timeout 180 observability phoenix otel-gateway
@@ -82,9 +89,19 @@ jobs:
         run: uv run pytest tests/integration/test_ai_observability_live.py -q
         env:
           FLINT_GRAPH_AI_OBSERVABILITY_INTEGRATION: '1'
+      - name: Build known local synthetic OTLP sender image
+        run: docker compose build api
+      - name: Start opt-in Jaeger backend without application services
+        run: docker compose -f compose.yaml -f compose.jaeger.yaml --profile jaeger up -d --no-deps --wait --wait-timeout 60 jaeger
+      - name: Verify native Jaeger trace structure, disabled surfaces and ephemeral restart
+        run: uv run pytest tests/integration/test_jaeger_backend_live.py -q -s
+        env:
+          FLINT_GRAPH_JAEGER_INTEGRATION: '1'
+          FLINT_GRAPH_JAEGER_RESTART_REHEARSAL: '1'
+          FLINT_GRAPH_JAEGER_SENDER_IMAGE: flint-graph-api:latest
       - name: Diagnostics on failure
         if: failure()
-        run: docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability logs --tail 100 observability phoenix otel-gateway
+        run: docker compose -f compose.yaml -f compose.ai-observability.yaml -f compose.jaeger.yaml --profile ai-observability --profile jaeger logs --tail 100 observability phoenix otel-gateway jaeger
 
   frontend-check:
     runs-on: ubuntu-latest

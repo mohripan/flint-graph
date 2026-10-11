@@ -345,7 +345,7 @@ requirement to wait until M23. M14 observability is the baseline, not a blank sl
 
 | Track | Milestone | Outcome | Dependencies |
 | --- | --- | --- | --- |
-| Platform | [24: observability](milestones/24-platform-observability.md) | Phoenix, provisioned Grafana, Alertmanager, privacy-safe traces, evaluated ELK/logging and production telemetry | 14; coordinate 18/22 |
+| Platform | [24: observability](milestones/24-platform-observability.md) | Phoenix, provisioned Grafana, Alertmanager, bounded opt-in Jaeger, privacy-safe traces, evaluated ELK/logging and production telemetry | 14; coordinate 18/22 |
 | Platform | [25: search/inference](milestones/25-search-inference-platform.md) | Measured large-corpus retrieval and optional vLLM serving | 16/17; coordinate 21/22 |
 | Developer experience | [26: reproducible environments](milestones/26-developer-experience.md) | Doctor, explicit local profiles, native infra validation, pinned upgrades and debug handoff | 15; coordinate 16/24 |
 

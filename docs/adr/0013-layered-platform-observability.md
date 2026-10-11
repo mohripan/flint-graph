@@ -58,6 +58,11 @@ non-authoritative: query provenance, audit and usage stay in PostgreSQL.
 
 ## Sources
 
+The requested incremental Jaeger investigation path is specified separately in
+[ADR 0031](0031-opt-in-bounded-jaeger-local-backend.md). Its first backend-only
+slice does not replace this gateway, change SDK ownership or qualify three-way
+privacy/failure isolation. #72/#106/#107 and production #43 remain separate gates.
+
 - [Phoenix Docker and persistence](https://arize.com/docs/phoenix/self-hosting/deployment-options/docker)
 - [OpenInference semantics](https://arize-ai.github.io/openinference/spec/semantic_conventions.html)
 - [OpenLLMetry content defaults and disabling capture](https://www.traceloop.com/docs/openllmetry/privacy/traces)

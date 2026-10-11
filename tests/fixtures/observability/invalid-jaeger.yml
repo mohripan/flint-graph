@@ -1,0 +1,15 @@
+# Intentionally syntactically valid, semantically unknown component.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+processors:
+  not_a_jaeger_processor:
+exporters:
+  nop:
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [not_a_jaeger_processor]
+      exporters: [nop]
