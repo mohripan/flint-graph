@@ -1,3 +1,5 @@
+import asyncio
+import socket
 from collections.abc import Mapping
 from hashlib import sha256
 
@@ -226,6 +228,37 @@ async def test_credential_bearing_url_intake_denies_before_document_job_or_objec
     assert "ingestion_job_id" not in response.json()
     assert store.objects == {}
     assert requests == (["/report"] if redirected else [])
+
+
+@pytest.mark.parametrize("dns_outcome", ["private", "failure", "slow"])
+async def test_url_intake_dns_denial_precedes_persistence(client, monkeypatch, dns_outcome):
+    store = FakeObjectStore()
+    app.dependency_overrides[get_object_store] = lambda: store
+    app.dependency_overrides[get_url_fetcher] = lambda: HTTPURLFetcher(
+        timeout_seconds=0.02, max_bytes=100
+    )
+    tenant_id = (await client.post("/v1/tenants", json={"name": "Synthetic DNS denial"})).json()[
+        "id"
+    ]
+
+    async def resolve(*args, **kwargs):
+        if dns_outcome == "failure":
+            raise socket.gaierror("SYNTHETIC_DNS_DIAGNOSTIC")
+        if dns_outcome == "slow":
+            await asyncio.sleep(0.1)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    response = await client.post(
+        "/v1/documents/from-url",
+        headers={"X-Tenant-ID": tenant_id, "Idempotency-Key": f"dns-denied-{dns_outcome}"},
+        json={"title": "Synthetic DNS denial", "source_url": "http://denied.invalid/report"},
+    )
+    assert response.status_code == 400
+    assert "SYNTHETIC_DNS_DIAGNOSTIC" not in response.text
+    assert "ingestion_job_id" not in response.json()
+    assert (await client.get("/v1/documents", headers={"X-Tenant-ID": tenant_id})).json() == []
+    assert store.objects == {}
 
 
 async def test_intake_requires_idempotency_key(client: httpx.AsyncClient) -> None:

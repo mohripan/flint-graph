@@ -6,6 +6,12 @@ from pydantic import ValidationError
 from flint_graph.config import Settings
 
 
+@pytest.mark.parametrize("timeout", [float("inf"), float("nan"), 0, -1])
+def test_settings_reject_unbounded_url_intake_timeout(timeout):
+    with pytest.raises(ValidationError, match="intake_url_timeout_seconds"):
+        _settings(env="test", intake_url_timeout_seconds=timeout)
+
+
 @pytest.mark.parametrize("provider_field", ["query_answer_provider", "query_support_provider"])
 def test_ollama_context_rejects_insufficient_packing_and_output_capacity(
     provider_field: str,

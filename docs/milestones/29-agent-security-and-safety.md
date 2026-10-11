@@ -7,7 +7,7 @@ Status: in progress; [epic #86](https://github.com/mohripan/flint-graph/issues/8
 | [#80](https://github.com/mohripan/flint-graph/issues/80) | Architecture-specific OWASP-informed threat model | design baseline and synthetic required-case catalog; verification recorded separately |
 | [#81](https://github.com/mohripan/flint-graph/issues/81) | Trusted policy/approval/egress/adversarial runtime enforcement | planned; current membership/evidence controls are not full acceptance |
 | [#103](https://github.com/mohripan/flint-graph/issues/103) | Reject credential-bearing URL intake | implemented for original URLs and every redirect; automated and running-API verification recorded below |
-| [#104](https://github.com/mohripan/flint-graph/issues/104) | Connection-bound DNS/redirect enforcement | identified gap; no demonstrated production exploit or fix yet |
+| [#104](https://github.com/mohripan/flint-graph/issues/104) | Connection-bound DNS/redirect enforcement | implemented; real IPv4/IPv6 isolated rebinding and owned TLS tests qualified; deployment egress remains separate |
 
 See [ADR 0029](../adr/0029-deterministic-agent-trust-and-approval-boundaries.md) and
 the [risk register](../architecture/agent-threat-model.md). Model/source/agent
@@ -19,5 +19,9 @@ Milestones 18/20/22/28 and independent usefulness/financial-quality gates.
 
 The [URL intake verification report](../reports/2026-10-11-url-intake-credentials.md)
 qualifies the narrow #103 boundary. Credentials in URL user information are
-rejected even when local private-network access is explicitly allowed. DNS
-validation is still separate from transport resolution; #104 remains open.
+rejected even when local private-network access is explicitly allowed.
+[ADR 0030](../adr/0030-connection-bound-document-url-intake.md) and the
+[DNS verification report](../reports/2026-10-11-url-intake-dns.md) qualify validated
+numeric-IP dispatch, fresh redirect checks, Host/TLS preservation and whole-fetch
+limits. Those narrow controls do not complete #81 or certify production routing,
+custom translators, parser resource bounds or future tool egress.

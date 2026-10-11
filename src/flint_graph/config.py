@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     object_store_max_pool_connections: int = Field(default=20, ge=1)
 
     intake_max_source_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
-    intake_url_timeout_seconds: float = Field(default=10.0, gt=0.0)
+    intake_url_timeout_seconds: float = Field(default=10.0, gt=0.0, allow_inf_nan=False)
 
     parser_timeout_seconds: float = Field(default=30.0, gt=0.0)
     parser_max_raw_bytes: int = Field(default=10 * 1024 * 1024, ge=1)

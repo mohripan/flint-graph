@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from ipaddress import ip_address
-from socket import getaddrinfo
+from math import isfinite
 from typing import Protocol
 from urllib.parse import urljoin, urlparse
 
 import httpx
 
 from flint_graph.domain.errors import BadRequestError
+from flint_graph.infrastructure.url_transport import PinnedURLTransport, is_public_intake_address
 
 
 @dataclass(frozen=True)
@@ -31,25 +33,37 @@ class HTTPURLFetcher:
         allow_private_addresses: bool = False,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
+        if not isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("URL intake deadline must be finite and positive.")
+        if max_bytes <= 0:
+            raise ValueError("URL intake body limit must be positive.")
         self._timeout_seconds = timeout_seconds
         self._max_bytes = max_bytes
         self._allow_private_addresses = allow_private_addresses
         self._http_client = http_client
 
     async def fetch(self, url: str) -> FetchedURL:
-        self._validate_url(url, resolve_hostname=self._http_client is None)
         try:
-            if self._http_client is not None:
-                return await self._fetch_with_client(self._http_client, url)
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                return await self._fetch_with_client(client, url)
+            async with asyncio.timeout(self._timeout_seconds):
+                self._validate_url(url)
+                if self._http_client is not None:
+                    return await self._fetch_with_client(self._http_client, url)
+                transport = PinnedURLTransport(
+                    allow_private_addresses=self._allow_private_addresses
+                )
+                async with httpx.AsyncClient(
+                    timeout=self._timeout_seconds, transport=transport, trust_env=False
+                ) as client:
+                    return await self._fetch_with_client(client, url)
         except BadRequestError:
             raise
+        except TimeoutError as exc:
+            raise BadRequestError("URL intake timed out.") from exc
         except httpx.HTTPStatusError as exc:
             raise BadRequestError(
                 f"URL returned an unsuccessful status: {exc.response.status_code}."
             ) from exc
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, OSError, ValueError) as exc:
             raise BadRequestError("URL content could not be fetched.") from exc
 
     async def _fetch_with_client(self, client: httpx.AsyncClient, url: str) -> FetchedURL:
@@ -61,10 +75,7 @@ class HTTPURLFetcher:
                     if not location:
                         raise BadRequestError("URL redirect omitted a Location header.")
                     current_url = urljoin(str(response.url), location)
-                    self._validate_url(
-                        current_url,
-                        resolve_hostname=self._http_client is None,
-                    )
+                    self._validate_url(current_url)
                     continue
                 response.raise_for_status()
                 content_length = response.headers.get("content-length")
@@ -85,7 +96,7 @@ class HTTPURLFetcher:
                 )
         raise BadRequestError("URL redirected too many times.")
 
-    def _validate_url(self, url: str, *, resolve_hostname: bool) -> None:
+    def _validate_url(self, url: str) -> None:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             raise BadRequestError("URL intake only supports http or https URLs.")
@@ -96,23 +107,8 @@ class HTTPURLFetcher:
         if self._allow_private_addresses:
             return
         try:
-            address = ip_address(parsed.hostname)
+            ip_address(parsed.hostname)
         except ValueError:
-            if not resolve_hostname:
-                return
-            addresses = {
-                item[4][0]
-                for item in getaddrinfo(parsed.hostname, parsed.port or 443)
-                if item and item[4]
-            }
-        else:
-            addresses = {str(address)}
-        for value in addresses:
-            address = ip_address(value)
-            if (
-                address.is_private
-                or address.is_loopback
-                or address.is_link_local
-                or address.is_multicast
-            ):
-                raise BadRequestError("URL intake rejects private or local network targets.")
+            return
+        if not is_public_intake_address(parsed.hostname):
+            raise BadRequestError("URL intake rejects private or local network targets.")

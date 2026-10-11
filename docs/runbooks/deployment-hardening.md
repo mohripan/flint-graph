@@ -39,6 +39,11 @@ local defaults from `.env.example` for any externally reachable deployment.
 - Keep `FLINT_GRAPH_ALLOW_PRIVATE_URL_INTAKE=false` outside local development.
 - Test that oversized uploads return 413 and private URL targets return a 4xx
   problem response before launch.
+- Qualify original/redirect DNS and TLS using the
+  [URL network-boundary runbook](url-intake-network-boundary.md). Intake pins a
+  validated address, preserves Host/TLS SNI, ignores ambient proxies and applies
+  one finite whole-fetch timeout. This does not replace restricted deployment
+  egress or parser resource isolation.
 
 ## Rate Limits
 

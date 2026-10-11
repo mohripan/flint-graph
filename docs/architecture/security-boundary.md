@@ -43,8 +43,14 @@ Implemented boundary:
   default to reduce SSRF risk.
 - URL intake rejects user information (including empty, username-only and
   encoded forms) before dispatching an original URL or redirect. This applies
-  even when private-network intake is allowed. It does not bind DNS validation
-  to the actual transport connection; that residual SSRF gap remains #104.
+  even when private-network intake is allowed.
+- Default URL intake resolves and validates all DNS answers, then dials a
+  validated numeric address while retaining Host and TLS certificate hostname
+  checks. Redirects/fresh requests revalidate; ambient proxies, automatic
+  retries and keepalive reuse are disabled. A finite whole-fetch deadline
+  includes DNS, redirects and body reads. See [ADR 0030](../adr/0030-connection-bound-document-url-intake.md).
+  Deployment routing/translation and private-network opt-in remain operator
+  responsibilities; this is not full agent/tool egress enforcement.
 - Expensive endpoints are protected by a fixed-window rate limiter keyed by
   user and workspace when enabled.
 
