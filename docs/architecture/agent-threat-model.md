@@ -124,7 +124,7 @@ are required assertions; none is newly runtime-attested by catalog validation.
 | FG-02 | LLM03 / ASI02,ASI10: model plans turn a nominal read into write/send/delete or grow children | H/H, P0 | Arbitrary tools/children absent; no capability registry/dispatcher yet | Runtime/tool owner, #81/#77/#82; forged destructive read request denied before side effect |
 | FG-03 | LLM02 / ASI03: forged tenant/thread/role or stale membership crosses workspace authority | M/H, P1 | OIDC, SQL membership/tenant filters, queued conversation member guard; standalone viewer inference deliberate; revocation only at request entry | Identity/runtime, #81/#63; foreign reference 404, invalid/revoked actor denied, no new dispatch |
 | FG-04 | LLM02,LLM08 / ASI03: adapter/tool output requests secrets or unrelated data and exfiltrates it | M/H, P0 | Credentials in adapters, no general external-send tool; no comprehensive network/credential scope policy | Platform/security, #81/#77/#43; sentinel secret absent from output, model input and telemetry; external send denied |
-| FG-05 | LLM03 / ASI02: intake URL/redirect/proxy accesses local network or carries credentials | M/H, P1 | Scheme/private-address/redirect/size checks; DNS precheck and connection resolve separately; user-info allowed; transport deadline/proxy qualification incomplete | Intake/platform, #103/#104; user-info denied and rebinding sentinel never contacted |
+| FG-05 | LLM03 / ASI02: intake URL/redirect/proxy accesses local network or carries credentials | M/H, P1 | Scheme/private-address/redirect/size checks; original/redirect user-info rejected (#103); DNS precheck and connection resolve separately; transport deadline/proxy qualification incomplete | Intake/platform, #103/#104; user-info denied and rebinding sentinel never contacted |
 | FG-06 | LLM05,LLM09 / ASI06: uploader poisons graph/retrieval with plausible false financial evidence | H/H, P1 | Immutable hashes, exact evidence, staged graph resolution and support; quote truth, publisher authenticity/conflict resolution not guaranteed | Corpus/AI quality, #7/#81/#89; altered year/unit/concept cannot win merely by citation existence |
 | FG-07 | LLM05 / ASI06: failed answer/summary or another chat becomes persistent instruction/evidence | M/H, P0 | Prior-year revalidation and new-chat isolation; no broad summary/preference memory; lifecycle/delete races remain | Memory/runtime, #75/#74/#81; stale/failed/immediate untrusted turn clarifies, no older-context fallback |
 | FG-08 | LLM03 / ASI07: child result spoofs a parent capability, approval or source record | M/H, P0 | Child protocol absent; no authenticated/bound delegated envelope | Orchestration/security, #81/#6; wrong tenant/parent/policy/version/replay cannot grant authority |
@@ -179,7 +179,7 @@ proof of external-side-effect rollback or durable worker cancellation.
 ## Rollout checklist and residual-risk ownership
 
 - Preserve offline defaults, standalone API role contracts and private data.
-- Fix #103, qualify #104 network boundary; do not describe string filtering as
+- Maintain the qualified #103 user-info guard, qualify #104 network boundary; do not describe string filtering as
   full SSRF/egress control. Isolate worker parsers before treating hostile uploads
   as safely contained.
 - Before new tools/agents: policy registry, exact argument/resource authorization,

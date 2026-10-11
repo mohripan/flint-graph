@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from hashlib import sha256
 
 import httpx
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,7 @@ from flint_graph.application.services.tenants import create_tenant
 from flint_graph.domain.enums import DocumentVersionStatus, SourceType
 from flint_graph.infrastructure.db.models import Document, DocumentVersion, IngestionJob
 from flint_graph.infrastructure.object_store import ObjectInfo
-from flint_graph.infrastructure.url_fetcher import FetchedURL
+from flint_graph.infrastructure.url_fetcher import FetchedURL, HTTPURLFetcher
 from flint_graph.main import app
 
 
@@ -183,6 +184,48 @@ async def test_url_intake_fetches_and_materializes_raw_source(
     assert store.objects[payload["object_uri"]] == b"<html><body>Acme</body></html>"
     assert store.metadata[payload["object_uri"]]["source-url"] == "https://example.test/page"
     assert store.metadata[payload["object_uri"]]["source-type"] == "url"
+
+
+@pytest.mark.parametrize("redirected", [False, True])
+async def test_credential_bearing_url_intake_denies_before_document_job_or_object(
+    client, redirected
+):
+    store = FakeObjectStore()
+    requests = []
+
+    def respond(request):
+        requests.append(request.url.path)
+        return httpx.Response(
+            302, headers={"Location": "http://example-user:EXAMPLE_NOT_SECRET@127.0.0.1/report"}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
+        fetcher = HTTPURLFetcher(
+            timeout_seconds=1, max_bytes=100, allow_private_addresses=True, http_client=http_client
+        )
+        app.dependency_overrides[get_object_store] = lambda: store
+        app.dependency_overrides[get_url_fetcher] = lambda: fetcher
+        tenant_id = (
+            await client.post("/v1/tenants", json={"name": "Synthetic credential denial"})
+        ).json()["id"]
+        headers = {"X-Tenant-ID": tenant_id, "Idempotency-Key": "url-user-info-rejected"}
+        response = await client.post(
+            "/v1/documents/from-url",
+            headers=headers,
+            json={
+                "title": "Synthetic credential denial",
+                "source_url": "http://127.0.0.1/report"
+                if redirected
+                else "http://example-user:EXAMPLE_NOT_SECRET@127.0.0.1/report",
+            },
+        )
+    assert response.status_code == 400
+    assert "user information" in response.json()["detail"]
+    assert "EXAMPLE_NOT_SECRET" not in response.text
+    assert (await client.get("/v1/documents", headers=headers)).json() == []
+    assert "ingestion_job_id" not in response.json()
+    assert store.objects == {}
+    assert requests == (["/report"] if redirected else [])
 
 
 async def test_intake_requires_idempotency_key(client: httpx.AsyncClient) -> None:

@@ -41,6 +41,10 @@ Implemented boundary:
   storage or background jobs.
 - URL intake blocks private, loopback, link-local, and multicast targets by
   default to reduce SSRF risk.
+- URL intake rejects user information (including empty, username-only and
+  encoded forms) before dispatching an original URL or redirect. This applies
+  even when private-network intake is allowed. It does not bind DNS validation
+  to the actual transport connection; that residual SSRF gap remains #104.
 - Expensive endpoints are protected by a fixed-window rate limiter keyed by
   user and workspace when enabled.
 

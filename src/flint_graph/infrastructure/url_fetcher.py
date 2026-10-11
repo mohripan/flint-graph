@@ -91,6 +91,8 @@ class HTTPURLFetcher:
             raise BadRequestError("URL intake only supports http or https URLs.")
         if not parsed.hostname:
             raise BadRequestError("URL intake requires a hostname.")
+        if parsed.username is not None or parsed.password is not None:
+            raise BadRequestError("URL intake rejects user information in URLs.")
         if self._allow_private_addresses:
             return
         try:
