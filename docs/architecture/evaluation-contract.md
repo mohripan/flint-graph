@@ -148,6 +148,29 @@ as a side-by-side table with metric and cost deltas.
 
 ## CI gates
 
+### Fresh ordered capture boundary (Milestone 27 / #102)
+
+The existing public-API capture flow offers opt-in `--conversation`, without
+changing standalone/nightly defaults or dataset/scorer schemas. One dataset is
+one newly created conversation; original questions execute sequentially with
+per-turn UUID idempotency identities and no client-provided history. Returned
+workspace/conversation/order/question/run references are verified before stream
+execution, final run references before scoring, and the retrieval index must
+remain stable across turns. No saved conversation reuse, automatic POST retries,
+silent truncation, or cleanup mutation is introduced.
+
+Finite prevalidated bounds are eight turns, at most 300 seconds per turn, and
+at most 900 seconds for the entire operation including creation. Conversation
+recording format 3 adds identities, declared limits and observed memory context;
+standalone format 2 stays compatible. Scoring still consumes final persisted
+retrieval/provenance and actual usage, never draft streams. Observed context is
+not a general-memory qualification. Time bounds are not cost reservations; fresh
+financial value/unit, transition, reset and isolation assertions need independent
+checks beyond the generic offline scorer. Draft conversation cases do not alter
+accepted baselines or enable remote/nightly execution.
+
+### Existing gates
+
 - **PR gate:** run the `deterministic` config over the golden set inside `make check`. Offline,
   hermetic, fast; enforces fixed thresholds. A regression fails the build.
 - **Live gate (nightly / pre-release):** run the real-provider config(s) over the full golden

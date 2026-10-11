@@ -1,0 +1,4 @@
+name: financial-conversation-smoke
+version: 1
+tenant: public-financial
+description: Draft source-checked two-turn prior-year smoke; human review pending, not a nightly gate.

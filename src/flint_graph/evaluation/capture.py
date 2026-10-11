@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from flint_graph.evaluation.datasets import GoldenDataset
 from flint_graph.evaluation.metrics import QueryEvaluation
@@ -33,6 +34,30 @@ class CapturedEvaluation(RecordedEvaluation):
     capture: dict[str, Any]
 
 
+class _FreshConversation(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    next_turn_number: int = Field(strict=True, ge=1, le=1)
+    archived_at: None
+
+
+class _ConversationRun(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    retrieval_index_version_id: UUID
+    query_text: str
+    status: str
+
+
+class _CapturedTurn(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    conversation_id: UUID
+    turn_number: int = Field(strict=True, ge=1)
+    idempotency_key: UUID
+    run: _ConversationRun
+
+
 async def capture_dataset(
     client: httpx.AsyncClient,
     dataset: GoldenDataset,
@@ -40,6 +65,8 @@ async def capture_dataset(
     *,
     git_sha: str | None = None,
     query_timeout_seconds: float = 300.0,
+    conversation: bool = False,
+    conversation_timeout_seconds: float = 900.0,
 ) -> list[CapturedEvaluation]:
     if (manifest.dataset_name, manifest.dataset_version) != (
         dataset.metadata.name,
@@ -48,16 +75,108 @@ async def capture_dataset(
         raise ValueError("Capture manifest does not match the dataset name/version.")
     if not dataset.queries or query_timeout_seconds <= 0:
         raise ValueError("Capture requires a nonempty dataset and a positive timeout.")
+    if conversation and (
+        len(dataset.queries) > 8
+        or not math.isfinite(query_timeout_seconds)
+        or query_timeout_seconds > 300
+        or not math.isfinite(conversation_timeout_seconds)
+        or not 0 < conversation_timeout_seconds <= 900
+    ):
+        raise ValueError(
+            "Conversation capture requires at most 8 turns, a finite turn timeout <= 300s, "
+            "and a finite total timeout in (0, 900]s."
+        )
+    if conversation:
+        async with asyncio.timeout(conversation_timeout_seconds):
+            return await _capture_dataset(
+                client,
+                dataset,
+                manifest,
+                git_sha=git_sha,
+                query_timeout_seconds=query_timeout_seconds,
+                conversation=True,
+                conversation_timeout_seconds=conversation_timeout_seconds,
+            )
+    return await _capture_dataset(
+        client,
+        dataset,
+        manifest,
+        git_sha=git_sha,
+        query_timeout_seconds=query_timeout_seconds,
+        conversation=False,
+        conversation_timeout_seconds=conversation_timeout_seconds,
+    )
+
+
+async def _capture_dataset(
+    client: httpx.AsyncClient,
+    dataset: GoldenDataset,
+    manifest: CaptureManifest,
+    *,
+    git_sha: str | None,
+    query_timeout_seconds: float,
+    conversation: bool,
+    conversation_timeout_seconds: float,
+) -> list[CapturedEvaluation]:
     headers = {"X-Tenant-ID": str(manifest.tenant_id)}
+    conversation_id = None
+    if conversation:
+        async with asyncio.timeout(query_timeout_seconds):
+            created_conversation = await client.post("/v1/conversations", headers=headers, json={})
+            created_conversation.raise_for_status()
+            try:
+                fresh = _FreshConversation.model_validate(created_conversation.json())
+            except ValidationError:
+                raise ValueError(
+                    "Conversation capture received an invalid fresh conversation."
+                ) from None
+            if fresh.tenant_id != manifest.tenant_id:
+                raise ValueError("Conversation capture received a foreign conversation.")
+            conversation_id = str(fresh.id)
     records: list[CapturedEvaluation] = []
+    conversation_index: UUID | None = None
     for query in dataset.queries:
         started = perf_counter()
         async with asyncio.timeout(query_timeout_seconds):
-            created = await client.post(
-                "/v1/query-runs", headers=headers, json={"query": query.query}
-            )
-            created.raise_for_status()
-            run_id = str(created.json()["id"])
+            turn = None
+            if conversation_id is not None:
+                key = uuid4()
+                created = await client.post(
+                    f"/v1/conversations/{conversation_id}/turns",
+                    headers=headers,
+                    json={"query": query.query, "idempotency_key": str(key)},
+                )
+                created.raise_for_status()
+                try:
+                    accepted = _CapturedTurn.model_validate(created.json())
+                except ValidationError:
+                    raise ValueError(
+                        "Conversation capture received invalid turn references."
+                    ) from None
+                if (
+                    accepted.tenant_id != manifest.tenant_id
+                    or str(accepted.conversation_id) != conversation_id
+                    or accepted.turn_number != len(records) + 1
+                    or accepted.idempotency_key != key
+                    or accepted.run.tenant_id != manifest.tenant_id
+                    or accepted.run.query_text != " ".join(query.query.split())
+                    or accepted.run.status != "queued"
+                ):
+                    raise ValueError("Conversation capture received mismatched turn references.")
+                if (
+                    conversation_index is not None
+                    and accepted.run.retrieval_index_version_id != conversation_index
+                ):
+                    raise ValueError("Conversation capture changed retrieval index between turns.")
+                conversation_index = accepted.run.retrieval_index_version_id
+                turn = accepted.model_dump(mode="json")
+                run_id = str(accepted.run.id)
+            else:
+                created = await client.post(
+                    "/v1/query-runs", headers=headers, json={"query": query.query}
+                )
+                created.raise_for_status()
+                run_id = str(created.json()["id"])
             path = f"/v1/query-runs/{run_id}"
             # SSE currently starts execution. Consume it, but never turn draft JSON into answers.
             async with client.stream(
@@ -69,6 +188,17 @@ async def capture_dataset(
             inspected = await client.get(path, headers=headers)
             inspected.raise_for_status()
             run = inspected.json()
+            if turn is not None:
+                try:
+                    final_reference = _ConversationRun.model_validate(run)
+                except ValidationError:
+                    raise ValueError(
+                        "Conversation capture received invalid final run references."
+                    ) from None
+                if final_reference.model_copy(update={"status": "queued"}) != accepted.run:
+                    raise ValueError(
+                        "Conversation capture received mismatched final run references."
+                    )
             if run["status"] != "completed":
                 raise ValueError(
                     f"Query '{query.id}' run '{run_id}' did not complete ({run['status']})."
@@ -94,7 +224,24 @@ async def capture_dataset(
                 query_id=query.id,
                 evaluation=evaluation,
                 capture={
-                    "format_version": 2,
+                    "format_version": 3 if conversation_id is not None else 2,
+                    **(
+                        {
+                            "conversation_id": conversation_id,
+                            "conversation_turn_id": turn["id"],
+                            "conversation_turn_number": turn["turn_number"],
+                            "conversation_limits": {
+                                "max_turns": 8,
+                                "turn_timeout_seconds": query_timeout_seconds,
+                                "total_timeout_seconds": conversation_timeout_seconds,
+                            },
+                            "conversation_context": run.get("metadata", {}).get(
+                                "conversation_context", {}
+                            ),
+                        }
+                        if turn is not None
+                        else {}
+                    ),
                     "provider_usage_complete": has_complete_query_usage(run),
                     "usage_scope": "query-invocations-v1",
                     "dataset_name": dataset.metadata.name,

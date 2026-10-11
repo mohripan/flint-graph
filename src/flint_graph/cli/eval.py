@@ -231,6 +231,8 @@ def capture_command(args: argparse.Namespace) -> int:
                     manifest,
                     git_sha=args.git_sha,
                     query_timeout_seconds=args.query_timeout,
+                    conversation=args.conversation,
+                    conversation_timeout_seconds=args.conversation_timeout,
                 )
             return "".join(record.model_dump_json() + "\n" for record in records)
 
@@ -280,6 +282,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     capture_parser.add_argument("--token-env", default="FLINT_GRAPH_EVAL_TOKEN")
     capture_parser.add_argument("--query-timeout", type=float, default=300.0)
+    capture_parser.add_argument(
+        "--conversation",
+        action="store_true",
+        help="capture dataset questions in order in one fresh conversation (at most 8 turns)",
+    )
+    capture_parser.add_argument(
+        "--conversation-timeout",
+        type=float,
+        default=900.0,
+        help="whole-conversation deadline in seconds, at most 900 (only with --conversation)",
+    )
     capture_parser.add_argument("--git-sha", default=None)
     capture_parser.set_defaults(func=capture_command)
 

@@ -282,6 +282,45 @@ def test_capture_cli_never_overwrites_recordings(tmp_path: Path) -> None:
     assert output.read_text(encoding="utf-8") == "existing"
 
 
+def test_capture_cli_conversation_option_validates_budget_before_creating_recording(
+    tmp_path, capsys
+):
+    dataset = _write_dataset(tmp_path / "ds")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "tenant_id": "11111111-1111-4111-8111-111111111111",
+                "dataset_name": "mini",
+                "dataset_version": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "fresh.jsonl"
+    assert (
+        main(
+            [
+                "capture",
+                "--dataset",
+                str(dataset),
+                "--manifest",
+                str(manifest),
+                "--base-url",
+                "http://127.0.0.1:1",
+                "--output",
+                str(output),
+                "--conversation",
+                "--conversation-timeout",
+                "901",
+            ]
+        )
+        == 1
+    )
+    assert "Conversation capture" in capsys.readouterr().out
+    assert not output.exists()
+
+
 def test_capture_cli_rejects_insecure_remote_url(tmp_path: Path) -> None:
     result = main(
         [

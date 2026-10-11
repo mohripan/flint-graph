@@ -1,0 +1,1 @@
+{"id":"fresh-prior-year","query":"What about the prior year?","query_type":"abstain_expected","expect_abstain":true,"notes":"Run as a separate --conversation capture: no prior question, so clarify rather than inherit another chat."}

@@ -12,7 +12,8 @@ Status: in progress; epic [#84](https://github.com/mohripan/flint-graph/issues/8
 | [#100](https://github.com/mohripan/flint-graph/issues/100) | Member-only queued conversation stream execution | implemented; verification and CI recorded separately |
 | [#101](https://github.com/mohripan/flint-graph/issues/101) | Named transcript and keyboard focus lifecycle | implemented; browser/live qualification recorded separately |
 | [#73](https://github.com/mohripan/flint-graph/issues/73) | Accessible new/reopen/thread Ask UI | in progress; first UI slice #99, full acceptance remains open |
-| [#74](https://github.com/mohripan/flint-graph/issues/74) | Fresh multi-turn quality and isolation gates | planned |
+| [#102](https://github.com/mohripan/flint-graph/issues/102) | Bounded fresh ordered public-API capture | implemented; qualification recorded separately |
+| [#74](https://github.com/mohripan/flint-graph/issues/74) | Fresh multi-turn quality and isolation gates | in progress; bounded tooling slice #102 only |
 | [#75](https://github.com/mohripan/flint-graph/issues/75) | Memory architecture, invalidation and lifecycle qualification | planned |
 
 The ledger is workspace-shared and preserves real server-backed order, identity,

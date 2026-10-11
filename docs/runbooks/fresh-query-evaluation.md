@@ -92,8 +92,50 @@ citations come from answer provenance. All persisted claim support statuses are
 counted, including partial/unsupported draft claims. Invalid/inactive final
 citations are counted as invalid, never replaced with fabricated sources.
 
-Provider token/cost accounting and exact model fingerprints are not added by this
-capture command. Hosted live-model capture in CI and strategy comparisons remain
+Capture records actual provider token rollups and the server's complete-usage
+attestation; missing accounting is unknown, not zero. Monetary pricing and exact
+model fingerprints are not inferred by this command. Hosted live-model capture
+in CI and strategy comparisons remain
 milestone work. The offline PR
 gate still uses its reviewed deterministic recording and cannot prove that a
 deployment's ingestion/indexing/model services are healthy.
+
+## Ordered conversation capture (opt-in)
+
+`--conversation` submits the dataset's original questions in file order in one
+fresh server conversation. It never reuses saved history or sends client-side
+transcripts/old answers. Use separate captures for independent conversations,
+including new-chat/reset cases. Standalone capture and nightly policy are unchanged.
+
+```powershell
+uv run flint-graph-eval capture --dataset evals/datasets/financial-conversation-smoke --manifest notes/financial-conversation-manifest.json --base-url http://localhost:8000 --output notes/financial-conversation-fresh.jsonl --conversation --query-timeout 90 --conversation-timeout 240 --git-sha YOUR_DEPLOYED_REVISION
+```
+
+The manifest must match the new dataset name/version and contain complete mappings
+for the already-verified public workspace. The financial conversation datasets
+are draft source-checked development cases; read their README before use. They
+are not automatically part of a reviewed nightly gate.
+
+Configuration is checked before HTTP: at most eight turns, finite positive turn
+timeout at most 300 seconds, and finite positive total conversation deadline at
+most 900 seconds. Defaults are 300/900 seconds. The total deadline includes
+creation and all turns. These are execution limits, not atomic token/cost
+reservations. `--conversation-timeout` has no effect in standalone mode.
+
+The tool verifies fresh/unarchived creation, tenant and UUID references, turn
+order, echoed attempt key, normalized question, queued run and stable retrieval
+index before starting each stream. It checks the final run references again
+before scoring. HTTP authorization/conflict errors or failed/incomplete runs stop
+the capture; no automatic POST retry or orphan deletion occurs. Every turn gets
+a UUID idempotency key, but restarting the command creates another conversation,
+not an exactly-once capture. Failure may leave inspectable server state and no
+complete JSONL output; inspect it before retrying.
+
+Conversation JSONL uses capture format 3, adding conversation/turn/run identity,
+declared limits and observed `conversation_context` policy/mode. Standalone format
+2 remains unchanged, and both load in the existing offline scorer. Final persisted
+retrieval/provenance/usage is scored, never provisional SSE drafts. Unknown context
+metadata is not evidence that general memory works. The generic offline scorer
+does not judge financial units or conversation transitions; check those separately
+against independently reviewed sources. Broader #74 quality/retention/security
+workloads and #53 scheduled activation remain separate acceptance.

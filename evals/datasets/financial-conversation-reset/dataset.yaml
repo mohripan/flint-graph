@@ -1,0 +1,4 @@
+name: financial-conversation-reset
+version: 1
+tenant: public-financial
+description: Draft fresh-conversation clarification smoke; human review pending, not a nightly gate.
