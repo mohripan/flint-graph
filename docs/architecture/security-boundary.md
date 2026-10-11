@@ -1,5 +1,11 @@
 # Current Security Boundary
 
+The [agent threat model](agent-threat-model.md) and
+[ADR 0029](../adr/0029-deterministic-agent-trust-and-approval-boundaries.md)
+distinguish existing controls from required future capability/approval/egress,
+memory/cache, sandbox and budget enforcement. The model identifies residual
+risks; it does not implement or certify those defenses.
+
 ## Workspace-scoped retrieval setup
 
 The public `/v1/retrieval-index/bootstrap` endpoint creates or reuses an active
