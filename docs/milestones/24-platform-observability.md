@@ -19,7 +19,7 @@ Design: [ADR 13](../adr/0013-layered-platform-observability.md).
 | [#69](https://github.com/mohripan/flint-graph/issues/69) | Report committed cleanup outcome without provider payloads in process logs | implemented |
 | [#72](https://github.com/mohripan/flint-graph/issues/72) | Add opt-in Jaeger investigation through the privacy-safe gateway | incremental local qualification; not complete |
 | [#105](https://github.com/mohripan/flint-graph/issues/105) | Pinned bounded Jaeger v2 local backend | backend/native delivery/restart qualified; CI recorded separately |
-| [#106](https://github.com/mohripan/flint-graph/issues/106) | Jaeger trace-only fan-out, privacy, failure isolation and Grafana lookup | planned |
+| [#106](https://github.com/mohripan/flint-graph/issues/106) | Jaeger trace-only fan-out, privacy, failure isolation and Grafana lookup | local qualification; CI recorded in delivery report |
 | [#107](https://github.com/mohripan/flint-graph/issues/107) | Cross-service trace correlation and safe profile transition/rollback | planned |
 
 Cleanup logging is verified against a real failure and retry using an isolated
@@ -32,7 +32,15 @@ process-specific guarantee, not a claim that all third-party logs are redacted.
 backend-only overlay. Native OTLP/v3 parent/child delivery, disabled AI/proxy
 routes and ephemeral restart are tested without inference. No application
 export endpoint/provider/data was changed. Privacy-safe three-way fan-out and
-full rollout are not implied; #72 remains open for #106/#107 and production #43.
+full rollout are not implied; #72 remains open for #107 and production #43.
+
+[ADR 0032](../adr/0032-shared-privacy-jaeger-fanout.md) adds the shared-policy
+gateway overlay, explicit two/three-destination modes, bounded non-blocking
+Jaeger export and opt-in fixed Grafana datasource. Synthetic real-OTLP privacy,
+exact IDs/parentage, paused-socket drop/recovery, Phoenix-independent mode and
+datasource-prune rollback are qualified in the
+[gateway report](../reports/2026-10-18-jaeger-gateway.md). Application exporters
+remain unchanged until #107; this is not production-wide privacy certification.
 
 ## Acceptance and boundaries
 

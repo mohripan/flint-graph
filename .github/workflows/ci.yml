@@ -36,6 +36,8 @@ jobs:
           docker compose -f compose.yaml -f compose.local-real.yaml -f compose.ai-observability.yaml --profile ai-observability config > /dev/null
           docker compose -f compose.yaml -f compose.jaeger.yaml --profile jaeger config > /dev/null
           docker compose -f compose.yaml -f compose.ai-observability.yaml -f compose.jaeger.yaml --profile ai-observability --profile jaeger config > /dev/null
+          docker compose -f compose.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile jaeger config > /dev/null
+          FLINT_GRAPH_JAEGER_GATEWAY_MODE=jaeger-phoenix docker compose -f compose.yaml -f compose.ai-observability.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile ai-observability --profile jaeger config > /dev/null
         env:
           FLINT_GRAPH_LOCAL_EMBEDDING_MODEL: fixture-embedding:1
           FLINT_GRAPH_LOCAL_EMBEDDING_DIMENSIONS: '768'
@@ -64,6 +66,8 @@ jobs:
           docker compose --profile metrics run --rm --no-deps --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml
           docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability run --rm --no-deps otel-gateway validate --config=/etc/otelcol/config.yml
           docker compose -f compose.yaml -f compose.jaeger.yaml --profile jaeger run --rm --no-deps jaeger validate --config=/etc/jaeger/config.yml
+          docker compose -f compose.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile jaeger run --rm --no-deps otel-gateway validate --config=/etc/otelcol/config.yml --config=/etc/otelcol/jaeger-exporter.yml --config=/etc/otelcol/jaeger-only.yml
+          docker compose -f compose.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile jaeger run --rm --no-deps otel-gateway validate --config=/etc/otelcol/config.yml --config=/etc/otelcol/jaeger-exporter.yml --config=/etc/otelcol/jaeger-phoenix.yml
       - name: Reject semantically invalid YAML fixtures
         run: |
           if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" --entrypoint promtool prom/prometheus:v3.1.0 check rules /invalid/invalid-alerts.yml; then
@@ -80,6 +84,10 @@ jobs:
           fi
           if docker run --rm -v "$PWD/tests/fixtures/observability:/invalid:ro" cr.jaegertracing.io/jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17 validate --config=/invalid/invalid-jaeger.yml; then
             echo "Jaeger accepted an unknown component"
+            exit 1
+          fi
+          if docker compose -f compose.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile jaeger run --rm --no-deps otel-gateway validate --config=/etc/otelcol/config.yml --config=/etc/otelcol/jaeger-exporter.yml --config=/etc/otelcol/not-a-mode.yml; then
+            echo "Collector accepted an unknown destination mode"
             exit 1
           fi
       - name: Start isolated local telemetry backends
@@ -99,6 +107,31 @@ jobs:
           FLINT_GRAPH_JAEGER_INTEGRATION: '1'
           FLINT_GRAPH_JAEGER_RESTART_REHEARSAL: '1'
           FLINT_GRAPH_JAEGER_SENDER_IMAGE: flint-graph-api:latest
+      - name: Start three-destination gateway and optional Grafana datasource
+        run: docker compose -f compose.yaml -f compose.ai-observability.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile ai-observability --profile jaeger up -d --no-deps --wait --wait-timeout 120 observability otel-gateway
+        env:
+          FLINT_GRAPH_JAEGER_GATEWAY_MODE: jaeger-phoenix
+      - name: Verify real privacy, parent-child fan-out and stalled Jaeger isolation
+        run: uv run pytest tests/integration/test_jaeger_gateway_live.py -q -s
+        env:
+          FLINT_GRAPH_JAEGER_GATEWAY_INTEGRATION: '1'
+          FLINT_GRAPH_JAEGER_GATEWAY_MODE: jaeger-phoenix
+          FLINT_GRAPH_JAEGER_PAUSE_REHEARSAL: '1'
+      - name: Qualify Jaeger-only mode without Phoenix
+        run: |
+          docker compose -f compose.yaml -f compose.ai-observability.yaml --profile ai-observability stop phoenix
+          docker compose -f compose.yaml -f compose.jaeger.yaml -f compose.jaeger-gateway.yaml --profile jaeger up -d --no-deps --wait --wait-timeout 60 otel-gateway
+          uv run pytest tests/integration/test_jaeger_gateway_live.py -q -s
+        env:
+          FLINT_GRAPH_JAEGER_GATEWAY_INTEGRATION: '1'
+          FLINT_GRAPH_JAEGER_GATEWAY_MODE: jaeger-only
+      - name: Verify optional datasource rollback without removing stored telemetry
+        run: |
+          docker compose up -d --no-deps --wait --wait-timeout 120 observability
+          uv run pytest tests/integration/test_jaeger_gateway_live.py -q -k optional_datasource_rollback
+        env:
+          FLINT_GRAPH_JAEGER_GATEWAY_INTEGRATION: '1'
+          FLINT_GRAPH_JAEGER_DATASOURCE_ROLLBACK: '1'
       - name: Diagnostics on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ai-observability.yaml -f compose.jaeger.yaml --profile ai-observability --profile jaeger logs --tail 100 observability phoenix otel-gateway jaeger

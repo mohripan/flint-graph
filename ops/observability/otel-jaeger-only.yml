@@ -1,0 +1,5 @@
+# Native map merge, list replacement; never replace the shared processors.
+service:
+  pipelines:
+    traces:
+      exporters: [otlp/lgtm, otlp/jaeger]
