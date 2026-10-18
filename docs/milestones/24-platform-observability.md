@@ -21,6 +21,8 @@ Design: [ADR 13](../adr/0013-layered-platform-observability.md).
 | [#105](https://github.com/mohripan/flint-graph/issues/105) | Pinned bounded Jaeger v2 local backend | backend/native delivery/restart qualified; CI recorded separately |
 | [#106](https://github.com/mohripan/flint-graph/issues/106) | Jaeger trace-only fan-out, privacy, failure isolation and Grafana lookup | local qualification; CI recorded in delivery report |
 | [#107](https://github.com/mohripan/flint-graph/issues/107) | Cross-service trace correlation and safe profile transition/rollback | planned |
+| [#108](https://github.com/mohripan/flint-graph/issues/108) | Per-process image/environment-preserving local telemetry switch | qualified locally; CI recorded separately |
+| [#109](https://github.com/mohripan/flint-graph/issues/109) | Isolated real HTTP/outbox/Temporal/index/query trace qualification | planned |
 
 Cleanup logging is verified against a real failure and retry using an isolated
 PostgreSQL fixture and live Neo4j/OpenSearch clients. See the
@@ -41,6 +43,13 @@ exact IDs/parentage, paused-socket drop/recovery, Phoenix-independent mode and
 datasource-prune rollback are qualified in the
 [gateway report](../reports/2026-10-18-jaeger-gateway.md). Application exporters
 remain unchanged until #107; this is not production-wide privacy certification.
+
+[ADR 0033](../adr/0033-local-app-only-telemetry-switch.md) and the
+[switch runbook](../runbooks/local-telemetry-switch.md) implement #108's
+preview-first app-only transition. Real combined switch, controlled process
+restart and base rollback preserve each process's immutable image/environment
+and public readiness/index metadata. Data-container identities remain unchanged.
+This does not establish the real workflow/query correlation required by #109.
 
 ## Acceptance and boundaries
 

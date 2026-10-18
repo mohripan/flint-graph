@@ -25,6 +25,11 @@ recreating those services, **preserving their current provider/model environment
 variables**. A bare Compose restart does not change container configuration;
 a fresh up with missing provider variables can reset local models to defaults.
 
+For the standard local project, prefer the preview-first
+[app-only switch helper](local-telemetry-switch.md). It preserves each process's
+actual image and environment in memory instead of relying on ambient Compose
+defaults. Custom configurations fail closed rather than being silently reset.
+
 Do not use the overlay without `--profile ai-observability`: it would point the
 application at a gateway that was not selected. Revert to base `compose.yaml`
 and recreate the affected application containers to return to direct LGTM OTLP.

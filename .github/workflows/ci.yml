@@ -99,6 +99,11 @@ jobs:
           FLINT_GRAPH_AI_OBSERVABILITY_INTEGRATION: '1'
       - name: Build known local synthetic OTLP sender image
         run: docker compose build api
+      - name: Verify native Compose string preservation without application data
+        run: uv run pytest tests/integration/test_telemetry_compose_literals.py -q
+        env:
+          FLINT_GRAPH_TELEMETRY_NATIVE_CONFIG_INTEGRATION: '1'
+          FLINT_GRAPH_JAEGER_SENDER_IMAGE: flint-graph-api:latest
       - name: Start opt-in Jaeger backend without application services
         run: docker compose -f compose.yaml -f compose.jaeger.yaml --profile jaeger up -d --no-deps --wait --wait-timeout 60 jaeger
       - name: Verify native Jaeger trace structure, disabled surfaces and ephemeral restart

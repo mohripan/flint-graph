@@ -15,8 +15,18 @@ Design: [ADR 15](../adr/0015-reproducible-developer-experience.md).
 | [#51](https://github.com/mohripan/flint-graph/issues/51) | Validate observability assets with native tools in CI | implemented |
 | [#52](https://github.com/mohripan/flint-graph/issues/52) | Improve query and ingestion debugging handoff from the product UI | planned |
 | [#65](https://github.com/mohripan/flint-graph/issues/65) | Repair primary Ask scrolling and reopen searchable paginated saved questions | implemented |
+| [#108](https://github.com/mohripan/flint-graph/issues/108) | Preview-first local telemetry switches preserving per-process images/settings | qualified locally; milestone 24 delivery |
 
 ## Acceptance and boundaries
+
+The [local telemetry switch helper](../runbooks/local-telemetry-switch.md) avoids
+ambient Compose model resets: it snapshots each local process in memory,
+previews by default, preserves image/environment/process settings, and changes
+only OTLP endpoint when explicitly applied. It rejects unsupported custom/remote
+deployments, reports partial failures without secrets, and passed actual
+combined/restart/base rollback qualification. See
+[ADR 0033](../adr/0033-local-app-only-telemetry-switch.md). Cross-service traces
+and production deployment remain separate acceptance gates.
 
 CI now has a bounded 15-minute observability job on Ubuntu 24.04. It validates
 the pinned promtool/amtool/Collector configs, rejects semantic-invalid YAML

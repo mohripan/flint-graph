@@ -94,4 +94,6 @@ re-enabling the overlay reprovisions it. Existing Phoenix-only gateway can be
 restored with its two-file overlay and named telemetry services. Do not stop a
 gateway still used by applications before restoring their previous endpoint.
 Application profile/model preservation and switching is #107, not this drill.
+The [local app-only switch helper](local-telemetry-switch.md) implements the
+per-process preservation prerequisite #108; full correlation remains #107.
 Never use `down -v`, prune Docker volumes or remove orphan containers here.
