@@ -1,0 +1,49 @@
+name: Narrative container smoke
+
+'on':
+  push:
+    branches: [master]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - runtimes/**
+      - src/flint_graph/narrative/**
+      - src/flint_graph/cli/narrative.py
+      - tests/fixtures/narrative/**
+      - tests/integration/test_narrative_container_live.py
+      - .github/workflows/narrative-container.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - runtimes/**
+      - src/flint_graph/narrative/**
+      - src/flint_graph/cli/narrative.py
+      - tests/fixtures/narrative/**
+      - tests/integration/test_narrative_container_live.py
+      - .github/workflows/narrative-container.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.12.3'
+      - run: uv sync --frozen --all-groups
+      - name: Build the real application package and bundled source templates
+        run: docker build --tag flint-graph-narrative-ci .
+      - name: Validate and export in a readonly network-isolated image
+        env:
+          FLINT_GRAPH_NARRATIVE_CONTAINER_IMAGE: flint-graph-narrative-ci
+        run: uv run pytest tests/integration/test_narrative_container_live.py -q --tb=short

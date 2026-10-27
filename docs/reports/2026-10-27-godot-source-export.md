@@ -91,3 +91,6 @@ qualification are skipped/not delivered in this source-export slice. Local sourc
 integrity is not authenticity or protection from a hostile host. See the
 [contract](../architecture/godot-export-contract.md) and
 [toolchain runbook](../runbooks/godot-toolchain.md).
+
+The first remote CI image build exposed a missing Docker runtime-template copy;
+see the [container correction and real image proof](2026-10-27-narrative-container-packaging.md).
