@@ -116,8 +116,28 @@ retrieval readiness or imports/calls a model provider.
 Audit create, accepted/conflicted revision and archive/restore in the same
 transaction, with IDs, sequence and hashes only. Never put story/notices into
 telemetry, audit metadata or exception text. Existing request-size/rate/auth
-middleware remains in force. Source validation returns bounded code/location
+middleware remains in force. Add narrative-specific early ASGI body buffering,
+capped at the smaller of the configured general request limit and **16 MiB**,
+including chunked/missing/misleading Content-Length bodies. Check accumulated
+bytes before handing the request to FastAPI; do not drain an oversized upload.
+This wire cap is separate from decoded story/notices limits. Add narrative paths
+to rate enforcement with a single bounded prefix bucket rather than raw UUID
+paths; OIDC mode must not accept X-Dev-User as the rate identity. This remains a
+process-local coarse limiter, not a distributed gateway quota. Test both added
+boundaries explicitly. Coalesce body bytes rather than retaining unbounded empty
+frame objects. Normalize credential whitespace/workspace UUIDs as authorization
+does, hash credentials in keys and cap narrative bucket state at a configurable
+default 10000 entries; expire old entries and reject new identities at capacity
+without evicting active buckets. Test the memory/capacity/normalization cases.
+Source validation returns bounded code/location
 diagnostics; conflict responses reveal only resources in the authorized project.
+Narrative mutations explicitly commit inside a safe persistence boundary, mapping
+SQLAlchemy query/flush/commit failures to a generic service-unavailable response
+without logging/chaining original exception text. Roll back where possible. Hide
+SQL parameters in the application engine as defense in depth; driver details can
+still include row values, so that setting alone is insufficient. Exercise a prose
+canary in an injected database commit failure and check responses/logs. An uncertain
+commit outcome is retried with the same idempotency key, never blindly duplicated.
 
 ## Verification and delivery
 

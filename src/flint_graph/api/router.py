@@ -5,6 +5,7 @@ from flint_graph.api.routes import (
     documents,
     graph,
     health,
+    narrative,
     observability,
     query,
     retrieval,
@@ -22,3 +23,4 @@ api_router.include_router(graph.router)
 api_router.include_router(retrieval.router)
 api_router.include_router(query.router)
 api_router.include_router(conversations.router)
+api_router.include_router(narrative.router)

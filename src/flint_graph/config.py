@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     allow_in_memory_rate_limit: bool = False
     rate_limit_requests: int = Field(default=60, ge=1)
     rate_limit_window_seconds: int = Field(default=60, ge=1)
+    narrative_rate_limit_max_buckets: int = Field(default=10000, ge=1, le=100000)
 
     database_url: str = "postgresql+asyncpg://flint_graph:flint_graph@localhost:5432/flint_graph"
     database_echo: bool = False

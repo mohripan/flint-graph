@@ -204,6 +204,11 @@ class AuditAction(StrEnum):
     """
 
     USER_PROVISIONED = "user.provisioned"
+    NARRATIVE_PROJECT_CREATED = "narrative.project_created"
+    NARRATIVE_REVISION_CREATED = "narrative.revision_created"
+    NARRATIVE_REVISION_CONFLICTED = "narrative.revision_conflicted"
+    NARRATIVE_PROJECT_ARCHIVED = "narrative.project_archived"
+    NARRATIVE_PROJECT_RESTORED = "narrative.project_restored"
     WORKSPACE_CREATED = "workspace.created"
     WORKSPACE_MEMBER_UPSERTED = "workspace.member_upserted"
     DOCUMENT_CREATED = "document.created"

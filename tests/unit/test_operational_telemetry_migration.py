@@ -6,6 +6,7 @@ from the models and would never notice a missing migration column.
 """
 
 from pathlib import Path
+from runpy import run_path
 
 from sqlalchemy import inspect
 
@@ -80,10 +81,23 @@ def test_migration_columns_match_the_orm_models() -> None:
     assert rollups <= model_columns
 
 
-def test_audit_action_enum_values_are_all_migrated() -> None:
-    """A new audit action without a migrated enum value fails inserts at runtime."""
+def test_enum_additions_remain_compatible_with_existing_varchar_storage() -> None:
+    """Keep old values readable and additions inside the actual deployed type.
+
+    These are VARCHARs without a CHECK, not native database enums. Rewriting an
+    already-applied historical migration would neither update existing installs
+    nor be necessary for a new value that fits the existing storage boundary.
+    """
     from flint_graph.domain.enums import AuditAction, AuditOutcome, ProviderUsageOperation
 
-    text = _migration_text()
-    for member in [*AuditAction, *AuditOutcome, *ProviderUsageOperation]:
-        assert f'"{member.value}"' in text, member.value
+    migration = run_path(str(MIGRATION))
+    for name, current in [
+        ("audit_action", AuditAction),
+        ("audit_outcome", AuditOutcome),
+        ("provider_usage_operation", ProviderUsageOperation),
+    ]:
+        deployed = migration[name]
+        assert deployed.native_enum is False
+        assert deployed.create_constraint is False
+        assert set(deployed.enums) <= {member.value for member in current}
+        assert all(len(member.value) <= deployed.length for member in current)

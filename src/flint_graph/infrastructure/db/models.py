@@ -61,6 +61,8 @@ from flint_graph.domain.enums import (
     WorkspaceRole,
 )
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from flint_graph.infrastructure.db.narrative_models import NarrativeProject as NarrativeProject
+from flint_graph.infrastructure.db.narrative_models import NarrativeRevision as NarrativeRevision
 
 
 def enum_column(enum_type: type[PyEnum], length: int) -> SAEnum:

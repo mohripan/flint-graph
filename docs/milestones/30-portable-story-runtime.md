@@ -1,6 +1,7 @@
 # Milestone 30: portable story runtime and Godot proof
 
-Status: acceptance passed, 2026-10-27; final browser-tooling CI/issue closure pending.
+Status: complete, 2026-10-27. All six issues closed after actual acceptance and
+green CI; GitHub milestone 17 is closed.
 [Tracking issue #112](https://github.com/mohripan/flint-graph/issues/112).
 The user approved the written design and autonomous implementation with one
 review sub-agent. [Plan](../superpowers/plans/2026-10-27-portable-story-runtime.md).
@@ -40,7 +41,7 @@ workspace, existing frontend or application service configuration was changed.
 
 ## Delivery boundary
 
-The actual engine/browser acceptance has passed; #121's tooling/docs commit must
-also pass ordinary CI before issue/milestone closure. M31 project/revision APIs
-and authoring editor remain pending. M30 proves a short original authored game,
+The actual engine/browser acceptance and #121's tooling/docs CI passed. Continue
+[M31](31-authored-narrative-studio.md) for project/revision APIs and the authoring
+editor. M30 proves a short original authored game,
 not AI story/image quality or a complete production studio.

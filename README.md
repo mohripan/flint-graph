@@ -15,6 +15,9 @@ saves. See the [player contract](docs/architecture/godot-player-contract.md) and
 [Real browser qualification](docs/reports/2026-10-27-narrative-web.md) passed;
 [author/export/play locally](docs/runbooks/narrative-web-play.md).
 The authoring editor remains pending.
+Workspace-scoped [project/revision APIs](docs/architecture/narrative-project-contract.md)
+now preserve immutable source and recoverable concurrent edits; see
+[M31 progress](docs/milestones/31-authored-narrative-studio.md).
 
 The existing implementation described below is the GraphRAG foundation.
 

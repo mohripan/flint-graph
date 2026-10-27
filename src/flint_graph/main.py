@@ -9,6 +9,7 @@ from flint_graph.api.middleware import (
     RequestContextMiddleware,
     RequestSizeLimitMiddleware,
 )
+from flint_graph.api.narrative_body_limit import NarrativeBodyLimitMiddleware
 from flint_graph.api.router import api_router
 from flint_graph.api.routes.observability import scrape_metrics
 from flint_graph.config import Settings, get_settings
@@ -26,6 +27,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(RequestSizeLimitMiddleware, settings=settings)
+    app.add_middleware(NarrativeBodyLimitMiddleware, settings=settings)
     app.add_middleware(FixedWindowRateLimitMiddleware, settings=settings)
     if settings.require_tls:
         app.add_middleware(HTTPSRedirectMiddleware)

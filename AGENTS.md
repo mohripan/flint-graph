@@ -11,8 +11,9 @@ the user authorized one review sub-agent and autonomous continuation. Preserve
 the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
 as part of the product pivot. M30 package loading, reference playback/saves and
 Godot source export/player and real browser qualification are delivered; the
-studio editor remains pending. Read `docs/milestones/30-portable-story-runtime.md`
-for actual progress before claiming a complete game-authoring product.
+studio editor remains pending. M31 #122 adds authorized immutable text revisions
+with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
+and the M30 report for actual progress before claiming a complete authoring product.
 
 ## Project Snapshot
 

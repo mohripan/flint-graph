@@ -1,0 +1,87 @@
+{
+  "passed": true,
+  "api": "http://127.0.0.1:8101",
+  "workspace_id": "93445205-ba25-44e5-b825-75897dbde8d8",
+  "project_id": "5dccacb5-ef12-4d1a-8521-461764180627",
+  "head_revision_id": "2189a1ea-6f54-42e7-8414-d38069b9c1af",
+  "conflict_revision_id": "c5a1e497-5190-4754-bf2c-7d76411e7b14",
+  "content_hash": "f01b17faf4bb37b0c7e912ed8372bf2e4ea171db5f9254946126583ca628d72a",
+  "events": [
+    {
+      "method": "POST",
+      "path": "/v1/workspaces",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions/9ae901e4-a548-44ae-931f-dce166dc3bd3",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions",
+      "status": 409
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions/c5a1e497-5190-4754-bf2c-7d76411e7b14",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions",
+      "status": 409
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/revisions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/archive",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627?include_archived=true",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/5dccacb5-ef12-4d1a-8521-461764180627/archive",
+      "status": 200
+    }
+  ],
+  "mode": "explicit owned local dev-auth proof"
+}

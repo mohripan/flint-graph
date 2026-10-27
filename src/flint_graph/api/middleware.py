@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
+from hashlib import sha256
 from time import monotonic
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -144,6 +145,7 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
     # Public so the metric label helper can attribute rejections to a bounded set
     # of prefixes rather than to raw request paths.
     EXPENSIVE_PATHS = (
+        "/v1/narrative/",
         "/v1/documents/uploads",
         "/v1/documents/from-url",
         "/v1/query-runs",
@@ -158,6 +160,8 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._settings = settings
         self._buckets: dict[str, tuple[float, int]] = {}
+        self._narrative_buckets: dict[str, tuple[float, int]] = {}
+        self._narrative_next_sweep = 0.0
 
     async def dispatch(
         self,
@@ -168,26 +172,53 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         key = self._key(request)
         now = monotonic()
-        window_start, count = self._buckets.get(key, (now, 0))
+        narrative = request.url.path.startswith("/v1/narrative/")
+        buckets = self._narrative_buckets if narrative else self._buckets
+        if (
+            narrative
+            and key not in buckets
+            and len(buckets) >= self._settings.narrative_rate_limit_max_buckets
+        ):
+            if now >= self._narrative_next_sweep:
+                expired = [
+                    item
+                    for item, (started, _) in buckets.items()
+                    if now - started >= self._settings.rate_limit_window_seconds
+                ]
+                for item in expired:
+                    del buckets[item]
+                self._narrative_next_sweep = now + 1.0
+            if len(buckets) >= self._settings.narrative_rate_limit_max_buckets:
+                return self._reject(
+                    request, self._settings.rate_limit_window_seconds, capacity=True
+                )
+        window_start, count = buckets.get(key, (now, 0))
         if now - window_start >= self._settings.rate_limit_window_seconds:
             window_start = now
             count = 0
         count += 1
-        self._buckets[key] = (window_start, count)
+        buckets[key] = (window_start, count)
         if count > self._settings.rate_limit_requests:
-            metrics.record_rate_limit_rejection(route=limited_route_label(request))
-            response = problem_response(
-                status_code=429,
-                title="Too many requests",
-                detail="Rate limit exceeded for this user and workspace.",
-                error_type="too-many-requests",
-                request=request,
+            return self._reject(
+                request, self._settings.rate_limit_window_seconds - (now - window_start)
             )
-            response.headers["Retry-After"] = str(
-                max(1, int(self._settings.rate_limit_window_seconds - (now - window_start)))
-            )
-            return response
         return await call_next(request)
+
+    def _reject(self, request: Request, retry_after: float, *, capacity: bool = False) -> Response:
+        metrics.record_rate_limit_rejection(route=limited_route_label(request))
+        response = problem_response(
+            status_code=429,
+            title="Too many requests",
+            detail=(
+                "Rate-tracker capacity limit exceeded. Retry later."
+                if capacity
+                else "Rate limit exceeded for this user and workspace."
+            ),
+            error_type="too-many-requests",
+            request=request,
+        )
+        response.headers["Retry-After"] = str(max(1, int(retry_after)))
+        return response
 
     def _should_limit(self, request: Request) -> bool:
         if not self._settings.rate_limit_enabled:
@@ -197,6 +228,30 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
         return any(request.url.path.startswith(path) for path in self.EXPENSIVE_PATHS)
 
     def _key(self, request: Request) -> str:
+        if request.url.path.startswith("/v1/narrative/"):
+            # A project UUID or spoofed dev header must not create fresh OIDC buckets.
+            if self._settings.auth_mode == "dev":
+                identity = "dev:" + request.headers.get(
+                    "X-Dev-User", self._settings.dev_auth_subject
+                )
+            else:
+                authorization = request.headers.get("Authorization", "")
+                token = (
+                    authorization.removeprefix("Bearer ").strip()
+                    if authorization.startswith("Bearer ")
+                    else ""
+                )
+                identity = (
+                    "bearer:" + token
+                    if token
+                    else "peer:" + (request.client.host if request.client else "unknown")
+                )
+            try:
+                workspace = str(UUID(request.headers.get("X-Tenant-ID", "")))
+            except ValueError:
+                workspace = "invalid-workspace"
+            # Never retain raw bearer credentials as dictionary keys.
+            return f"/v1/narrative/:{sha256(identity.encode()).hexdigest()}:{workspace}"
         user = (
             request.headers.get("X-Dev-User")
             or request.headers.get("Authorization")

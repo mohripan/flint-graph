@@ -16,6 +16,26 @@ PACKAGE_LIMIT = 100 * 1024 * 1024
 NOTICES_LIMIT = 1024 * 1024
 
 
+def load_text_package(story_json: bytes, notices: bytes = b"") -> StoryPackage:
+    """Validate an in-memory text-only snapshot without filesystem or asset access."""
+    story = parse_json(story_json, limit=STORY_LIMIT)
+    warnings = validate_story(story)
+    if story["assets"]:
+        raise PackageError("assets_not_supported", "assets")
+    if len(notices) > NOTICES_LIMIT:
+        raise PackageError("size_limit", "NOTICES.txt")
+    try:
+        notice_text = notices.decode("utf-8")
+    except UnicodeError:
+        raise PackageError("invalid_text", "NOTICES.txt") from None
+    if "\x00" in notice_text:
+        raise PackageError("invalid_text", "NOTICES.txt")
+    canonical = canonical_json(story)
+    if len(canonical) > STORY_LIMIT:
+        raise PackageError("size_limit", "story.json")
+    return StoryPackage(canonical, notices, warnings=warnings)
+
+
 def _regular(path: Path, *, directory: bool = False) -> os.stat_result:
     info = path.lstat()
     if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
