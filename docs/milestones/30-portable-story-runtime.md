@@ -11,13 +11,17 @@ review sub-agent. [Plan](../superpowers/plans/2026-10-27-portable-story-runtime.
   structural warnings and original three-ending fixture with route expectations.
   See the [contract](../architecture/narrative-package-contract.md) and
   [verification](../reports/2026-10-27-narrative-package.md).
+- #118: deterministic reference player, bounded actions/trace output, typed state,
+  atomic overflow faults, strict revision-bound save/load and a local validate/play
+  CLI. [Runtime contract](../architecture/narrative-runtime-contract.md),
+  [try it](../runbooks/narrative-local-play.md), and
+  [live subprocess verification](../reports/2026-10-27-narrative-reference-player.md).
 
-This is a loader foundation, not a playable/exportable game. No model, database,
+Reference terminal/scripted playback works; Godot export is pending. No model, database,
 workspace, existing frontend or application service configuration was changed.
 
 ## Remaining acceptance
 
-- #118: reference player actions, route traces, checked transitions and strict saves.
 - #119: pinned engine/templates and safe trusted-source export.
 - #120: real Godot runtime/player and reference/save parity.
 - #121: actual served web export, browser input/layout proof and developer guide.

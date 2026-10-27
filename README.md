@@ -7,6 +7,10 @@ export first. This is planned work, not an implemented game editor. See the
 [new milestone sequence](docs/ROADMAP.md#active-product-direction-narrative-game-studio),
 and [first runtime design](docs/superpowers/specs/2026-10-27-portable-story-runtime-design.md).
 
+The standalone package validator and reference player are available now:
+[play the original sample locally](docs/runbooks/narrative-local-play.md).
+Godot/browser export and the authoring editor remain in progress/planned.
+
 The existing implementation described below is the GraphRAG foundation.
 
 A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, adds an OIDC-backed workspace access boundary for MVP use, and hardens the public API boundary for controlled deployments. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.

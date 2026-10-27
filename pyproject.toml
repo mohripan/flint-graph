@@ -47,6 +47,7 @@ flint-graph-doctor = "flint_graph.cli.doctor:main"
 flint-graph-dev = "flint_graph.cli.dev:main"
 flint-graph-corpus = "flint_graph.cli.corpus:main"
 flint-graph-telemetry = "flint_graph.cli.telemetry:main"
+flint-graph-narrative = "flint_graph.cli.narrative:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

@@ -29,8 +29,8 @@ needed rather than completing all old research/financial features first. Existin
 data, API invariants and uncommitted #109 observability work remain intact.
 Features listed here are not implemented by this planning update.
 Implementation has started under [Milestone 30](milestones/30-portable-story-runtime.md):
-#117 delivers the local package boundary and original fixture; actual reference
-playback and Godot/browser qualification remain #118–#121.
+#117 delivers the local package boundary and original fixture; #118 adds reference
+playback and strict saves. Godot/browser qualification remains #119–#121.
 
 ## Historical GraphRAG roadmap and foundation backlog
 
