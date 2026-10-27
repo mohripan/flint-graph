@@ -1,6 +1,7 @@
 # Milestone 30: portable story runtime and Godot proof
 
-Status: in progress, 2026-10-27. [Tracking issue #112](https://github.com/mohripan/flint-graph/issues/112).
+Status: acceptance passed, 2026-10-27; final browser-tooling CI/issue closure pending.
+[Tracking issue #112](https://github.com/mohripan/flint-graph/issues/112).
 The user approved the written design and autonomous implementation with one
 review sub-agent. [Plan](../superpowers/plans/2026-10-27-portable-story-runtime.md).
 
@@ -28,13 +29,18 @@ review sub-agent. [Plan](../superpowers/plans/2026-10-27-portable-story-runtime.
   [Contract](../architecture/godot-player-contract.md),
   [evidence](../reports/2026-10-27-godot-player.md).
 
-Reference playback and Godot gameplay/source export work; browser acceptance
-remains pending. No model, database,
+- #121: actual served single-threaded web export, 16-step browser input proof,
+  three endings, save/reload/restore, desktop/mobile long-text scrolling and
+  retained screenshots. [Developer guide](../runbooks/narrative-web-play.md),
+  [dated browser proof](../reports/2026-10-27-narrative-web.md).
+
+Reference playback, Godot gameplay/source export and browser acceptance work.
+No model, database,
 workspace, existing frontend or application service configuration was changed.
 
-## Remaining acceptance
+## Delivery boundary
 
-- #121: actual served web export, browser input/layout proof and developer guide.
-
-M30 remains open until actual engine/browser acceptance passes. Documentation,
-valid structure and offline fixtures do not substitute for running the game.
+The actual engine/browser acceptance has passed; #121's tooling/docs commit must
+also pass ordinary CI before issue/milestone closure. M31 project/revision APIs
+and authoring editor remain pending. M30 proves a short original authored game,
+not AI story/image quality or a complete production studio.

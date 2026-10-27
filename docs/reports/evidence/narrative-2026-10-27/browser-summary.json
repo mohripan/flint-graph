@@ -1,0 +1,217 @@
+{
+  "passed": true,
+  "url": "http://127.0.0.1:5190/qualified-20261027/sample/index.html?qa=1",
+  "longURL": "http://127.0.0.1:5190/qualified-20261027/long/index.html?qa=1",
+  "errors": "",
+  "browser": "agent-browser 0.39.0",
+  "note": "Scroll screenshots must also be visually reviewed; QA control rectangles refresh on render/resize, not wheel input.",
+  "steps": [
+    {
+      "step": "01-desktop-arrival",
+      "node_id": "arrival",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "02-desktop-choice",
+      "node_id": "approach_choice",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "03-desktop-saved",
+      "node_id": "approach_choice",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": "Saved on this device."
+    },
+    {
+      "step": "04-desktop-restored-ending",
+      "node_id": "restored_end",
+      "status": "ended",
+      "ending": "restored",
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "05-desktop-loaded-after-reload",
+      "node_id": "approach_choice",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": "Saved game loaded."
+    },
+    {
+      "step": "06-desktop-quiet-ending",
+      "node_id": "quiet_end",
+      "status": "ended",
+      "ending": "quiet",
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "07-desktop-hasty-ending",
+      "node_id": "hasty_end",
+      "status": "ended",
+      "ending": "hasty",
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "08-mobile-arrival",
+      "node_id": "arrival",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "09-mobile-choice",
+      "node_id": "approach_choice",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "10-mobile-restored-ending",
+      "node_id": "restored_end",
+      "status": "ended",
+      "ending": "restored",
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "has_save": true,
+      "notice": ""
+    },
+    {
+      "step": "11-mobile-long-top",
+      "node_id": "arrival",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "has_save": false,
+      "notice": ""
+    },
+    {
+      "step": "12-mobile-long-bottom",
+      "node_id": "arrival",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "has_save": false,
+      "notice": ""
+    },
+    {
+      "step": "13-mobile-long-choice",
+      "node_id": "approach_choice",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "has_save": false,
+      "notice": ""
+    },
+    {
+      "step": "14-desktop-long-top",
+      "node_id": "arrival",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": false,
+      "notice": ""
+    },
+    {
+      "step": "15-desktop-long-bottom",
+      "node_id": "arrival",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": false,
+      "notice": ""
+    },
+    {
+      "step": "16-desktop-long-choice",
+      "node_id": "approach_choice",
+      "status": "playing",
+      "ending": null,
+      "viewport": {
+        "height": 900,
+        "width": 1280
+      },
+      "has_save": false,
+      "notice": ""
+    }
+  ],
+  "manual_default_check": {
+    "qa_absent_before_and_after_input": true,
+    "input": "Enter",
+    "screenshot": "17-default-no-qa-choice.png"
+  },
+  "console_errors": false,
+  "geometry_assertions": [
+    "finite coordinates/dimensions",
+    "x>=0",
+    "y>=0",
+    "width>0",
+    "height>=44",
+    "x+width<=390",
+    "y+height<=844"
+  ]
+}

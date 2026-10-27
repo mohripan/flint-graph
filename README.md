@@ -11,8 +11,10 @@ The standalone package validator and reference player are available now:
 [play the original sample locally](docs/runbooks/narrative-local-play.md).
 Editable Godot source export includes a playable authored UI with choices and local
 saves. See the [player contract](docs/architecture/godot-player-contract.md) and
-[engine guide](docs/runbooks/godot-toolchain.md). Browser qualification is tracked
-separately; the authoring editor remains pending.
+[engine guide](docs/runbooks/godot-toolchain.md).
+[Real browser qualification](docs/reports/2026-10-27-narrative-web.md) passed;
+[author/export/play locally](docs/runbooks/narrative-web-play.md).
+The authoring editor remains pending.
 
 The existing implementation described below is the GraphRAG foundation.
 

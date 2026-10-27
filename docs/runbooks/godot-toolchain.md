@@ -93,5 +93,6 @@ $taskWebOutput=Join-Path (Resolve-Path notes/my-web-build).Path 'index.html'
 Use an existing owned build directory and an absolute output path if running from
 a different working directory. Check generated HTML/JS/WASM/PCK files and actual
 content behavior. Producing a web build is not browser gameplay qualification;
-the real input/layout/save checks remain #121. Never expose this local bootstrap
+repeat the [real input/layout/save checks](narrative-web-play.md) from #121.
+Never expose this local player
 as a production authoring/build service or execute creator-provided plugins.
