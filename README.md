@@ -1,5 +1,14 @@
 # FlintGraph
 
+**Product direction (2026-10-27):** an AI-assisted narrative game studio for
+developers, with authored visual novels, branching choices and editable Godot
+export first. This is planned work, not an implemented game editor. See the
+[product brief](docs/product/narrative-game-studio.md),
+[new milestone sequence](docs/ROADMAP.md#active-product-direction-narrative-game-studio),
+and [first runtime design](docs/superpowers/specs/2026-10-27-portable-story-runtime-design.md).
+
+The existing implementation described below is the GraphRAG foundation.
+
 A production-oriented GraphRAG platform. The current implementation provides the ingestion control plane, a Temporal-backed content pipeline that materializes source bytes, parses supported formats, chunks content, records lineage, persists provenance-rich extraction proposals, builds a resolved knowledge graph with reviewable, reversible merges, maintains rebuildable retrieval indexes, exposes LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, includes real-model defaults plus an offline evaluation quality gate, adds an OIDC-backed workspace access boundary for MVP use, and hardens the public API boundary for controlled deployments. PostgreSQL is the system of record; Neo4j and OpenSearch are idempotent projections.
 
 See the [roadmap](docs/ROADMAP.md) for useful-answer reliability, embeddings,

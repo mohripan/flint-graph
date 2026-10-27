@@ -1,5 +1,36 @@
 # FlintGraph roadmap
 
+## Active product direction: narrative game studio
+
+Updated: 2026-10-27. Product direction approved; implementation is planned.
+FlintGraph is moving toward an AI-assisted authoring studio for visual novels and
+branching narrative games, with authored gameplay and editable Godot/GDScript
+export first. AI assists creators; exported gameplay has no inference dependency.
+
+Read [the product direction](product/narrative-game-studio.md),
+[ADR 0035](adr/0035-authored-narrative-games-and-portable-godot-export.md), and
+[the first focused implementation design](superpowers/specs/2026-10-27-portable-story-runtime-design.md).
+The written M30 design requires review before implementation begins.
+The [GitHub delivery queue](product/narrative-game-backlog.md) links milestones
+30–34 and issues #112–#132, including focused acceptance and live verification.
+
+| Planned milestone | Outcome | Dependency |
+| --- | --- | --- |
+| 30 | Portable story package, deterministic runtime, real Godot/browser export proof | Written M30 contract review |
+| 31 | Workspace/project-scoped authored game editor, revisions, preview and release download | 30 |
+| 32 | Bounded narrative proposals, world/character knowledge, continuity and reviewed revisions | 31 |
+| 33 | Asset library, approved image variations, provenance and release bindings | 31 |
+| 34 | Complete game, three reachable endings, 15–30 minute playtest, release/recovery qualification | 31–33 |
+
+Use the approved narrative track as the next delivery order. Milestones 15–29
+below retain historical plans/progress and deferred issues; their old sequential
+queue is not the active product plan. Reuse generic platform/security work when
+needed rather than completing all old research/financial features first. Existing
+data, API invariants and uncommitted #109 observability work remain intact.
+Features listed here are not implemented by this planning update.
+
+## Historical GraphRAG roadmap and foundation backlog
+
 Updated: 2026-10-10. Inspected baseline: `1c15820` (Milestone 14).
 
 Implementation has started: [Milestone 15 progress](milestones/15-useful-answers.md),

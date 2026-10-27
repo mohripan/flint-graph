@@ -1,5 +1,15 @@
 # Agent Handoff Guide
 
+## Active product direction (2026-10-27)
+
+The user approved an authored narrative game studio with Godot/GDScript export
+first. Read `docs/product/narrative-game-studio.md`, ADR 0035 and the active section
+of `docs/ROADMAP.md` before selecting work. Milestones 30–34 supersede the older
+automatic research/financial queue; historical deliveries and security invariants
+remain valid. The M30 written spec awaits review before implementation. Preserve
+the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
+as part of the product pivot. The studio/runtime is planned, not implemented.
+
 ## Project Snapshot
 
 FlintGraph is an early GraphRAG platform. Through Milestone 13 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, an OIDC-backed workspace access boundary for MVP use, and controlled-deployment public API hardening.
