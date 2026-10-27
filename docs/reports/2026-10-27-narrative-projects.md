@@ -76,8 +76,11 @@ historical migration was rewritten. Actual PG audit insert/readback passed.
 Offline skips include unconfigured live/engine/container integrations and the
 host's unprivileged symlink. Three SQLite cases skip PG-only trigger/locking/FK
 proof; those cases passed on actual PG. The final cursor optimization preserves
-public behavior and passed both backend tests. Remote CI remains required before
-closure. Preserved #109 WIP participates locally but is excluded from this commit.
+public behavior and passed both backend tests.
+[CI](https://github.com/mohripan/flint-graph/actions/runs/40501201632) and
+[real container smoke](https://github.com/mohripan/flint-graph/actions/runs/40501202072)
+passed for `9dfcf74`; #122 is closed. Preserved #109 WIP participates locally but
+is excluded from this delivery.
 
 No engine runtime or React frontend changed; M30's separate real play proof was
 not repeated for these API changes. This is the editor's foundation, not a complete

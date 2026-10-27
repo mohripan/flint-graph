@@ -10,7 +10,7 @@ are complete; the studio builds on that authored runtime.
 - #122: authorized projects, immutable text revisions, explicit base concurrency,
   committed recoverable conflicts, scoped metadata lists and archive/restore.
   Actual PostgreSQL constraints/queued writers and a real HTTP workflow passed.
-  Final remote CI/issue closure pending.
+  CI and real container smoke passed; the issue is closed.
   [Design](../superpowers/specs/2026-10-27-narrative-project-revisions-design.md),
   [contract](../architecture/narrative-project-contract.md),
   [evidence](../reports/2026-10-27-narrative-projects.md).
