@@ -21,4 +21,5 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 This license applies to the original bundled runtime/template source only.
-It does not license creator story/art, Godot Engine, or the rest of FlintGraph.
+It does not license creator story/art, bundled fonts, Godot Engine, or the rest
+of FlintGraph. Each has its own terms and notices.

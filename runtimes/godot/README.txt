@@ -1,11 +1,14 @@
-FlintGraph editable Godot source export, runtime 0.1.0.
+FlintGraph editable Godot source export, runtime 0.2.0.
 
 Use the qualified Godot 4.7.2 stable GDScript engine. No AI service or platform
 account is required by this project. Install matching engine export templates
 explicitly if you build a browser executable; this export never installs them.
 
-This #119 bootstrap verifies package and asset hashes. Actual authored gameplay
-is the next #120 implementation; this source proof is not a complete game player.
+The bootstrap verifies package and asset hashes, then starts the authored player.
+Use Continue/Enter/Space, listed choices (or digits 1-9), and Save/Load/Restart.
+Saves are local to the device/browser and package version; no cloud sync is used.
+Gameplay conformance and actual browser qualification are documented separately
+in the repository. This export is not an authoring studio or AI server.
 
 Edit your downloaded copy as needed. Re-export always creates a separate project;
 custom engine edits are not reverse-synchronized into the studio. Creator source

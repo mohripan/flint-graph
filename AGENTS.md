@@ -10,8 +10,8 @@ remain valid. The M30 written spec was approved for implementation on 2026-10-27
 the user authorized one review sub-agent and autonomous continuation. Preserve
 the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
 as part of the product pivot. M30 package loading, reference playback/saves and
-Godot source export are delivered; Godot gameplay/browser acceptance and the
-studio editor remain pending. Read `docs/milestones/30-portable-story-runtime.md`
+Godot source export/player are delivered; browser qualification and the studio
+editor remain pending. Read `docs/milestones/30-portable-story-runtime.md`
 for actual progress before claiming a complete game-authoring product.
 
 ## Project Snapshot

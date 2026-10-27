@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
-# Trusted loader bootstrap. The complete narrative player follows in M30 #120.
+# Trusted content bootstrap and narrative player startup.
 extends Control
+
+const StrictJson = preload("res://runtime/strict_json.gd")
+const GameView = preload("res://runtime/game_view.gd")
 
 
 func _digest(data: PackedByteArray) -> String:
@@ -32,17 +35,27 @@ func verify_content() -> Dictionary:
 	if _digest(source) != manifest.get("story_sha256") or _digest(notices) != manifest.get("notices_sha256"):
 		return {"error": "content_hash_mismatch"}
 	var ids := RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}$")
+	var assets := {}
+	var total := source.size() + notices.size()
 	for asset: Variant in manifest["assets"]:
 		if not asset is Dictionary or not asset.get("id") is String or ids.search(asset["id"]) == null:
 			return {"error": "invalid_asset_manifest"}
 		if asset.get("path") != "assets/" + asset["id"] + ".png":
 			return {"error": "invalid_asset_path"}
-		if _digest(_bytes("res://content/" + asset["path"], 10485760)) != asset.get("sha256"):
+		var data := _bytes("res://content/" + asset["path"], 10485760)
+		total += data.size()
+		if total > 104857600:
+			return {"error": "content_size_limit"}
+		if _digest(data) != asset.get("sha256"):
 			return {"error": "asset_hash_mismatch"}
-	var story: Variant = JSON.parse_string(source.get_string_from_utf8())
-	if not story is Dictionary or not story.get("title") is String:
+		assets[asset["id"]] = data
+	var decoded := StrictJson.decode(source, 5242880)
+	if not decoded.get("ok", false) or not decoded["value"] is Dictionary:
 		return {"error": "invalid_story"}
-	return {"ok": true, "package_hash": build["package_hash"], "story": story}
+	var story: Dictionary = decoded["value"]
+	if not story.get("title") is String:
+		return {"error": "invalid_story"}
+	return {"ok": true, "package_hash": build["package_hash"], "story": story, "assets": assets}
 
 
 func _ready() -> void:
@@ -55,7 +68,7 @@ func _ready() -> void:
 	if "--verify-content" in OS.get_cmdline_user_args():
 		get_tree().quit(0)
 		return
-	var label := Label.new()
-	label.text = checked["story"]["title"] + "\nPackage verified. Narrative player implementation follows in #120."
-	label.position = Vector2(32, 32)
-	add_child(label)
+	var game := GameView.new()
+	game.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(game)
+	game.configure(checked["story"], checked["package_hash"], checked["assets"])

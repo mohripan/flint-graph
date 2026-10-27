@@ -2,3 +2,6 @@
 tests/fixtures/narrative/** text eol=lf
 tests/fixtures/narrative/**/*.png -text
 runtimes/godot/** text eol=lf
+runtimes/godot/**/*.ttf -text
+# Preserve the exact upstream OFL notice, including its intentional trailing space.
+runtimes/godot/fonts/LICENSE-Lora.txt whitespace=-blank-at-eol

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Lora.ttf",
+    "git_blob": "ee1914c3746140523de2940d267ec2215bd85d5b",
+    "sha256": "822a6621ccbe8d97d20ac88c1c41f5615c9c2c202eaa75f272cd452aac6475a7",
+    "bytes": 212196,
+    "source": "https://github.com/google/fonts/tree/main/ofl/lora"
+  },
+  {
+    "name": "LICENSE-Lora.txt",
+    "git_blob": "d0ce7fe062e60eaa92c4af3ee1bebe81c5141b4e",
+    "sha256": "1d9a970809ac804b582a6ce7f0ebc4e7fefcbfd7ff6299cad35ee656a21be716",
+    "bytes": 4423,
+    "source": "https://github.com/google/fonts/tree/main/ofl/lora"
+  }
+]

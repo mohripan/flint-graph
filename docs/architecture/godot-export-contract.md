@@ -15,16 +15,19 @@ scripts from story text, or include workspace credentials/drafts/provider prompt
 ```text
 new-project/
   project.godot, main.tscn, export_presets.cfg
-  runtime/bootstrap.gd
+  runtime/bootstrap.gd, strict_json.gd, player.gd, game_view.gd, save_store.gd
+  fonts/Lora.ttf, LICENSE-Lora.txt, provenance.json
   content/story.json, package-manifest.json, NOTICES.txt
   content/assets/<id>.png, <id>.png.import
   toolchain.json, build-manifest.json
   README.txt, LICENSE.runtime.txt, GODOT-NOTICE.txt
 ```
 
-The current bootstrap verifies source/notices/PNG hashes and displays an explicit
-verification placeholder. Actual narrative gameplay is #120; this source-proof
-milestone does not claim to deliver its player or browser route acceptance.
+The bootstrap verifies source/notices/PNG hashes, captures those bytes and starts
+the authored player. Runtime 0.2.0 adds narration, choices and local saves; see the
+[player contract](godot-player-contract.md). The original #119 report records the
+earlier 0.1.0 verification-only bootstrap. Browser qualification is recorded
+separately in #121.
 
 Every output target must be a new directory, even if an existing directory is
 empty. Its parent must already exist and resolve without symlink/junction aliases.
@@ -96,9 +99,10 @@ Native qualification checks a pinned executable hash, real engine import,
 successful package/asset verification and rejection of a tampered exported PNG.
 Normal offline tests do not download or execute an engine. An explicitly
 configured `FLINT_GRAPH_NARRATIVE_GODOT_BIN` runs the opt-in integration test.
-The actual native source import, web export and Web PCK integrity proof passed;
-browser input, UI layout, save/runtime route parity and complete gameplay remain
-#120–#121 acceptance.
+The actual native source import, web export and Web PCK integrity proof passed.
+Runtime/save route parity is covered by #120; browser input and layout are #121.
+The font is separately licensed under OFL, with its license/provenance explicitly
+included as non-resource files in compiled Web PCKs as well as source exports.
 
 Official references reviewed 2026-10-27:
 

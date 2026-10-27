@@ -1,8 +1,8 @@
 # Export source and qualify a local Godot toolchain
 
-Current source proof: M30 #119. Reference playback is already available in
-[the local play runbook](narrative-local-play.md). The current exported bootstrap
-verifies data; authored game UI/playback follows in #120.
+M30 #119–#120. Reference playback is available in
+[the local play runbook](narrative-local-play.md). The exported bootstrap verifies
+data and starts the authored Godot player with narration, choices and local saves.
 
 ## Source export without an engine
 
@@ -49,10 +49,22 @@ $env:FLINT_GRAPH_NARRATIVE_GODOT_BIN=(Resolve-Path notes/toolchains/godot-4.7.2/
 uv run pytest tests/integration/test_narrative_godot_live.py -q --tb=short
 ```
 
-The test verifies the executable SHA-256, exports to an owned temporary directory,
-imports it with the real engine, checks the fixture hash, and rejects a tampered
-PNG. It uses a temporary engine profile, not your ordinary editor settings.
+The suite verifies the executable SHA-256 and uses owned temporary exports and
+engine profiles. It checks import/hash/tamper handling, every original route against
+the Python reference, invalid/stale actions, save compatibility, parser boundaries,
+automatic faults and native UI/save-file regressions.
 Without the explicit environment setting it skips and cannot qualify a release.
+
+To also build and inspect a real Web PCK, select the directory containing the
+previously verified matching templates:
+
+```powershell
+$env:FLINT_GRAPH_NARRATIVE_GODOT_TEMPLATES=(Resolve-Path notes/toolchains/godot-4.7.2/templates).Path
+uv run pytest tests/integration/test_narrative_godot_live.py -q --tb=short
+```
+
+This separately checks both template hashes, builds HTML/JS/WASM/PCK and verifies
+exact content and font/runtime/engine notice bytes from the pack itself.
 
 For a manual check using your chosen project and qualified engine:
 

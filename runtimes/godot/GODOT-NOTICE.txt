@@ -8,3 +8,6 @@ An engine binary or export template is not included in this source project.
 
 Creator content/asset notices are in content/NOTICES.txt.
 Original runtime/template terms are in LICENSE.runtime.txt.
+
+The Lora display font is separately licensed under SIL Open Font License 1.1.
+See fonts/LICENSE-Lora.txt and fonts/provenance.json. It is not MIT-licensed.

@@ -23,13 +23,17 @@ review sub-agent. [Plan](../superpowers/plans/2026-10-27-portable-story-runtime.
   [toolchain guide](../runbooks/godot-toolchain.md),
   [evidence](../reports/2026-10-27-godot-source-export.md).
 
-Reference terminal/scripted playback and Godot source export work; Godot gameplay
-and browser acceptance remain pending. No model, database,
+- #120: trusted Godot runtime 0.2.0, playable responsive UI, strict saves/parser,
+  stale-input protection and native reference/save conformance.
+  [Contract](../architecture/godot-player-contract.md),
+  [evidence](../reports/2026-10-27-godot-player.md).
+
+Reference playback and Godot gameplay/source export work; browser acceptance
+remains pending. No model, database,
 workspace, existing frontend or application service configuration was changed.
 
 ## Remaining acceptance
 
-- #120: real Godot runtime/player and reference/save parity.
 - #121: actual served web export, browser input/layout proof and developer guide.
 
 M30 remains open until actual engine/browser acceptance passes. Documentation,
