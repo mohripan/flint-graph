@@ -1,8 +1,9 @@
 # Milestone 30: portable story runtime and Godot proof
 
-Date: 2026-10-27. Status: proposed implementation contract; awaiting written-spec
-review. The authored-game/Godot product direction is approved. No narrative runtime
-is implemented by this document.
+Date: 2026-10-27. Status: approved for implementation in conversation. The user
+authorized autonomous continuation and one review sub-agent. No narrative runtime
+is implemented merely by this document. See the implementation plan and dated
+delivery reports for actual progress.
 
 ## Scope and success
 
@@ -67,6 +68,10 @@ state. V1 stages one portrait and one background, with no animation/audio/camera
 commands. Choice conditions are evaluated on entering the choice; no visible
 options is an explicit `no_available_choices` fault, never a frozen screen.
 No effects are hidden in dialogue or option text. Use explicit `set` nodes.
+Choice and end nodes have their own plain text/text ID and clear all previous
+line visuals; every settled screen is rendered solely from its current node.
+The reviewer identified this rule as necessary for reproducible saves at a
+choice reached through paths with different preceding portraits/backgrounds.
 
 Conditions are typed data trees: equality/inequality on matching declared types,
 integer comparisons (`lt`, `le`, `gt`, `ge`), `all`, `any` and `not`. Compare a

@@ -10,7 +10,7 @@ export first. AI assists creators; exported gameplay has no inference dependency
 Read [the product direction](product/narrative-game-studio.md),
 [ADR 0035](adr/0035-authored-narrative-games-and-portable-godot-export.md), and
 [the first focused implementation design](superpowers/specs/2026-10-27-portable-story-runtime-design.md).
-The written M30 design requires review before implementation begins.
+The written M30 design was approved for implementation on 2026-10-27.
 The [GitHub delivery queue](product/narrative-game-backlog.md) links milestones
 30–34 and issues #112–#132, including focused acceptance and live verification.
 
@@ -28,6 +28,9 @@ queue is not the active product plan. Reuse generic platform/security work when
 needed rather than completing all old research/financial features first. Existing
 data, API invariants and uncommitted #109 observability work remain intact.
 Features listed here are not implemented by this planning update.
+Implementation has started under [Milestone 30](milestones/30-portable-story-runtime.md):
+#117 delivers the local package boundary and original fixture; actual reference
+playback and Godot/browser qualification remain #118–#121.
 
 ## Historical GraphRAG roadmap and foundation backlog
 

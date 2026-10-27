@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "routes": [
+    {
+      "id": "patient_inquiry",
+      "actions": ["advance", "choose:listen", "advance", "choose:ask_letter", "advance"],
+      "ending": "restored",
+      "variables": {"trust": 1, "letter_known": true, "approach": "careful"}
+    },
+    {
+      "id": "leave_in_peace",
+      "actions": ["advance", "choose:leave"],
+      "ending": "quiet",
+      "variables": {"trust": 0, "letter_known": false, "approach": "careful"}
+    },
+    {
+      "id": "rush_to_judgment",
+      "actions": ["advance", "choose:accuse"],
+      "ending": "hasty",
+      "variables": {"trust": 0, "letter_known": false, "approach": "hasty"}
+    }
+  ]
+}

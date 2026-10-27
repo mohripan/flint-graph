@@ -1,0 +1,5 @@
+The Lantern Archive: original runtime-test story and procedural placeholder art.
+Created for this repository on 2026-10-27. No external artwork or source novel.
+This fixture's original text and PNG assets are dedicated under CC0-1.0:
+https://creativecommons.org/publicdomain/zero/1.0/
+The Godot runtime and generated engine project have separate software notices.

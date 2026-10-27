@@ -5,7 +5,9 @@ Created: 2026-10-27. Five milestones and 21 issues (five tracking issues plus
 
 The [product brief](narrative-game-studio.md) explains the direction. Review the
 [M30 written contract](../superpowers/specs/2026-10-27-portable-story-runtime-design.md)
-before implementation. Each later subsystem needs its own focused design.
+before implementation. This review was approved on 2026-10-27; #117 package
+delivery is documented in [M30 progress](../milestones/30-portable-story-runtime.md).
+Each later subsystem needs its own focused design.
 Issue dependencies are explicit in GitHub; the grouping below is not a claim
 that every task must run serially. Close only with real acceptance evidence.
 

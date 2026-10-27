@@ -1,7 +1,7 @@
 # ADR 0035: Authored narrative games with portable Godot export
 
-Date: 2026-10-27. Status: product direction accepted; first implementation contract
-awaiting written-spec review. This ADR records intent, not delivered behavior.
+Date: 2026-10-27. Status: product direction and first implementation contract
+accepted. This ADR records intent, not delivered behavior.
 
 ## Context
 

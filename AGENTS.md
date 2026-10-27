@@ -6,7 +6,8 @@ The user approved an authored narrative game studio with Godot/GDScript export
 first. Read `docs/product/narrative-game-studio.md`, ADR 0035 and the active section
 of `docs/ROADMAP.md` before selecting work. Milestones 30–34 supersede the older
 automatic research/financial queue; historical deliveries and security invariants
-remain valid. The M30 written spec awaits review before implementation. Preserve
+remain valid. The M30 written spec was approved for implementation on 2026-10-27;
+the user authorized one review sub-agent and autonomous continuation. Preserve
 the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
 as part of the product pivot. The studio/runtime is planned, not implemented.
 

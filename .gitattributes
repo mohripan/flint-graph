@@ -1,0 +1,3 @@
+# Source package identities include notice bytes; keep fixtures portable across checkouts.
+tests/fixtures/narrative/** text eol=lf
+tests/fixtures/narrative/**/*.png -text

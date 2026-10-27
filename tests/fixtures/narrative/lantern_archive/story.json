@@ -1,0 +1,74 @@
+{
+  "schema_version": "1",
+  "id": "lantern_archive",
+  "title": "The Lantern Archive",
+  "language": "en",
+  "entry": "arrival",
+  "characters": {"mira": {"name": "Mira, the archivist"}},
+  "variables": {
+    "trust": {"type": "int", "initial": 0},
+    "letter_known": {"type": "bool", "initial": false},
+    "approach": {"type": "enum", "values": ["careful", "hasty"], "initial": "careful"}
+  },
+  "assets": {
+    "archive": {"path": "assets/archive.png", "sha256": "240a5f4aa5b3c3abbe009c2fd88a178f33a630342dfeafd85793830106cdfd45"},
+    "archivist": {"path": "assets/archivist.png", "sha256": "27dcb88828d25e7d26e97ca945ac95f71ae53c7b366cc5f23be4fe5e85418504"}
+  },
+  "nodes": {
+    "arrival": {
+      "type": "line", "text_id": "arrival_text", "speaker": "mira",
+      "text": "Someone moved the lantern from the west archive. I found a letter, but its seal is not mine.",
+      "background": "archive", "portrait": "archivist", "next": "approach_choice"
+    },
+    "approach_choice": {
+      "type": "choice", "text_id": "approach_prompt", "text": "How will you approach the mystery?",
+      "options": [
+        {"id": "listen", "text_id": "listen_option", "text": "Listen before making an accusation.", "target": "earn_trust"},
+        {"id": "leave", "text_id": "leave_option", "text": "Leave the archive in peace.", "target": "quiet_end"},
+        {"id": "accuse", "text_id": "accuse_option", "text": "Accuse Mira of hiding the lantern.", "target": "rush"}
+      ]
+    },
+    "earn_trust": {
+      "type": "set", "operations": [{"op": "increment", "variable": "trust", "value": 1}],
+      "next": "letter_clue"
+    },
+    "letter_clue": {
+      "type": "line", "text_id": "clue_text", "speaker": "mira", "portrait": "archivist",
+      "text": "Thank you for hearing me. The letter mentions a promise made before the flood.", "next": "inquiry"
+    },
+    "inquiry": {
+      "type": "choice", "text_id": "inquiry_prompt", "text": "What will you ask?",
+      "options": [
+        {"id": "ask_letter", "text_id": "ask_letter_option", "text": "Ask to read the letter together.",
+         "condition": {"op": "ge", "variable": "trust", "value": 1}, "target": "learn_letter"},
+        {"id": "leave", "text_id": "inquiry_leave_option", "text": "Leave the rest for another day.", "target": "quiet_end"}
+      ]
+    },
+    "learn_letter": {
+      "type": "set", "operations": [{"op": "set", "variable": "letter_known", "value": true}],
+      "next": "reveal"
+    },
+    "reveal": {
+      "type": "branch",
+      "condition": {"op": "all", "children": [
+        {"op": "ge", "variable": "trust", "value": 1},
+        {"op": "eq", "variable": "letter_known", "value": true}
+      ]},
+      "if_true": "promise", "if_false": "quiet_end"
+    },
+    "promise": {
+      "type": "line", "text_id": "promise_text", "speaker": "mira", "background": "archive", "portrait": "archivist",
+      "text": "The lantern was a signal for the ferry keeper. Together, we can return it before dawn.", "next": "restored_end"
+    },
+    "rush": {
+      "type": "set", "operations": [{"op": "set", "variable": "approach", "value": "hasty"}],
+      "next": "hasty_end"
+    },
+    "restored_end": {"type": "end", "text_id": "restored_text", "ending": "restored",
+                     "text": "The lantern returns to the river. A promise survives the night."},
+    "quiet_end": {"type": "end", "text_id": "quiet_text", "ending": "quiet",
+                  "text": "You leave quietly. The lantern's story remains unfinished."},
+    "hasty_end": {"type": "end", "text_id": "hasty_text", "ending": "hasty",
+                  "text": "Mira closes the archive. An accusation has cost you the truth."}
+  }
+}

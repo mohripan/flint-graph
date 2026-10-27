@@ -1,7 +1,8 @@
 # Narrative game studio: product direction
 
-Date: 2026-10-27. Direction approved in conversation; implementation is planned,
-not delivered. The first implementation contract requires written-spec review.
+Date: 2026-10-27. Direction and first implementation contract approved in
+conversation. Delivery is tracked issue by issue; the complete studio is planned,
+not delivered. See milestone reports for implemented boundaries.
 
 ## Product and audience
 
