@@ -9,7 +9,8 @@ and [first runtime design](docs/superpowers/specs/2026-10-27-portable-story-runt
 
 The standalone package validator and reference player are available now:
 [play the original sample locally](docs/runbooks/narrative-local-play.md).
-Godot/browser export and the authoring editor remain in progress/planned.
+Editable Godot source export is also available; its current bootstrap verifies
+content. Godot gameplay, browser acceptance and the authoring editor remain pending.
 
 The existing implementation described below is the GraphRAG foundation.
 

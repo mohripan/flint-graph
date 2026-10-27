@@ -16,13 +16,19 @@ review sub-agent. [Plan](../superpowers/plans/2026-10-27-portable-story-runtime.
   CLI. [Runtime contract](../architecture/narrative-runtime-contract.md),
   [try it](../runbooks/narrative-local-play.md), and
   [live subprocess verification](../reports/2026-10-27-narrative-reference-player.md).
+- #119: trusted editable source export, explicit pinned Godot 4.7.2 toolchain,
+  wheel-packaged templates, source/asset hashes and notices. Real import/content
+  verification, tamper rejection, web build and Web PCK integrity passed.
+  [Contract](../architecture/godot-export-contract.md),
+  [toolchain guide](../runbooks/godot-toolchain.md),
+  [evidence](../reports/2026-10-27-godot-source-export.md).
 
-Reference terminal/scripted playback works; Godot export is pending. No model, database,
+Reference terminal/scripted playback and Godot source export work; Godot gameplay
+and browser acceptance remain pending. No model, database,
 workspace, existing frontend or application service configuration was changed.
 
 ## Remaining acceptance
 
-- #119: pinned engine/templates and safe trusted-source export.
 - #120: real Godot runtime/player and reference/save parity.
 - #121: actual served web export, browser input/layout proof and developer guide.
 

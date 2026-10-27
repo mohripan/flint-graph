@@ -1,0 +1,10 @@
+Godot Engine is distributed under the MIT license. Engine license and notices:
+https://godotengine.org/license/
+https://docs.godotengine.org/en/stable/about/complying_with_licenses.html
+
+The engine and its third-party components have their own notices; preserve the
+notices accompanying the exact engine/export templates used for distribution.
+An engine binary or export template is not included in this source project.
+
+Creator content/asset notices are in content/NOTICES.txt.
+Original runtime/template terms are in LICENSE.runtime.txt.

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from flint_graph.narrative import PackageError, Player, PlayerError, load_package
+from flint_graph.narrative.export import ExportError, export_godot
 from flint_graph.narrative.json_format import parse_json
 from flint_graph.narrative.player import SAVE_LIMIT
 
@@ -79,6 +80,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     subcommands = parser.add_subparsers(dest="command", required=True)
     validate = subcommands.add_parser("validate", help="Validate a local story package")
     validate.add_argument("package", type=Path)
+    export = subcommands.add_parser(
+        "export-godot", help="Create a new editable Godot source project"
+    )
+    export.add_argument("package", type=Path)
+    export.add_argument("--output", type=Path, required=True)
     play = subcommands.add_parser("play", help="Play with fixed actions or an interactive terminal")
     play.add_argument("package", type=Path)
     mode = play.add_mutually_exclusive_group(required=True)
@@ -101,6 +107,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     {"code": warning.code, "location": warning.location}
                     for warning in package.warnings
                 ],
+            }
+        elif args.command == "export-godot":
+            if args.output.resolve().is_relative_to(args.package.resolve()):
+                raise ExportError("unsafe_output_path")
+            exported = export_godot(package, args.output)
+            result = {
+                "package_hash": exported.package_hash,
+                "manifest_hash": exported.manifest_hash,
+                "file_count": exported.file_count,
+                "godot_version": exported.godot_version,
             }
         else:
             player = Player(package)
@@ -135,7 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
         return 1 if args.command == "play" and result["state"]["status"] == "fault" else 0
-    except (PackageError, PlayerError) as error:
+    except (PackageError, PlayerError, ExportError) as error:
         print(json.dumps({"error": error.code}), file=sys.stderr)
         return 1
     except (OSError, EOFError, KeyboardInterrupt):

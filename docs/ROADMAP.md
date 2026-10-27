@@ -30,7 +30,8 @@ data, API invariants and uncommitted #109 observability work remain intact.
 Features listed here are not implemented by this planning update.
 Implementation has started under [Milestone 30](milestones/30-portable-story-runtime.md):
 #117 delivers the local package boundary and original fixture; #118 adds reference
-playback and strict saves. Godot/browser qualification remains #119–#121.
+playback and strict saves; #119 adds pinned trusted-source export with native
+import/build proof. Actual Godot player/browser qualification remains #120–#121.
 
 ## Historical GraphRAG roadmap and foundation backlog
 

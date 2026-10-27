@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "godot_version": "4.7.2.stable",
+  "release_tag": "4.7.2-stable",
+  "runtime_version": "0.1.0",
+  "upstream": "https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable",
+  "artifacts": {
+    "windows_x86_64": {
+      "name": "Godot_v4.7.2-stable_win64.exe.zip",
+      "sha256": "731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953",
+      "sha512": "83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993"
+    },
+    "export_templates": {
+      "name": "Godot_v4.7.2-stable_export_templates.tpz",
+      "sha256": "f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011",
+      "sha512": "ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079"
+    }
+  },
+  "extracted_sha256": {
+    "Godot_v4.7.2-stable_win64.exe": "ab1824f85bfd8e0e4128182c000c4003a3e042245b2967848d089b2a04b22424",
+    "web_nothreads_debug.zip": "08962aefef811b603541d7951ac67ef00413aad2d978855183c28adee98f626a",
+    "web_nothreads_release.zip": "d3ee2f08cef0cf3cf6678a6355a92a8db48ccdd35cbd2e8bfd5f0e8a0b4032a0"
+  }
+}

@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: MIT
+# Trusted loader bootstrap. The complete narrative player follows in M30 #120.
+extends Control
+
+
+func _digest(data: PackedByteArray) -> String:
+	var context := HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(data)
+	return context.finish().hex_encode()
+
+
+func _bytes(path: String, limit: int) -> PackedByteArray:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null or file.get_length() > limit:
+		return PackedByteArray()
+	return file.get_buffer(file.get_length())
+
+
+func verify_content() -> Dictionary:
+	var build: Variant = JSON.parse_string(_bytes("res://build-manifest.json", 1048576).get_string_from_utf8())
+	var manifest_bytes := _bytes("res://content/package-manifest.json", 1048576)
+	if not build is Dictionary or not build.get("package_hash") is String:
+		return {"error": "invalid_build_manifest"}
+	if _digest(manifest_bytes) != build["package_hash"]:
+		return {"error": "package_hash_mismatch"}
+	var manifest: Variant = JSON.parse_string(manifest_bytes.get_string_from_utf8())
+	if not manifest is Dictionary or not manifest.get("assets") is Array:
+		return {"error": "invalid_package_manifest"}
+	var source := _bytes("res://content/story.json", 5242880)
+	var notices := _bytes("res://content/NOTICES.txt", 1048576)
+	if _digest(source) != manifest.get("story_sha256") or _digest(notices) != manifest.get("notices_sha256"):
+		return {"error": "content_hash_mismatch"}
+	var ids := RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}$")
+	for asset: Variant in manifest["assets"]:
+		if not asset is Dictionary or not asset.get("id") is String or ids.search(asset["id"]) == null:
+			return {"error": "invalid_asset_manifest"}
+		if asset.get("path") != "assets/" + asset["id"] + ".png":
+			return {"error": "invalid_asset_path"}
+		if _digest(_bytes("res://content/" + asset["path"], 10485760)) != asset.get("sha256"):
+			return {"error": "asset_hash_mismatch"}
+	var story: Variant = JSON.parse_string(source.get_string_from_utf8())
+	if not story is Dictionary or not story.get("title") is String:
+		return {"error": "invalid_story"}
+	return {"ok": true, "package_hash": build["package_hash"], "story": story}
+
+
+func _ready() -> void:
+	var checked := verify_content()
+	if not checked.get("ok", false):
+		push_error("CONTENT_ERROR:" + checked.get("error", "invalid_content"))
+		get_tree().quit(1)
+		return
+	print("CONTENT_OK:" + checked["package_hash"])
+	if "--verify-content" in OS.get_cmdline_user_args():
+		get_tree().quit(0)
+		return
+	var label := Label.new()
+	label.text = checked["story"]["title"] + "\nPackage verified. Narrative player implementation follows in #120."
+	label.position = Vector2(32, 32)
+	add_child(label)

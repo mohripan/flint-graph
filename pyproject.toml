@@ -56,6 +56,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/flint_graph"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"runtimes/godot/project.godot" = "flint_graph/narrative/export/template/project.godot"
+"runtimes/godot/main.tscn" = "flint_graph/narrative/export/template/main.tscn"
+"runtimes/godot/runtime/bootstrap.gd" = "flint_graph/narrative/export/template/runtime/bootstrap.gd"
+"runtimes/godot/export_presets.cfg" = "flint_graph/narrative/export/template/export_presets.cfg"
+"runtimes/godot/LICENSE.runtime.txt" = "flint_graph/narrative/export/template/LICENSE.runtime.txt"
+"runtimes/godot/GODOT-NOTICE.txt" = "flint_graph/narrative/export/template/GODOT-NOTICE.txt"
+"runtimes/godot/README.txt" = "flint_graph/narrative/export/template/README.txt"
+"runtimes/godot/toolchain.json" = "flint_graph/narrative/export/template/toolchain.json"
+
 [tool.pyright]
 include = ["src", "migrations", "tests"]
 extraPaths = ["src"]

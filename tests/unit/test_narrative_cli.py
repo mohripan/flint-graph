@@ -125,3 +125,23 @@ def test_cli_can_load_a_valid_save_larger_than_one_megabyte(tmp_path, capsys) ->
     assert main(["play", str(game), "--actions", str(actions), "--load", str(save)]) == 0
 
     assert len(json.loads(capsys.readouterr().out)["state"]["variables"]) == 80
+
+
+def test_creator_can_export_godot_source_through_the_registered_cli_seam(tmp_path, capsys) -> None:
+    output = tmp_path / "my-game"
+
+    assert main(["export-godot", str(FIXTURE), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["godot_version"] == "4.7.2.stable"
+    assert (output / "project.godot").is_file()
+
+
+def test_cli_refuses_to_export_inside_its_source_package(tmp_path, capsys) -> None:
+    root = tmp_path / "source"
+    shutil.copytree(FIXTURE, root)
+
+    assert main(["export-godot", str(root), "--output", str(root / "export")]) == 1
+
+    assert not (root / "export").exists()
+    assert json.loads(capsys.readouterr().err)["error"] == "unsafe_output_path"
