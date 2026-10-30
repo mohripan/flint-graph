@@ -1,7 +1,7 @@
 # Manual studio and isolated Godot preview qualification
 
-Scope: M31 #123. Implementation and local live qualification complete; GitHub CI
-is pending for the delivery commit. #124 release/build/artifact work remains open.
+Scope: M31 #123. Implementation, local live qualification and GitHub CI complete
+for delivery commit `4124a54`. #124 release/build/artifact work remains open.
 The existing Q&A pages and unrelated #109 trace work were preserved.
 
 ## Delivered behavior
@@ -66,7 +66,7 @@ fixed and rechecked. No upstream browser/engine defect is claimed.
 served file hashes against the retained [build manifest](evidence/narrative-studio-2026-10-30/preview-build.json),
 the current API head/conflict records and screenshot hashes. The build helper's
 `browser_qualified:false` is its build-only output; the separate live qualification
-is recorded here. Source-free engine/template build directories and raw HAR stay
+is recorded here. Trusted preview build directories and raw HAR stay
 in ignored notes. The report includes no credentials or private corpus.
 
 ![Route map](evidence/narrative-studio-2026-10-30/route-map-desktop.png)
@@ -97,10 +97,11 @@ in ignored notes. The report includes no credentials or private corpus.
   cleanup, request sequencing and a delayed history-copy race. No material blocker
   remained. No implementation changes were delegated.
 
-Full old Godot export/container qualification was not repeated: its shared runtime
-and export implementation were unchanged. The new trusted preview was explicitly
-rebuilt and executed. Existing #109 WIP remains unstaged. GitHub CI status will be
-recorded after push before closing #123.
+The full earlier native Godot export test matrix was not repeated locally: its
+shared runtime/export implementation was unchanged. The new trusted preview was
+explicitly rebuilt and executed. [CI 40997753595](https://github.com/mohripan/flint-graph/actions/runs/40997753595)
+passed offline, frontend and real observability checks; [container smoke 40997753326](https://github.com/mohripan/flint-graph/actions/runs/40997753326)
+also passed the real rebuild/export boundary. Existing #109 WIP remains unstaged.
 
 ## Remaining boundary
 

@@ -12,7 +12,8 @@ the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume
 as part of the product pivot. M30 package loading, reference playback/saves and
 Godot source export/player and real browser qualification are delivered.
 M31 #123 studio editor and isolated local Godot preview are implemented and live
-qualified; delivery CI is pending. M31 #122 adds authorized immutable text revisions
+qualified with green CI/container smoke. #124 release/build design is next.
+M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.
 

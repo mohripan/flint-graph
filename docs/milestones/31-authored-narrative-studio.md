@@ -16,7 +16,7 @@ are complete; the studio builds on that authored runtime.
   [evidence](../reports/2026-10-27-narrative-projects.md).
 
 - #123: editor and isolated local Godot preview implemented and live qualified;
-  delivery CI pending before issue closure. [Report](../reports/2026-10-30-narrative-studio.md).
+  CI and real container smoke passed; issue closed. [Report](../reports/2026-10-30-narrative-studio.md).
 
 ## Next work
 

@@ -31,8 +31,8 @@ Milestone 30 is complete through #117–#121: package/reference playback, pinned
 editable Godot export, real player and native/browser qualification. Under
 [Milestone 31](milestones/31-authored-narrative-studio.md), #122 delivered authorized
 immutable revisions and recoverable conflicts. #123 adds the manual studio and
-isolated local Godot preview, with live qualification complete and delivery CI
-pending. #124 durable release/build jobs and authorized downloads remain next.
+isolated local Godot preview, with live qualification, CI and real container smoke
+complete. #124 durable release/build jobs and authorized downloads remain next.
 
 ## Historical GraphRAG roadmap and foundation backlog
 
