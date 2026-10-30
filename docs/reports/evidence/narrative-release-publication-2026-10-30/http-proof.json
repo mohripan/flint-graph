@@ -1,0 +1,113 @@
+{
+  "scope": "real HTTP/PG/Godot/MinIO publication and downloads; manual activity, no Temporal/UI claim",
+  "workspace_id": "cb3b27f2-d3d7-477c-b90a-732df98d7d26",
+  "project_id": "a20e25e6-7ff6-44de-83fb-45ca84439fc1",
+  "release_id": "204dee07-a191-4bbc-ad8f-b1c9154fb440",
+  "revision_id": "d029b861-9e72-4c87-a840-0c51f3e1fb39",
+  "job_id": "f7878bf8-354c-412b-a8c6-d7bea140e2ae",
+  "package_hash": "e89e03ff39046983747e50091230a7d2336ae9841907f8126f06cd33527e22d3",
+  "builder_image": "sha256:0e0ee5625ab13bd5a4ceade377487a88c78acc549db8261679ea36c0e7e18511",
+  "toolchain_sha256": "a5ba78d233e18bdfa2f9d56b9118134e492071d9cbf14d8bec10709628809af4",
+  "downloads": {
+    "source": {
+      "bytes": 126641,
+      "sha256": "8783f64ebf74d94bdbcc6cf2e9760f23b81305a4540384ea97dc836b9f073de3"
+    },
+    "web": {
+      "bytes": 10367989,
+      "sha256": "3a2f9fe1441e043adedb8c8ba7c2430596be751f38449b41361de2c38e11d5da"
+    },
+    "manifest": {
+      "bytes": 934,
+      "sha256": "2c7d59744d10cf408ad57ea76411bcc2e24cc6abdc1356845e2d5be134cc8205"
+    }
+  },
+  "native_downloaded_source_import": "passed",
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/health/live",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/revisions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases",
+      "status": 202
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/source",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/source",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/web",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/manifest",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/source",
+      "status": 404
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/jobs/f7878bf8-354c-412b-a8c6-d7bea140e2ae/cancel",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/retry",
+      "status": 409
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/archive",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/source",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/a20e25e6-7ff6-44de-83fb-45ca84439fc1/releases/204dee07-a191-4bbc-ad8f-b1c9154fb440/artifacts/source?include_archived=true",
+      "status": 200
+    }
+  ]
+}

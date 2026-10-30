@@ -93,9 +93,10 @@ Input loading checks current ownership/cancel before exact builder identity and
 canonical revision/release hashes. Claim precedes builder resolution so an
 unavailable builder can fail owned work. These services never launch a child or
 authorize artifact insertion. Completion remains reserved for publication. Actual relay/
-Temporal workflow/worker integration, bounded object publication,
-authorized downloads and Releases UI remain unimplemented. No artifact is published
-or available for download by this initial slice.
+Temporal workflow/worker integration and Releases UI remain unimplemented. Bounded
+immutable object publication and authorized downloads are now implemented and
+qualified through a manual actual engine/store/HTTP path; automatic dispatch and
+end-to-end UI/recovery remain pending.
 
 See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
 and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).
@@ -131,3 +132,20 @@ decoder and removes only label-verified immutable container IDs plus token-marke
 scratch. Unconfirmed cleanup retains a safe marker for future owned recovery.
 Actual export and task cancellation passed. See the
 [runner report](../reports/2026-10-30-narrative-build-runner.md).
+
+## Implemented immutable publication and authorized attachments
+
+The release-specific store adapter uses conditional create-only writes and exact
+size/actual-byte/hash checks with closed bodies and safe SDK errors. Publication
+rechecks active ownership/cancel under release -> job locks, validates three
+server-derived receipts/caps and the canonical DB-bound manifest, and commits all
+artifact metadata/status/event atomically. Completed replay returns stable IDs;
+stale/rolled-back/cancelled work exposes no partial artifacts.
+
+Viewer-authorized attachment downloads check complete same-job/same-fence metadata
+and project/tenant/archive access before bounded store reads. Verified bytes use
+safe filenames/private-no-store/nosniff; failed storage/integrity is a safe503.
+Item GET supplies artifact metadata; list/acceptance responses remain summaries.
+See [publication qualification](../reports/2026-10-30-narrative-release-publication.md)
+and the [artifact runbook](../runbooks/narrative-release-artifacts.md). Source, keys
+and ZIPs remain activity-local, never workflow payloads or ordinary telemetry.

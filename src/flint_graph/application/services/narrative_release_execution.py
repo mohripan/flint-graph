@@ -61,7 +61,7 @@ class ReleaseInputError(ValueError):
         super().__init__(code)
 
 
-async def _locked(
+async def lock_release_execution(
     session: AsyncSession,
     tenant_id: UUID,
     release_id: UUID,
@@ -94,13 +94,13 @@ async def _locked(
     return release, job, (await latest_job(session, release)).id
 
 
-def _state(job: NarrativeReleaseJob) -> ReleaseAttempt:
+def release_attempt(job: NarrativeReleaseJob) -> ReleaseAttempt:
     return ReleaseAttempt(
         job.id, ReleaseJobStatus(job.status), job.cancel_requested, job.execution_token
     )
 
 
-def _event(session: AsyncSession, job: NarrativeReleaseJob, code: str) -> None:
+def append_execution_event(session: AsyncSession, job: NarrativeReleaseJob, code: str) -> None:
     sequence = job.next_event_sequence
     job.next_event_sequence += 1
     session.add(
@@ -124,8 +124,8 @@ async def claim_release_execution(
     job_id: UUID,
     token: UUID,
 ) -> ExecutionClaim:
-    _, job, active_id = await _locked(session, tenant_id, release_id, job_id)
-    before = _state(job)
+    _, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
+    before = release_attempt(job)
     after = claim_execution(before, token=token, active_job_id=active_id)
     if before == after:
         return ExecutionClaim(before, acquired=False)
@@ -135,7 +135,7 @@ async def claim_release_execution(
     job.status, job.execution_token = after.status.value, after.execution_token
     if job.started_at is None:
         job.started_at = datetime.now(UTC)
-    _event(
+    append_execution_event(
         session,
         job,
         "release.running"
@@ -158,8 +158,8 @@ async def finish_release_failure(
 ) -> bool:
     if error_code not in FAILURE_CODES and not (cancelled and error_code is None):
         raise ValueError("Invalid release failure code")
-    _, job, active_id = await _locked(session, tenant_id, release_id, job_id)
-    before = _state(job)
+    _, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
+    before = release_attempt(job)
     after = finish_execution(
         before, token=token, active_job_id=active_id, outcome="cancelled" if cancelled else "failed"
     )
@@ -169,7 +169,7 @@ async def finish_release_failure(
     job.cancel_requested = after.cancel_requested
     job.error_code = None if after.status == ReleaseJobStatus.CANCELLED else error_code
     job.finished_at = datetime.now(UTC)
-    _event(session, job, "release." + after.status.value)
+    append_execution_event(session, job, "release." + after.status.value)
     await session.flush()
     return True
 
@@ -188,7 +188,7 @@ async def load_release_input(
     Caller commits/releases locks before engine work. A later execution replacement
     or cancellation still fences publication; the runner must check at boundaries.
     """
-    release, job, active_id = await _locked(session, tenant_id, release_id, job_id)
+    release, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
     if job.id != active_id or job.status != "running" or job.execution_token != token:
         raise ReleaseInputError("execution_stale")
     if job.cancel_requested:

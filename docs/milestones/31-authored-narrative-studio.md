@@ -63,6 +63,13 @@ are complete; the studio builds on that authored runtime.
   [Runner scope/evidence](../reports/2026-10-30-narrative-build-runner.md).
   Activity integration, startup recovery, store/publication/downloads, Temporal
   and Releases UI/end-to-end acceptance remain open.
+  Immutable store verification, atomic PostgreSQL publication and authorized
+  attachments are now qualified:19 offline store cases,4 real MinIO cases,
+  60 native PostgreSQL/API passes/6 backend skips and1352 full-suite passes/59 skips.
+  A17-request real HTTP path built, uploaded, published and downloaded an original
+  three-ending text fixture; downloaded source imported in pinned native Godot.
+  [Publication scope/evidence](../reports/2026-10-30-narrative-release-publication.md).
+  Temporal/activity dispatch, startup cleanup and Releases UI still keep #124 open.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.

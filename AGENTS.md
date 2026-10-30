@@ -18,9 +18,11 @@ preparation, trusted Godot child/watchdog and standalone host runner. Actual
 PostgreSQL recoveries, native export/tamper rejection, absent-worker watchdog and
 real host-task cancellation passed. Read the M31 progress/release contract and
 `docs/reports/2026-10-30-narrative-build-runner.md` plus linked child/execution
-reports for exact scope. Worker/activity integration, startup cleanup recovery,
-immutable storage/publication/downloads, Temporal and Releases UI/end-to-end proof
-remain pending. Successful completion stays reserved for verified publication;
+reports for exact scope. Immutable storage/publication and authorized downloads
+are now qualified too (real MinIO, PostgreSQL and17 HTTP calls with actual engine
+build/downloaded-source import): read `docs/reports/2026-10-30-narrative-release-publication.md`.
+Worker/activity integration, startup cleanup recovery, Temporal and Releases
+UI/end-to-end proof remain pending. Completion requires verified atomic publication;
 ordinary API release creation remains disabled. Preserve private owned fixtures.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`

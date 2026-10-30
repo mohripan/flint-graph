@@ -159,14 +159,24 @@ def create_object_store(settings: Settings) -> ObjectStore:
 
 
 def create_s3_object_store(settings: Settings) -> S3ObjectStore:
+    return S3ObjectStore(create_s3_client(settings))
+
+
+def create_s3_client(settings: Settings, *, max_attempts: int | None = None) -> Any:
     boto3: Any = import_module("boto3")
     botocore_config: Any = import_module("botocore.config")
     addressing_style = "path" if settings.object_store_force_path_style else "auto"
+    options = {}
+    if max_attempts is not None:
+        if not 1 <= max_attempts <= 10:
+            raise ValueError("Invalid object store retry limit")
+        options["retries"] = {"mode": "standard", "total_max_attempts": max_attempts}
     config = botocore_config.Config(
         connect_timeout=settings.object_store_connect_timeout_seconds,
         read_timeout=settings.object_store_read_timeout_seconds,
         max_pool_connections=settings.object_store_max_pool_connections,
         s3={"addressing_style": addressing_style},
+        **options,
     )
     client = boto3.client(
         "s3",
@@ -176,7 +186,7 @@ def create_s3_object_store(settings: Settings) -> S3ObjectStore:
         region_name=settings.object_store_region,
         config=config,
     )
-    return S3ObjectStore(client)
+    return client
 
 
 def _version_prefix(*, tenant_id: UUID, document_id: UUID, version_id: UUID) -> str:

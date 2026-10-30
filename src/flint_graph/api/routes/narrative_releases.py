@@ -1,16 +1,20 @@
+from collections.abc import Sequence
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from flint_graph.api.dependencies import (
     AuditActorDep,
     CurrentUserDep,
+    NarrativeArtifactStoreDep,
     SessionDep,
     SettingsDep,
     TenantIdDep,
     TenantMemberDep,
 )
 from flint_graph.api.narrative_release_schemas import (
+    NarrativeReleaseArtifactSummary,
     NarrativeReleaseBuildIdentity,
     NarrativeReleaseCreate,
     NarrativeReleaseEventResponse,
@@ -19,6 +23,7 @@ from flint_graph.api.narrative_release_schemas import (
     NarrativeReleaseRetry,
 )
 from flint_graph.api.routes.narrative import _persist
+from flint_graph.application.services.narrative_release_publication import published_artifacts
 from flint_graph.application.services.narrative_releases import (
     BuildIdentity,
     cancel_release_job,
@@ -32,12 +37,22 @@ from flint_graph.application.services.narrative_releases import (
     retry_release,
 )
 from flint_graph.config import Settings
-from flint_graph.infrastructure.db.models import NarrativeRelease, NarrativeReleaseJob
+from flint_graph.domain.errors import DomainError, NotFoundError
+from flint_graph.infrastructure.db.models import (
+    NarrativeRelease,
+    NarrativeReleaseArtifact,
+    NarrativeReleaseJob,
+)
+from flint_graph.infrastructure.narrative_artifact_store import ArtifactStoreError
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}/releases", tags=["narrative"])
 
 
-def response(release: NarrativeRelease, job: NarrativeReleaseJob) -> NarrativeReleaseResponse:
+def response(
+    release: NarrativeRelease,
+    job: NarrativeReleaseJob,
+    artifacts: Sequence[NarrativeReleaseArtifact] = (),
+) -> NarrativeReleaseResponse:
     return NarrativeReleaseResponse(
         id=release.id,
         tenant_id=release.tenant_id,
@@ -47,6 +62,7 @@ def response(release: NarrativeRelease, job: NarrativeReleaseJob) -> NarrativeRe
         created_at=release.created_at,
         build_identity=NarrativeReleaseBuildIdentity.model_validate(release),
         job=NarrativeReleaseJobSummary.model_validate(job),
+        artifacts=[NarrativeReleaseArtifactSummary.model_validate(row) for row in artifacts],
     )
 
 
@@ -126,7 +142,55 @@ async def get_release_endpoint(
         release_id=release_id,
         include_archived=include_archived,
     )
-    return response(release, await latest_job(session, release))
+    job = await latest_job(session, release)
+    return response(release, job, await published_artifacts(session, release, job))
+
+
+@router.get("/{release_id}/artifacts/{kind}")
+async def download_release_artifact_endpoint(
+    project_id: UUID,
+    release_id: UUID,
+    kind: Literal["source", "web", "manifest"],
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    store: NarrativeArtifactStoreDep,
+    include_archived: bool = False,
+) -> Response:
+    release = await get_release(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        release_id=release_id,
+        include_archived=include_archived,
+    )
+    job = await latest_job(session, release)
+    rows = await published_artifacts(session, release, job)
+    artifact = next((row for row in rows if row.kind == kind), None)
+    if artifact is None:
+        raise NotFoundError("Release artifact was not found.")
+    try:
+        data = await store.get_verified(
+            artifact.object_key,
+            expected_size=artifact.size_bytes,
+            expected_sha256=artifact.sha256,
+            max_bytes=1048576 if kind == "manifest" else 67108864,
+        )
+    except (ArtifactStoreError, ValueError):
+        raise DomainError(
+            503,
+            "Service unavailable",
+            "Release artifacts are unavailable.",
+            "release-artifacts-unavailable",
+        ) from None
+    return Response(
+        content=data,
+        media_type=artifact.media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{artifact.filename}"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/{release_id}/retry", response_model=NarrativeReleaseResponse, status_code=202)

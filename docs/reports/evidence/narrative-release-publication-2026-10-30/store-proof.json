@@ -1,0 +1,15 @@
+{
+  "image": "sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+  "version": "minio version RELEASE.2025-09-07T16-13-09Z (commit-id=07c3a429bfed433e49018cb0f78a52145d4bedeb)",
+  "scope": "private store roundtrip only; no database publication",
+  "actual_engine_artifacts": {
+    "source": {
+      "sha256": "93dfcfca0ab877a6ce4c5ff49319d37876d8874107d86fe2554d7acb2794a564",
+      "bytes": 125850
+    },
+    "web": {
+      "sha256": "8cf404ce33771fd744119d6b81cd9c764eb1c21548b4c8bff0246d53da8d47de",
+      "bytes": 10367032
+    }
+  }
+}

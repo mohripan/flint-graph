@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class NarrativeReleaseCreate(BaseModel):
@@ -35,6 +35,16 @@ class NarrativeReleaseJobSummary(BaseModel):
     updated_at: datetime
 
 
+class NarrativeReleaseArtifactSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    kind: str
+    sha256: str
+    size_bytes: int
+    filename: str
+    media_type: str
+
+
 class NarrativeReleaseResponse(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -44,6 +54,7 @@ class NarrativeReleaseResponse(BaseModel):
     created_at: datetime
     build_identity: NarrativeReleaseBuildIdentity
     job: NarrativeReleaseJobSummary
+    artifacts: list[NarrativeReleaseArtifactSummary] = Field(default_factory=list)
 
 
 class NarrativeReleaseEventResponse(BaseModel):

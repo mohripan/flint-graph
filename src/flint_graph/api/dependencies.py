@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
@@ -35,8 +35,13 @@ from flint_graph.infrastructure.embedding_factory import (
     create_embedding_model,
     embedding_base_url,
 )
+from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.neo4j import Neo4jClient, create_neo4j_client
-from flint_graph.infrastructure.object_store import ObjectStore, create_object_store
+from flint_graph.infrastructure.object_store import (
+    ObjectStore,
+    create_object_store,
+    create_s3_client,
+)
 from flint_graph.infrastructure.oidc import OIDCTokenVerifier
 from flint_graph.infrastructure.opensearch import OpenSearchClient, create_opensearch_client
 from flint_graph.infrastructure.temporal import (
@@ -236,6 +241,19 @@ def get_object_store(settings: SettingsDep) -> ObjectStore:
 
 
 ObjectStoreDep = Annotated[ObjectStore, Depends(get_object_store)]
+
+
+def get_narrative_artifact_store(settings: SettingsDep) -> Iterator[S3NarrativeArtifactStore]:
+    client = create_s3_client(settings, max_attempts=3)
+    try:
+        yield S3NarrativeArtifactStore(client, bucket=settings.object_store_bucket)
+    finally:
+        client.close()
+
+
+NarrativeArtifactStoreDep = Annotated[
+    S3NarrativeArtifactStore, Depends(get_narrative_artifact_store)
+]
 
 
 def get_url_fetcher(settings: SettingsDep) -> URLFetcher:
