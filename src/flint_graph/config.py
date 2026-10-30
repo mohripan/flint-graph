@@ -222,6 +222,7 @@ class Settings(BaseSettings):
     narrative_assistant_temperature: float = Field(default=0.6, ge=0.0, le=2.0)
     narrative_assistant_turn_deadline_seconds: int = Field(default=180, ge=10, le=1800)
     narrative_assistant_context_chars: int = Field(default=24000, ge=4000, le=400000)
+    narrative_assistant_max_active_turns_per_workspace: int = Field(default=1, ge=1, le=20)
 
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"

@@ -11,6 +11,11 @@ loop, three requests (scene/choice/ending insertion, a route question, a new sta
 variable with a gated option) all succeeded on the first attempt in 14–60 s.
 Prompt v2 candidate: replies still sometimes say a change "was added".
 The Anthropic adapter is offline-tested only; no paid call was made.
+Step 4 delivered: migration 0020 (threads, fenced turns, proposals), ID-only
+outbox/audit, one active turn per workspace under the workspace lock, accept with
+untouched-record rebase or conflict revision, reject, cancel and execution fences.
+Proven on SQLite and the owned PostgreSQL, including a contended admission race.
+The running owned API still uses schema 0019; migrate it before serving step 6.
 
 Scope/authorization: the [approved design](../specs/2026-10-30-chat-to-game-assistant-design.md),
 [ADR 0038](../../adr/0038-conversational-authoring-through-reviewed-proposals.md) and the

@@ -61,6 +61,15 @@ from flint_graph.domain.enums import (
     WorkspaceRole,
 )
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from flint_graph.infrastructure.db.narrative_assistant_models import (
+    NarrativeAssistantProposal as NarrativeAssistantProposal,
+)
+from flint_graph.infrastructure.db.narrative_assistant_models import (
+    NarrativeAssistantThread as NarrativeAssistantThread,
+)
+from flint_graph.infrastructure.db.narrative_assistant_models import (
+    NarrativeAssistantTurn as NarrativeAssistantTurn,
+)
 from flint_graph.infrastructure.db.narrative_models import NarrativeProject as NarrativeProject
 from flint_graph.infrastructure.db.narrative_models import NarrativeRevision as NarrativeRevision
 from flint_graph.infrastructure.db.narrative_release_models import (
@@ -105,9 +114,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(500), nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     claims: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class WorkspaceMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -622,11 +629,13 @@ class ConversationTurn(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "conversation_turns"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["conversation_id", "tenant_id"], ["conversations.id", "conversations.tenant_id"],
+            ["conversation_id", "tenant_id"],
+            ["conversations.id", "conversations.tenant_id"],
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(
-            ["query_run_id", "tenant_id"], ["query_runs.id", "query_runs.tenant_id"],
+            ["query_run_id", "tenant_id"],
+            ["query_runs.id", "query_runs.tenant_id"],
             ondelete="RESTRICT",
         ),
         UniqueConstraint("conversation_id", "turn_number", name="uq_conversation_turn_number"),
@@ -724,9 +733,7 @@ class QueryRunLinkedEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     method: Mapped[str] = mapped_column(String(100), nullable=False)
-    candidate_entity_ids: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
+    candidate_entity_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict
@@ -792,9 +799,7 @@ class QueryContextPack(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     pack_version: Mapped[int] = mapped_column(Integer, nullable=False)
     token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    selected_candidate_ids: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
+    selected_candidate_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     citation_map: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict
@@ -990,9 +995,7 @@ class EntityMention(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_entity_mentions_document_version", "document_version_id"),
         Index("ix_entity_mentions_tenant_status", "tenant_id", "resolution_status"),
-        Index(
-            "ix_entity_mentions_tenant_type_text", "tenant_id", "entity_type", "normalized_text"
-        ),
+        Index("ix_entity_mentions_tenant_type_text", "tenant_id", "entity_type", "normalized_text"),
         Index("ix_entity_mentions_resolved_entity", "resolved_entity_id"),
     )
 
@@ -1198,9 +1201,7 @@ class ExtractionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     accepted_entity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     accepted_relation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     accepted_claim_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    quality_metrics: Mapped[dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
+    quality_metrics: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     warnings: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     errors: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
 
@@ -1357,9 +1358,7 @@ class ExtractedEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     resolved_by_candidate_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("entity_resolution_candidates.id", ondelete="SET NULL"), nullable=True
     )
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExtractedRelation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -1407,9 +1406,7 @@ class ExtractedClaim(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "extracted_claims"
     __table_args__ = (
         UniqueConstraint("tenant_id", "stable_id", name="uq_extracted_claims_stable_id"),
-        UniqueConstraint(
-            "extraction_run_id", "local_id", name="uq_extracted_claims_run_local_id"
-        ),
+        UniqueConstraint("extraction_run_id", "local_id", name="uq_extracted_claims_run_local_id"),
         Index("ix_extracted_claims_run", "extraction_run_id"),
     )
 
