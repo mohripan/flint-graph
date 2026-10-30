@@ -91,3 +91,117 @@ export function assistantError(code: string | null): string {
 export function proposalStatus(status: ProposalStatus): string {
   return { ready: "Ready to review", invalid: "Can't be used", accepted: "Accepted", rejected: "Rejected" }[status];
 }
+
+// Live turn progress (#171): the worker persists ordered events; the page folds them.
+export type TurnEventKind = "step" | "thinking" | "text" | "status";
+export interface AssistantTurnEvent {
+  turn_id: string; sequence: number; attempt: number; kind: TurnEventKind;
+  payload: Record<string, unknown>; created_at: string;
+}
+interface StepRecord { key: string; name: string; state: string; payload: Record<string, unknown> }
+export interface TurnActivity {
+  cursor: number; attempt: number; call: number; steps: StepRecord[];
+  calls: Record<number, { thinking: string; text: string }>;
+  status: string | null; errorCode: string | null; startedAt: string | null; endedAt: string | null;
+}
+export function emptyActivity(): TurnActivity {
+  return { cursor: 0, attempt: 0, call: 0, steps: [], calls: {}, status: null, errorCode: null, startedAt: null, endedAt: null };
+}
+const number = (value: unknown): number => typeof value === "number" && Number.isFinite(value) ? value : 0;
+const string = (value: unknown): string => typeof value === "string" ? value : "";
+function stepKey(payload: Record<string, unknown>): string {
+  const name = string(payload.name);
+  return name === "truncated" ? `${name}:${string(payload.kind)}:${number(payload.call)}`
+    : name === "start" || name === "context" ? name : `${name}:${number(payload.call)}`;
+}
+// Idempotent by sequence, so a resumed stream may replay events safely. A new
+// attempt (a retried or recovered execution) replaces the abandoned attempt's view.
+export function foldEvents(activity: TurnActivity, events: AssistantTurnEvent[]): TurnActivity {
+  let next: TurnActivity | null = null;
+  for (const event of events) {
+    const current: TurnActivity = next ?? activity;
+    if (event.sequence <= current.cursor || event.attempt < current.attempt) continue;
+    const state: TurnActivity = next ??= { ...activity, steps: [...activity.steps], calls: { ...activity.calls } };
+    state.cursor = event.sequence;
+    state.startedAt ??= event.created_at;
+    if (event.attempt > state.attempt) Object.assign(state, { attempt: event.attempt, call: 0, steps: [], calls: {} });
+    const payload = event.payload ?? {};
+    if (event.kind === "status") {
+      state.status = string(payload.status) || null; state.errorCode = string(payload.error_code) || null;
+      state.endedAt = event.created_at;
+    } else if (event.kind === "step") {
+      const key = stepKey(payload), index = state.steps.findIndex(item => item.key === key);
+      const record = { key, name: string(payload.name), state: string(payload.state), payload };
+      if (index < 0) state.steps.push(record);
+      else state.steps[index] = { ...record, payload: { ...state.steps[index].payload, ...payload } };
+      if (record.name === "model") state.call = Math.max(state.call, number(payload.call));
+    } else {
+      const call = number(payload.call), known = state.calls[call] ?? { thinking: "", text: "" };
+      const field = event.kind === "thinking" ? "thinking" : "text";
+      state.calls[call] = { ...known, [field]: known[field] + string(payload.text) };
+      state.call = Math.max(state.call, call);
+    }
+  }
+  return next ?? activity;
+}
+export function streamedReply(activity: TurnActivity): string {
+  const calls = Object.keys(activity.calls).map(Number).filter(call => activity.calls[call].text).sort((a, b) => b - a);
+  return calls.length ? activity.calls[calls[0]].text : "";
+}
+export type StepState = "active" | "done" | "failed" | "stopped";
+export interface StepView { key: string; label: string; detail?: string; state: StepState }
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+const humanCodes = (codes: unknown) => Array.isArray(codes) ? codes.map(code => string(code).replaceAll("_", " ")).join(", ") : "";
+export function activitySteps(activity: TurnActivity, active: boolean): StepView[] {
+  const modelDone = new Set(activity.steps.filter(item => item.name === "model" && item.state === "done").map(item => number(item.payload.call)));
+  const settle = (state: StepState): StepState => state !== "active" || active ? state
+    : activity.status === "completed" ? "done" : "stopped";
+  const views: StepView[] = [];
+  for (const { key, name, state, payload } of activity.steps) {
+    const call = number(payload.call);
+    if (name === "start") {
+      if (activity.attempt > 1) views.push({ key, label: `Reconnected and started again (attempt ${activity.attempt})`, state: "done" });
+    } else if (name === "context") {
+      const omitted = number(payload.omitted), focus = string(payload.focus), history = number(payload.history);
+      views.push({ key, label: "Read the story", state: "done", detail: plural(number(payload.scenes), "scene")
+        + (omitted ? `, ${omitted} left out to fit` : "") + (focus ? ` · focus ${focus}` : "")
+        + (history ? ` · ${plural(history, "earlier message")}` : "") });
+    } else if (name === "model") {
+      const finished = state === "done" || (!active && activity.status === "completed");
+      views.push({ key, state: settle(state === "done" ? "done" : "active"),
+        label: call > 1 ? (finished ? "Rewrote the reply" : "Rewriting the reply") : finished ? "Wrote a reply" : "Writing a reply" });
+    } else if (name === "drafting") {
+      const finished = modelDone.has(call), operations = number(payload.operations);
+      views.push({ key, label: finished ? "Drafted changes" : "Drafting changes", state: settle(finished ? "done" : "active"),
+        detail: operations ? plural(operations, "edit") : undefined });
+    } else if (name === "validating") {
+      const problems = number(payload.problems);
+      views.push(payload.valid === true ? { key, label: "Checked the changes against the story rules", state: "done" }
+        : { key, label: `Found ${plural(problems, "problem")}`, state: "failed", detail: humanCodes(payload.codes) || undefined });
+    } else if (name === "repair") {
+      views.push({ key, state: "done",
+        label: `Fixing ${plural(number(payload.problems), "problem")} (attempt ${call} of ${number(payload.of)})` });
+    } else if (name === "truncated") {
+      views.push({ key, state: "done", label: string(payload.kind) === "thinking"
+        ? "Thinking was too long to keep in full" : "The reply was too long to keep in full" });
+    }
+  }
+  return views;
+}
+export function workedFor(activity: TurnActivity): string {
+  if (!activity.startedAt || !activity.endedAt) return "";
+  const seconds = Math.max(0, Math.round((Date.parse(activity.endedAt) - Date.parse(activity.startedAt)) / 1000));
+  return seconds < 60 ? `Worked for ${seconds} s` : `Worked for ${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+}
+export function threadTitle(request: string): string {
+  const line = request.replace(/\s+/g, " ").trim();
+  if (!line) return "Story chat";
+  return line.length <= 60 ? line : `${line.slice(0, 59).trimEnd()}…`;
+}
+// The server rejects a reused creation key with a different title, so a changed
+// first message (and title) gets a new key; an identical resend replays safely.
+export interface ThreadIntent { title: string; key: string }
+export function prepareThread(previous: ThreadIntent | null, title: string,
+  key = () => crypto.randomUUID()): ThreadIntent {
+  return previous?.title === title ? previous : { title, key: key() };
+}

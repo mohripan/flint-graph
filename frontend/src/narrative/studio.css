@@ -116,32 +116,7 @@
 .studio-release-events li { display:flex; justify-content:space-between; gap:4px 12px; flex-wrap:wrap; padding:8px 0; font-size:14px; }
 .studio-release-events time { color:#4e6577; font-size:12px; }
 .studio-visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
-.studio-workspace.with-assistant { display:grid; grid-template-columns:minmax(0,1fr) minmax(340px,420px); gap:24px; align-items:start; }
 .studio-editor { min-width:0; }
-.studio-assistant { position:sticky; top:0; display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 96px); min-height:420px; padding:18px; border:1px solid #c2d0d8; border-top:4px solid #d5ae68; border-radius:9px; background:#f8fafb; }
-.studio-assistant-head { display:flex; justify-content:space-between; gap:10px; align-items:start; flex-wrap:wrap; }
-.studio-assistant-head h2 { font-family:StudioLora,Georgia,serif; font-size:21px; font-weight:600; margin:2px 0 0; }
-.studio-assistant-thread { max-width:200px; min-height:40px; border:1px solid #b4c4ce; border-radius:6px; background:#fff; padding:6px 8px; font-size:13px; }
-.studio-assistant-live:empty { display:none; }
-.studio-assistant .studio-notice,.studio-assistant .studio-error,.studio-assistant .studio-conflict { margin:0; padding:10px 12px; font-size:13px; }
-.studio-chat { list-style:none; margin:0; padding:0 4px 0 0; overflow:auto; flex:1; min-height:120px; display:flex; flex-direction:column; gap:16px; }
-.studio-chat-turn { display:flex; flex-direction:column; gap:8px; }
-.studio-chat-user { align-self:flex-end; max-width:88%; margin:0; padding:10px 13px; border-radius:12px 12px 3px 12px; background:#182635; color:#f0f4f6; font-size:14px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; }
-.studio-chat-reply { align-self:stretch; display:flex; flex-direction:column; gap:8px; font-size:14px; line-height:1.6; }
-.studio-chat-reply > p { margin:0; overflow-wrap:anywhere; }
-.studio-proposal { border:1px solid #c2d0d8; border-left:4px solid #d5ae68; border-radius:8px; padding:12px; background:#fff; display:flex; flex-direction:column; gap:10px; }
-.studio-proposal strong { font-size:14px; }
-.studio-proposal-changes { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
-.studio-proposal-changes li { display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 8px; align-items:baseline; font-size:13px; }
-.studio-proposal-changes q { grid-column:2; color:#36576f; font-family:StudioLora,Georgia,serif; overflow-wrap:anywhere; }
-.studio-proposal-changes q.studio-change-before { text-decoration:line-through; color:#4e6577; }
-.studio-change { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:999px; }
-.studio-change.is-added { background:#e0efe5; color:#22593a; }
-.studio-change.is-changed { background:#dce8f0; color:#26445a; }
-.studio-change.is-removed { background:#fbe3e5; color:#862d37; }
-.studio-composer { border-top:1px solid #d4dfe6; padding-top:10px; }
-.studio-composer .studio-field { margin:0 0 8px; }
-.studio-composer textarea { font-size:15px; }
 .narrative-studio button[aria-disabled="true"] { opacity:.45; cursor:not-allowed; }
 .studio-tree { display:flex; flex-direction:column; gap:8px; border:1px solid #c2d0d8; border-radius:9px; background:#f8fafb; padding:12px 10px 10px; }
 .studio-tree-head { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:0 4px; }
@@ -182,10 +157,6 @@
 .narrative-studio .studio-script-state .studio-link { min-height:28px; }
 .studio-script-exit { margin-top:20px; padding-top:14px; border-top:1px dashed #b4c4ce; }
 .studio-script-exit > h3 { font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:#4e6577; margin:0 0 6px; }
-@media(max-width:1199px) {
-  .studio-workspace.with-assistant { display:block; }
-  .studio-assistant { position:fixed; inset:0 0 0 auto; z-index:40; width:min(440px,100%); max-height:none; min-height:0; border-radius:0; box-shadow:-12px 0 32px #18263533; }
-}
 @media(max-width:1000px) {
   .narrative-studio { padding:20px; }
   .studio-desk { grid-template-columns:minmax(220px,260px) minmax(0,1fr); gap:16px; }

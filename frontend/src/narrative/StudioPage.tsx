@@ -18,7 +18,7 @@ import { SceneForm } from "./SceneForm";
 import { StudioDialog } from "./StudioDialog";
 import { PreviewDialog } from "./PreviewDialog";
 import { ReleasesDialog } from "./ReleasesDialog";
-import { AssistantPanel } from "./AssistantPanel";
+import { AssistantPage } from "./AssistantPage";
 import { releaseIntents } from "./releaseModel";
 import type { NarrativeProject, NarrativeRevision, RevisionSummary, RevisionWrite, StoryDraft, StoryNode } from "./types";
 import "./studio.css";
@@ -79,10 +79,12 @@ export function StudioPage({ onDirtyChange }: {
   // synchronously, before React commits the unmount.
   const releaseScope = useRef<(() => void) | null>(null);
   const releaseIntentStore = useRef(releaseIntents());
-  // The assistant panel is remounted per project; its scope is invalidated synchronously
+  // The assistant page is remounted per project; its scope is invalidated synchronously
   // on every path that changes project, collection or access.
   const assistantScope = useRef<(() => void) | null>(null), hierarchyScope = useRef<(() => void) | null>(null);
-  const [assistantOpen, setAssistantOpen] = useState(true);
+  const viewKey = `flintgraph.studio.view.${tenantId}`;
+  const [view, setView] = useState<"editor" | "assistant">(() => readSelection(viewKey) === "assistant" ? "assistant" : "editor");
+  const chooseView = (next: "editor" | "assistant") => { setView(next); writeSelection(viewKey, next === "assistant" ? next : null); };
   const endReleases = useCallback(() => {
     releaseScope.current?.(); assistantScope.current?.(); hierarchyScope.current?.(); setReleasesOpen(false);
   }, []);
@@ -355,9 +357,11 @@ export function StudioPage({ onDirtyChange }: {
     canWrite={canWrite} scopeRef={hierarchyScope} onAccessLost={releaseAccessLost}
     onSelect={id => { setSceneId(id); setNodeEditor(null); choosePanel("write"); }} /> : null;
 
+  const assistantView = view === "assistant" && Boolean(state.project && state.revision);
+
   return <SceneOptionsContext.Provider value={sceneOptions}>
   <CharacterProfilesProvider tenantId={tenantId} projectId={state.project?.id ?? ""}>
-  <div className="narrative-studio" role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
+  <div className={`narrative-studio ${assistantView ? "is-assistant" : ""}`} role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
     {releasesOpen && state.project && state.revision && <ReleasesDialog key={`${tenantId}:${state.project.id}`}
       tenantId={tenantId} projectId={state.project.id} headId={state.project.head_revision_id} revision={state.revision}
       history={historyRows} canWrite={canWrite} dirty={dirty} saving={state.saving} onSave={save}
@@ -369,16 +373,17 @@ export function StudioPage({ onDirtyChange }: {
       <p>{state.project ? `Revision ${state.revision?.revision_number ?? "…"} · ${state.saving ? "Saving…" : state.conflict ? "Conflict copy saved" : dirty ? "Unsaved changes" : "Saved"}` : "Write a branching story. Shape its choices. Play what you authored."}</p></div>
       {state.project && <div className="studio-actions">
         <button type="button" className="studio-secondary" onClick={collection}>Projects</button>
-        <button type="button" className="studio-secondary" disabled={!canWrite || !history.current.canUndo || state.saving} onClick={() => restoreHistory("undo")}>Undo</button>
-        <button type="button" className="studio-secondary" disabled={!canWrite || !history.current.canRedo || state.saving} onClick={() => restoreHistory("redo")}>Redo</button>
+        <div className="studio-view-switch" role="group" aria-label="Studio view">
+          <button type="button" aria-pressed={!assistantView} onClick={() => chooseView("editor")}>Editor</button>
+          <button type="button" aria-pressed={assistantView} disabled={!state.revision} onClick={() => chooseView("assistant")}>Assistant</button></div>
+        {!assistantView && <><button type="button" className="studio-secondary" disabled={!canWrite || !history.current.canUndo || state.saving} onClick={() => restoreHistory("undo")}>Undo</button>
+        <button type="button" className="studio-secondary" disabled={!canWrite || !history.current.canRedo || state.saving} onClick={() => restoreHistory("redo")}>Redo</button></>}
         {onPreview && <button type="button" className="studio-secondary" disabled={!state.revision || state.saving}
           onClick={async event => { const opener = event.currentTarget;
             const revision = dirty && canWrite ? await save() : state.revision; if (revision) onPreview(revision, opener); }}>
           {dirty && canWrite ? "Save & playtest" : "Playtest"}</button>}
         <button type="button" className="studio-secondary" disabled={!state.revision}
           onClick={event => { releasesOpener.current = event.currentTarget; setReleasesOpen(true); }}>Releases</button>
-        <button type="button" className="studio-secondary" aria-pressed={assistantOpen}
-          onClick={() => setAssistantOpen(open => !open)}>Assistant</button>
         {canWrite && <button type="button" className="studio-primary" disabled={!dirty || state.saving}
           onClick={() => void save()}>{state.saving ? "Saving…" : state.request && state.error && !state.conflict ? "Retry save" : "Save revision"}</button>}
       </div>}
@@ -409,7 +414,12 @@ export function StudioPage({ onDirtyChange }: {
         <p>Open the writing desk <span aria-hidden="true">↗</span></p></button>)}</div>
       {!projects.length && <p className="studio-empty">{listBusy ? "Loading projects…" : "Your first story starts here. A blank project needs no documents or AI service."}</p>}
       {listMore && <button type="button" className="studio-secondary" disabled={listBusy} onClick={() => void refreshProjects(true)}>Load older projects</button>}
-    </> : <div className={`studio-workspace ${assistantOpen && state.revision ? "with-assistant" : ""}`}>
+    </> : assistantView && state.revision ? <AssistantPage key={`${tenantId}:${state.project.id}`}
+      tenantId={tenantId} projectId={state.project.id} revision={state.revision} focus={sceneId || null}
+      canWrite={canWrite} dirty={dirty} saving={state.saving} scopeRef={assistantScope} onSave={save}
+      onAccepted={acceptedRevision} onConflict={assistantConflict} onInspect={id => void inspectRevision(id)}
+      onOpenEditor={() => chooseView("editor")} onAccessLost={releaseAccessLost} />
+    : <div className="studio-workspace">
       <div className="studio-editor">
       <nav className="studio-tabs" aria-label="Story editor panels">{panels.map(([id, label]) => <button type="button" key={id}
         aria-pressed={panel === id} className={`${panel === id ? "selected" : ""} studio-tab-${id} ${id === "write" && panel === "scenes" ? "wide-selected" : ""}`} onClick={() => choosePanel(id)}>{label}</button>)}</nav>
@@ -446,11 +456,6 @@ export function StudioPage({ onDirtyChange }: {
           {type === "line" ? "Add scene" : type === "choice" ? "Add choice" : type === "end" ? "Add ending" : type === "set" ? "Add state change" : "Add condition"}</button>)}
       </div><small>Save explicitly. Ctrl/⌘ + S saves a revision.</small></footer>}
       </div>
-      {assistantOpen && state.project && state.revision && <AssistantPanel key={`${tenantId}:${state.project.id}`}
-        tenantId={tenantId} projectId={state.project.id} revision={state.revision} focus={sceneId || null}
-        canWrite={canWrite} dirty={dirty} saving={state.saving} scopeRef={assistantScope} onSave={save}
-        onAccepted={acceptedRevision} onConflict={assistantConflict} onInspect={id => void inspectRevision(id)}
-        onClose={() => setAssistantOpen(false)} onAccessLost={releaseAccessLost} />}
     </div>}
     {peek && <StudioDialog label={`Revision ${peek.revision_number}`} onClose={closePeek}>
       <div className="studio-peek-body"><div className="studio-section-heading"><h2>Revision {peek.revision_number}{peek.conflicted ? " · conflict copy" : ""}</h2>
