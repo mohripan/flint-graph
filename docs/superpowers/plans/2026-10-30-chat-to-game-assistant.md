@@ -1,7 +1,11 @@
 # Chat-to-game assistant implementation plan
 
 Tracking: [#168](https://github.com/mohripan/flint-graph/issues/168).
-Progress 2026-10-30: step 1 (edit operations and collected diagnostics) delivered.
+Progress 2026-10-30: steps 1–2 delivered (edit operations, collected diagnostics,
+pinned v1 prompt/schema and focus-first context). A live probe with the local
+`gemma-4-12B` QAT model returned a fully valid 4-operation proposal in ~31 s once
+the schema gave each node type an exact shape; a looser shared node schema let
+constrained decoding mix fields across types.
 
 Scope/authorization: the [approved design](../specs/2026-10-30-chat-to-game-assistant-design.md),
 [ADR 0038](../../adr/0038-conversational-authoring-through-reviewed-proposals.md) and the
