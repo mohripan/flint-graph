@@ -1,0 +1,8 @@
+{
+  "image": "sha256:0e0ee5625ab13bd5a4ceade377487a88c78acc549db8261679ea36c0e7e18511",
+  "exit_code": 124,
+  "oom_killed": false,
+  "elapsed_seconds": 182.219,
+  "host_stop_before_exit": false,
+  "owned_container_removed": true
+}

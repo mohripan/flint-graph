@@ -104,3 +104,12 @@ accumulator; ZIP file/parent and case collisions are rejected. Stream deadlines
 and process termination belong to the still-pending runner. A real nonroot,
 read-only, network-none tmpfs transport fixture passed; it is not an engine or
 artifact publication claim. See the [codec report](../reports/2026-10-30-narrative-release-codec.md).
+
+The explicitly prepared Linux image and standalone trusted child are now qualified
+against actual Godot: fixed input copying, image-owned runtime hashes, closed
+manifest parsing, bounded nonblocking engine diagnostics/deadlines, fixed web
+inventory/USTAR and an independent180-second PID1 watchdog. A changed script with
+an updated manifest was rejected; absent-supervisor watchdog exit124 was observed.
+The credentialed host runner, fencing and publication remain pending. See the
+[child report](../reports/2026-10-30-narrative-build-child.md) and
+[preparation runbook](../runbooks/narrative-builder-preparation.md).

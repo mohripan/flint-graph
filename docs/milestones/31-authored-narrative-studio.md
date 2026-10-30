@@ -44,6 +44,12 @@ are complete; the studio builds on that authored runtime.
   transport receipt. Review caught/fixed short-read memory amplification.
   [Codec scope/evidence](../reports/2026-10-30-narrative-release-codec.md).
   This is not yet an engine, deadline, publication or download delivery.
+  The next slice qualifies an explicitly prepared Linux Godot image and trusted
+  child:13 offline cases and3 actual container cases, including export/tamper
+  rejection and a182.219-second absent-supervisor watchdog exit. Full offline suite:
+  1309 passed/50 skipped. [Child scope/evidence](../reports/2026-10-30-narrative-build-child.md).
+  Host runner/fence integration, storage/publication/downloads, Temporal and UI
+  remain pending; the issue stays open.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.

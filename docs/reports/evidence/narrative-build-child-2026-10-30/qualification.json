@@ -1,0 +1,67 @@
+{
+  "image": "sha256:0e0ee5625ab13bd5a4ceade377487a88c78acc549db8261679ea36c0e7e18511",
+  "toolchain_sha256": "a5ba78d233e18bdfa2f9d56b9118134e492071d9cbf14d8bec10709628809af4",
+  "package_hash": "724ca950a73719502dd1772646b1e53c3e764f4a4779a7643457c629121e7eaa",
+  "files": {
+    "index.audio.position.worklet.js": {
+      "bytes": 2973,
+      "sha256": "be33985bc7160d6bf9646f259cd86b259cd67b02ccb297ee5c44f8ac84327bc8"
+    },
+    "index.audio.worklet.js": {
+      "bytes": 7298,
+      "sha256": "5b476a9c9ce642c0ee4256436d1bc31d9c38f868aca0f9a8e2a57c18d2dec2a3"
+    },
+    "index.html": {
+      "bytes": 5313,
+      "sha256": "18db12c1185267c3aa76de92354b96df0b723363a07b2db8a33099a26594003f"
+    },
+    "index.js": {
+      "bytes": 279815,
+      "sha256": "33c94cb3175f3333b82e2a3be5e8e86f77986f0aa2042b1631f6367a4e5bb6ba"
+    },
+    "index.pck": {
+      "bytes": 164688,
+      "sha256": "f1445e96dbab7f6790476c878111c24b7335767b4b5f84af023755d7b175604c"
+    },
+    "index.png": {
+      "bytes": 21443,
+      "sha256": "3cb4495c0b98dfbe4b663cbf2b6836473572339beb66d902367893162a70be0e"
+    },
+    "index.wasm": {
+      "bytes": 39514754,
+      "sha256": "fc74679e3b97f76878947fcd4fbe1268cbfa6188182a2e33bbc3f5dc9bfa57d0"
+    }
+  },
+  "source_zip_sha256": "710ab39cde6e086836795c7f24a083a27f335fad99531b9e8a646e47d00a882c",
+  "web_zip_sha256": "86a329fdecc0c5ca7bacd1270ed208aba46fd4f5d75e8746e7a595b4b1a89c23",
+  "effective": {
+    "user": "10001:10001",
+    "NetworkMode": "none",
+    "ReadonlyRootfs": true,
+    "Memory": 1073741824,
+    "MemorySwap": 1073741824,
+    "NanoCpus": 2000000000,
+    "PidsLimit": 128,
+    "CapDrop": [
+      "ALL"
+    ],
+    "SecurityOpt": [
+      "no-new-privileges"
+    ],
+    "Privileged": false,
+    "Devices": [],
+    "Tmpfs": {
+      "/scratch": "rw,size=268435456,mode=1777"
+    },
+    "host_bind_count": 1,
+    "host_bind_destination": "/input",
+    "host_bind_readonly": true,
+    "host_secret_canary_absent": true
+  },
+  "scope": "trusted child/codec only; no publication, API download or Temporal execution",
+  "native_cases": [
+    "actual Godot export plus bounded USTAR/hash/ZIP checks",
+    "changed runtime with updated input manifest rejected before Godot"
+  ],
+  "owned_containers_removed": true
+}

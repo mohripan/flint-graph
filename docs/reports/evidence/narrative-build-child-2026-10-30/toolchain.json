@@ -1,0 +1,41 @@
+{
+  "identity": {
+    "child_sha256": "c0c090a0a3b1337ff6aaef260c5b5c4ae572237123c64039b16c07223b6a3c8a",
+    "pin": {
+      "archive": {
+        "name": "Godot_v4.7.2-stable_linux.x86_64.zip",
+        "sha256": "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4",
+        "sha512": "9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65"
+      },
+      "base_image": "python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258",
+      "engine_sha256": "8d106cbe6144c2dc7e881d61d2429c1a8a76e6b22ef48bd5e48dcf934953f71e",
+      "godot_version": "4.7.2.stable",
+      "schema_version": "1",
+      "templates": {
+        "web_nothreads_debug.zip": "08962aefef811b603541d7951ac67ef00413aad2d978855183c28adee98f626a",
+        "web_nothreads_release.zip": "d3ee2f08cef0cf3cf6678a6355a92a8db48ccdd35cbd2e8bfd5f0e8a0b4032a0"
+      }
+    },
+    "recipe_sha256": "0c4ac990167b49617194d836d50942634b531b23bfca50cf5894ad1dd024d6f2",
+    "runtime_files": {
+      "GODOT-NOTICE.txt": "39018067df880a2e91e6f55f4cc4db80fe4f926f41aa31fc4906f78436e405d3",
+      "LICENSE.runtime.txt": "c605e9933dc64b6c51b33f9a6ceaa861e04de0348adaf765be4e02d377bed4d5",
+      "README.txt": "439bc284fef973bf847e6e95a7440ea7e8be07218c7c030c88f7ce2796a40d36",
+      "export_presets.cfg": "cbbc4c11810e0ed2995a010b310cbc3ce3f7e2fe5cf97cb9547fa8df6e03ab9c",
+      "fonts/LICENSE-Lora.txt": "1d9a970809ac804b582a6ce7f0ebc4e7fefcbfd7ff6299cad35ee656a21be716",
+      "fonts/Lora.ttf": "822a6621ccbe8d97d20ac88c1c41f5615c9c2c202eaa75f272cd452aac6475a7",
+      "fonts/provenance.json": "9cb5cdf4ec46d78eeafe4fbfeabe735a727e4aefb0927274ecfbd8a3dd61d77b",
+      "main.tscn": "035b2796dff407c30a425dee32d0989dc5d13ff1d3171f1d4482b911dd787b92",
+      "project.godot": "a5a62cc7718342154bef3c040f1e5c855326564f89500c312e5689f2d4ff78a9",
+      "runtime/bootstrap.gd": "7ca87fa4d5b0f9dd5a08521345dc2a52702f228f713c65640dd21e6fdad901c5",
+      "runtime/game_view.gd": "02e9558b0009b14e8e7e2bff4884092fbc4ec0d911cb01776601024dec51cb07",
+      "runtime/player.gd": "87cfd980283931f68dc4d5912be0bc1bfb8276d62dead979ba38ccc52f8ddf29",
+      "runtime/save_store.gd": "aa5ddcfe1ef12b9269fff7e8b613169d1d5d1b9e324ad247a51bbf6e1e778fa5",
+      "runtime/strict_json.gd": "408a81436eda2bc6ec0dc49be34fb394dc63299e35a29c30518befe0015b7587",
+      "toolchain.json": "1aaaa1065f3e1d4c672ef45b3fbc2e0538604ddf94f93060f5c0752af5f62178"
+    },
+    "schema_version": "1"
+  },
+  "image": "sha256:0e0ee5625ab13bd5a4ceade377487a88c78acc549db8261679ea36c0e7e18511",
+  "toolchain_sha256": "a5ba78d233e18bdfa2f9d56b9118134e492071d9cbf14d8bec10709628809af4"
+}
