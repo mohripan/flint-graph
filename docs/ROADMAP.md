@@ -38,7 +38,8 @@ editable Godot export, real player and native/browser qualification. Under
 immutable revisions and recoverable conflicts. #123 adds the manual studio and
 isolated local Godot preview, with live qualification, CI and real container smoke
 complete. #124 durable release/build jobs and authorized downloads remain next.
-Its ledger, lifecycle and cancellation/retry APIs are delivered; isolated builds,
+Its ledger, lifecycle, cancellation/retry APIs, execution fences/private input
+loading and trusted engine child are delivered. Host-runner integration,
 publication/downloads, Temporal execution and Releases UI still need qualification.
 The added presentation track preserves v1 releases/saves and precedes the final
 #132 game. Prompt work starts with #134 → #135; requiring all of M35 before M32

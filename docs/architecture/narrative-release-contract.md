@@ -85,9 +85,14 @@ release identity, events and artifact metadata. Actual migration constraints and
 immutable release updates were qualified against owned PostgreSQL.
 
 The pure attempt transition boundary fences stale execution and cleanup, honors
-cancellation before publication and revokes terminal tokens. Persistence integration
-for claim/finish remains pending; these transitions do not themselves
-dispatch work or authorize artifact insertion. Actual relay/
+cancellation before publication and revokes terminal tokens. Claim and failure/
+cancellation persistence plus private immutable input loading are now implemented
+under release -> job locks and qualified against actual PostgreSQL recovery writers.
+Same-token/terminal/old-attempt replay cannot acquire; stale cleanup is a no-op.
+Input loading checks current ownership/cancel before exact builder identity and
+canonical revision/release hashes. Claim precedes builder resolution so an
+unavailable builder can fail owned work. These services never launch a child or
+authorize artifact insertion. Completion remains reserved for publication. Actual relay/
 Temporal workflow, credential-free child runner, bounded object publication,
 authorized downloads and Releases UI remain unimplemented. No artifact is published
 or available for download by this initial slice.
@@ -113,3 +118,6 @@ an updated manifest was rejected; absent-supervisor watchdog exit124 was observe
 The credentialed host runner, fencing and publication remain pending. See the
 [child report](../reports/2026-10-30-narrative-build-child.md) and
 [preparation runbook](../runbooks/narrative-builder-preparation.md).
+
+See the [execution ownership report](../reports/2026-10-30-narrative-release-execution.md)
+for exact service/database verification and the remaining host-worker boundary.

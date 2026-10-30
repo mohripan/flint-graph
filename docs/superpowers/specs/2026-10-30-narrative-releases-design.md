@@ -147,6 +147,15 @@ publish after explicit retry created a new job; completed publication cannot be
 changed by late activity failure or cancellation cleanup. Record these exact races
 in the transition and PostgreSQL tests.
 
+Claiming ownership is separate from resolving the pinned engine: commit the fresh
+fence first, then recheck active ownership/cancellation before private source and
+builder resolution. This lets an unavailable builder terminate the owned attempt
+as `runtime_unavailable` instead of stranding accepted work in queued state.
+Cancellation recovery works even if the original image was removed. Same-token
+claim replay is a no-op and never authorizes another child. The private source
+loader returns only activity-local captured bytes; never pass its result through
+Temporal input/results/heartbeats. Drop release/job locks before any engine work.
+
 If the worker dies after uploading, private orphan objects remain inaccessible.
 If it dies after atomic publication but before activity acknowledgement, replay
 returns the already-published metadata without rebuilding or overwriting. Automatic

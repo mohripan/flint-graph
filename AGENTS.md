@@ -15,7 +15,7 @@ M31 #123 studio editor and isolated local Godot preview are implemented and live
 qualified with green CI/container smoke. #124 release/build design is committed;
 fenced transitions and initial ledger/create/list APIs are implemented with actual
 PostgreSQL/HTTP qualification. Retry/cancel/history persistence is also qualified;
-claim/finish execution, worker and artifacts remain pending. Read the M31 progress
+Worker and artifacts remain pending. Read the M31 progress
 and release contract before claiming build delivery.
 The bounded USTAR/ZIP codec is implemented and reviewed with a real constrained
 transport fixture; engine/deadline/publication integration remains pending. See
@@ -23,7 +23,10 @@ transport fixture; engine/deadline/publication integration remains pending. See
 The standalone trusted Linux Godot child and explicit operator image preparation
 are also live qualified (export, tamper rejection and independent180-second
 watchdog). Read `docs/reports/2026-10-30-narrative-build-child.md`; host runner,
-claim/finish fencing, storage/publication, Temporal and Releases UI remain pending.
+storage/publication, Temporal and Releases UI remain pending. Claim/non-success
+finalization and private source loading are now persisted and qualified against
+actual PostgreSQL recoveries; successful completion stays reserved for verified
+publication. See `docs/reports/2026-10-30-narrative-release-execution.md`.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

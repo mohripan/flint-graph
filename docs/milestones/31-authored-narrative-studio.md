@@ -50,6 +50,12 @@ are complete; the studio builds on that authored runtime.
   1309 passed/50 skipped. [Child scope/evidence](../reports/2026-10-30-narrative-build-child.md).
   Host runner/fence integration, storage/publication/downloads, Temporal and UI
   remain pending; the issue stays open.
+  Claim/non-success finalization and private immutable input loading are now
+  persisted with release/job fences and actual queued PostgreSQL recoveries.
+  Combined native database/API matrix:41 passed/5 backend skips; full suite:
+  1315 passed/52 skipped. [Execution scope/evidence](../reports/2026-10-30-narrative-release-execution.md).
+  Successful completion remains exclusive to future verified publication; host
+  runner, store/downloads, Temporal and Releases UI remain open.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.
