@@ -1,8 +1,8 @@
 # Milestone 31: authored narrative studio
 
-Status: in progress, 2026-10-30. [Tracking issue #113](https://github.com/mohripan/flint-graph/issues/113).
-Two of three focused issues are complete. The remaining release issue #124 has a
-qualified backend/recovery path; Releases UI and final browser acceptance remain.
+Status: complete, 2026-10-30. [Tracking issue #113](https://github.com/mohripan/flint-graph/issues/113).
+All three focused issues are delivered with real engine, browser, database and
+job qualification.
 
 ## Available now
 
@@ -13,27 +13,25 @@ qualified backend/recovery path; Releases UI and final browser acceptance remain
 - **#123 complete:** manual scene/choice editor, story map, revision history,
   conflict handling and isolated local Godot browser preview. Real engine/browser,
   CI and container smoke passed. [Qualification](../reports/2026-10-30-narrative-studio.md).
-- **#124 in progress:** release/job ledger, cancellation/retry/history, execution
-  fences, bounded codecs, pinned isolated Godot engine/host runner/watchdog,
-  immutable objects, atomic publication and authorized source/web/manifest
-  downloads. The separate relay/workflow/activities now pass an actual
-  Temporal→PostgreSQL→Godot→MinIO→API download proof. Real-server tests also cover
-  duplicate/closed dispatch, bounded retries and shielded cancellation.
-  Separate worker/relay processes and periodic recovery are now qualified too:
-  actual process kill/restart, active engine cancellation/retry and natural expired
-  cleanup passed. [Current scope](../reports/2026-10-30-narrative-build-recovery.md).
+- **#124 complete:** immutable releases of saved revisions, built by separate
+  opt-in relay/worker processes in a pinned, network-none Godot 4.7.2 container,
+  with cancellation, retry, recovery, atomic publication and authorized
+  source/web/manifest downloads. The Studio **Releases** dialog requests builds,
+  follows server state across reloads, cancels/retries for members and verifies
+  downloads in the browser. A live author → save → build → download → play proof
+  matched four authored routes across the Studio preview, the release web build
+  and a web export of the downloaded editable source.
+  [Releases UI and end-to-end report](../reports/2026-10-30-narrative-releases-ui.md),
+  [recovery](../reports/2026-10-30-narrative-build-recovery.md).
 
-## Required to finish #124 and this milestone
+The live proof found and fixed an export defect: browser builds published before
+the fix contain an empty `project.binary` and do not boot. Build a new release of
+the same saved revision to replace one.
 
-1. Studio Releases UI: request a saved revision, reload server state, inspect jobs,
-   cancel/retry and download authorized attachments.
-2. Real browser author→save→background build→download→play proof and equivalent
-   authored routes, followed by reviewed documentation and green CI.
-
-Release admission on the ordinary local API stays disabled during the Releases UI
-delivery. Manual authoring and isolated preview remain available.
-Text authoring needs no model or searchable corpus. AI assistance, asset authoring
-and package-v2 presentation are later milestones.
+Text authoring needs no model or searchable corpus. Building needs the explicit
+operator setup in the [worker runbook](../runbooks/narrative-build-worker.md).
+AI assistance, asset authoring and package-v2 presentation are later milestones;
+this is not yet a complete AI production product.
 
 ## Earlier release qualification
 
@@ -44,6 +42,7 @@ and package-v2 presentation are later milestones.
 [trusted child](../reports/2026-10-30-narrative-build-child.md),
 [host runner](../reports/2026-10-30-narrative-build-runner.md),
 [publication](../reports/2026-10-30-narrative-release-publication.md),
-[workflow ownership](../reports/2026-10-30-narrative-workflow-ownership.md).
+[workflow ownership](../reports/2026-10-30-narrative-workflow-ownership.md),
+[connected worker](../reports/2026-10-30-narrative-temporal-worker.md).
 These reports preserve each earlier checkpoint's exact scope and evidence.
 Existing GraphRAG data and unrelated #109 work remain preserved.

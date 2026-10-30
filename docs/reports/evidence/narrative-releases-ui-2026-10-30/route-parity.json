@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "story": "Original text-only 'The Harbor Bell' (revision 3), two variables, gated option, branch, three endings",
+  "reference": "flint_graph.narrative.Player over the downloaded source's content/story.json and NOTICES.txt",
+  "comparison": "rendered text and offered option texts at every step, plus ended status",
+  "routes": {
+    "rope_tie_rung": ["advance", "choose:search", "advance", "choose:tie"],
+    "climb_pull_strained": ["advance", "choose:climb", "choose:pull"],
+    "rope_pull_rung": ["advance", "choose:search", "advance", "choose:pull"],
+    "wait_lost": ["advance", "choose:wait"]
+  },
+  "gate": "climb_pull_strained offers only 'Pull the bell by hand.'; rope routes also offer 'Tie the clapper with the rope.'",
+  "surfaces": {
+    "release_web_build": {
+      "evidence": "window.__flintNarrativeQA snapshots (?qa=1), keyboard and mouse input",
+      "rope_tie_rung": true, "climb_pull_strained": true, "rope_pull_rung": true, "wait_lost": true
+    },
+    "web_export_rebuilt_from_downloaded_source": {
+      "evidence": "pinned Windows Godot 4.7.2 export of a copy of the downloaded source; QA snapshots, mouse input",
+      "rope_tie_rung": true, "climb_pull_strained": true, "rope_pull_rung": true, "wait_lost": true
+    },
+    "studio_saved_revision_preview": {
+      "evidence": "isolated cross-origin preview; keyboard-only play verified from rendered screenshots",
+      "rope_tie_rung": true, "climb_pull_strained": true, "rope_pull_rung": true, "wait_lost": true
+    }
+  }
+}

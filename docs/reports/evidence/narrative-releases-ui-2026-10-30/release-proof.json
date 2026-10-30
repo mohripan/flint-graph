@@ -1,0 +1,43 @@
+{
+  "schema_version": "1",
+  "requested_through": "Studio Releases dialog (real browser, owned local stack)",
+  "revision_number": 3,
+  "authoring": ["Source panel JSON", "Write panel form edit"],
+  "package_hash": "3ecc21b70434494781627f76a4e5913de3b81873d4afba4d3e0dcd69254c9852",
+  "builder_image": "sha256:0e0ee5625ab13bd5a4ceade377487a88c78acc549db8261679ea36c0e7e18511",
+  "toolchain_sha256": "a5ba78d233e18bdfa2f9d56b9118134e492071d9cbf14d8bec10709628809af4",
+  "before_fix": {
+    "status": "completed",
+    "web_zip": {"sha256": "ea8f1e7c055ecbd7d150ac18e934325be57530ea07145c2548d3a768893af17e", "bytes": 10367769},
+    "pck_project_binary_bytes": 0,
+    "browser": "black canvas: Couldn't load project data",
+    "native_main_pack_probe": "Corrupted header in binary project.binary (not ECFG)",
+    "builder_log": "ERROR: Couldn't save project.binary at '/tmp/tmpproject.binary'"
+  },
+  "after_fix": {
+    "status": "completed",
+    "attempt_number": 1,
+    "artifacts": {
+      "source": {"sha256": "a9b8e4398364530f8b5720eada3f68e9eac6f474a9c6b988d266391d89131a2d", "bytes": 126519},
+      "web": {"sha256": "eeab467da22c576b2b70f00e54896dbf46fcdc02621092f36bc54a7fdd1e0011", "bytes": 10368009},
+      "manifest": {"sha256": "afd4e195c13cb3259a0684a3e27463e272f4c753473218fbacbd44cfacc0af35", "bytes": 934}
+    },
+    "http_downloads_verified": true,
+    "attachment_headers_verified": true,
+    "packaged_story_equals_saved_revision": true,
+    "reference_package_hash_matches": true,
+    "downloaded_source_import_and_content_ok": true,
+    "downloaded_source_left_byte_identical": true,
+    "release_pck_project_binary_bytes": 528,
+    "release_pck_content_ok": true,
+    "source_rebuilt_web_export": true
+  },
+  "source_zip_identical_before_and_after_fix": true,
+  "ui": {
+    "server_state_survives_reload": true,
+    "duplicate_active_build_blocked": true,
+    "polling_queued_to_ready_without_reload": true,
+    "in_browser_sha256_verified_download_notice": true,
+    "focus_kept_on_aria_disabled_build_button": true
+  }
+}

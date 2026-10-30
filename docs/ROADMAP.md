@@ -2,7 +2,7 @@
 
 ## Active product direction: narrative game studio
 
-Updated: 2026-10-30. Product direction approved; M30 delivered, M31 in progress.
+Updated: 2026-10-30. Product direction approved; M30 and M31 delivered.
 FlintGraph is moving toward an AI-assisted authoring studio for visual novels and
 branching narrative games, with authored gameplay and editable Godot/GDScript
 export first. AI assists creators; exported gameplay has no inference dependency.
@@ -37,14 +37,13 @@ editable Godot export, real player and native/browser qualification. Under
 [Milestone 31](milestones/31-authored-narrative-studio.md), #122 delivered authorized
 immutable revisions and recoverable conflicts. #123 adds the manual studio and
 isolated local Godot preview, with live qualification, CI and real container smoke
-complete. #124 durable release/build jobs and authorized downloads remain next.
-Its ledger, lifecycle, cancellation/retry APIs, execution fences/private input
-loading, trusted engine/host runner and immutable publication/authorized downloads
-are delivered. The separate relay/workflow/activities now have a connected native
-Temporal/PostgreSQL/Godot/MinIO/authorized-download proof. Separate operator
-processes, periodic closed-run/owned cleanup and actual process-loss/restart plus
-active cancellation/retry are now qualified. Releases UI and complete browser
-acceptance remain. See the [recovery report](reports/2026-10-30-narrative-build-recovery.md).
+complete. #124 completes the milestone with durable release/build jobs in a pinned,
+isolated Godot worker, recovery, immutable publication, authorized downloads and
+the Studio Releases dialog. A live author → build → download → play proof matched
+authored routes across preview, the release web build and the downloaded source.
+It also found and fixed an empty-`project.binary` export defect; browser builds
+published before that fix must be rebuilt as new releases. See the
+[Releases UI report](reports/2026-10-30-narrative-releases-ui.md).
 The added presentation track preserves v1 releases/saves and precedes the final
 #132 game. Prompt work starts with #134 → #135; requiring all of M35 before M32
 would create a cycle because #140 consumes #126. See the delivery queue for the

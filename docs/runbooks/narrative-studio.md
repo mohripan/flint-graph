@@ -73,6 +73,23 @@ opener. Close/timeouts/access loss remove the iframe/listener. Normal exported-g
 Save/Load behavior is unchanged. `?qa=1` on the editor explicitly enables the shared
 read-only runtime probe in the child; normal URLs expose no probe.
 
+## Build and download a release
+
+**Releases** opens the server-backed release dialog. Choose a saved revision; it
+defaults to the current one and lists conflict copies explicitly. Then select
+**Build release**. Unsaved edits are never built; the dialog offers to save them
+first. Builds run on the separate narrative worker, so closing the dialog or
+reloading the page does not lose them. Members can cancel active work and retry
+failed or cancelled attempts. Viewers can follow history and download.
+
+A ready release offers **Godot source**, **Browser build** and **Release details
+(JSON)**. Each download is fetched with your session and checked for size and
+SHA-256 in the browser before it is saved. **View saved revision** opens that
+revision's snapshot, from which **Playtest this revision** plays exactly what was
+built. Building requires the operator setup in the
+[worker runbook](narrative-build-worker.md). Without it, new requests return a
+clear "not configured" error while authoring and preview keep working.
+
 ## Verification and limits
 
 Run `npm test`, `npm run typecheck`, `npm run build` in frontend. Run Python gates
@@ -88,7 +105,9 @@ mock success. Test real browser author/save/reload/history/conflict, desktop/390
 keyboard Enter/choice keys/Escape and actual scrolling. Inspect screenshots and
 console/network errors. See the [delivery report](../reports/2026-10-30-narrative-studio.md).
 
-This delivery qualifies the local separate-host topology. Production HTTPS/cookie
-scope/gateway hosting, isolated creator-code compilation, durable build jobs,
-authorized release artifacts and asset authoring belong to #124 and later work.
+This delivery qualifies the local separate-host topology. Durable build jobs and
+authorized release artifacts are delivered by #124; see the
+[Releases UI report](../reports/2026-10-30-narrative-releases-ui.md). Production
+HTTPS/cookie scope/gateway hosting, isolated creator-code compilation and asset
+authoring are later work.
 No paid model or inference service is enabled by these flows.

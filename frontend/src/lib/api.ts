@@ -3,6 +3,10 @@ import type {
   NarrativeRevision,
   RevisionSummary,
   RevisionWrite,
+  NarrativeRelease,
+  ReleaseArtifact,
+  ReleaseJob,
+  ReleaseEvent,
 } from "../narrative/types";
 import type {
   AnswerProvenance,
@@ -97,6 +101,55 @@ function narrativePage(options: { limit?: number; beforeId?: string; includeArch
   return query.toString();
 }
 
+function releasePath(projectId: string, releaseId?: string): string {
+  return `/v1/narrative/projects/${encodeURIComponent(projectId)}/releases`
+    + (releaseId ? `/${encodeURIComponent(releaseId)}` : "");
+}
+
+async function verifiedAttachment(tenantId: string, projectId: string, releaseId: string,
+  artifact: ReleaseArtifact, signal?: AbortSignal): Promise<Blob> {
+  const cap = artifact.kind === "manifest" ? 1048576 : 67108864;
+  const mediaType = artifact.kind === "manifest" ? "application/json" : "application/zip";
+  const invalid = () => new ApiError("The downloaded file could not be verified. Refresh this release and try again.", 502);
+  const filename = `game-${releaseId.replaceAll("-", "")}-${artifact.kind}.${artifact.kind === "manifest" ? "json" : "zip"}`;
+  if (!["source", "web", "manifest"].includes(artifact.kind) || !Number.isSafeInteger(artifact.size_bytes)
+    || artifact.size_bytes < 1 || artifact.size_bytes > cap || !/^[a-f0-9]{64}$/.test(artifact.sha256)
+    || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(releaseId)
+    || artifact.filename !== filename || artifact.media_type !== mediaType) throw invalid();
+  const headers = { ...(await authHeaders()), ...tenantHeaders(tenantId) };
+  signal?.throwIfAborted();
+  const response = await fetch(`${BASE}${releasePath(projectId, releaseId)}/artifacts/${artifact.kind}`, {
+    headers, signal, cache: "no-store", credentials: "same-origin", redirect: "error",
+  });
+  if (!response.ok) throw await parseError(response);
+  const reader = response.body?.getReader();
+  if (!reader) throw invalid();
+  try {
+    if (response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== mediaType) throw invalid();
+    const length = response.headers.get("content-length");
+    if (length !== null && !response.headers.get("content-encoding") && Number(length) !== artifact.size_bytes) throw invalid();
+    // Allocate once: arbitrarily small stream chunks cannot amplify metadata memory.
+    const bytes = new Uint8Array(artifact.size_bytes);
+    let offset = 0;
+    while (true) {
+      signal?.throwIfAborted();
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (offset + value.length > bytes.length) throw invalid();
+      bytes.set(value, offset); offset += value.length;
+    }
+    if (offset !== bytes.length) throw invalid();
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+      .map(value => value.toString(16).padStart(2, "0")).join("");
+    signal?.throwIfAborted();
+    if (digest !== artifact.sha256) throw invalid();
+    return new Blob([bytes], { type: mediaType });
+  } finally {
+    try { await reader.cancel(); } catch { /* Abort/closed streams need no further reads. */ }
+    reader.releaseLock();
+  }
+}
+
 export const api = {
   async health(): Promise<boolean> {
     try {
@@ -169,6 +222,57 @@ export const api = {
       method: "POST", headers: tenantHeaders(tenantId), signal, json: payload,
     });
   },
+
+  listNarrativeReleases(tenantId: string, projectId: string, options: {
+    limit?: number; beforeId?: string; signal?: AbortSignal;
+  } = {}): Promise<NarrativeRelease[]> {
+    return jsonRequest(`${releasePath(projectId)}?${narrativePage(options)}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  createNarrativeRelease(tenantId: string, projectId: string, revisionId: string, key: string,
+    signal?: AbortSignal): Promise<NarrativeRelease> {
+    return jsonRequest(releasePath(projectId), { method: "POST", headers: tenantHeaders(tenantId),
+      signal, json: { revision_id: revisionId, idempotency_key: key } });
+  },
+
+  getNarrativeRelease(tenantId: string, projectId: string, releaseId: string,
+    signal?: AbortSignal): Promise<NarrativeRelease> {
+    return jsonRequest(releasePath(projectId, releaseId), { headers: tenantHeaders(tenantId), signal, cache: "no-store" });
+  },
+
+  retryNarrativeRelease(tenantId: string, projectId: string, releaseId: string, key: string,
+    signal?: AbortSignal): Promise<NarrativeRelease> {
+    return jsonRequest(`${releasePath(projectId, releaseId)}/retry`, { method: "POST",
+      headers: tenantHeaders(tenantId), signal, json: { idempotency_key: key } });
+  },
+
+  cancelNarrativeRelease(tenantId: string, projectId: string, releaseId: string, jobId: string,
+    signal?: AbortSignal): Promise<ReleaseJob> {
+    return jsonRequest(`${releasePath(projectId, releaseId)}/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  listNarrativeReleaseJobs(tenantId: string, projectId: string, releaseId: string, options: {
+    limit?: number; beforeId?: string; signal?: AbortSignal;
+  } = {}): Promise<ReleaseJob[]> {
+    return jsonRequest(`${releasePath(projectId, releaseId)}/jobs?${narrativePage(options)}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  listNarrativeReleaseEvents(tenantId: string, projectId: string, releaseId: string, jobId: string, options: {
+    limit?: number; afterSequence?: number; signal?: AbortSignal;
+  } = {}): Promise<ReleaseEvent[]> {
+    const query = new URLSearchParams({ limit: String(options.limit ?? 100), after_sequence: String(options.afterSequence ?? 0) });
+    return jsonRequest(`${releasePath(projectId, releaseId)}/jobs/${encodeURIComponent(jobId)}/events?${query}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  downloadNarrativeArtifact: verifiedAttachment,
 
   listDocuments(tenantId: string): Promise<DocumentListItem[]> {
     return jsonRequest<DocumentListItem[]>("/v1/documents", {

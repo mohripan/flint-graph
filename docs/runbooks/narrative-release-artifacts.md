@@ -1,9 +1,10 @@
 # Release object publication and download operations
 
-The release API/storage slice is implemented; automatic build dispatch and the
-Releases UI are still pending. Keep new release creation disabled outside explicit
-qualification until the workflow/worker is ready. Manual studio/preview needs no
-object store or model. See the [qualification report](../reports/2026-10-30-narrative-release-publication.md).
+The release API, storage, automatic build dispatch and Studio Releases dialog are
+implemented. Enable release creation only together with a running narrative relay
+and worker ([runbook](narrative-build-worker.md)). Manual studio/preview needs no
+object store or model. See the [publication report](../reports/2026-10-30-narrative-release-publication.md)
+and the [Releases UI report](../reports/2026-10-30-narrative-releases-ui.md).
 
 ## Storage and publication
 

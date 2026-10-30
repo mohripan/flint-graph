@@ -1,0 +1,31 @@
+{
+  "schema_version": "1",
+  "identity": "separate owned API process with a distinct dev subject, granted through the owner members endpoint",
+  "viewer": {
+    "ui_read_only_notice": true,
+    "ui_build_cancel_retry_controls_absent": true,
+    "ui_history_and_downloads_present": true,
+    "http_manifest_download": {"status": 200, "sha256_matches": true},
+    "http_build": 403,
+    "http_retry": 403,
+    "http_cancel": 403
+  },
+  "live_downgrade_while_dialog_open": {
+    "role_before": "member",
+    "role_after": "viewer",
+    "stale_build_request": 403,
+    "dialog_closed": true,
+    "studio_cleared_to_project_list": true,
+    "message": "Your workspace access changed. Reload your workspaces before continuing.",
+    "stored_project_selection_cleared": true,
+    "requests_after_403": 0,
+    "release_count_unchanged": true
+  },
+  "dev_mode_note": "Dev auth auto-enrolls an unknown subject as owner on first workspace access; the QA identity was explicitly downgraded before checks. Staging/production reject dev auth.",
+  "mobile_390x844": {
+    "single_column": true,
+    "horizontal_overflow": false,
+    "single_dialog_scroll_area": true,
+    "buttons_under_44px": 0
+  }
+}

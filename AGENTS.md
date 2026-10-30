@@ -28,9 +28,13 @@ relay processes, periodic closed-run recovery and fair bounded expired cleanup
 now have real process-kill/restart, active-cancel/retry and natural-expiry proof:
 `docs/reports/2026-10-30-narrative-build-recovery.md`. Owned worker/relay receipts
 are in ignored `notes/narrative-worker-owned.json` / `narrative-relay-owned.json`;
-preserve their private root/queue across restarts. Releases UI/end-to-end proof
-remain pending. Completion requires verified atomic publication;
-ordinary API release creation remains disabled. Preserve private owned fixtures.
+preserve their private root/queue across restarts. The Studio Releases dialog and
+the live author→save→build→download→play proof complete #124/M31:
+`docs/reports/2026-10-30-narrative-releases-ui.md`. That proof found that build
+children need a bounded writable `/tmp`; otherwise Godot packs an empty
+`project.binary` and the browser build black-screens. The host now requires the
+`/tmp` tmpfs and rejects such packs. The owned local API admits releases with the
+existing builder pins. Preserve private owned fixtures.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.
@@ -40,8 +44,8 @@ and the M30 report for actual progress before claiming a complete authoring prod
 The user added #133–#167 on 2026-10-30: M35 prompt management, M36 context
 engineering, M37 controlled memory, M38 package-v2 visual novel presentation,
 plus shared conversations and narrative assistant/art work. Read the updated
-`docs/product/narrative-game-backlog.md` dependency map. Finish #124's bounded v1
-release work first; #134/#135 precede #126, while #140 follows #126. Package v2
+`docs/product/narrative-game-backlog.md` dependency map. #124's bounded v1
+release work is delivered; #134/#135 precede #126, while #140 follows #126. Package v2
 requires #124/#128/#157 and preserves existing v1 releases/saves. Planned issues
 are not delivered functionality; the final #132 game should exercise M38 parity.
 

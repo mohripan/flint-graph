@@ -11,6 +11,8 @@ import { RouteMap } from "./RouteMap";
 import { SceneForm } from "./SceneForm";
 import { StudioDialog } from "./StudioDialog";
 import { PreviewDialog } from "./PreviewDialog";
+import { ReleasesDialog } from "./ReleasesDialog";
+import { releaseIntents } from "./releaseModel";
 import type { NarrativeProject, NarrativeRevision, RevisionSummary, RevisionWrite, StoryDraft, StoryNode } from "./types";
 import "./studio.css";
 
@@ -64,6 +66,17 @@ export function StudioPage({ onDirtyChange }: {
   const onPreview = (revision: NarrativeRevision, opener: HTMLButtonElement) => {
     previewOpener.current = opener; setPreview(revision);
   };
+  const [releasesOpen, setReleasesOpen] = useState(false);
+  const releasesOpener = useRef<HTMLButtonElement | null>(null);
+  // The open dialog registers its request scope; closing paths invalidate it
+  // synchronously, before React commits the unmount.
+  const releaseScope = useRef<(() => void) | null>(null);
+  const releaseIntentStore = useRef(releaseIntents());
+  const endReleases = useCallback(() => { releaseScope.current?.(); setReleasesOpen(false); }, []);
+  const closeReleases = useCallback(() => {
+    setReleasesOpen(false);
+    window.requestAnimationFrame(() => releasesOpener.current?.focus());
+  }, []);
   const [panel, setPanel] = useState<Panel>("write");
   const [sceneId, setSceneId] = useState("");
   const [sceneFilter, setSceneFilter] = useState("");
@@ -85,6 +98,7 @@ export function StudioPage({ onDirtyChange }: {
   }
   function abortAll() { for (const value of controllers.current) value.abort(); controllers.current.clear(); }
   const loseAccess = useCallback((message: string) => {
+    endReleases(); releaseIntentStore.current = releaseIntents();
     epoch.current += 1; listEpoch.current += 1; historyEpoch.current += 1;
     abortAll(); pendingSave.current = null; saving.current = false;
     pendingCreate.current = null; creating.current = false; setCreateBusy(false); setCreateName("");
@@ -92,7 +106,8 @@ export function StudioPage({ onDirtyChange }: {
     history.current.clear(); setPeek(null); setPreview(null); setHistoryRows([]); setProjects([]); setRawMode(false);
     writeSelection(storageKey, null);
     dispatch({ type: "clear", generation: epoch.current, message });
-  }, [storageKey]);
+  }, [storageKey, endReleases]);
+  const releaseAccessLost = useCallback(() => loseAccess("Your workspace access changed. Reload your workspaces before continuing."), [loseAccess]);
   const failure = useCallback((error: unknown, generation: number) => {
     if (!mounted.current || epoch.current !== generation || (error instanceof Error && error.name === "AbortError")) return;
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -138,7 +153,7 @@ export function StudioPage({ onDirtyChange }: {
   const loadProject = useCallback(async (id: string) => {
     abortAll(); const generation = ++epoch.current, request = controller();
     pendingSave.current = null; saving.current = false; history.current.clear();
-    setPeek(null); setPreview(null); setHistoryRows([]); setNotice(null); setRawMode(false); setPanel("write");
+    setPeek(null); setPreview(null); endReleases(); setHistoryRows([]); setNotice(null); setRawMode(false); setPanel("write");
     dispatch({ type: "load", generation });
     try {
       const project = await api.getNarrativeProject(tenantId, id, request.signal);
@@ -152,7 +167,7 @@ export function StudioPage({ onDirtyChange }: {
       if (mounted.current && epoch.current === generation && error instanceof ApiError && error.status === 404) writeSelection(storageKey, null);
       failure(error, generation);
     } finally { controllers.current.delete(request); }
-  }, [tenantId, storageKey, refreshHistory, failure]);
+  }, [tenantId, storageKey, refreshHistory, failure, endReleases]);
 
   useEffect(() => {
     mounted.current = true;
@@ -236,7 +251,7 @@ export function StudioPage({ onDirtyChange }: {
   function collection() {
     if (!confirmLeave()) return;
     abortAll(); epoch.current += 1; pendingSave.current = null; saving.current = false;
-    history.current.clear(); setPeek(null); setPreview(null); setHistoryRows([]); setRawMode(false); writeSelection(storageKey, null);
+    history.current.clear(); setPeek(null); setPreview(null); endReleases(); setHistoryRows([]); setRawMode(false); writeSelection(storageKey, null);
     dispatch({ type: "clear", generation: epoch.current }); void refreshProjects();
   }
   function choosePanel(next: Panel) {
@@ -305,6 +320,11 @@ export function StudioPage({ onDirtyChange }: {
     {!sceneRows.length && <p className="studio-empty">No matching scenes.</p>}</div>;
 
   return <div className="narrative-studio" role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
+    {releasesOpen && state.project && state.revision && <ReleasesDialog key={`${tenantId}:${state.project.id}`}
+      tenantId={tenantId} projectId={state.project.id} headId={state.project.head_revision_id} revision={state.revision}
+      history={historyRows} canWrite={canWrite} dirty={dirty} saving={state.saving} onSave={save}
+      intents={releaseIntentStore.current} scopeRef={releaseScope}
+      onInspect={id => void inspectRevision(id)} onClose={closeReleases} onAccessLost={releaseAccessLost} />}
     {preview && <PreviewDialog key={preview.id} revision={preview} onClose={closePreview} />}
     <header className="studio-heading"><div><p className="studio-eyebrow">Narrative studio</p>
       <h1>{state.project?.name ?? "Your stories"}</h1>
@@ -317,6 +337,8 @@ export function StudioPage({ onDirtyChange }: {
           onClick={async event => { const opener = event.currentTarget;
             const revision = dirty && canWrite ? await save() : state.revision; if (revision) onPreview(revision, opener); }}>
           {dirty && canWrite ? "Save & playtest" : "Playtest"}</button>}
+        <button type="button" className="studio-secondary" disabled={!state.revision}
+          onClick={event => { releasesOpener.current = event.currentTarget; setReleasesOpen(true); }}>Releases</button>
         {canWrite && <button type="button" className="studio-primary" disabled={!dirty || state.saving}
           onClick={() => void save()}>{state.saving ? "Saving…" : state.request && state.error && !state.conflict ? "Retry save" : "Save revision"}</button>}
       </div>}

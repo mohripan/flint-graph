@@ -12,7 +12,9 @@ and fault proofs. Object publication/downloads, worker/activity/startup recovery
 The connected relay/workflow/activities are now native-qualified too; see the
 Temporal worker report. Operator processes and periodic recovery/sweeps now have
 actual process-loss/cancel/retry/natural-expiry qualification too; see the build
-recovery report. Releases UI/end-to-end qualification remain open; #124 stays open.
+recovery report. The Releases UI and end-to-end author/build/download/play proof
+are delivered too (step 5); see the Releases UI report, which also records the
+empty-`project.binary` export fix.
 
 1. Add public API/transition tests before implementation. Introduce migration 0018,
    scoped immutable release identity, jobs/events/artifacts and release admission,

@@ -65,3 +65,24 @@ export interface RevisionWrite {
   story_json: string;
   notices: string;
 }
+
+export type ReleaseStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type ArtifactKind = "source" | "web" | "manifest";
+export interface ReleaseJob {
+  id: string; attempt_number: number; status: ReleaseStatus;
+  cancel_requested: boolean; error_code: string | null; created_at: string; updated_at: string;
+}
+export interface ReleaseArtifact {
+  id: string; kind: ArtifactKind; sha256: string; size_bytes: number;
+  filename: string; media_type: string;
+}
+export interface NarrativeRelease {
+  id: string; tenant_id: string; project_id: string; revision_id: string;
+  package_hash: string; created_at: string; job: ReleaseJob; artifacts: ReleaseArtifact[];
+  build_identity: { compiler_version: string; runtime_version: string; godot_version: string;
+    toolchain_sha256: string; builder_image_digest: string };
+}
+export interface ReleaseEvent {
+  id: string; release_id: string; job_id: string; sequence: number;
+  code: string; payload: Record<string, string>; created_at: string;
+}
