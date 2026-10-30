@@ -1,5 +1,7 @@
+import { useContext } from "react";
 import type { ReactNode } from "react";
 import { own } from "./model";
+import { SceneOptionsContext } from "./sceneOptions";
 import type { Scalar, StoryDraft, VariableDeclaration } from "./types";
 
 export function Field({ label, children, hint }: {
@@ -48,9 +50,14 @@ export function VariableSelect({ story, value, onChange, label = "Variable", int
 export function TargetSelect({ story, value, onChange, label }: {
   story: StoryDraft; value: string; onChange: (value: string) => void; label: string;
 }) {
+  const scenes = useContext(SceneOptionsContext);
+  const missing = !own(story.nodes, value);
   return <Field label={label}><select value={value} onChange={event => onChange(event.target.value)}>
-    {!own(story.nodes, value) && <option value={value}>Missing scene: {value || "none"}</option>}
-    {Object.entries(story.nodes).map(([id, node]) => <option key={id} value={id}>
+    {missing && <option value={value}>Missing scene: {value || "none"}</option>}
+    {scenes ? <>
+      {!missing && !scenes.ids.has(value) && <option value={value}>{value} · inside a scene</option>}
+      {scenes.options}
+    </> : Object.entries(story.nodes).map(([id, node]) => <option key={id} value={id}>
       {id} · {"text" in node ? node.text.slice(0, 48) : node.type}
     </option>)}
   </select></Field>;

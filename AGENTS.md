@@ -44,7 +44,11 @@ only on acceptance. It runs as fenced Temporal jobs via the opt-in
 `docs/runbooks/narrative-assistant.md`. The owned assistant worker receipt is
 `notes/narrative-assistant-owned.json`. Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
-`notes/models/`; no generation pipeline exists yet.
+`notes/models/`; no generation pipeline exists yet. The Studio rail is now a
+Godot-style scene hierarchy (#169): scenes are line chains projected from the node
+graph, folders live in an editor-only versioned layout (migration 0021), and a
+script editor edits a whole scene. Long-form limits (10k nodes / 5 MB) are #172;
+read `docs/reports/2026-10-31-scene-hierarchy.md`.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

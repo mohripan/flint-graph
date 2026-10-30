@@ -3,12 +3,12 @@ import { api } from "./lib/api";
 import { useAuth } from "./lib/auth";
 import { useWorkspace } from "./lib/workspace";
 import { AuthGate, WorkspaceGate, Logo } from "./components/WorkspaceGate";
-import { AskPage } from "./pages/AskPage";
-import { UploadPage } from "./pages/UploadPage";
 import { SetupPage } from "./pages/SetupPage";
 import { StudioPage } from "./narrative/StudioPage";
 
-type Tab = "studio" | "ask" | "documents" | "setup";
+// The GraphRAG Ask and Documents pages are hidden from the studio shell (#169); their
+// code and API remain for project lore sources and story questions later (#125, #171).
+type Tab = "studio" | "setup";
 
 export default function App() {
   const auth = useAuth();
@@ -90,18 +90,11 @@ export default function App() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav aria-label="Workspace pages" className="flex w-full shrink-0 gap-1 border-b border-slate-200 bg-white p-3 md:w-52 md:flex-col md:border-r md:border-b-0">
           <NavItem active={tab === "studio"} onClick={() => navigate("studio")} label="Studio" icon={<DocIcon />} />
-          <NavItem active={tab === "ask"} onClick={() => navigate("ask")} label="Ask" icon={<AskIcon />} />
-          <NavItem
-            active={tab === "documents"}
-            onClick={() => navigate("documents")}
-            label="Documents"
-            icon={<DocIcon />}
-          />
           <NavItem active={tab === "setup"} onClick={() => navigate("setup")} label="Setup" icon={<SetupIcon />} />
         </nav>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
-          {tab === "studio" ? <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} /> : tab === "ask" ? <AskPage key={workspace.id} /> : tab === "documents" ? <UploadPage key={workspace.id} /> : <SetupPage key={workspace.id} />}
+          {tab === "studio" ? <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} /> : <SetupPage key={workspace.id} />}
         </main>
       </div>
     </div>
@@ -142,19 +135,6 @@ function HealthDot({ healthy }: { healthy: boolean | null }) {
       <span className={`h-2 w-2 rounded-full ${color}`} />
       {label}
     </span>
-  );
-}
-
-function AskIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <path
-        d="M21 12a8 8 0 01-11.3 7.3L4 21l1.7-5.7A8 8 0 1121 12z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 

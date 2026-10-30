@@ -12,6 +12,9 @@ import type {
   AssistantTurn,
   TurnWrite,
 } from "../narrative/types";
+import type { LayoutItem } from "../narrative/sceneTree";
+
+export interface SceneLayout { project_id: string; version: number; items: LayoutItem[] }
 import type {
   AnswerProvenance,
   Conversation,
@@ -281,6 +284,20 @@ export const api = {
   },
 
   downloadNarrativeArtifact: verifiedAttachment,
+
+  getNarrativeLayout(tenantId: string, projectId: string, signal?: AbortSignal): Promise<SceneLayout> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/layout`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  // Optimistic version: a 409 means someone else reorganized the scenes first.
+  saveNarrativeLayout(tenantId: string, projectId: string, baseVersion: number, items: LayoutItem[],
+    signal?: AbortSignal): Promise<SceneLayout> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/layout`, {
+      method: "PUT", headers: tenantHeaders(tenantId), signal, json: { base_version: baseVersion, items },
+    });
+  },
 
   listAssistantThreads(tenantId: string, projectId: string, options: {
     limit?: number; beforeId?: string; signal?: AbortSignal;

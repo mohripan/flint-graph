@@ -18,8 +18,10 @@ export class DraftHistory {
   }
   breakGroup(): void { this.group = null; }
 
-  record(snapshot: string, group?: string): void {
+  // A thunk defers building large snapshots until a new undo step is actually recorded.
+  record(value: string | (() => string), group?: string): void {
     if (group && this.group === group) return;
+    const snapshot = typeof value === "function" ? value() : value;
     for (const entry of this.forward) this.retained -= entry.bytes;
     this.forward = [];
     const entry = this.entry(snapshot);

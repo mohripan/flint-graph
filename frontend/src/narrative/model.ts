@@ -166,3 +166,44 @@ export function deleteVariable(story: StoryDraft, id: string): StoryDraft {
   const variables = { ...story.variables }; delete variables[id];
   return { ...story, variables };
 }
+
+// Inserting a line keeps it inside the same scene and with the same speaker.
+export function insertLineAfter(story: StoryDraft, id: string): { story: StoryDraft; id: string } {
+  const node = getScene(story, id);
+  if (!node || (node.type !== "line" && node.type !== "set")) throw new Error("Only lines and state changes can be followed by a new line.");
+  if (Object.keys(story.nodes).length >= 10000) throw new Error("This story already has 10,000 scenes.");
+  const lineId = availableId(`${id.slice(0, 48)}_line`, Object.keys(story.nodes));
+  const textId = availableId(`${lineId}_text`, textIds(story));
+  const speaker = node.type === "line" ? node.speaker : undefined;
+  const line: StoryNode = { type: "line", text_id: textId, text: "…", next: node.next, ...(speaker ? { speaker } : {}) };
+  return { id: lineId, story: { ...story, nodes: { ...story.nodes, [id]: { ...node, next: lineId }, [lineId]: line } } };
+}
+
+// Removing a line reconnects every route that reached it to the line that followed it.
+export function removeLine(story: StoryDraft, id: string): StoryDraft {
+  const node = getScene(story, id);
+  if (!node || (node.type !== "line" && node.type !== "set")) throw new Error("Only lines and state changes can be removed here.");
+  if (node.next === id) throw new Error("This line loops to itself; reconnect it first.");
+  const follow = (target: string) => target === id ? node.next : target;
+  const nodes: Record<string, StoryNode> = {};
+  for (const [key, item] of Object.entries(story.nodes)) {
+    if (key === id) continue;
+    nodes[key] = item.type === "line" || item.type === "set" ? { ...item, next: follow(item.next) }
+      : item.type === "choice" ? { ...item, options: item.options.map(option => ({ ...option, target: follow(option.target) })) }
+      : item.type === "branch" ? { ...item, if_true: follow(item.if_true), if_false: follow(item.if_false) } : item;
+  }
+  return { ...story, entry: follow(story.entry), nodes };
+}
+// Deletes a whole scene's nodes when nothing outside the scene still leads into it.
+export function deletePassage(story: StoryDraft, ids: string[]): StoryDraft {
+  const doomed = new Set(ids);
+  if (doomed.has(story.entry)) throw new Error("This scene starts the story. Choose another start scene first.");
+  for (const [id, node] of Object.entries(story.nodes)) {
+    if (!doomed.has(id) && sceneTargets(node).some(target => doomed.has(target))) {
+      throw new Error("Other scenes still lead here. Reconnect those routes first.");
+    }
+  }
+  const nodes = { ...story.nodes };
+  for (const id of doomed) delete nodes[id];
+  return { ...story, nodes };
+}

@@ -5,7 +5,11 @@ import { draftReducer, initialDraftState, prepareSave } from "./draftState";
 import type { SavedConflict, SourceDiagnostic } from "./draftState";
 import { Field } from "./FormFields";
 import { DraftHistory } from "./history";
-import { addScene, deleteScene } from "./model";
+import { addScene } from "./model";
+import { buildPassages } from "./passages";
+import { PassageEditor } from "./PassageEditor";
+import { SceneHierarchy } from "./SceneHierarchy";
+import { SceneOptionsContext } from "./sceneOptions";
 import { CharactersPanel, StatePanel, StoryPanel } from "./RecordPanels";
 import { RouteMap } from "./RouteMap";
 import { SceneForm } from "./SceneForm";
@@ -75,10 +79,10 @@ export function StudioPage({ onDirtyChange }: {
   const releaseIntentStore = useRef(releaseIntents());
   // The assistant panel is remounted per project; its scope is invalidated synchronously
   // on every path that changes project, collection or access.
-  const assistantScope = useRef<(() => void) | null>(null);
+  const assistantScope = useRef<(() => void) | null>(null), hierarchyScope = useRef<(() => void) | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(true);
   const endReleases = useCallback(() => {
-    releaseScope.current?.(); assistantScope.current?.(); setReleasesOpen(false);
+    releaseScope.current?.(); assistantScope.current?.(); hierarchyScope.current?.(); setReleasesOpen(false);
   }, []);
   const closeReleases = useCallback(() => {
     setReleasesOpen(false);
@@ -86,8 +90,7 @@ export function StudioPage({ onDirtyChange }: {
   }, []);
   const [panel, setPanel] = useState<Panel>("write");
   const [sceneId, setSceneId] = useState("");
-  const [sceneFilter, setSceneFilter] = useState("");
-  const [sceneLimit, setSceneLimit] = useState(50);
+  const [nodeEditor, setNodeEditor] = useState<string | null>(null);
   const [rawMode, setRawMode] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [, redrawHistory] = useState(0);
@@ -98,7 +101,19 @@ export function StudioPage({ onDirtyChange }: {
   const pendingCreate = useRef<{ name: string; key: string } | null>(null), creating = useRef(false);
   const dirty = Boolean(state.revision && (state.source !== state.revision.story_json || state.notices !== state.revision.notices));
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
-  const story = useMemo(() => rawMode ? null : parsedStory(state.source), [state.source, rawMode]);
+  // Form edits already hold the edited object; reuse it instead of re-parsing megabytes.
+  const lastEdit = useRef<{ source: string; story: StoryDraft } | null>(null);
+  const story = useMemo(() => rawMode ? null
+    : lastEdit.current?.source === state.source ? lastEdit.current.story : parsedStory(state.source), [state.source, rawMode]);
+  const scenes = useMemo(() => story ? buildPassages(story) : null, [story]);
+  const optionsKey = scenes ? scenes.passages.map(item => `${item.id}\u0001${item.title.slice(0, 48)}`).join("\u0000") : "";
+  const sceneOptions = useMemo(() => {
+    if (!optionsKey) return null;
+    const rows = optionsKey.split("\u0000").map(row => row.split("\u0001"));
+    return { ids: new Set(rows.map(([id]) => id)),
+      options: rows.map(([id, title]) => <option key={id} value={id}>{id} · {title}</option>) };
+  }, [optionsKey]);
+  const passage = scenes?.passages.find(item => item.id === (scenes.owner.get(sceneId) ?? sceneId));
 
   function controller(): AbortController {
     const value = new AbortController(); controllers.current.add(value); return value;
@@ -197,10 +212,14 @@ export function StudioPage({ onDirtyChange }: {
     const current = stateRef.current;
     if (!canWrite || current.saving || saving.current || !current.revision) return;
     if (source === current.source && notices === current.notices) return;
-    history.current.record(snapshot(), group); redrawHistory(value => value + 1);
+    history.current.record(snapshot, group); redrawHistory(value => value + 1);
     dispatch({ type: "edit", source, notices }); setNotice(null);
   }
-  function updateStory(next: StoryDraft, group?: string) { edit(JSON.stringify(next), stateRef.current.notices, group); }
+  function updateStory(next: StoryDraft, group?: string) {
+    const source = JSON.stringify(next);
+    lastEdit.current = { source, story: next };
+    edit(source, stateRef.current.notices, group);
+  }
   function restoreHistory(direction: "undo" | "redo") {
     if (!canWrite || saving.current) return;
     const stored = history.current[direction](snapshot()); redrawHistory(value => value + 1);
@@ -327,22 +346,15 @@ export function StudioPage({ onDirtyChange }: {
     try { const added = addScene(story, kind); updateStory(added.story); setSceneId(added.id); setPanel("write"); }
     catch (error) { setNotice(errorMessage(error)); }
   }
-  const sceneRows = story ? Object.entries(story.nodes).filter(([id, node]) =>
-    `${id} ${"text" in node ? node.text : node.type}`.toLowerCase().includes(sceneFilter.toLowerCase())) : [];
   const readOnly = !canWrite || state.saving;
   const common = story ? { story, readOnly, onChange: updateStory, onError: setNotice } : null;
-  const sceneList = <div className="studio-scene-list"><Field label="Find a scene"><input value={sceneFilter}
-    onChange={event => { setSceneFilter(event.target.value); setSceneLimit(50); }} placeholder="Text or scene ID" /></Field>
-    {sceneRows.slice(0, sceneLimit).map(([id, node]) => <button key={id} type="button"
-      className={`studio-scene ${sceneId === id ? "selected" : ""}`} aria-pressed={sceneId === id}
-      onClick={() => { setSceneId(id); choosePanel("write"); }}>
-      <span className="studio-kind">{node.type}{id === story?.entry ? " · start" : ""}</span>
-      <strong>{"text" in node ? node.text.slice(0, 90) || "Untitled scene" : node.type === "set" ? "Change story state" : "Check a condition"}</strong>
-      <code>{id}</code></button>)}
-    {sceneRows.length > sceneLimit && <button type="button" className="studio-secondary" onClick={() => setSceneLimit(value => value + 50)}>Show more scenes</button>}
-    {!sceneRows.length && <p className="studio-empty">No matching scenes.</p>}</div>;
+  const hierarchy = scenes && state.project ? <SceneHierarchy key={`${tenantId}:${state.project.id}`} tenantId={tenantId}
+    projectId={state.project.id} passages={scenes.passages} owner={scenes.owner} from={scenes.from} selected={sceneId}
+    canWrite={canWrite} scopeRef={hierarchyScope} onAccessLost={releaseAccessLost}
+    onSelect={id => { setSceneId(id); setNodeEditor(null); choosePanel("write"); }} /> : null;
 
-  return <div className="narrative-studio" role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
+  return <SceneOptionsContext.Provider value={sceneOptions}>
+  <div className="narrative-studio" role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
     {releasesOpen && state.project && state.revision && <ReleasesDialog key={`${tenantId}:${state.project.id}`}
       tenantId={tenantId} projectId={state.project.id} headId={state.project.head_revision_id} revision={state.revision}
       history={historyRows} canWrite={canWrite} dirty={dirty} saving={state.saving} onSave={save}
@@ -399,9 +411,9 @@ export function StudioPage({ onDirtyChange }: {
       <nav className="studio-tabs" aria-label="Story editor panels">{panels.map(([id, label]) => <button type="button" key={id}
         aria-pressed={panel === id} className={panel === id ? "selected" : ""} onClick={() => choosePanel(id)}>{label}</button>)}</nav>
       <div className={`studio-desk ${panel === "scenes" ? "show-scenes" : ""}`}>
-        <aside className="studio-rail" aria-label="Scenes">{sceneList}</aside>
+        <aside className="studio-rail" aria-label="Scenes">{hierarchy ?? <p className="studio-hint">Open Write to see scenes.</p>}</aside>
         <section className="studio-sheet">
-          {panel === "scenes" ? <div className="studio-mobile-scenes">{sceneList}</div> : panel === "source" ? <fieldset className="studio-form" disabled={readOnly}>
+          {panel === "source" ? <fieldset className="studio-form" disabled={readOnly}>
             <h2>Advanced source</h2><p className="studio-hint">Raw source is kept exactly as you type it. Strict validation runs when saving; invalid or duplicate fields are not silently repaired.</p>
             <Field label="Story JSON"><textarea className="studio-source" rows={22} spellCheck={false} value={state.source}
               onChange={event => edit(event.target.value, state.notices, "raw-source")} /></Field>
@@ -416,10 +428,12 @@ export function StudioPage({ onDirtyChange }: {
             : panel === "characters" ? <CharactersPanel {...common} /> : panel === "state" ? <StatePanel {...common} />
             : panel === "story" ? <><StoryPanel {...common} /><Field label="Content notices"><textarea rows={5} value={state.notices} disabled={readOnly}
                 onChange={event => edit(state.source, event.target.value, "notices")} /></Field></>
-            : <><SceneForm {...common} sceneId={sceneId} /><div className="studio-scene-actions">
-              {canWrite && <button type="button" className="studio-link studio-danger" disabled={readOnly || sceneId === common.story.entry}
-                onClick={() => { try { const next = deleteScene(common.story, sceneId); updateStory(next); setSceneId(next.entry); }
-                  catch (error) { setNotice(errorMessage(error)); } }}>Remove scene</button>}</div></>
+            : nodeEditor && common.story.nodes[nodeEditor] ? <><button type="button" className="studio-link"
+                onClick={() => setNodeEditor(null)}>← Back to the scene script</button>
+                <SceneForm {...common} sceneId={nodeEditor} /></>
+            : passage ? <PassageEditor key={passage.id} {...common} passage={passage} onOpenNode={setNodeEditor}
+                onDeleted={next => { updateStory(next); setSceneId(next.entry); }} />
+            : <SceneForm {...common} sceneId={sceneId} />
             : <p className="studio-empty">Open Source to inspect this draft, or reopen a valid saved revision.</p>}
         </section>
       </div>
@@ -444,5 +458,6 @@ export function StudioPage({ onDirtyChange }: {
         {onPreview && <button type="button" className="studio-secondary" onClick={event => onPreview(peek, event.currentTarget)}>Playtest this revision</button>}
       </div>
     </StudioDialog>}
-  </div>;
+  </div>
+  </SceneOptionsContext.Provider>;
 }
