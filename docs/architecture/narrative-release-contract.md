@@ -14,6 +14,15 @@ Under `/v1/narrative/projects/{project_id}/releases`:
 - `GET ""`: viewer or higher, `limit=1..100`, optional `before_id` and
   `include_archived`. Lists compact release/build identity and latest job metadata.
   Source/notices, object keys, engine paths and execution tokens are omitted.
+- `GET /{release_id}` and `GET /{release_id}/jobs[/{job_id}]`: scoped item/latest
+  and attempt history. Job lists accept bounded limit and an owned-job cursor.
+- `GET /{release_id}/jobs/{job_id}/events`: ordered safe events, bounded limit and
+  `after_sequence=0..2147483647`. Oversized cursors return 422 before SQL binding.
+- `POST /{release_id}/jobs/{job_id}/cancel`: member+, idempotent status response.
+  Queued work becomes cancelled immediately; running work retains its fence and
+  reports cancellation requested until worker cleanup. Completed work is unchanged.
+- `POST /{release_id}/retry`: member+, `{idempotency_key}`, 202 with a separate new
+  attempt only after failed/cancelled work. Pin identities remain unchanged.
 
 These routes reuse the existing authenticated workspace boundary. A workspace
 header alone is not authentication. Foreign project/revision/cursor reads return
@@ -33,13 +42,21 @@ Do not enable this experimental queue in a deployment expecting completed artifa
 
 ## Identity, transactions and replay
 
-Release keys are scoped to project/workspace. Intent hashes include the explicitly
+Release keys are scoped to project/workspace; retry keys are scoped to the release.
+Intent hashes include the explicitly
 selected revision, independent of current runtime configuration. Same key/different
 revision returns 409. Accepted replay is resolved before configuration, archive or
 admission checks and returns the original attempt 1, even after later attempts exist.
 Its current status may evolve; its job/release identity cannot change. List views
 show the latest attempt instead. Runtime/compiler/Godot/toolchain/image/package
 identities are pinned on release creation and remain immutable.
+
+Accepted retry keys likewise resolve their original attempt before archive/config
+checks. Fresh retries reject active/completed work, archived projects, published
+artifact metadata or an unavailable/mismatched pinned builder. Retry and cancel
+atomically persist their event/outbox/audit effects. Repeated cancellation adds no
+duplicate event/message; cancellation remains available after archiving. A viewer
+can inspect but cannot retry/cancel. Membership revocation denies subsequent reads.
 
 One transaction creates release, initial queued job/event, compact ID-only outbox
 message and safe audit record. Storage failure rolls back all records and returns
@@ -69,10 +86,11 @@ immutable release updates were qualified against owned PostgreSQL.
 
 The pure attempt transition boundary fences stale execution and cleanup, honors
 cancellation before publication and revokes terminal tokens. Persistence integration
-for retry/cancel/claim/finish remains pending; these transitions do not themselves
-dispatch work or authorize artifact insertion. Job/event/item APIs, actual relay/
+for claim/finish remains pending; these transitions do not themselves
+dispatch work or authorize artifact insertion. Actual relay/
 Temporal workflow, credential-free child runner, bounded object publication,
 authorized downloads and Releases UI remain unimplemented. No artifact is published
 or available for download by this initial slice.
 
-See the [qualification report](../reports/2026-10-30-narrative-release-ledger.md).
+See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
+and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).

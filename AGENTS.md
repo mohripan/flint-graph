@@ -14,8 +14,9 @@ Godot source export/player and real browser qualification are delivered.
 M31 #123 studio editor and isolated local Godot preview are implemented and live
 qualified with green CI/container smoke. #124 release/build design is committed;
 fenced transitions and initial ledger/create/list APIs are implemented with actual
-PostgreSQL/HTTP qualification. Retry/cancel persistence, worker and artifacts remain
-pending. Read the M31 progress/initial release contract before claiming build delivery.
+PostgreSQL/HTTP qualification. Retry/cancel/history persistence is also qualified;
+claim/finish execution, worker and artifacts remain pending. Read the M31 progress
+and release contract before claiming build delivery.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

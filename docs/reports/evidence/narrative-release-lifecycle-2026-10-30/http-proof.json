@@ -1,0 +1,88 @@
+{
+  "scope": "Owned loopback API/PostgreSQL; synthetic builder identities; no engine execution",
+  "item": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa",
+  "retry_request": {
+    "idempotency_key": "53010b88-18b0-4dd3-b064-491ded1f2791"
+  },
+  "first_job_id": "ed4c5b09-9aa2-4a99-b52e-860f3c8a78b1",
+  "second_job_id": "99e10a8a-034d-46ec-b3ec-cb6016aecd2f",
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/ed4c5b09-9aa2-4a99-b52e-860f3c8a78b1/cancel",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/ed4c5b09-9aa2-4a99-b52e-860f3c8a78b1/cancel",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/ed4c5b09-9aa2-4a99-b52e-860f3c8a78b1/events",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/retry",
+      "status": 202
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/retry",
+      "status": 202
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 202
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/99e10a8a-034d-46ec-b3ec-cb6016aecd2f",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/99e10a8a-034d-46ec-b3ec-cb6016aecd2f/cancel",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/99e10a8a-034d-46ec-b3ec-cb6016aecd2f/events",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs/99e10a8a-034d-46ec-b3ec-cb6016aecd2f/events?after_sequence=2147483648",
+      "status": 422
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/retry",
+      "status": 202
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/retry",
+      "status": 503
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases/a35f873f-4b67-4e63-b118-a71a98b6e2fa/jobs",
+      "status": 200
+    }
+  ],
+  "restart_with_builder_disabled_replayed_retry": true,
+  "all_fixture_attempts_cancelled": true
+}

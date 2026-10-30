@@ -33,7 +33,11 @@ are complete; the studio builds on that authored runtime.
   calls, including process restart/disabled-builder replay. Default building stays
   disabled. Final full suite: 1241 passed/48 skipped. [Initial ledger contract](../architecture/narrative-release-contract.md)
   and [qualified scope](../reports/2026-10-30-narrative-release-ledger.md).
-  Retry/cancel persistence, relay/Temporal, runner, publication/download and release
+  Retry/cancel/history persistence is now qualified with 15 more actual HTTP calls,
+  including disabled-builder restart replay; both synthetic fixture attempts are
+  cancelled. Final lifecycle suite: 1247 passed/48 skipped, and actual PostgreSQL
+  release API matrix: 28 passed/4 parameter skips. [Lifecycle scope/evidence](../reports/2026-10-30-narrative-release-lifecycle.md).
+  Claim/finish integration, relay/Temporal, runner, publication/download and release
   UI remain open. The existing studio/API/preview remain running.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance

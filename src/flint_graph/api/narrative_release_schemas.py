@@ -10,6 +10,11 @@ class NarrativeReleaseCreate(BaseModel):
     idempotency_key: UUID
 
 
+class NarrativeReleaseRetry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    idempotency_key: UUID
+
+
 class NarrativeReleaseBuildIdentity(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     compiler_version: str
@@ -39,3 +44,14 @@ class NarrativeReleaseResponse(BaseModel):
     created_at: datetime
     build_identity: NarrativeReleaseBuildIdentity
     job: NarrativeReleaseJobSummary
+
+
+class NarrativeReleaseEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    release_id: UUID
+    job_id: UUID
+    sequence: int
+    code: str
+    payload: dict[str, str]
+    created_at: datetime

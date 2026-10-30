@@ -4,6 +4,9 @@ Scope: initial #124 control plane, not complete release/build delivery. #123 rem
 delivered; #124 stays open for retry/cancel persistence, runner, Temporal dispatch,
 artifact publication/download and UI. See the
 [implemented contract](../architecture/narrative-release-contract.md).
+The subsequent [lifecycle slice](2026-10-30-narrative-release-lifecycle.md) now adds
+retry/cancel/history and cleans up the retained queued fixture. This report records
+the initial slice's evidence and scope at delivery.
 
 ## Behavior and actual proof
 

@@ -11,12 +11,15 @@ from flint_graph.api.dependencies import get_session
 from flint_graph.application.services.audit import AuditActor
 from flint_graph.application.services.narrative_projects import archive_project, create_revision
 from flint_graph.config import Settings, get_settings
+from flint_graph.domain.enums import WorkspaceMembershipStatus
 from flint_graph.infrastructure.db.models import (
     NarrativeProject,
     NarrativeRelease,
     NarrativeReleaseJob,
     OutboxMessage,
     Tenant,
+    User,
+    WorkspaceMembership,
 )
 from flint_graph.main import app
 
@@ -95,6 +98,54 @@ async def new_story(client, name="Release fixture", auth=None):
 
 
 @pytest.mark.anyio
+async def test_queued_cancel_and_explicit_retry_keep_the_original_acceptance_identity(
+    narrative_env, release_configuration
+):
+    client, _, _ = narrative_env
+    headers, project, path = await new_story(client)
+    request = {"revision_id": project["head_revision_id"], "idempotency_key": str(uuid4())}
+    release = (await client.post(f"{path}/releases", headers=headers, json=request)).json()
+    item = f"{path}/releases/{release['id']}"
+    first_job = release["job"]["id"]
+    cancelled = await client.post(f"{item}/jobs/{first_job}/cancel", headers=headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["cancel_requested"] is True
+    assert (
+        await client.post(f"{item}/jobs/{first_job}/cancel", headers=headers)
+    ).json() == cancelled.json()
+    retry_request = {"idempotency_key": str(uuid4())}
+    retry = await client.post(f"{item}/retry", headers=headers, json=retry_request)
+    assert retry.status_code == 202
+    assert retry.json()["id"] == release["id"]
+    assert retry.json()["job"]["id"] != first_job
+    assert retry.json()["job"]["attempt_number"] == 2
+    assert retry.json()["job"]["status"] == "queued"
+    app.dependency_overrides[get_settings] = lambda: Settings(env="test")
+    assert (
+        await client.post(f"{item}/retry", headers=headers, json=retry_request)
+    ).json() == retry.json()
+    replay = await client.post(f"{path}/releases", headers=headers, json=request)
+    assert replay.json()["job"]["id"] == first_job
+    assert replay.json()["job"]["status"] == "cancelled"
+    assert (await client.get(item, headers=headers)).json()["job"]["id"] == retry.json()["job"][
+        "id"
+    ]
+    jobs = await client.get(f"{item}/jobs", headers=headers)
+    assert [row["attempt_number"] for row in jobs.json()] == [2, 1]
+    assert (
+        await client.post(
+            f"{path}/archive",
+            headers=headers,
+            json={"base_revision_id": project["head_revision_id"], "archived": True},
+        )
+    ).status_code == 200
+    archived_replay = await client.post(f"{item}/retry", headers=headers, json=retry_request)
+    assert archived_replay.status_code == 202
+    assert archived_replay.json()["job"]["id"] == retry.json()["job"]["id"]
+
+
+@pytest.mark.anyio
 async def test_release_pages_do_not_repeat_a_same_timestamp_cursor(
     narrative_env, release_configuration
 ):
@@ -118,6 +169,248 @@ async def test_release_pages_do_not_repeat_a_same_timestamp_cursor(
     assert {first[0]["id"], second[0]["id"]} == ids
     last = await client.get(f"{path}/releases?before_id={second[0]['id']}", headers=headers)
     assert last.json() == []
+
+
+@pytest.mark.anyio
+async def test_running_cancel_is_a_durable_request_until_the_fenced_worker_finishes(
+    narrative_env, release_configuration
+):
+    client, factory, _ = narrative_env
+    headers, project, path = await new_story(client)
+    release = (
+        await client.post(
+            f"{path}/releases",
+            headers=headers,
+            json={"revision_id": project["head_revision_id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    job_id = release["job"]["id"]
+    item = f"{path}/releases/{release['id']}/jobs/{job_id}"
+    # Arrange an external worker's running state; this test does not execute an engine.
+    async with factory() as session:
+        job = await session.get(NarrativeReleaseJob, UUID(job_id))
+        job.status, job.execution_token = "running", uuid4()
+        await session.commit()
+    pending = await client.post(f"{item}/cancel", headers=headers)
+    assert pending.status_code == 200
+    assert pending.json()["status"] == "running"
+    assert pending.json()["cancel_requested"] is True
+    assert "execution_token" not in pending.text
+    first = await client.get(f"{item}/events", headers=headers)
+    assert first.status_code == 200
+    assert [row["code"] for row in first.json()] == ["release.queued", "release.cancel_requested"]
+    assert [row["sequence"] for row in first.json()] == [1, 2]
+    assert (await client.post(f"{item}/cancel", headers=headers)).json() == pending.json()
+    assert (await client.get(f"{item}/events", headers=headers)).json() == first.json()
+    assert (
+        len((await client.get(f"{item}/events?after_sequence=1&limit=1", headers=headers)).json())
+        == 1
+    )
+    async with factory() as session:
+        messages = list(
+            await session.scalars(
+                select(OutboxMessage).where(OutboxMessage.aggregate_id == UUID(job_id))
+            )
+        )
+    assert sorted(row.topic for row in messages) == [
+        "narrative.release_cancelled",
+        "narrative.release_queued",
+    ]
+
+
+@pytest.mark.anyio
+async def test_retry_keeps_the_pinned_runtime_and_replays_its_own_attempt_after_config_changes(
+    narrative_env, release_configuration
+):
+    client, _, _ = narrative_env
+    headers, project, path = await new_story(client)
+    release = (
+        await client.post(
+            f"{path}/releases",
+            headers=headers,
+            json={"revision_id": project["head_revision_id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    item = f"{path}/releases/{release['id']}"
+    await client.post(f"{item}/jobs/{release['job']['id']}/cancel", headers=headers)
+    request = {"idempotency_key": str(uuid4())}
+    release_configuration.narrative_release_builder_image_digest = "sha256:" + "c" * 64
+    assert (await client.post(f"{item}/retry", headers=headers, json=request)).status_code == 503
+    assert len((await client.get(f"{item}/jobs", headers=headers)).json()) == 1
+    release_configuration.narrative_release_builder_image_digest = "sha256:" + "a" * 64
+    retried = await client.post(f"{item}/retry", headers=headers, json=request)
+    assert retried.status_code == 202
+    assert retried.json()["build_identity"] == release["build_identity"]
+    second_job = retried.json()["job"]["id"]
+    assert (
+        await client.post(f"{item}/retry", headers=headers, json={"idempotency_key": str(uuid4())})
+    ).status_code == 409
+    await client.post(f"{item}/jobs/{second_job}/cancel", headers=headers)
+    release_configuration.narrative_releases_enabled = False
+    replay = await client.post(f"{item}/retry", headers=headers, json=request)
+    assert replay.status_code == 202
+    assert replay.json()["job"]["id"] == second_job
+    assert replay.json()["job"]["status"] == "cancelled"
+    assert (
+        await client.post(f"{item}/retry", headers=headers, json={"idempotency_key": str(uuid4())})
+    ).status_code == 503
+    assert len((await client.get(f"{item}/jobs", headers=headers)).json()) == 2
+
+
+@pytest.mark.anyio
+async def test_completed_attempt_is_not_cancelled_or_retried_in_place(
+    narrative_env, release_configuration
+):
+    client, factory, _ = narrative_env
+    headers, project, path = await new_story(client)
+    release = (
+        await client.post(
+            f"{path}/releases",
+            headers=headers,
+            json={"revision_id": project["head_revision_id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    item = f"{path}/releases/{release['id']}"
+    async with factory() as session:
+        job = await session.get(NarrativeReleaseJob, UUID(release["job"]["id"]))
+        job.status = "completed"  # Arrange an external publisher's terminal state only.
+        await session.commit()
+    cancelled = await client.post(f"{item}/jobs/{release['job']['id']}/cancel", headers=headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "completed"
+    assert cancelled.json()["cancel_requested"] is False
+    assert (
+        await client.post(f"{item}/retry", headers=headers, json={"idempotency_key": str(uuid4())})
+    ).status_code == 409
+    assert len((await client.get(f"{item}/jobs", headers=headers)).json()) == 1
+
+
+@pytest.mark.anyio
+async def test_release_event_cursor_stays_within_the_database_integer_boundary(
+    narrative_env, release_configuration
+):
+    client, _, _ = narrative_env
+    headers, project, path = await new_story(client)
+    release = (
+        await client.post(
+            f"{path}/releases",
+            headers=headers,
+            json={"revision_id": project["head_revision_id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    item = f"{path}/releases/{release['id']}/jobs/{release['job']['id']}/events"
+    for value in [-1, 2**31, 10**100]:
+        assert (
+            await client.get(f"{item}?after_sequence={value}", headers=headers)
+        ).status_code == 422
+    accepted = await client.get(f"{item}?after_sequence={2**31 - 1}", headers=headers)
+    assert accepted.status_code == 200
+    assert accepted.json() == []
+
+
+@pytest.mark.anyio
+async def test_attempt_reads_cancel_retry_and_events_apply_signed_membership_and_scope(
+    narrative_env, oidc_auth
+):
+    client, factory, _ = narrative_env
+    configured = app.dependency_overrides[get_settings]().model_copy(
+        update={
+            "narrative_releases_enabled": True,
+            "narrative_release_builder_image_digest": "sha256:" + "a" * 64,
+            "narrative_release_toolchain_sha256": "b" * 64,
+        }
+    )
+    app.dependency_overrides[get_settings] = lambda: configured
+    owner = {"Authorization": "Bearer " + oidc_auth("attempt-owner")}
+    headers, project, path = await new_story(client, auth=owner)
+    added = await client.post(
+        f"/v1/workspaces/{project['tenant_id']}/members",
+        headers=owner,
+        json={
+            "oidc_issuer": "https://keycloak.example/realms/flintgraph",
+            "oidc_subject": "attempt-viewer",
+            "role": "viewer",
+        },
+    )
+    assert added.status_code == 201
+    viewer = {**headers, "Authorization": "Bearer " + oidc_auth("attempt-viewer")}
+    release = (
+        await client.post(
+            f"{path}/releases",
+            headers=headers,
+            json={"revision_id": project["head_revision_id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    item = f"{path}/releases/{release['id']}"
+    job = f"{item}/jobs/{release['job']['id']}"
+    reads = [item, f"{item}/jobs", job, f"{job}/events"]
+    for read in reads:
+        assert (await client.get(read, headers=viewer)).status_code == 200
+    assert (await client.post(f"{job}/cancel", headers=viewer)).status_code == 403
+    assert (
+        await client.post(f"{item}/retry", headers=viewer, json={"idempotency_key": str(uuid4())})
+    ).status_code == 403
+    foreign_headers, foreign, foreign_path = await new_story(
+        client, name="Foreign attempts", auth=owner
+    )
+    other = (
+        await client.post(
+            f"{foreign_path}/releases",
+            headers=foreign_headers,
+            json={"revision_id": foreign["head_revision_id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    foreign_job = f"{item}/jobs/{other['job']['id']}"
+    foreign_release = f"{path}/releases/{other['id']}"
+    assert (await client.get(foreign_release, headers=headers)).status_code == 404
+    assert (await client.get(foreign_release + "/jobs", headers=headers)).status_code == 404
+    assert (
+        await client.post(
+            foreign_release + "/retry", headers=headers, json={"idempotency_key": str(uuid4())}
+        )
+    ).status_code == 404
+    assert (await client.get(foreign_job, headers=headers)).status_code == 404
+    assert (await client.get(f"{foreign_job}/events", headers=headers)).status_code == 404
+    assert (await client.post(f"{foreign_job}/cancel", headers=headers)).status_code == 404
+    assert (
+        await client.get(f"{item}/jobs?before_id={other['job']['id']}", headers=headers)
+    ).status_code == 404
+    assert (
+        await client.post(
+            f"{path}/archive",
+            headers=headers,
+            json={"base_revision_id": project["head_revision_id"], "archived": True},
+        )
+    ).status_code == 200
+    for read in reads:
+        assert (await client.get(read, headers=viewer)).status_code == 404
+        assert (
+            await client.get(read + "?include_archived=true", headers=viewer)
+        ).status_code == 200
+    assert (await client.post(f"{job}/cancel", headers=headers)).json()["status"] == "cancelled"
+    assert (
+        await client.post(f"{item}/retry", headers=headers, json={"idempotency_key": str(uuid4())})
+    ).status_code == 409
+    async with factory() as session:
+        viewer_id = await session.scalar(
+            select(User.id).where(User.oidc_subject == "attempt-viewer")
+        )
+        await session.execute(
+            update(WorkspaceMembership)
+            .where(
+                WorkspaceMembership.tenant_id == UUID(project["tenant_id"]),
+                WorkspaceMembership.user_id == viewer_id,
+            )
+            .values(status=WorkspaceMembershipStatus.DISABLED)
+        )
+        await session.commit()
+    for read in reads:
+        assert (
+            await client.get(read + "?include_archived=true", headers=viewer)
+        ).status_code == 403
+    assert (
+        await client.get(item, headers={"X-Tenant-ID": project["tenant_id"]})
+    ).status_code == 401
 
 
 @pytest.mark.anyio
