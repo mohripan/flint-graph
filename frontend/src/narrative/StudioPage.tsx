@@ -12,6 +12,7 @@ import { SceneForm } from "./SceneForm";
 import { StudioDialog } from "./StudioDialog";
 import { PreviewDialog } from "./PreviewDialog";
 import { ReleasesDialog } from "./ReleasesDialog";
+import { AssistantPanel } from "./AssistantPanel";
 import { releaseIntents } from "./releaseModel";
 import type { NarrativeProject, NarrativeRevision, RevisionSummary, RevisionWrite, StoryDraft, StoryNode } from "./types";
 import "./studio.css";
@@ -72,7 +73,13 @@ export function StudioPage({ onDirtyChange }: {
   // synchronously, before React commits the unmount.
   const releaseScope = useRef<(() => void) | null>(null);
   const releaseIntentStore = useRef(releaseIntents());
-  const endReleases = useCallback(() => { releaseScope.current?.(); setReleasesOpen(false); }, []);
+  // The assistant panel is remounted per project; its scope is invalidated synchronously
+  // on every path that changes project, collection or access.
+  const assistantScope = useRef<(() => void) | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const endReleases = useCallback(() => {
+    releaseScope.current?.(); assistantScope.current?.(); setReleasesOpen(false);
+  }, []);
   const closeReleases = useCallback(() => {
     setReleasesOpen(false);
     window.requestAnimationFrame(() => releasesOpener.current?.focus());
@@ -219,6 +226,22 @@ export function StudioPage({ onDirtyChange }: {
     } catch (error) { failure(error, generation); return null; }
     finally { controllers.current.delete(request); if (epoch.current === generation) saving.current = false; }
   }
+  function acceptedRevision(revision: NarrativeRevision) {
+    const current = stateRef.current;
+    if (!current.project || revision.project_id !== current.project.id || dirtyRef.current) return;
+    const generation = epoch.current;
+    history.current.breakGroup();
+    dispatch({ type: "saved", generation, revision });
+    setProjects(rows => rows.map(row => row.id === current.project!.id ? { ...row, head_revision_id: revision.id } : row));
+    const accepted = parsedStory(revision.story_json);
+    if (accepted && !Object.prototype.hasOwnProperty.call(accepted.nodes, sceneId)) setSceneId(accepted.entry);
+    setNotice(`Accepted the assistant's proposal as revision ${revision.revision_number}.`);
+    void refreshHistory(current.project.id, generation);
+  }
+  function assistantConflict() {
+    const current = stateRef.current.project;
+    if (current) void refreshHistory(current.id, epoch.current);
+  }
   const saveRef = useRef(save); saveRef.current = save;
   const undoRef = useRef(restoreHistory); undoRef.current = restoreHistory;
   useEffect(() => {
@@ -339,6 +362,8 @@ export function StudioPage({ onDirtyChange }: {
           {dirty && canWrite ? "Save & playtest" : "Playtest"}</button>}
         <button type="button" className="studio-secondary" disabled={!state.revision}
           onClick={event => { releasesOpener.current = event.currentTarget; setReleasesOpen(true); }}>Releases</button>
+        <button type="button" className="studio-secondary" aria-pressed={assistantOpen}
+          onClick={() => setAssistantOpen(open => !open)}>Assistant</button>
         {canWrite && <button type="button" className="studio-primary" disabled={!dirty || state.saving}
           onClick={() => void save()}>{state.saving ? "Saving…" : state.request && state.error && !state.conflict ? "Retry save" : "Save revision"}</button>}
       </div>}
@@ -369,7 +394,8 @@ export function StudioPage({ onDirtyChange }: {
         <p>Open the writing desk <span aria-hidden="true">↗</span></p></button>)}</div>
       {!projects.length && <p className="studio-empty">{listBusy ? "Loading projects…" : "Your first story starts here. A blank project needs no documents or AI service."}</p>}
       {listMore && <button type="button" className="studio-secondary" disabled={listBusy} onClick={() => void refreshProjects(true)}>Load older projects</button>}
-    </> : <>
+    </> : <div className={`studio-workspace ${assistantOpen && state.revision ? "with-assistant" : ""}`}>
+      <div className="studio-editor">
       <nav className="studio-tabs" aria-label="Story editor panels">{panels.map(([id, label]) => <button type="button" key={id}
         aria-pressed={panel === id} className={panel === id ? "selected" : ""} onClick={() => choosePanel(id)}>{label}</button>)}</nav>
       <div className={`studio-desk ${panel === "scenes" ? "show-scenes" : ""}`}>
@@ -402,7 +428,13 @@ export function StudioPage({ onDirtyChange }: {
           disabled={readOnly || ((type === "set" || type === "branch") && !Object.keys(story.variables).length)} onClick={() => add(type)}>
           {type === "line" ? "Add scene" : type === "choice" ? "Add choice" : type === "end" ? "Add ending" : type === "set" ? "Add state change" : "Add condition"}</button>)}
       </div><small>Save explicitly. Ctrl/⌘ + S saves a revision.</small></footer>}
-    </>}
+      </div>
+      {assistantOpen && state.project && state.revision && <AssistantPanel key={`${tenantId}:${state.project.id}`}
+        tenantId={tenantId} projectId={state.project.id} revision={state.revision} focus={sceneId || null}
+        canWrite={canWrite} dirty={dirty} saving={state.saving} scopeRef={assistantScope} onSave={save}
+        onAccepted={acceptedRevision} onConflict={assistantConflict} onInspect={id => void inspectRevision(id)}
+        onClose={() => setAssistantOpen(false)} onAccessLost={releaseAccessLost} />}
+    </div>}
     {peek && <StudioDialog label={`Revision ${peek.revision_number}`} onClose={closePeek}>
       <div className="studio-peek-body"><div className="studio-section-heading"><h2>Revision {peek.revision_number}{peek.conflicted ? " · conflict copy" : ""}</h2>
         <button type="button" className="studio-secondary" onClick={closePeek}>Close revision</button></div>

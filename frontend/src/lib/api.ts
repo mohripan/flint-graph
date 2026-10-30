@@ -7,6 +7,10 @@ import type {
   ReleaseArtifact,
   ReleaseJob,
   ReleaseEvent,
+  AssistantProposal,
+  AssistantThread,
+  AssistantTurn,
+  TurnWrite,
 } from "../narrative/types";
 import type {
   AnswerProvenance,
@@ -99,6 +103,10 @@ function narrativePage(options: { limit?: number; beforeId?: string; includeArch
   if (options.beforeId) query.set("before_id", options.beforeId);
   if (options.includeArchived) query.set("include_archived", "true");
   return query.toString();
+}
+
+function assistantPath(projectId: string): string {
+  return `/v1/narrative/projects/${encodeURIComponent(projectId)}/assistant`;
 }
 
 function releasePath(projectId: string, releaseId?: string): string {
@@ -273,6 +281,64 @@ export const api = {
   },
 
   downloadNarrativeArtifact: verifiedAttachment,
+
+  listAssistantThreads(tenantId: string, projectId: string, options: {
+    limit?: number; beforeId?: string; signal?: AbortSignal;
+  } = {}): Promise<AssistantThread[]> {
+    return jsonRequest(`${assistantPath(projectId)}/threads?${narrativePage(options)}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  createAssistantThread(tenantId: string, projectId: string, title: string, key: string,
+    signal?: AbortSignal): Promise<AssistantThread> {
+    return jsonRequest(`${assistantPath(projectId)}/threads`, { method: "POST",
+      headers: tenantHeaders(tenantId), signal, json: { title, idempotency_key: key } });
+  },
+
+  listAssistantTurns(tenantId: string, projectId: string, threadId: string, options: {
+    signal?: AbortSignal;
+  } = {}): Promise<AssistantTurn[]> {
+    return jsonRequest(`${assistantPath(projectId)}/threads/${encodeURIComponent(threadId)}/turns?limit=100`, {
+      headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  postAssistantTurn(tenantId: string, projectId: string, threadId: string, payload: TurnWrite,
+    signal?: AbortSignal): Promise<AssistantTurn> {
+    return jsonRequest(`${assistantPath(projectId)}/threads/${encodeURIComponent(threadId)}/turns`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: payload,
+    });
+  },
+
+  cancelAssistantTurn(tenantId: string, projectId: string, threadId: string, turnId: string,
+    signal?: AbortSignal): Promise<AssistantTurn> {
+    return jsonRequest(`${assistantPath(projectId)}/threads/${encodeURIComponent(threadId)}/turns/${encodeURIComponent(turnId)}/cancel`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  getAssistantProposal(tenantId: string, projectId: string, proposalId: string,
+    signal?: AbortSignal): Promise<AssistantProposal> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  // A stale base still commits a conflict revision; callers read it from the 409 problem.
+  acceptAssistantProposal(tenantId: string, projectId: string, proposalId: string, key: string,
+    signal?: AbortSignal): Promise<NarrativeRevision> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/accept`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: { idempotency_key: key },
+    });
+  },
+
+  rejectAssistantProposal(tenantId: string, projectId: string, proposalId: string,
+    signal?: AbortSignal): Promise<AssistantProposal> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/reject`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
 
   listDocuments(tenantId: string): Promise<DocumentListItem[]> {
     return jsonRequest<DocumentListItem[]>("/v1/documents", {

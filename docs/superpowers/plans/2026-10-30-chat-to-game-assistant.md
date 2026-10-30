@@ -22,6 +22,13 @@ retries and a shielded finalizer, fenced recovery of turns whose run closed, and
 opt-in `flint_graph.processes.narrative_assistant_worker` process. Live on the owned
 Temporal: connected completion with IDs-only history and mid-call cancellation on
 SQLite and PostgreSQL, and a real local-Gemma turn producing a ready proposal in ~21 s.
+Step 6 delivered: the Studio Assistant panel (docked at ≥1200 px, full-screen sheet
+below), conversations, turn progress with Stop, proposal cards with an added/changed/
+removed change list, Accept/Reject/Refine, save-first for dirty drafts, viewer
+read-only and shared access-loss scope. Live in the browser against the owned API
+(migrated to 0020) and assistant worker with local Gemma: a request added a scene,
+a choice and an ending (~40 s), Accept created revision 4 that the editor loaded, and
+the reference player completed the new route with no structural warnings.
 
 Scope/authorization: the [approved design](../specs/2026-10-30-chat-to-game-assistant-design.md),
 [ADR 0038](../../adr/0038-conversational-authoring-through-reviewed-proposals.md) and the
