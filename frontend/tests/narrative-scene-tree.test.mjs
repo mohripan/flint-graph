@@ -110,6 +110,11 @@ test("folders can be added, renamed and removed without losing scenes", () => {
   assert.match(tree.newGroupId(items), /^folder_[a-z0-9]+$/);
 });
 
+test("touch rows are at least 44 px; mouse rows keep editor density", () => {
+  assert.ok(tree.treeRowHeight(true) >= 44);
+  assert.ok(tree.treeRowHeight(false) < tree.treeRowHeight(true));
+});
+
 test("lines can be inserted and removed inside a scene without breaking routes", () => {
   const inserted = model.insertLineAfter(story(), "opening");
   assert.equal(inserted.story.nodes.opening.next, inserted.id);

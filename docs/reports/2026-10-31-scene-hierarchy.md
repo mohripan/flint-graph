@@ -36,6 +36,8 @@ In the browser against the owned API:
   (layout versions 2–4); Alt+↑ moved a scene and kept focus (version 5). A status
   message above the list shifted rows under the pointer; messages now render below.
 - At 375×812 the Scenes tab shows the tree full width and opens a one-column script.
+  Rows are 34 px for mouse and keyboard (Godot density) and 44 px when the pointer is
+  coarse (touch); the virtualized list follows the media query live.
 
 About 8,000 lines is roughly 200k words (~550 pages) and already near the package
 limit of 10,000 nodes and 5 MB. A 20-hour, ~800-page game needs the long-form

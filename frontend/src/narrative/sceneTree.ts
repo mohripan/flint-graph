@@ -7,6 +7,8 @@ export type Path = number[];
 export interface TreeRow { key: string; depth: number; path: Path; item: LayoutItem }
 
 export const MAX_DEPTH = 4;
+// Godot-like density for mouse and keyboard; 44 px rows when the pointer is a finger.
+export const treeRowHeight = (coarsePointer: boolean) => coarsePointer ? 44 : 34;
 
 function clone(items: LayoutItem[]): LayoutItem[] {
   return items.map(item => item.type === "group" ? { ...item, items: clone(item.items) } : { ...item });

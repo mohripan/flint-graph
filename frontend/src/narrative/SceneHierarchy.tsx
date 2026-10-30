@@ -5,10 +5,22 @@ import type { Passage } from "./passages";
 import { releaseErrorMessage, useReleaseRequests } from "./releaseRequests";
 import {
   addGroup, canDrop, flattenTree, moveItem, newGroupId, normalizeLayout, parentPath, removeGroup, renameGroup, toggleGroup,
+  treeRowHeight,
 } from "./sceneTree";
 import type { LayoutItem, Path, TreeRow } from "./sceneTree";
 
-const ROW = 34, OVERSCAN = 12;
+const OVERSCAN = 12, COARSE = "(pointer: coarse)";
+function useRowHeight() {
+  const [coarse, setCoarse] = useState(() => window.matchMedia?.(COARSE).matches ?? false);
+  useEffect(() => {
+    const media = window.matchMedia?.(COARSE);
+    if (!media) return;
+    const update = () => setCoarse(media.matches);
+    update(); media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return treeRowHeight(coarse);
+}
 type Drop = { index: number; where: "before" | "after" | "inside" };
 const glyph: Record<Passage["kind"], string> = { scene: "¶", choice: "⑂", branch: "◇", end: "■", state: "⚙" };
 
@@ -23,6 +35,7 @@ export function SceneHierarchy({ tenantId, projectId, passages, owner, from, sel
   onSelect: (passageId: string) => void; onAccessLost: () => void;
 }) {
   const { run, invalidate } = useReleaseRequests(onAccessLost);
+  const ROW = useRowHeight();
   useLayoutEffect(() => {
     scopeRef.current = invalidate;
     return () => { if (scopeRef.current === invalidate) scopeRef.current = null; };
@@ -232,7 +245,7 @@ export function SceneHierarchy({ tenantId, projectId, passages, owner, from, sel
             aria-expanded={item.type === "group" ? !item.collapsed || Boolean(query) : undefined} aria-selected={current}
             tabIndex={index === focusIndex ? 0 : -1}
             className={`studio-tree-row ${current ? "selected" : ""} ${dropping ? "drop-inside" : ""} ${item.type}`}
-            style={{ top: index * ROW, paddingLeft: 8 + row.depth * 16 }}
+            style={{ top: index * ROW, height: ROW, paddingLeft: 8 + row.depth * 16 }}
             onPointerDown={event => pointerDown(event, row)} onKeyDown={event => keyDown(event, row, index)}
             onFocus={() => setFocusKey(row.key)}
             onDoubleClick={() => { if (item.type === "group" && canWrite) setRenaming(item.id); }}>
