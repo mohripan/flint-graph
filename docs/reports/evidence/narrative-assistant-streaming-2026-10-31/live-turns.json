@@ -1,0 +1,119 @@
+{
+  "captured": "2026-10-31",
+  "stack": "isolated QA database on the owned PostgreSQL, own API :8111, own assistant worker and task queue, owned Temporal, local Ollama gemma-4-12B QAT with thinking on, built-in browser at 1280x800 and 375x812",
+  "turns": [
+    {
+      "thread_sequence": 1,
+      "status": "completed",
+      "error_code": null,
+      "model_calls": 1,
+      "proposal": "accepted",
+      "seconds": 101.4,
+      "events": {
+        "step": 11,
+        "thinking": 224,
+        "text": 3,
+        "status": 1
+      },
+      "chars": {
+        "thinking": 13870,
+        "text": 146
+      },
+      "max_delta_row_chars": 90,
+      "first_event_after_seconds": {
+        "step": 0.6,
+        "thinking": 10.5,
+        "text": 92.3,
+        "status": 101.4
+      },
+      "steps": [
+        "start:done",
+        "context:done",
+        "model:started",
+        "drafting:started",
+        "drafting:progress",
+        "drafting:progress",
+        "drafting:progress",
+        "drafting:progress",
+        "drafting:progress",
+        "model:done",
+        "validating:done"
+      ],
+      "final": {
+        "status": "completed",
+        "error_code": null
+      }
+    },
+    {
+      "thread_sequence": 2,
+      "status": "cancelled",
+      "error_code": "cancelled",
+      "model_calls": null,
+      "proposal": null,
+      "seconds": 54.1,
+      "events": {
+        "step": 3,
+        "thinking": 67,
+        "status": 1
+      },
+      "chars": {
+        "thinking": 6994,
+        "text": 0
+      },
+      "max_delta_row_chars": 192,
+      "first_event_after_seconds": {
+        "step": 0.2,
+        "thinking": 10.1,
+        "status": 54.1
+      },
+      "steps": [
+        "start:done",
+        "context:done",
+        "model:started"
+      ],
+      "final": {
+        "status": "cancelled",
+        "error_code": "cancelled"
+      }
+    },
+    {
+      "thread_sequence": 1,
+      "status": "completed",
+      "error_code": null,
+      "model_calls": 1,
+      "proposal": null,
+      "seconds": 78.3,
+      "events": {
+        "step": 4,
+        "thinking": 68,
+        "text": 2,
+        "status": 1
+      },
+      "chars": {
+        "thinking": 6907,
+        "text": 136
+      },
+      "max_delta_row_chars": 197,
+      "first_event_after_seconds": {
+        "step": 0.9,
+        "thinking": 33.9,
+        "text": 77.7,
+        "status": 78.3
+      },
+      "steps": [
+        "start:done",
+        "context:done",
+        "model:started",
+        "model:done"
+      ],
+      "final": {
+        "status": "completed",
+        "error_code": null
+      }
+    }
+  ],
+  "head_revision": {
+    "number": 3,
+    "scenes": 16
+  }
+}

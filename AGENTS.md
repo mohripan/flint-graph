@@ -42,7 +42,11 @@ only on acceptance. It runs as fenced Temporal jobs via the opt-in
 `narrative_assistant_worker` with local Ollama by default; read
 `docs/reports/2026-10-31-narrative-assistant.md` and
 `docs/runbooks/narrative-assistant.md`. The owned assistant worker receipt is
-`notes/narrative-assistant-owned.json`. Downloaded local generation models
+`notes/narrative-assistant-owned.json`. #171 moved the assistant to a full-page
+Studio view whose turns stream steps, thinking and reply text from durable
+PostgreSQL events (migration 0023, IDs-only Temporal history); Ollama `think` is now
+explicit and budgeted. Read `docs/reports/2026-10-31-assistant-live-turns.md`.
+Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
 `notes/models/`; no generation pipeline exists yet. The Studio rail is now a
 Godot-style scene hierarchy (#169): scenes are line chains projected from the node
