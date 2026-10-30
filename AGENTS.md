@@ -10,8 +10,9 @@ remain valid. The M30 written spec was approved for implementation on 2026-10-27
 the user authorized one review sub-agent and autonomous continuation. Preserve
 the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
 as part of the product pivot. M30 package loading, reference playback/saves and
-Godot source export/player and real browser qualification are delivered; the
-studio editor remains pending. M31 #122 adds authorized immutable text revisions
+Godot source export/player and real browser qualification are delivered.
+M31 #123 studio editor and isolated local Godot preview are implemented and live
+qualified; delivery CI is pending. M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.
 

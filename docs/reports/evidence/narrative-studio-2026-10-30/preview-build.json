@@ -1,0 +1,40 @@
+{
+  "schema_version": "1",
+  "parent_origin": "http://localhost:5173",
+  "engine": "4.7.2.stable",
+  "runtime": "0.2.0",
+  "source_files": {
+    "project.godot": "a5a62cc7718342154bef3c040f1e5c855326564f89500c312e5689f2d4ff78a9",
+    "main.tscn": "974847dfaf38662d8a4bf62117f188b4b2e01c05227afba653620a19855ff2aa",
+    "export_presets.cfg": "75915899caabaa75c95b2e567106f6ed0a983d0a361816ee5b5fcff4563c79ac",
+    "LICENSE.runtime.txt": "c605e9933dc64b6c51b33f9a6ceaa861e04de0348adaf765be4e02d377bed4d5",
+    "GODOT-NOTICE.txt": "39018067df880a2e91e6f55f4cc4db80fe4f926f41aa31fc4906f78436e405d3",
+    "runtime/player.gd": "87cfd980283931f68dc4d5912be0bc1bfb8276d62dead979ba38ccc52f8ddf29",
+    "runtime/game_view.gd": "02e9558b0009b14e8e7e2bff4884092fbc4ec0d911cb01776601024dec51cb07",
+    "runtime/save_store.gd": "aa5ddcfe1ef12b9269fff7e8b613169d1d5d1b9e324ad247a51bbf6e1e778fa5",
+    "runtime/strict_json.gd": "408a81436eda2bc6ec0dc49be34fb394dc63299e35a29c30518befe0015b7587",
+    "fonts/Lora.ttf": "822a6621ccbe8d97d20ac88c1c41f5615c9c2c202eaa75f272cd452aac6475a7",
+    "fonts/LICENSE-Lora.txt": "1d9a970809ac804b582a6ce7f0ebc4e7fefcbfd7ff6299cad35ee656a21be716",
+    "fonts/provenance.json": "9cb5cdf4ec46d78eeafe4fbfeabe735a727e4aefb0927274ecfbd8a3dd61d77b",
+    "preview/bootstrap.gd": "e2f9ff1a5e5b6794a16d6c3c3362b3e2d14950d4a804639d1768030f7fd37923",
+    "preview/game_view.gd": "023d4b08352b99a04d2aadd8d822ad9f8fb9b93bec621f7869fd711d0a9ca670",
+    "preview/validate_story.gd": "ba98c1e04b351352cb0376714bbf988321b9c572b28702928f81b97ba8d40cdb",
+    "preview/shell.html": "6862d6c3f02e676b23dd042ac15e930b31223bd8d06f30fb96b282d300294a86"
+  },
+  "files": {
+    "bridge.js": "58ed2f809814f444768afb36cbad51b22ea471341fa0f6c41b33855b4a32d7b2",
+    "GODOT-NOTICE.txt": "39018067df880a2e91e6f55f4cc4db80fe4f926f41aa31fc4906f78436e405d3",
+    "index.audio.position.worklet.js": "be33985bc7160d6bf9646f259cd86b259cd67b02ccb297ee5c44f8ac84327bc8",
+    "index.audio.worklet.js": "5b476a9c9ce642c0ee4256436d1bc31d9c38f868aca0f9a8e2a57c18d2dec2a3",
+    "index.html": "99f4c212dcdd1d58340ffb42e841c3e1521ad5ae77198384f2e8af309672fb7e",
+    "index.js": "33c94cb3175f3333b82e2a3be5e8e86f77986f0aa2042b1631f6367a4e5bb6ba",
+    "index.pck": "68b9cfe9210d13af2923f9cc614fc5b4f4b4e672e440eaec3d6c05a84d424a19",
+    "index.png": "3cb4495c0b98dfbe4b663cbf2b6836473572339beb66d902367893162a70be0e",
+    "index.wasm": "fc74679e3b97f76878947fcd4fbe1268cbfa6188182a2e33bbc3f5dc9bfa57d0",
+    "LICENSE-Lora.txt": "1d9a970809ac804b582a6ce7f0ebc4e7fefcbfd7ff6299cad35ee656a21be716",
+    "LICENSE.runtime.txt": "c605e9933dc64b6c51b33f9a6ceaa861e04de0348adaf765be4e02d377bed4d5",
+    "preview.css": "a73f59a02dd86f80c9fecf1b453fb79a425cc8c7216076d61dbc904daa93d17b",
+    "provenance.json": "9cb5cdf4ec46d78eeafe4fbfeabe735a727e4aefb0927274ecfbd8a3dd61d77b"
+  },
+  "browser_qualified": false
+}

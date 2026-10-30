@@ -5,3 +5,5 @@ runtimes/godot/** text eol=lf
 runtimes/godot/**/*.ttf -text
 # Preserve the exact upstream OFL notice, including its intentional trailing space.
 runtimes/godot/fonts/LICENSE-Lora.txt whitespace=-blank-at-eol
+frontend/src/narrative/Lora.ttf -text
+frontend/public/LICENSE-Lora.txt text eol=lf whitespace=-blank-at-eol

@@ -6,14 +6,18 @@ import { AuthGate, WorkspaceGate, Logo } from "./components/WorkspaceGate";
 import { AskPage } from "./pages/AskPage";
 import { UploadPage } from "./pages/UploadPage";
 import { SetupPage } from "./pages/SetupPage";
+import { StudioPage } from "./narrative/StudioPage";
 
-type Tab = "ask" | "documents" | "setup";
+type Tab = "studio" | "ask" | "documents" | "setup";
 
 export default function App() {
   const auth = useAuth();
   const { workspace, workspaces, loading, reset, select } = useWorkspace();
-  const [tab, setTab] = useState<Tab>("ask");
+  const [tab, setTab] = useState<Tab>("studio");
+  const [studioDirty, setStudioDirty] = useState(false);
   const [healthy, setHealthy] = useState<boolean | null>(null);
+  const mayLeave = () => !studioDirty || window.confirm("Leave this draft without saving? Your last saved revision will remain available.");
+  const navigate = (next: Tab) => { if (next !== tab && mayLeave()) setTab(next); };
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +62,7 @@ export default function App() {
             value={workspace.id}
             onChange={(event) => {
               const next = workspaces.find((item) => item.id === event.target.value);
-              if (next) select(next);
+              if (next && next.id !== workspace.id && mayLeave()) select(next);
             }}
             aria-label="Workspace"
             className="min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-600 sm:max-w-64"
@@ -69,12 +73,12 @@ export default function App() {
               </option>
             ))}
           </select>
-          <button onClick={reset} className="text-sm text-slate-500 hover:text-slate-700">
+          <button onClick={() => { if (mayLeave()) reset(); }} className="text-sm text-slate-500 hover:text-slate-700">
             Switch workspace
           </button>
           {auth.mode === "oidc" && (
             <button
-              onClick={() => void auth.signOut()}
+              onClick={() => { if (mayLeave()) void auth.signOut(); }}
               className="text-sm text-slate-500 hover:text-slate-700"
             >
               Sign out
@@ -85,18 +89,19 @@ export default function App() {
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav aria-label="Workspace pages" className="flex w-full shrink-0 gap-1 border-b border-slate-200 bg-white p-3 md:w-52 md:flex-col md:border-r md:border-b-0">
-          <NavItem active={tab === "ask"} onClick={() => setTab("ask")} label="Ask" icon={<AskIcon />} />
+          <NavItem active={tab === "studio"} onClick={() => navigate("studio")} label="Studio" icon={<DocIcon />} />
+          <NavItem active={tab === "ask"} onClick={() => navigate("ask")} label="Ask" icon={<AskIcon />} />
           <NavItem
             active={tab === "documents"}
-            onClick={() => setTab("documents")}
+            onClick={() => navigate("documents")}
             label="Documents"
             icon={<DocIcon />}
           />
-          <NavItem active={tab === "setup"} onClick={() => setTab("setup")} label="Setup" icon={<SetupIcon />} />
+          <NavItem active={tab === "setup"} onClick={() => navigate("setup")} label="Setup" icon={<SetupIcon />} />
         </nav>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
-          {tab === "ask" ? <AskPage key={workspace.id} /> : tab === "documents" ? <UploadPage key={workspace.id} /> : <SetupPage key={workspace.id} />}
+          {tab === "studio" ? <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} /> : tab === "ask" ? <AskPage key={workspace.id} /> : tab === "documents" ? <UploadPage key={workspace.id} /> : <SetupPage key={workspace.id} />}
         </main>
       </div>
     </div>
@@ -121,7 +126,7 @@ function NavItem({
         active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"
       }`}
     >
-      <span className="h-5 w-5">{icon}</span>
+      <span className="hidden h-5 w-5 md:block">{icon}</span>
       {label}
     </button>
   );

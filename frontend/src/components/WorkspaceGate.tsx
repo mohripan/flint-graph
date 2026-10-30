@@ -73,7 +73,7 @@ export function WorkspaceGate() {
           <Logo />
           <div>
             <h1 className="text-lg font-semibold text-slate-900">FlintGraph</h1>
-            <p className="text-sm text-slate-500">Ask questions about your documents</p>
+            <p className="text-sm text-slate-500">Create stories in your workspace</p>
           </div>
         </div>
 
@@ -81,7 +81,7 @@ export function WorkspaceGate() {
           Choose a workspace
         </h2>
         <p className="mb-5 text-sm text-slate-500">
-          Workspaces keep each team or department's documents and answers separate.
+          Workspaces keep each team's stories, documents, and answers separate.
         </p>
 
         {workspaces.length > 0 && (

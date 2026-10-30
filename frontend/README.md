@@ -1,9 +1,13 @@
 # FlintGraph Frontend
 
-A focused end-user UI for FlintGraph: sign in, choose a workspace, prepare
-search, upload or ingest documents, ask streamed citation-bearing questions,
-and inspect recent query history. Built with React, TypeScript, Vite, and
-Tailwind CSS.
+A workspace UI for authored branching games: create projects, write scenes and
+choices, edit typed state and conditions, save revisions, inspect history and
+playtest through the actual Godot runtime. Ask, Documents and Setup retain the
+existing document Q&A flows. Built with React, TypeScript, Vite, and Tailwind CSS.
+
+Manual Studio authoring requires the API and PostgreSQL, without a model or search
+index. The optional isolated playtest requires an explicit trusted runtime build
+and separate host; follow the [studio runbook](../docs/runbooks/narrative-studio.md).
 
 ## Prerequisites
 

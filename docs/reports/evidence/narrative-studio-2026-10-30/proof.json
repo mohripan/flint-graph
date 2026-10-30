@@ -1,0 +1,76 @@
+{
+  "recorded_at": "2026-10-30T03:27:48.990940+00:00",
+  "scope": "Owned local API/PostgreSQL fixtures and isolated browser; no private documents or live models",
+  "project_id": "120ead4e-15e5-4e2d-9d43-512474feb2ae",
+  "workspace_id": "70e8359d-e17f-4f9a-a321-f912fe4b9d30",
+  "head_revision_number": 6,
+  "both_concurrent_drafts_recoverable": true,
+  "revision_metadata": [
+    {
+      "id": "deafac67-124d-4823-8f68-7d7ffe4c4ab7",
+      "revision_number": 6,
+      "conflicted": false,
+      "content_hash": "b5e93af1572e70e875a9118254724e25e05df4833f5152048ac9b037c9882be3"
+    },
+    {
+      "id": "f7dcd8a1-7260-495e-b42c-8aa6be380726",
+      "revision_number": 5,
+      "conflicted": true,
+      "content_hash": "c59740ee5cdf604f046a8de73b78fbb026f6e503a10c5580182f1a523e07f80b"
+    },
+    {
+      "id": "33b49a60-325b-4501-a451-9aae4e11df89",
+      "revision_number": 4,
+      "conflicted": false,
+      "content_hash": "0a42562fd966cb104aa3ae01cc3f3eceaf5ed5a8492d28651d580c89788ecbf2"
+    },
+    {
+      "id": "d58c1275-a29d-46d8-ab53-c9d935381c5f",
+      "revision_number": 3,
+      "conflicted": false,
+      "content_hash": "d01a8844c1db6f22a48f4335594ca9c6034fc6080245d2ea33bfd5c6b0051278"
+    },
+    {
+      "id": "18d4c9bf-0edf-44d9-bb69-7cd91bd82fef",
+      "revision_number": 2,
+      "conflicted": false,
+      "content_hash": "e58dfa0841f3a5a7f455085434fb522b0b01ab301e8f7c2d1393369097b767e6"
+    },
+    {
+      "id": "c92f1e0d-def0-4117-b85d-f09c15d8c76b",
+      "revision_number": 1,
+      "conflicted": false,
+      "content_hash": "61a71c4b31e43bf1c2d83f61cbf1fe48d5c9982e46bc8154d79249ba3fe267c3"
+    }
+  ],
+  "served_files_match_build": {
+    "bridge.js": "58ed2f809814f444768afb36cbad51b22ea471341fa0f6c41b33855b4a32d7b2",
+    "GODOT-NOTICE.txt": "39018067df880a2e91e6f55f4cc4db80fe4f926f41aa31fc4906f78436e405d3",
+    "index.audio.position.worklet.js": "be33985bc7160d6bf9646f259cd86b259cd67b02ccb297ee5c44f8ac84327bc8",
+    "index.audio.worklet.js": "5b476a9c9ce642c0ee4256436d1bc31d9c38f868aca0f9a8e2a57c18d2dec2a3",
+    "index.html": "99f4c212dcdd1d58340ffb42e841c3e1521ad5ae77198384f2e8af309672fb7e",
+    "index.js": "33c94cb3175f3333b82e2a3be5e8e86f77986f0aa2042b1631f6367a4e5bb6ba",
+    "index.pck": "68b9cfe9210d13af2923f9cc614fc5b4f4b4e672e440eaec3d6c05a84d424a19",
+    "index.png": "3cb4495c0b98dfbe4b663cbf2b6836473572339beb66d902367893162a70be0e",
+    "index.wasm": "fc74679e3b97f76878947fcd4fbe1268cbfa6188182a2e33bbc3f5dc9bfa57d0",
+    "LICENSE-Lora.txt": "1d9a970809ac804b582a6ce7f0ebc4e7fefcbfd7ff6299cad35ee656a21be716",
+    "LICENSE.runtime.txt": "c605e9933dc64b6c51b33f9a6ceaa861e04de0348adaf765be4e02d377bed4d5",
+    "preview.css": "a73f59a02dd86f80c9fecf1b453fb79a425cc8c7216076d61dbc904daa93d17b",
+    "provenance.json": "9cb5cdf4ec46d78eeafe4fbfeabe735a727e4aefb0927274ecfbd8a3dd61d77b"
+  },
+  "content_security_policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors http://localhost:5173",
+  "preview_navigation": {
+    "status": 200,
+    "cookie_header": false,
+    "authorization_header": false
+  },
+  "synthetic_browser_cookie_test": "Not performed: automatic approval review rejected insertion (blocked by policy). HTTP credential rejection is covered separately.",
+  "screenshots": {
+    "conflict-mobile.png": "db5cd4815e55fdb587a7e86283d7ee54cb5c68384059a25c4f38b34ac590c091",
+    "editor-mobile.png": "4774c6f1b16c7bea2147d4df74c1139fadd8a11f9b965b0348e3c0a75549035d",
+    "ending.png": "ed0fd1a54507828acdf69749b9b431618af76c7e2487eabadeffb7c6c53b0f54",
+    "gated-choice.png": "19416b449d12bcad7d198bdf3e4b10c5b406517ac15d63e793f561fa9bbfac0f",
+    "playtest-mobile.png": "46c1cc68988e1c0c905e993291640b9ee6eb5d538278869d16bce591978d8c0e",
+    "route-map-desktop.png": "c228f4330501ef1c4295721f407cc51d7f48dc4a92b251abc25fa61584ad4707"
+  }
+}

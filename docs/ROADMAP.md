@@ -2,7 +2,7 @@
 
 ## Active product direction: narrative game studio
 
-Updated: 2026-10-27. Product direction approved; implementation is planned.
+Updated: 2026-10-30. Product direction approved; M30 delivered, M31 in progress.
 FlintGraph is moving toward an AI-assisted authoring studio for visual novels and
 branching narrative games, with authored gameplay and editable Godot/GDScript
 export first. AI assists creators; exported gameplay has no inference dependency.
@@ -27,11 +27,12 @@ below retain historical plans/progress and deferred issues; their old sequential
 queue is not the active product plan. Reuse generic platform/security work when
 needed rather than completing all old research/financial features first. Existing
 data, API invariants and uncommitted #109 observability work remain intact.
-Features listed here are not implemented by this planning update.
-Implementation has started under [Milestone 30](milestones/30-portable-story-runtime.md):
-#117 delivers the local package boundary and original fixture; #118 adds reference
-playback and strict saves; #119 adds pinned trusted-source export with native
-import/build proof. Actual Godot player/browser qualification remains #120–#121.
+Milestone 30 is complete through #117–#121: package/reference playback, pinned
+editable Godot export, real player and native/browser qualification. Under
+[Milestone 31](milestones/31-authored-narrative-studio.md), #122 delivered authorized
+immutable revisions and recoverable conflicts. #123 adds the manual studio and
+isolated local Godot preview, with live qualification complete and delivery CI
+pending. #124 durable release/build jobs and authorized downloads remain next.
 
 ## Historical GraphRAG roadmap and foundation backlog
 

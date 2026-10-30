@@ -1,4 +1,10 @@
 import type {
+  NarrativeProject,
+  NarrativeRevision,
+  RevisionSummary,
+  RevisionWrite,
+} from "../narrative/types";
+import type {
   AnswerProvenance,
   Conversation,
   ConversationTurn,
@@ -84,10 +90,17 @@ function idempotencyKey(): string {
   return crypto.randomUUID();
 }
 
+function narrativePage(options: { limit?: number; beforeId?: string; includeArchived?: boolean }): string {
+  const query = new URLSearchParams({ limit: String(options.limit ?? 25) });
+  if (options.beforeId) query.set("before_id", options.beforeId);
+  if (options.includeArchived) query.set("include_archived", "true");
+  return query.toString();
+}
+
 export const api = {
   async health(): Promise<boolean> {
     try {
-      const res = await fetch(`${BASE}/health/ready`);
+      const res = await fetch(`${BASE}/health/live`);
       return res.ok;
     } catch {
       return false;
@@ -109,6 +122,51 @@ export const api = {
     return jsonRequest<Workspace>("/v1/workspaces", {
       method: "POST",
       json: { name },
+    });
+  },
+
+  listNarrativeProjects(tenantId: string, options: {
+    limit?: number; beforeId?: string; includeArchived?: boolean; signal?: AbortSignal;
+  } = {}): Promise<NarrativeProject[]> {
+    return jsonRequest(`/v1/narrative/projects?${narrativePage(options)}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal,
+    });
+  },
+
+  createNarrativeProject(tenantId: string, name: string, key: string,
+    signal?: AbortSignal): Promise<NarrativeProject> {
+    return jsonRequest("/v1/narrative/projects", {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { name, idempotency_key: key },
+    });
+  },
+
+  getNarrativeProject(tenantId: string, projectId: string,
+    signal?: AbortSignal): Promise<NarrativeProject> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}`, {
+      headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  listNarrativeRevisions(tenantId: string, projectId: string, options: {
+    limit?: number; beforeId?: string; includeArchived?: boolean; signal?: AbortSignal;
+  } = {}): Promise<RevisionSummary[]> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/revisions?${narrativePage(options)}`, {
+      headers: tenantHeaders(tenantId), signal: options.signal,
+    });
+  },
+
+  getNarrativeRevision(tenantId: string, projectId: string, revisionId: string,
+    signal?: AbortSignal): Promise<NarrativeRevision> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}`, {
+      headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  saveNarrativeRevision(tenantId: string, projectId: string, payload: RevisionWrite,
+    signal?: AbortSignal): Promise<NarrativeRevision> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/revisions`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: payload,
     });
   },
 
