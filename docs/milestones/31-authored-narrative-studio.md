@@ -39,6 +39,11 @@ are complete; the studio builds on that authored runtime.
   release API matrix: 28 passed/4 parameter skips. [Lifecycle scope/evidence](../reports/2026-10-30-narrative-release-lifecycle.md).
   Claim/finish integration, relay/Temporal, runner, publication/download and release
   UI remain open. The existing studio/API/preview remain running.
+  The standalone bounded USTAR/ZIP codec is now implemented:49 focused tests,
+  1296 full-suite passes/48 skips, clean Ruff/mypy and an actual constrained Docker
+  transport receipt. Review caught/fixed short-read memory amplification.
+  [Codec scope/evidence](../reports/2026-10-30-narrative-release-codec.md).
+  This is not yet an engine, deadline, publication or download delivery.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.

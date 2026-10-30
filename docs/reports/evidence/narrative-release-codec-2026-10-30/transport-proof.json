@@ -1,0 +1,30 @@
+{
+  "scope": "fixed transport fixture only; not a Godot build",
+  "image": "sha256:39f6e9b1669a5c1b713cbcdd12abbd95366bac99c02b1932b58148e7e8ef4f2a",
+  "user": "10001:10001",
+  "network": "none",
+  "readonly_rootfs": true,
+  "memory_bytes": 134217728,
+  "memory_swap_bytes": 134217728,
+  "nano_cpus": 1000000000,
+  "pids_limit": 64,
+  "cap_drop": [
+    "ALL"
+  ],
+  "security_opt": [
+    "no-new-privileges"
+  ],
+  "tmpfs": {
+    "/scratch": "rw,size=1048576,mode=1777"
+  },
+  "host_binds": null,
+  "files": {
+    "index.js": {
+      "bytes": 15,
+      "sha256": "1983b07b93a3e7104c9b137310c0a4f66f487e6b33a5d64675ef1d89e213639f"
+    }
+  },
+  "zip_bytes": 131,
+  "zip_sha256": "202c79a39099c6905e18f8cdf256ba4f71a970f324c95e12953e66666ff4d8c4",
+  "owned_container_removed": true
+}

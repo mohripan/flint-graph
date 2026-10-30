@@ -21,7 +21,7 @@ acceptance and live verification. The new #133–#167 work is planned, not deliv
 | 31 | Workspace/project-scoped authored game editor, revisions, preview and release download | 30 |
 | 32 | Bounded narrative proposals, world/character knowledge, continuity and reviewed revisions | 31 |
 | 33 | Asset library, approved image variations, provenance and release bindings | 31 |
-| 34 | Complete game, three reachable endings, 15–30 minute playtest, release/recovery qualification | 31–33 |
+| 34 | Complete game, three reachable endings, 15–30 minute playtest, release/recovery qualification | 31–33; final #132 game also requires M38/#166 parity |
 | 35 | Typed prompt catalog, reviewed Langfuse promotion and locked offline fallback | #134/#135 before #126; #140 follows #126 |
 | 36 | Accurate context counts, budgets, manifests and measured prefix caching | Prompt catalog; preserve parent-call reservations |
 | 37 | Reviewed opt-in memory, branch summaries and accepted character knowledge | Context planning, canon and conversation branches |

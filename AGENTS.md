@@ -17,6 +17,9 @@ fenced transitions and initial ledger/create/list APIs are implemented with actu
 PostgreSQL/HTTP qualification. Retry/cancel/history persistence is also qualified;
 claim/finish execution, worker and artifacts remain pending. Read the M31 progress
 and release contract before claiming build delivery.
+The bounded USTAR/ZIP codec is implemented and reviewed with a real constrained
+transport fixture; engine/deadline/publication integration remains pending. See
+`docs/reports/2026-10-30-narrative-release-codec.md` for exact verified scope.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

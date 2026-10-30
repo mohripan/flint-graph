@@ -184,6 +184,18 @@ entries, traversal, duplicates and unexpected files. On overflow/error, stop the
 owned retrieval process/container and clean up only that execution's state. An
 inventory check after extraction is insufficient to enforce this boundary.
 
+Transport qualification found that Docker's archive-copy endpoint cannot see the
+bounded tmpfs output mount. Use a fixed trusted in-child archiver through `docker
+exec`, with USTAR output and a fixed flat web inventory; no creator command/path
+selection or host-side shell extraction. A real nonroot, read-only, network-none
+fixture produced the expected directory/regular-file headers. The host codec reads
+one checked512-byte header at a time (standard-library `TarInfo.frombuf`, without
+automatic PAX/longname processing), rejects extended/link/sparse/special entries
+before payload reads, caps per-file/aggregate/wire bytes and checks zero padding/
+trailer plus exact inventory. It returns bounded byte mappings; no archive metadata
+is extracted into host paths. Given-file ZIP output uses fixed ordering/timestamps
+and regular0644 modes. Deadline/process cleanup remains the runner's responsibility.
+
 Generate ZIPs with deterministic entry order, fixed timestamps and safe normalized
 relative paths, without symlinks/junctions/traversal/duplicate names or `.godot`
 import caches. The source project keeps trusted editable scripts, exact canonical
@@ -246,5 +258,7 @@ to the relevant acceptance, not permission to claim mock-only completion.
 - [Docker run options](https://docs.docker.com/reference/cli/docker/container/run/)
   and [resource constraints](https://docs.docker.com/engine/containers/resource_constraints/):
   configure and inspect the explicit child boundary.
+- [Docker copy corner cases](https://docs.docker.com/reference/cli/docker/container/cp/):
+  tmpfs requires the explicit child-archive transport rather than filesystem copy.
 - [Temporal Python cancellation](https://docs.temporal.io/develop/python/workflows/cancellation):
   heartbeat delivery, cleanup and re-raising cancellation.

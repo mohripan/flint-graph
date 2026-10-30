@@ -94,3 +94,13 @@ or available for download by this initial slice.
 
 See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
 and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).
+
+## Implemented artifact codec, pending runner integration
+
+The standalone USTAR decoder/ZIP encoder now enforce fixed inventories, checked
+headers/trailers, portable paths and count/per-file/aggregate/wire/output budgets.
+No host extraction or filesystem discovery occurs. Short reads use a bounded
+accumulator; ZIP file/parent and case collisions are rejected. Stream deadlines
+and process termination belong to the still-pending runner. A real nonroot,
+read-only, network-none tmpfs transport fixture passed; it is not an engine or
+artifact publication claim. See the [codec report](../reports/2026-10-30-narrative-release-codec.md).
