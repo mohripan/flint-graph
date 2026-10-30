@@ -1,9 +1,11 @@
 """Workspace-owned narrative editing containers and immutable source snapshots."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -96,3 +98,23 @@ class NarrativeRevision(UUIDPrimaryKeyMixin, Base):
     content_hash: Mapped[str] = mapped_column(String(64))
     author_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class NarrativeProjectLayout(TimestampMixin, Base):
+    """Editor-only scene hierarchy; never part of story content, packages or exports."""
+
+    __tablename__ = "narrative_project_layouts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["project_id", "tenant_id"],
+            ["narrative_projects.id", "narrative_projects.tenant_id"],
+            name="fk_narrative_project_layout_project",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version > 0", name="ck_narrative_project_layout_version"),
+    )
+    project_id: Mapped[UUID] = mapped_column(primary_key=True)
+    tenant_id: Mapped[UUID]
+    version: Mapped[int] = mapped_column(Integer)
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    updated_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))

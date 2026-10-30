@@ -7,6 +7,7 @@ from flint_graph.api.routes import (
     health,
     narrative,
     narrative_assistant,
+    narrative_layout,
     narrative_releases,
     observability,
     query,
@@ -28,3 +29,4 @@ api_router.include_router(conversations.router)
 api_router.include_router(narrative.router)
 api_router.include_router(narrative_releases.router)
 api_router.include_router(narrative_assistant.router)
+api_router.include_router(narrative_layout.router)

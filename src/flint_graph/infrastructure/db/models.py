@@ -71,6 +71,9 @@ from flint_graph.infrastructure.db.narrative_assistant_models import (
     NarrativeAssistantTurn as NarrativeAssistantTurn,
 )
 from flint_graph.infrastructure.db.narrative_models import NarrativeProject as NarrativeProject
+from flint_graph.infrastructure.db.narrative_models import (
+    NarrativeProjectLayout as NarrativeProjectLayout,
+)
 from flint_graph.infrastructure.db.narrative_models import NarrativeRevision as NarrativeRevision
 from flint_graph.infrastructure.db.narrative_release_models import (
     NarrativeRelease as NarrativeRelease,
