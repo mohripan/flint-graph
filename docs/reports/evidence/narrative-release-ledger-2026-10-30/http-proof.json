@@ -1,0 +1,98 @@
+{
+  "headers": {
+    "X-Tenant-ID": "5f847347-1bee-4dc4-87eb-b0957d6a947d"
+  },
+  "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2",
+  "request": {
+    "revision_id": "507d761d-b909-48fd-adb3-fdaace77d51d",
+    "idempotency_key": "261ff3be-0a69-442b-8e8f-4be8b2a6488d"
+  },
+  "release": {
+    "id": "a35f873f-4b67-4e63-b118-a71a98b6e2fa",
+    "tenant_id": "5f847347-1bee-4dc4-87eb-b0957d6a947d",
+    "project_id": "50c97b67-7aac-47f2-8f95-5bfb5a5939a2",
+    "revision_id": "507d761d-b909-48fd-adb3-fdaace77d51d",
+    "package_hash": "503074a4e6f05031b1a4bf18f153ae869ed89422acf7e5e0ddbadfc06fb46d49",
+    "created_at": "2026-10-30T04:02:53.889012Z",
+    "build_identity": {
+      "compiler_version": "0.1.0",
+      "runtime_version": "0.2.0",
+      "godot_version": "4.7.2.stable",
+      "toolchain_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "builder_image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "job": {
+      "id": "ed4c5b09-9aa2-4a99-b52e-860f3c8a78b1",
+      "attempt_number": 1,
+      "status": "queued",
+      "cancel_requested": false,
+      "error_code": null,
+      "created_at": "2026-10-30T04:02:53.889012Z",
+      "updated_at": "2026-10-30T04:02:53.889012Z"
+    }
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/v1/workspaces",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/revisions/507d761d-b909-48fd-adb3-fdaace77d51d",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 202
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 202
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 409
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 429
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 202
+    },
+    {
+      "method": "POST",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 503
+    },
+    {
+      "method": "GET",
+      "path": "/v1/narrative/projects/50c97b67-7aac-47f2-8f95-5bfb5a5939a2/releases",
+      "status": 200
+    }
+  ],
+  "scope": "Owned loopback API/PostgreSQL, synthetic builder identities; no engine invocation",
+  "restart_with_builder_disabled_replayed_original": true
+}

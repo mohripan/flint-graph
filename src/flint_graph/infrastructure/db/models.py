@@ -63,6 +63,18 @@ from flint_graph.domain.enums import (
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from flint_graph.infrastructure.db.narrative_models import NarrativeProject as NarrativeProject
 from flint_graph.infrastructure.db.narrative_models import NarrativeRevision as NarrativeRevision
+from flint_graph.infrastructure.db.narrative_release_models import (
+    NarrativeRelease as NarrativeRelease,
+)
+from flint_graph.infrastructure.db.narrative_release_models import (
+    NarrativeReleaseArtifact as NarrativeReleaseArtifact,
+)
+from flint_graph.infrastructure.db.narrative_release_models import (
+    NarrativeReleaseEvent as NarrativeReleaseEvent,
+)
+from flint_graph.infrastructure.db.narrative_release_models import (
+    NarrativeReleaseJob as NarrativeReleaseJob,
+)
 
 
 def enum_column(enum_type: type[PyEnum], length: int) -> SAEnum:

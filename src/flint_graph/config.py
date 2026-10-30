@@ -191,6 +191,13 @@ class Settings(BaseSettings):
     outbox_relay_retry_delay_seconds: int = Field(default=30, ge=0)
     projection_cleanup_poll_interval_seconds: float = Field(default=5.0, gt=0.0)
 
+    narrative_releases_enabled: bool = False
+    narrative_release_builder_image_digest: str | None = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
+    narrative_release_toolchain_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    narrative_release_max_active_jobs_per_workspace: int = Field(default=10, ge=1, le=100)
+
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True

@@ -209,6 +209,7 @@ class AuditAction(StrEnum):
     NARRATIVE_REVISION_CONFLICTED = "narrative.revision_conflicted"
     NARRATIVE_PROJECT_ARCHIVED = "narrative.project_archived"
     NARRATIVE_PROJECT_RESTORED = "narrative.project_restored"
+    NARRATIVE_RELEASE_REQUESTED = "narrative.release_requested"
     WORKSPACE_CREATED = "workspace.created"
     WORKSPACE_MEMBER_UPSERTED = "workspace.member_upserted"
     DOCUMENT_CREATED = "document.created"

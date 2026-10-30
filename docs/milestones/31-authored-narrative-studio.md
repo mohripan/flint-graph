@@ -28,8 +28,13 @@ are complete; the studio builds on that authored runtime.
   queued cancellation, active execution replacement, stale cleanup/publication,
   completion-before-cancel and recovery cleanup have six passing unit tests.
   Ruff and mypy (177 source files) pass. These tests establish transition behavior;
-  the release ledger/API, actual engine jobs and artifact downloads are still pending
-  and have no live delivery claim yet. The existing studio/API/preview remain running.
+  the actual engine jobs and artifact downloads are still pending. The initial
+  ledger/create/list API is now implemented with actual PostgreSQL and 12 real HTTP
+  calls, including process restart/disabled-builder replay. Default building stays
+  disabled. Final full suite: 1241 passed/48 skipped. [Initial ledger contract](../architecture/narrative-release-contract.md)
+  and [qualified scope](../reports/2026-10-30-narrative-release-ledger.md).
+  Retry/cancel persistence, relay/Temporal, runner, publication/download and release
+  UI remain open. The existing studio/API/preview remain running.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.
