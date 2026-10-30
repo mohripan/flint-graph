@@ -93,20 +93,20 @@ Input loading checks current ownership/cancel before exact builder identity and
 canonical revision/release hashes. Claim precedes builder resolution so an
 unavailable builder can fail owned work. These services never launch a child or
 authorize artifact insertion. Completion remains reserved for publication. Actual relay/
-Temporal workflow, credential-free child runner, bounded object publication,
+Temporal workflow/worker integration, bounded object publication,
 authorized downloads and Releases UI remain unimplemented. No artifact is published
 or available for download by this initial slice.
 
 See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
 and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).
 
-## Implemented artifact codec, pending runner integration
+## Implemented artifact codec and standalone runner
 
 The standalone USTAR decoder/ZIP encoder now enforce fixed inventories, checked
 headers/trailers, portable paths and count/per-file/aggregate/wire/output budgets.
 No host extraction or filesystem discovery occurs. Short reads use a bounded
-accumulator; ZIP file/parent and case collisions are rejected. Stream deadlines
-and process termination belong to the still-pending runner. A real nonroot,
+accumulator; ZIP file/parent and case collisions are rejected. The host runner
+now adds stream deadlines, process joining and owned cleanup. A real nonroot,
 read-only, network-none tmpfs transport fixture passed; it is not an engine or
 artifact publication claim. See the [codec report](../reports/2026-10-30-narrative-release-codec.md).
 
@@ -115,9 +115,19 @@ against actual Godot: fixed input copying, image-owned runtime hashes, closed
 manifest parsing, bounded nonblocking engine diagnostics/deadlines, fixed web
 inventory/USTAR and an independent180-second PID1 watchdog. A changed script with
 an updated manifest was rejected; absent-supervisor watchdog exit124 was observed.
-The credentialed host runner, fencing and publication remain pending. See the
+Standalone host execution is also qualified; worker integration and publication
+remain pending. See the
 [child report](../reports/2026-10-30-narrative-build-child.md) and
 [preparation runbook](../runbooks/narrative-builder-preparation.md).
 
 See the [execution ownership report](../reports/2026-10-30-narrative-release-execution.md)
 for exact service/database verification and the remaining host-worker boundary.
+
+The host adapter verifies pinned/effective image and container profiles before
+engine start, captures/validates exact source and child output inventories, checks
+ownership/cancellation between stages, adds external web licenses/notices and
+returns private ZIP bytes. Repeated-cancel-safe finalization joins subprocesses/
+decoder and removes only label-verified immutable container IDs plus token-marked
+scratch. Unconfirmed cleanup retains a safe marker for future owned recovery.
+Actual export and task cancellation passed. See the
+[runner report](../reports/2026-10-30-narrative-build-runner.md).

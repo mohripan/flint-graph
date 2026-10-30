@@ -1,0 +1,11 @@
+{
+  "package_hash": "8e510219c2bee010c39d7a294b8eed545d97f60f8a87d0f925c7a28083d83a7b",
+  "image": "sha256:0e0ee5625ab13bd5a4ceade377487a88c78acc549db8261679ea36c0e7e18511",
+  "toolchain_sha256": "a5ba78d233e18bdfa2f9d56b9118134e492071d9cbf14d8bec10709628809af4",
+  "source_sha256": "93dfcfca0ab877a6ce4c5ff49319d37876d8874107d86fe2554d7acb2794a564",
+  "web_sha256": "8cf404ce33771fd744119d6b81cd9c764eb1c21548b4c8bff0246d53da8d47de",
+  "source_bytes": 125850,
+  "web_bytes": 10367032,
+  "owned_scratch_removed": true,
+  "owned_running_child_removed": true
+}

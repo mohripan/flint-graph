@@ -99,3 +99,23 @@ the child was not OOM-killed. Each test cleans up only its labeled owned contain
 Missing opt-in settings skip the native tests; they never select a default user
 image/service. Keep PostgreSQL publication, storage, Temporal and UI acceptance
 separate until their actual end-to-end proofs pass.
+
+## Host adapter and ownership checks
+
+`DockerNarrativeBuilder` now implements standalone host preparation, effective
+inspection before engine start, bounded command/archive reads, source/output
+verification, licensed ZIP assembly and protected cleanup. It still requires a
+trusted activity caller; no public build endpoint dispatches it yet. Use the
+execution fence UUID as `execution_id`, never the stable job ID. The caller must
+have acquired and committed that fresh lease, load the exact pinned private input,
+and supply an async check that revalidates ownership/cancellation in fresh short
+transactions between stages. Hold no release/job locks during engine execution.
+Returning ZIP bytes never grants publication permission; the final transaction
+must recheck the same active fence and all object receipts.
+
+Cancellation joins CLI/decoder handles and removes only an immutable container ID
+whose execution label matched. Scratch checks exact resolved ownership before
+deletion. An unreachable daemon or ownership mismatch retains the private marked
+folder with `.cleanup=cleanup_unconfirmed`; automatic startup recovery is still
+pending. Do not manually delete unrelated Docker resources or the scratch parent.
+See the [host runner qualification](../reports/2026-10-30-narrative-build-runner.md).

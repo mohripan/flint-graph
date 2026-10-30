@@ -10,7 +10,7 @@ import tarfile
 import zipfile
 from collections.abc import Buffer, Mapping
 from dataclasses import dataclass
-from typing import BinaryIO
+from typing import Protocol
 
 _CHUNK = 65536
 _MIB = 1024 * 1024
@@ -51,8 +51,12 @@ class ArtifactLimits:
 _DEFAULT_LIMITS = ArtifactLimits()
 
 
+class BinaryReader(Protocol):
+    def read(self, size: int = -1, /) -> bytes: ...
+
+
 class _Reader:
-    def __init__(self, stream: BinaryIO, cap: int) -> None:
+    def __init__(self, stream: BinaryReader, cap: int) -> None:
         self.stream, self.cap, self.used = stream, cap, 0
 
     def chunk(self, size: int = _CHUNK) -> bytes:
@@ -88,7 +92,7 @@ def _flat_name(name: str) -> bool:
 
 
 def read_child_files(
-    stream: BinaryIO,
+    stream: BinaryReader,
     *,
     expected_names: frozenset[str],
     root: str = "web",

@@ -56,6 +56,13 @@ are complete; the studio builds on that authored runtime.
   1315 passed/52 skipped. [Execution scope/evidence](../reports/2026-10-30-narrative-release-execution.md).
   Successful completion remains exclusive to future verified publication; host
   runner, store/downloads, Temporal and Releases UI remain open.
+  The standalone host runner is now qualified too: effective settings are checked
+  before start, source/output hashes are verified, web licenses/notices included,
+  and repeated cancellation safely joins pipes/processes and preserves sibling
+  files.58 focused passes;1324 full-suite passes/54 skips;2 actual image cases.
+  [Runner scope/evidence](../reports/2026-10-30-narrative-build-runner.md).
+  Activity integration, startup recovery, store/publication/downloads, Temporal
+  and Releases UI/end-to-end acceptance remain open.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.

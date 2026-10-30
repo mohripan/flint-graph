@@ -5,6 +5,12 @@ and the user's autonomous continuation instruction. The existing review agent
 identified fencing, configuration-independent replay and pre-extraction bounds;
 the written design now pins these before implementation.
 
+Progress2026-10-30: ledger/lifecycle, fenced execution/private input loading and
+standalone codec/child/host-runner qualification are delivered. Reports under
+`docs/reports/2026-10-30-narrative-*` distinguish actual PostgreSQL, native image
+and fault proofs. Object publication/downloads, worker/activity/startup recovery,
+Temporal and Releases UI/end-to-end qualification remain open; #124 stays open.
+
 1. Add public API/transition tests before implementation. Introduce migration 0018,
    scoped immutable release identity, jobs/events/artifacts and release admission,
    key/body replay, retry/cancel/read APIs. Queue initial/cancel outbox atomically.

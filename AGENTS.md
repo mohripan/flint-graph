@@ -4,29 +4,24 @@
 
 The user approved an authored narrative game studio with Godot/GDScript export
 first. Read `docs/product/narrative-game-studio.md`, ADR 0035 and the active section
-of `docs/ROADMAP.md` before selecting work. Milestones 30–34 supersede the older
+of `docs/ROADMAP.md` before selecting work. Milestones 30–38 supersede the older
 automatic research/financial queue; historical deliveries and security invariants
 remain valid. The M30 written spec was approved for implementation on 2026-10-27;
 the user authorized one review sub-agent and autonomous continuation. Preserve
 the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
 as part of the product pivot. M30 package loading, reference playback/saves and
 Godot source export/player and real browser qualification are delivered.
-M31 #123 studio editor and isolated local Godot preview are implemented and live
-qualified with green CI/container smoke. #124 release/build design is committed;
-fenced transitions and initial ledger/create/list APIs are implemented with actual
-PostgreSQL/HTTP qualification. Retry/cancel/history persistence is also qualified;
-Worker and artifacts remain pending. Read the M31 progress
-and release contract before claiming build delivery.
-The bounded USTAR/ZIP codec is implemented and reviewed with a real constrained
-transport fixture; engine/deadline/publication integration remains pending. See
-`docs/reports/2026-10-30-narrative-release-codec.md` for exact verified scope.
-The standalone trusted Linux Godot child and explicit operator image preparation
-are also live qualified (export, tamper rejection and independent180-second
-watchdog). Read `docs/reports/2026-10-30-narrative-build-child.md`; host runner,
-storage/publication, Temporal and Releases UI remain pending. Claim/non-success
-finalization and private source loading are now persisted and qualified against
-actual PostgreSQL recoveries; successful completion stays reserved for verified
-publication. See `docs/reports/2026-10-30-narrative-release-execution.md`.
+M31 #123 studio editor and isolated local Godot preview are live qualified with
+green CI/container smoke. #124 now has qualified ledger/lifecycle APIs, execution
+fences/private input loading, bounded USTAR/ZIP codecs, explicit Linux image
+preparation, trusted Godot child/watchdog and standalone host runner. Actual
+PostgreSQL recoveries, native export/tamper rejection, absent-worker watchdog and
+real host-task cancellation passed. Read the M31 progress/release contract and
+`docs/reports/2026-10-30-narrative-build-runner.md` plus linked child/execution
+reports for exact scope. Worker/activity integration, startup cleanup recovery,
+immutable storage/publication/downloads, Temporal and Releases UI/end-to-end proof
+remain pending. Successful completion stays reserved for verified publication;
+ordinary API release creation remains disabled. Preserve private owned fixtures.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.
