@@ -35,6 +35,16 @@ children need a bounded writable `/tmp`; otherwise Godot packs an empty
 `project.binary` and the browser build black-screens. The host now requires the
 `/tmp` tmpfs and rejects such packs. The owned local API admits releases with the
 existing builder pins. Preserve private owned fixtures.
+On 2026-10-30 the user made chat-driven creation the primary workflow
+([ADR 0038](docs/adr/0038-conversational-authoring-through-reviewed-proposals.md),
+#168): a Studio Assistant panel proposes bounded story edits that become revisions
+only on acceptance. It runs as fenced Temporal jobs via the opt-in
+`narrative_assistant_worker` with local Ollama by default; read
+`docs/reports/2026-10-31-narrative-assistant.md` and
+`docs/runbooks/narrative-assistant.md`. The owned assistant worker receipt is
+`notes/narrative-assistant-owned.json`. Downloaded local generation models
+(Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
+`notes/models/`; no generation pipeline exists yet.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.
