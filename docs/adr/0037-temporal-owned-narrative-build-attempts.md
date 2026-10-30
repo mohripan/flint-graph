@@ -24,12 +24,26 @@ heartbeats contain compact IDs/status only, never source, ZIPs, keys or raw erro
 
 Migration0019 adds nullable workflow-run UUID and activity-attempt number to each
 release job, constrained as an absent pair or a valid pair. Existing/manual
-qualified attempts remain readable with both absent. The first Temporal claim
-binds a job to one run. Same-run newer/equal activity attempts may acquire fresh
+qualified attempts remain readable with both absent. The relay durably registers
+the exact accepted run with attempt0 before marking its dispatch message published,
+independently of whether a build activity ever claims. A replay verifies the same
+expected workflow ID/type/compact input and registers that same run idempotently.
+Same-run newer/equal activity attempts may acquire fresh
 execution tokens; lower attempts, a different run or an unowned manual claim may
 not take over that bound job. Ordinary activity cleanup still requires its exact
 original token. Terminal state revokes that token and retains owner identity for
 inspection; no new public DTO exposes it.
+
+Registration may race the first worker poll. An absent owner on a still-queued,
+tokenless job is a retryable registration condition, never successful/stale
+completion. It cannot claim or launch an engine before registration commits.
+Supervisor/periodic closed-run recovery can safely fail a registered attempt0 job
+when all build executions failed before their first claim. It never applies this
+fallback to running/manual/unknown-owner work. Recovery runs after registration
+too, not solely once at worker startup, so a recovered relay commit is not missed.
+Bind only one fixed workflow ID/type and build activity ID/type per job/run;
+attempt ordering assumes that single activity chain, since another activity ID
+would restart its attempt counter.
 
 Workflow execution retry/continue-as-new/reset into another run for the same job
 is unsupported in this first delivery. Recovery uses activity retries within the
@@ -85,7 +99,7 @@ authentication/HA and stronger hostile-code isolation remain separate platform w
 
 Add tests before behavior: owner pair constraints, old-attempt/run/manual claim
 rejection, same-run recovery, supervisor ownership and cancellation/completion
-ordering. Qualify actual PostgreSQL and native Temporal dispatch duplicates,
+ordering, including final exhaustion before any first claim. Qualify actual PostgreSQL and native Temporal dispatch duplicates,
 worker interruption/exhaustion, running cancellation and private-payload absence.
 Inspect real child limits and publication/download hashes. Then deliver the
 server-backed Releases UI and real browser export/play proof. Missing services
