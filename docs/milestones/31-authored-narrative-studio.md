@@ -1,75 +1,50 @@
 # Milestone 31: authored narrative studio
 
-Status: in progress, 2026-10-27.
-[Tracking issue #113](https://github.com/mohripan/flint-graph/issues/113).
-M30's package, reference player, Godot source/player and browser qualification
-are complete; the studio builds on that authored runtime.
+Status: in progress, 2026-10-30. [Tracking issue #113](https://github.com/mohripan/flint-graph/issues/113).
+Two of three focused issues are complete. The remaining release issue #124 has a
+connected native backend proof; operator recovery and the Releases UI remain.
 
-## Delivered slices
+## Available now
 
-- #122: authorized projects, immutable text revisions, explicit base concurrency,
-  committed recoverable conflicts, scoped metadata lists and archive/restore.
-  Actual PostgreSQL constraints/queued writers and a real HTTP workflow passed.
-  CI and real container smoke passed; the issue is closed.
-  [Design](../superpowers/specs/2026-10-27-narrative-project-revisions-design.md),
-  [contract](../architecture/narrative-project-contract.md),
-  [evidence](../reports/2026-10-27-narrative-projects.md).
+- **#122 complete:** workspace-authorized projects, immutable text revisions,
+  explicit base concurrency, recoverable conflicts and archive/restore.
+  [Contract](../architecture/narrative-project-contract.md),
+  [qualification](../reports/2026-10-27-narrative-projects.md).
+- **#123 complete:** manual scene/choice editor, story map, revision history,
+  conflict handling and isolated local Godot browser preview. Real engine/browser,
+  CI and container smoke passed. [Qualification](../reports/2026-10-30-narrative-studio.md).
+- **#124 in progress:** release/job ledger, cancellation/retry/history, execution
+  fences, bounded codecs, pinned isolated Godot engine/host runner/watchdog,
+  immutable objects, atomic publication and authorized source/web/manifest
+  downloads. The separate relay/workflow/activities now pass an actual
+  Temporal→PostgreSQL→Godot→MinIO→API download proof. Real-server tests also cover
+  duplicate/closed dispatch, bounded retries and shielded cancellation.
+  [Current scope](../reports/2026-10-30-narrative-temporal-worker.md).
 
-- #123: editor and isolated local Godot preview implemented and live qualified;
-  CI and real container smoke passed; issue closed. [Report](../reports/2026-10-30-narrative-studio.md).
+## Required to finish #124 and this milestone
 
-## Next work
+1. Operator worker/relay entry points, periodic exact closed-run recovery and
+   ownership-checked expired child/scratch sweeps. Qualify process loss/restart,
+   stale completion and cancellation with the connected services.
+2. Studio Releases UI: request a saved revision, reload server state, inspect jobs,
+   cancel/retry and download authorized attachments.
+3. Real browser author→save→background build→download→play proof and equivalent
+   authored routes, followed by reviewed documentation and green CI.
 
-- #124: immutable releases, durable isolated build jobs and authorized artifacts.
-  [Focused design](../superpowers/specs/2026-10-30-narrative-releases-design.md)
-  and [implementation plan](../superpowers/plans/2026-10-30-narrative-releases.md)
-  are committed after the same reviewer checked fencing, replay and transport
-  bounds. Implementation started with a pure fenced-attempt transition boundary:
-  queued cancellation, active execution replacement, stale cleanup/publication,
-  completion-before-cancel and recovery cleanup have six passing unit tests.
-  Ruff and mypy (177 source files) pass. These tests establish transition behavior;
-  the actual engine jobs and artifact downloads are still pending. The initial
-  ledger/create/list API is now implemented with actual PostgreSQL and 12 real HTTP
-  calls, including process restart/disabled-builder replay. Default building stays
-  disabled. Final full suite: 1241 passed/48 skipped. [Initial ledger contract](../architecture/narrative-release-contract.md)
-  and [qualified scope](../reports/2026-10-30-narrative-release-ledger.md).
-  Retry/cancel/history persistence is now qualified with 15 more actual HTTP calls,
-  including disabled-builder restart replay; both synthetic fixture attempts are
-  cancelled. Final lifecycle suite: 1247 passed/48 skipped, and actual PostgreSQL
-  release API matrix: 28 passed/4 parameter skips. [Lifecycle scope/evidence](../reports/2026-10-30-narrative-release-lifecycle.md).
-  Claim/finish integration, relay/Temporal, runner, publication/download and release
-  UI remain open. The existing studio/API/preview remain running.
-  The standalone bounded USTAR/ZIP codec is now implemented:49 focused tests,
-  1296 full-suite passes/48 skips, clean Ruff/mypy and an actual constrained Docker
-  transport receipt. Review caught/fixed short-read memory amplification.
-  [Codec scope/evidence](../reports/2026-10-30-narrative-release-codec.md).
-  This is not yet an engine, deadline, publication or download delivery.
-  The next slice qualifies an explicitly prepared Linux Godot image and trusted
-  child:13 offline cases and3 actual container cases, including export/tamper
-  rejection and a182.219-second absent-supervisor watchdog exit. Full offline suite:
-  1309 passed/50 skipped. [Child scope/evidence](../reports/2026-10-30-narrative-build-child.md).
-  Host runner/fence integration, storage/publication/downloads, Temporal and UI
-  remain pending; the issue stays open.
-  Claim/non-success finalization and private immutable input loading are now
-  persisted with release/job fences and actual queued PostgreSQL recoveries.
-  Combined native database/API matrix:41 passed/5 backend skips; full suite:
-  1315 passed/52 skipped. [Execution scope/evidence](../reports/2026-10-30-narrative-release-execution.md).
-  Successful completion remains exclusive to future verified publication; host
-  runner, store/downloads, Temporal and Releases UI remain open.
-  The standalone host runner is now qualified too: effective settings are checked
-  before start, source/output hashes are verified, web licenses/notices included,
-  and repeated cancellation safely joins pipes/processes and preserves sibling
-  files.58 focused passes;1324 full-suite passes/54 skips;2 actual image cases.
-  [Runner scope/evidence](../reports/2026-10-30-narrative-build-runner.md).
-  Activity integration, startup recovery, store/publication/downloads, Temporal
-  and Releases UI/end-to-end acceptance remain open.
-  Immutable store verification, atomic PostgreSQL publication and authorized
-  attachments are now qualified:19 offline store cases,4 real MinIO cases,
-  60 native PostgreSQL/API passes/6 backend skips and1352 full-suite passes/59 skips.
-  A17-request real HTTP path built, uploaded, published and downloaded an original
-  three-ending text fixture; downloaded source imported in pinned native Godot.
-  [Publication scope/evidence](../reports/2026-10-30-narrative-release-publication.md).
-  Temporal/activity dispatch, startup cleanup and Releases UI still keep #124 open.
+Release admission on the ordinary local API stays disabled until the worker and
+recovery path are ready. Manual authoring and isolated preview remain available.
+Text authoring needs no model or searchable corpus. AI assistance, asset authoring
+and package-v2 presentation are later milestones.
 
-Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
-have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.
+## Earlier release qualification
+
+[Ledger](../reports/2026-10-30-narrative-release-ledger.md),
+[lifecycle](../reports/2026-10-30-narrative-release-lifecycle.md),
+[execution](../reports/2026-10-30-narrative-release-execution.md),
+[codec](../reports/2026-10-30-narrative-release-codec.md),
+[trusted child](../reports/2026-10-30-narrative-build-child.md),
+[host runner](../reports/2026-10-30-narrative-build-runner.md),
+[publication](../reports/2026-10-30-narrative-release-publication.md),
+[workflow ownership](../reports/2026-10-30-narrative-workflow-ownership.md).
+These reports preserve each earlier checkpoint's exact scope and evidence.
+Existing GraphRAG data and unrelated #109 work remain preserved.

@@ -9,7 +9,9 @@ Progress2026-10-30: ledger/lifecycle, fenced execution/private input loading and
 standalone codec/child/host-runner qualification are delivered. Reports under
 `docs/reports/2026-10-30-narrative-*` distinguish actual PostgreSQL, native image
 and fault proofs. Object publication/downloads, worker/activity/startup recovery,
-Temporal and Releases UI/end-to-end qualification remain open; #124 stays open.
+The connected relay/workflow/activities are now native-qualified too; see the
+Temporal worker report. Operator processes, periodic recovery/sweeps and Releases
+UI/end-to-end qualification remain open; #124 stays open.
 
 1. Add public API/transition tests before implementation. Introduce migration 0018,
    scoped immutable release identity, jobs/events/artifacts and release admission,

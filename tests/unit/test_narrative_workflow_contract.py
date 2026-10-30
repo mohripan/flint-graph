@@ -1,6 +1,10 @@
 import pytest
 
-from flint_graph.application.narrative_workflow import release_workflow_id, validate_release_payload
+from flint_graph.application.narrative_workflow import (
+    release_workflow_id,
+    validate_release_payload,
+    validate_release_result,
+)
 
 PAYLOAD = {
     "schema_version": "1",
@@ -31,3 +35,21 @@ def test_workflow_contract_contains_only_canonical_ids_and_a_fixed_version():
 def test_unknown_source_fields_or_invalid_ids_fail_with_only_a_safe_code(payload):
     with pytest.raises(ValueError, match=r"^Invalid narrative release payload$"):
         validate_release_payload(payload)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        {},
+        {"job_id": PAYLOAD["job_id"], "status": "running"},
+        {"job_id": PAYLOAD["release_id"], "status": "completed"},
+        {"job_id": PAYLOAD["job_id"], "status": "completed", "private": "PRIVATE_CANARY"},
+    ],
+)
+def test_result_is_exact_compact_and_bound_to_expected_job(value):
+    with pytest.raises(ValueError, match=r"^Invalid narrative release result$"):
+        validate_release_result(value, job_id=PAYLOAD["job_id"])
+    assert validate_release_result(
+        {"job_id": PAYLOAD["job_id"], "status": "completed"}, job_id=PAYLOAD["job_id"]
+    ) == {"job_id": PAYLOAD["job_id"], "status": "completed"}

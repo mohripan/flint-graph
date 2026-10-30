@@ -1,6 +1,7 @@
 # Narrative release control plane
 
-M31 #124, initial ledger/API slice, migration `0018_narrative_releases`.
+M31 #124, implemented ledger/runner/publication/Temporal activity boundaries,
+migrations `0018_narrative_releases` and `0019_narrative_workflow_owner`.
 The [focused release design](../superpowers/specs/2026-10-30-narrative-releases-design.md)
 defines the complete target. This document describes the implemented subset only.
 
@@ -35,10 +36,12 @@ Building is disabled by default. Explicit operator settings are
 `FLINT_GRAPH_NARRATIVE_RELEASE_BUILDER_IMAGE_DIGEST` (`sha256:` plus 64 hex),
 `FLINT_GRAPH_NARRATIVE_RELEASE_TOOLCHAIN_SHA256` (64 hex), and
 `FLINT_GRAPH_NARRATIVE_RELEASE_MAX_ACTIVE_JOBS_PER_WORKSPACE` (default 10, range 1..100).
-Until the runner/relay delivery is complete, enabling these only admits durable
-queue intent; it does not start a build. Ordinary API startup never invokes Docker
-or downloads a toolchain. Missing configuration rejects new requests with 503.
-Do not enable this experimental queue in a deployment expecting completed artifacts.
+These settings admit durable queue intent; a separately started narrative relay
+and worker are required to execute it. Ordinary API startup never invokes Docker
+or downloads a toolchain. Missing configuration rejects new requests with503.
+The connected native worker path is qualified; long-running operator processes
+and periodic recovery are still pending. Keep ordinary release admission disabled
+until that delivery is ready.
 
 ## Identity, transactions and replay
 
@@ -62,8 +65,8 @@ One transaction creates release, initial queued job/event, compact ID-only outbo
 message and safe audit record. Storage failure rolls back all records and returns
 a generic retryable503. No source, engine log or raw driver parameters enter the
 response. Outbox topic `narrative.release_queued`, aggregate `narrative_release_job`,
-payload `{schema_version:"1", tenant_id, release_id, job_id}`. A narrative relay is
-still pending; existing ingestion filters do not consume this topic.
+payload `{schema_version:"1", tenant_id, release_id, job_id}`. The separate narrative
+relay consumes only its two narrative topics; ingestion filters are unchanged.
 
 Admission locks the workspace row with PostgreSQL `FOR NO KEY UPDATE`, then the
 project. It serializes admission counting while remaining compatible with audit
@@ -73,7 +76,7 @@ running jobs across the workspace. Replays precede the active-job cap. Lists use
 the stored timestamp in SQL for cursor comparisons, avoiding SQLite timestamp
 round-trip duplicates.
 
-## Persistence and pending publication boundary
+## Persistence
 
 Four scoped tables reserve the final subsystem shape: immutable release identity,
 mutable attempts, append-only events and immutable artifact metadata. Composite FKs
@@ -92,11 +95,11 @@ Same-token/terminal/old-attempt replay cannot acquire; stale cleanup is a no-op.
 Input loading checks current ownership/cancel before exact builder identity and
 canonical revision/release hashes. Claim precedes builder resolution so an
 unavailable builder can fail owned work. These services never launch a child or
-authorize artifact insertion. Completion remains reserved for publication. Actual relay/
-Temporal workflow/worker integration and Releases UI remain unimplemented. Bounded
-immutable object publication and authorized downloads are now implemented and
-qualified through a manual actual engine/store/HTTP path; automatic dispatch and
-end-to-end UI/recovery remain pending.
+authorize artifact insertion. Completion remains reserved for publication. Bounded
+immutable publication and downloads have real engine/store/HTTP qualification;
+the separate relay/workflow/activities now also have a connected native proof.
+Operator processes, periodic recovery/sweeps and Releases UI/browser acceptance
+remain pending. See the [worker report](../reports/2026-10-30-narrative-temporal-worker.md).
 
 See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
 and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).
@@ -116,8 +119,8 @@ against actual Godot: fixed input copying, image-owned runtime hashes, closed
 manifest parsing, bounded nonblocking engine diagnostics/deadlines, fixed web
 inventory/USTAR and an independent180-second PID1 watchdog. A changed script with
 an updated manifest was rejected; absent-supervisor watchdog exit124 was observed.
-Standalone host execution is also qualified; worker integration and publication
-remain pending. See the
+Standalone host execution, worker activity integration and publication are also
+qualified with the separate scopes above. See the
 [child report](../reports/2026-10-30-narrative-build-child.md) and
 [preparation runbook](../runbooks/narrative-builder-preparation.md).
 

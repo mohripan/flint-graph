@@ -21,8 +21,11 @@ real host-task cancellation passed. Read the M31 progress/release contract and
 reports for exact scope. Immutable storage/publication and authorized downloads
 are now qualified too (real MinIO, PostgreSQL and17 HTTP calls with actual engine
 build/downloaded-source import): read `docs/reports/2026-10-30-narrative-release-publication.md`.
-Worker/activity integration, startup cleanup recovery, Temporal and Releases
-UI/end-to-end proof remain pending. Completion requires verified atomic publication;
+The relay/workflow/activities now pass connected real Temporal/PostgreSQL/Godot/
+MinIO/authorized-download qualification; see
+`docs/reports/2026-10-30-narrative-temporal-worker.md`. Long-running operator
+processes, periodic closed-run/owned cleanup recovery and Releases UI/end-to-end
+proof remain pending. Completion requires verified atomic publication;
 ordinary API release creation remains disabled. Preserve private owned fixtures.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`

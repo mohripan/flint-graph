@@ -1,6 +1,6 @@
 """Small deterministic contracts shared by relay, workflow and activity edges."""
 
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 from uuid import UUID
 
 NARRATIVE_RELEASE_WORKFLOW = "NarrativeReleaseWorkflow"
@@ -52,3 +52,15 @@ def validate_release_payload(value: object) -> ReleasePayload:
 
 def release_workflow_id(payload: ReleasePayload) -> str:
     return "narrative-release-" + payload["job_id"]
+
+
+def validate_release_result(value: object, *, job_id: str) -> ReleaseResult:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"job_id", "status"}
+        or value["job_id"] != job_id
+        or not isinstance(value["status"], str)
+        or value["status"] not in ("completed", "failed", "cancelled", "stale")
+    ):
+        raise ValueError("Invalid narrative release result")
+    return cast(ReleaseResult, {"job_id": job_id, "status": value["status"]})

@@ -415,7 +415,7 @@ class DockerNarrativeBuilder:
             raise
         await asyncio.to_thread(self._scratch_cleanup, folder, execution, False)
 
-    def _scratch_cleanup(self, folder: Path, execution: str, retained: bool) -> None:
+    def _verify_scratch(self, folder: Path, execution: str) -> None:
         if (
             folder.resolve(strict=True) != folder
             or folder.parent != self.root
@@ -425,10 +425,41 @@ class DockerNarrativeBuilder:
             or (folder / ".owner").read_text(encoding="ascii") != execution
         ):
             raise BuildError("build_io")
+
+    def _scratch_cleanup(self, folder: Path, execution: str, retained: bool) -> None:
+        self._verify_scratch(folder, execution)
         if retained:
             (folder / ".cleanup").write_text("cleanup_unconfirmed", encoding="ascii")
         else:
             shutil.rmtree(folder)
+
+    async def cleanup_execution(self, execution_id: UUID) -> None:
+        """Run-authorized recovery of one exact token; never needs the old image.
+
+        Caller proves database/workflow ownership before invoking this operation.
+        Validate every matching scratch marker before touching its exact child.
+        No recursive discovery or deletion outside the configured private root.
+        """
+        execution = str(execution_id)
+
+        def owned_folders() -> list[Path]:
+            folders = list(self.root.glob("build-" + execution_id.hex + "-*"))
+            for folder in folders:
+                self._verify_scratch(folder, execution)
+            return folders
+
+        async def clean() -> None:
+            try:
+                folders = await asyncio.to_thread(owned_folders)
+                await self._remove("flint-narrative-build-" + execution_id.hex, execution)
+                for folder in folders:
+                    await asyncio.to_thread(self._scratch_cleanup, folder, execution, False)
+            except OSError:
+                raise BuildError("build_io") from None
+
+        _, interrupted = await _join_owned(asyncio.create_task(clean()))
+        if interrupted:
+            raise asyncio.CancelledError
 
     async def build(
         self, package: StoryPackage, *, execution_id: UUID, check: Check

@@ -98,6 +98,38 @@ async def current():
     pass
 
 
+@pytest.mark.anyio
+async def test_recovery_cleans_exact_token_without_loading_original_image(tmp_path):
+    runner, scratch = external_fixture(tmp_path, "normal")
+    execution = uuid4()
+    folder = scratch / ("build-" + execution.hex + "-recovered")
+    folder.mkdir()
+    (folder / ".owner").write_text(str(execution), encoding="ascii")
+    (folder / "private.txt").write_bytes(b"PRIVATE SOURCE")
+    sibling = scratch / "creator-export"
+    sibling.mkdir()
+    (sibling / "game.txt").write_bytes(b"creator owned")
+    (tmp_path / "state.json").write_text(json.dumps({"execution": str(execution)}))
+    await runner.cleanup_execution(execution)
+    await runner.cleanup_execution(execution)
+    assert not folder.exists()
+    assert (sibling / "game.txt").read_bytes() == b"creator owned"
+    assert not (tmp_path / "state.json").exists()
+
+
+@pytest.mark.anyio
+async def test_recovery_refuses_unverified_scratch_before_removing_any_container(tmp_path):
+    runner, scratch = external_fixture(tmp_path, "normal")
+    execution = uuid4()
+    folder = scratch / ("build-" + execution.hex + "-unverified")
+    folder.mkdir()
+    (folder / ".owner").write_text(str(uuid4()), encoding="ascii")
+    (tmp_path / "state.json").write_text(json.dumps({"execution": str(execution)}))
+    with pytest.raises(BuildError, match="build_io"):
+        await runner.cleanup_execution(execution)
+    assert folder.exists() and (tmp_path / "state.json").exists()
+
+
 def process_alive(pid):
     if sys.platform == "win32":
         result = subprocess.check_output(
