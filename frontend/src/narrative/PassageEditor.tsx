@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { CharacterAvatar } from "./characterImages";
 import { TargetSelect } from "./FormFields";
 import { deletePassage, insertLineAfter, removeLine, replaceScene } from "./model";
 import type { Passage } from "./passages";
@@ -40,14 +41,18 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
         </li>;
         if (node.type !== "line") return null;
         return <li key={id} className="studio-script-line">
-          <select aria-label="Speaker" className="studio-script-speaker" disabled={readOnly} value={node.speaker ?? ""}
-            onChange={event => {
-              const { speaker: _, ...rest } = node;
-              onChange(replaceScene(story, id, event.target.value ? { ...rest, speaker: event.target.value } : rest), `${id}:speaker`);
-            }}>
-            <option value="">Narration</option>
-            {characters.map(([key, character]) => <option key={key} value={key}>{character.name}</option>)}
-          </select>
+          <div className="studio-script-who">
+            {node.speaker && story.characters[node.speaker] &&
+              <CharacterAvatar characterId={node.speaker} name={story.characters[node.speaker].name} />}
+            <select aria-label="Speaker" className="studio-script-speaker" disabled={readOnly} value={node.speaker ?? ""}
+              onChange={event => {
+                const { speaker: _, ...rest } = node;
+                onChange(replaceScene(story, id, event.target.value ? { ...rest, speaker: event.target.value } : rest), `${id}:speaker`);
+              }}>
+              <option value="">Narration</option>
+              {characters.map(([key, character]) => <option key={key} value={key}>{character.name}</option>)}
+            </select>
+          </div>
           <textarea data-line={id} aria-label="Line" className="studio-script-text studio-prose" readOnly={readOnly}
             rows={Math.min(8, Math.max(1, Math.ceil(node.text.length / 70)))} value={node.text}
             onChange={event => onChange(replaceScene(story, id, { ...node, text: event.target.value }), `${id}:text`)}

@@ -15,6 +15,26 @@ import type {
 import type { LayoutItem } from "../narrative/sceneTree";
 
 export interface SceneLayout { project_id: string; version: number; items: LayoutItem[] }
+export type CharacterType = "girl" | "boy" | "woman" | "man" | "other";
+export type CharacterFraming = "portrait" | "full_body";
+export interface NarrativeImage {
+  id: string; character_id: string | null; kind: string; status: "candidate" | "approved" | "discarded";
+  width: number; height: number; sha256: string; size_bytes: number; thumbnail_width: number;
+  thumbnail_height: number; seed: number | null; job_id: string | null; license: string;
+  provenance: Record<string, unknown>; created_at: string; approved_at: string | null;
+}
+export interface CharacterProfile {
+  character_id: string; appearance: string; character_type: CharacterType; framing: CharacterFraming;
+  portrait: NarrativeImage | null; version: number;
+}
+export interface ImageJob {
+  id: string; character_id: string; status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number; count: number; cancel_requested: boolean; error_code: string | null; appearance: string;
+  character_type: CharacterType; framing: CharacterFraming; prompt: string; negative_prompt: string;
+  width: number; height: number; steps: number; guidance: number; seeds: number[]; model: string | null;
+  prompt_tokens: number | null; truncated: boolean | null; created_at: string; started_at: string | null;
+  finished_at: string | null; assets: NarrativeImage[];
+}
 import type {
   AnswerProvenance,
   Conversation,
@@ -110,6 +130,10 @@ function narrativePage(options: { limit?: number; beforeId?: string; includeArch
 
 function assistantPath(projectId: string): string {
   return `/v1/narrative/projects/${encodeURIComponent(projectId)}/assistant`;
+}
+
+function projectPath(projectId: string): string {
+  return `/v1/narrative/projects/${encodeURIComponent(projectId)}`;
 }
 
 function releasePath(projectId: string, releaseId?: string): string {
@@ -297,6 +321,78 @@ export const api = {
     return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/layout`, {
       method: "PUT", headers: tenantHeaders(tenantId), signal, json: { base_version: baseVersion, items },
     });
+  },
+
+  // Characters (ADR 0039): editor-only appearance, local portrait jobs and approved images.
+  listCharacterProfiles(tenantId: string, projectId: string, signal?: AbortSignal):
+    Promise<{ project_id: string; profiles: CharacterProfile[] }> {
+    return jsonRequest(`${projectPath(projectId)}/characters`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  saveCharacterProfile(tenantId: string, projectId: string, characterId: string, body: {
+    base_version: number; appearance: string; character_type: CharacterType; framing: CharacterFraming;
+  }, signal?: AbortSignal): Promise<CharacterProfile> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}`, {
+      method: "PUT", headers: tenantHeaders(tenantId), signal, json: body,
+    });
+  },
+
+  chooseCharacterPortrait(tenantId: string, projectId: string, characterId: string, baseVersion: number,
+    assetId: string | null, signal?: AbortSignal): Promise<CharacterProfile> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait`, {
+      method: "PUT", headers: tenantHeaders(tenantId), signal,
+      json: { base_version: baseVersion, asset_id: assetId },
+    });
+  },
+
+  createPortraitJob(tenantId: string, projectId: string, characterId: string, body: {
+    appearance: string; character_type: CharacterType; framing: CharacterFraming; count: number;
+    idempotency_key: string;
+  }, signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: body,
+    });
+  },
+
+  listPortraitJobs(tenantId: string, projectId: string, characterId: string, signal?: AbortSignal):
+    Promise<{ jobs: ImageJob[] }> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait-jobs`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  getImageJob(tenantId: string, projectId: string, jobId: string, signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/image-jobs/${encodeURIComponent(jobId)}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  cancelImageJob(tenantId: string, projectId: string, jobId: string, signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/image-jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  discardNarrativeImage(tenantId: string, projectId: string, assetId: string, signal?: AbortSignal):
+    Promise<NarrativeImage> {
+    return jsonRequest(`${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}/discard`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  // Immutable bytes behind authorization: fetched with auth headers, shown as blob URLs.
+  async getNarrativeImage(tenantId: string, projectId: string, assetId: string,
+    variant: "image" | "thumbnail", signal?: AbortSignal): Promise<Blob> {
+    const response = await fetch(
+      `${BASE}${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}/content?variant=${variant}`,
+      { headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error" },
+    );
+    if (!response.ok) throw await parseError(response);
+    const blob = await response.blob();
+    if (blob.type !== "image/png") throw new ApiError("The image could not be loaded.", 502);
+    return blob;
   },
 
   listAssistantThreads(tenantId: string, projectId: string, options: {

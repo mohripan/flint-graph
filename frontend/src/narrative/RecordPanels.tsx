@@ -1,32 +1,10 @@
 import { Field, ScalarInput, TargetSelect } from "./FormFields";
-import { addCharacter, addVariable, deleteCharacter, deleteVariable } from "./model";
+import { addVariable, deleteVariable } from "./model";
 import type { StoryDraft } from "./types";
 
 interface Props {
   story: StoryDraft; readOnly: boolean;
   onChange: (story: StoryDraft, group?: string) => void; onError: (message: string) => void;
-}
-
-export function CharactersPanel({ story, readOnly, onChange, onError }: Props) {
-  return <fieldset disabled={readOnly} className="studio-form">
-    <div className="studio-section-heading"><h2>Characters</h2>
-      <button type="button" className="studio-secondary" onClick={() => {
-        try { onChange(addCharacter(story).story); }
-        catch (error) { onError(error instanceof Error ? error.message : "Could not add a character."); }
-      }}>Add character</button></div>
-    <p className="studio-hint">Choose these speakers when writing dialogue. Their IDs stay stable across scene edits.</p>
-    {!Object.keys(story.characters).length && <p className="studio-empty">No characters yet. Narration works without one.</p>}
-    {Object.entries(story.characters).map(([id, character]) => <section className="studio-option" key={id}>
-      <div className="studio-section-heading"><h3>{character.name || "Unnamed character"}</h3><code>{id}</code></div>
-      <Field label={`Character name · ${id}`}><input value={character.name} onChange={event => onChange({
-        ...story, characters: { ...story.characters, [id]: { ...character, name: event.target.value } },
-      }, `character:${id}:name`)} /></Field>
-      <button type="button" className="studio-link studio-danger" onClick={() => {
-        try { onChange(deleteCharacter(story, id)); }
-        catch (error) { onError(error instanceof Error ? error.message : "Could not remove a character."); }
-      }}>Remove character</button>
-    </section>)}
-  </fieldset>;
 }
 
 export function StatePanel({ story, readOnly, onChange, onError }: Props) {

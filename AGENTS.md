@@ -48,7 +48,14 @@ only on acceptance. It runs as fenced Temporal jobs via the opt-in
 Godot-style scene hierarchy (#169): scenes are line chains projected from the node
 graph, folders live in an editor-only versioned layout (migration 0021), and a
 script editor edits a whole scene. Long-form limits (10k nodes / 5 MB) are #172;
-read `docs/reports/2026-10-31-scene-hierarchy.md`.
+read `docs/reports/2026-10-31-scene-hierarchy.md`. Character creation (#170 first
+slice, ADR 0039, migration 0022) generates portraits locally with Animagine XL 4.0
+through the opt-in `narrative_image_worker` and an isolated child in
+`runtimes/imagegen` (its own uv lock, CUDA 12.8); read
+`docs/reports/2026-10-31-character-creation.md` and
+`docs/runbooks/narrative-image-generation.md`. Portraits are editor metadata until
+the #128 export binding puts them in playtests and releases. The owned image worker
+receipt is `notes/narrative-image-owned.json`.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

@@ -10,7 +10,9 @@ import { buildPassages } from "./passages";
 import { PassageEditor } from "./PassageEditor";
 import { SceneHierarchy } from "./SceneHierarchy";
 import { SceneOptionsContext } from "./sceneOptions";
-import { CharactersPanel, StatePanel, StoryPanel } from "./RecordPanels";
+import { CharacterProfilesProvider } from "./characterImages";
+import { CharacterStudio } from "./CharacterStudio";
+import { StatePanel, StoryPanel } from "./RecordPanels";
 import { RouteMap } from "./RouteMap";
 import { SceneForm } from "./SceneForm";
 import { StudioDialog } from "./StudioDialog";
@@ -354,6 +356,7 @@ export function StudioPage({ onDirtyChange }: {
     onSelect={id => { setSceneId(id); setNodeEditor(null); choosePanel("write"); }} /> : null;
 
   return <SceneOptionsContext.Provider value={sceneOptions}>
+  <CharacterProfilesProvider tenantId={tenantId} projectId={state.project?.id ?? ""}>
   <div className="narrative-studio" role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
     {releasesOpen && state.project && state.revision && <ReleasesDialog key={`${tenantId}:${state.project.id}`}
       tenantId={tenantId} projectId={state.project.id} headId={state.project.head_revision_id} revision={state.revision}
@@ -409,8 +412,8 @@ export function StudioPage({ onDirtyChange }: {
     </> : <div className={`studio-workspace ${assistantOpen && state.revision ? "with-assistant" : ""}`}>
       <div className="studio-editor">
       <nav className="studio-tabs" aria-label="Story editor panels">{panels.map(([id, label]) => <button type="button" key={id}
-        aria-pressed={panel === id} className={panel === id ? "selected" : ""} onClick={() => choosePanel(id)}>{label}</button>)}</nav>
-      <div className={`studio-desk ${panel === "scenes" ? "show-scenes" : ""}`}>
+        aria-pressed={panel === id} className={`${panel === id ? "selected" : ""} studio-tab-${id} ${id === "write" && panel === "scenes" ? "wide-selected" : ""}`} onClick={() => choosePanel(id)}>{label}</button>)}</nav>
+      <div className={`studio-desk ${panel === "scenes" ? "show-scenes" : ""} ${panel === "characters" ? "no-rail" : ""}`}>
         <aside className="studio-rail" aria-label="Scenes">{hierarchy ?? <p className="studio-hint">Open Write to see scenes.</p>}</aside>
         <section className="studio-sheet">
           {panel === "source" ? <fieldset className="studio-form" disabled={readOnly}>
@@ -425,7 +428,7 @@ export function StudioPage({ onDirtyChange }: {
             {historyMore && <button type="button" className="studio-secondary" disabled={historyBusy}
               onClick={() => void refreshHistory(state.project!.id, epoch.current, historyRows[historyRows.length - 1]?.id)}>Load older revisions</button>}
           </div> : common ? panel === "map" ? <RouteMap story={common.story} selected={sceneId} onSelect={id => { setSceneId(id); setPanel("write"); }} />
-            : panel === "characters" ? <CharactersPanel {...common} /> : panel === "state" ? <StatePanel {...common} />
+            : panel === "characters" ? <CharacterStudio {...common} /> : panel === "state" ? <StatePanel {...common} />
             : panel === "story" ? <><StoryPanel {...common} /><Field label="Content notices"><textarea rows={5} value={state.notices} disabled={readOnly}
                 onChange={event => edit(state.source, event.target.value, "notices")} /></Field></>
             : nodeEditor && common.story.nodes[nodeEditor] ? <><button type="button" className="studio-link"
@@ -459,5 +462,6 @@ export function StudioPage({ onDirtyChange }: {
       </div>
     </StudioDialog>}
   </div>
+  </CharacterProfilesProvider>
   </SceneOptionsContext.Provider>;
 }
