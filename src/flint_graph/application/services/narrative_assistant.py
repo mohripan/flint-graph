@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.narrative_assistant_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_projects import (
     create_revision,
@@ -43,8 +44,6 @@ from flint_graph.narrative.assistant.operations import Proposal, check_proposal
 from flint_graph.narrative.assistant.turn import TurnResult
 from flint_graph.narrative.values import canonical_json
 
-QUEUED_TOPIC = "narrative.assistant_turn_queued"
-CANCELLED_TOPIC = "narrative.assistant_turn_cancelled"
 HISTORY_TURNS = 4
 _ACTIVE = ("queued", "running")
 
@@ -559,6 +558,43 @@ async def _locked_turn(session: AsyncSession, turn_id: UUID) -> NarrativeAssista
     return turn
 
 
+class TurnRegistrationPending(Exception):
+    """The accepted workflow run is not committed on the turn yet; retry shortly."""
+
+
+async def register_turn_workflow(
+    session: AsyncSession, *, tenant_id: UUID, turn_id: UUID, workflow_run_id: UUID
+) -> None:
+    """Bind a queued turn to the run Temporal accepted, before any claim (ADR 0037)."""
+    turn = await session.scalar(
+        select(NarrativeAssistantTurn)
+        .where(NarrativeAssistantTurn.id == turn_id, NarrativeAssistantTurn.tenant_id == tenant_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if turn is None:
+        raise ValueError("Invalid assistant dispatch identity")
+    if turn.workflow_run_id is None:
+        if turn.status == "queued":
+            turn.workflow_run_id, turn.activity_attempt = workflow_run_id, 0
+            await session.flush()
+    elif turn.workflow_run_id != workflow_run_id:
+        raise ValueError("Unowned assistant execution")
+
+
+async def abandon_turn(
+    session: AsyncSession, *, turn_id: UUID, workflow_run_id: UUID, error_code: str
+) -> NarrativeAssistantTurn | None:
+    """Close an active turn of this run only; returns ``None`` when it is not ours."""
+    turn = await _locked_turn(session, turn_id)
+    if turn is None or turn.workflow_run_id != workflow_run_id or turn.status not in _ACTIVE:
+        return None
+    turn.error_code = error_code[:80]
+    _finish(turn, "cancelled" if turn.cancel_requested else "failed")
+    await session.flush()
+    return turn
+
+
 async def claim_turn(
     session: AsyncSession,
     *,
@@ -567,16 +603,24 @@ async def claim_turn(
     workflow_run_id: UUID,
     activity_attempt: int,
 ) -> TurnWork | None:
-    """Fence one execution; a later attempt of the same workflow run replaces it."""
+    """Fence one execution of the registered run; its later attempts replace it.
+
+    Raises ``TurnRegistrationPending`` while the relay has started the workflow but
+    not yet committed its run, so the activity retries instead of going stale.
+    """
     turn = await _locked_turn(session, turn_id)
-    if turn is None or turn.cancel_requested:
+    if turn is None or turn.status not in _ACTIVE:
         return None
-    replacing = turn.status == "running" and turn.workflow_run_id == workflow_run_id
-    if turn.status != "queued" and not replacing:
+    if turn.workflow_run_id is None:
+        raise TurnRegistrationPending
+    if turn.workflow_run_id != workflow_run_id:
+        return None
+    if turn.cancel_requested:
+        _finish(turn, "cancelled")
+        await session.flush()
         return None
     turn.status = "running"
     turn.execution_token = execution_token
-    turn.workflow_run_id = workflow_run_id
     turn.activity_attempt = activity_attempt
     turn.started_at = turn.started_at or _now()
     base = await session.scalar(

@@ -16,6 +16,12 @@ outbox/audit, one active turn per workspace under the workspace lock, accept wit
 untouched-record rebase or conflict revision, reject, cancel and execution fences.
 Proven on SQLite and the owned PostgreSQL, including a contended admission race.
 The running owned API still uses schema 0019; migrate it before serving step 6.
+Step 5 delivered: assistant-only relay registering the accepted run before claims,
+`NarrativeAssistantTurnWorkflow` with a heartbeating activity, bounded transient
+retries and a shielded finalizer, fenced recovery of turns whose run closed, and the
+opt-in `flint_graph.processes.narrative_assistant_worker` process. Live on the owned
+Temporal: connected completion with IDs-only history and mid-call cancellation on
+SQLite and PostgreSQL, and a real local-Gemma turn producing a ready proposal in ~21 s.
 
 Scope/authorization: the [approved design](../specs/2026-10-30-chat-to-game-assistant-design.md),
 [ADR 0038](../../adr/0038-conversational-authoring-through-reviewed-proposals.md) and the

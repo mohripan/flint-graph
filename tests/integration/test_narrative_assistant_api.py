@@ -11,6 +11,7 @@ from flint_graph.application.services.narrative_assistant import (
     claim_turn,
     complete_turn,
     fail_turn,
+    register_turn_workflow,
 )
 from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.db.models import NarrativeAssistantTurn, OutboxMessage, Tenant
@@ -86,9 +87,14 @@ async def ask(client, headers, path, thread, base, request="Add a storm.", key=N
     )
 
 
-async def work(factory, turn_id, *script):
-    token, run = uuid4(), uuid4()
+async def claim(factory, turn_id, token, run=None):
+    # Production order: the relay registers the accepted run before any claim.
+    run = run or uuid4()
     async with factory() as session:
+        turn = await session.get(NarrativeAssistantTurn, UUID(turn_id))
+        await register_turn_workflow(
+            session, tenant_id=turn.tenant_id, turn_id=turn.id, workflow_run_id=run
+        )
         claimed = await claim_turn(
             session,
             turn_id=UUID(turn_id),
@@ -97,6 +103,12 @@ async def work(factory, turn_id, *script):
             activity_attempt=1,
         )
         await session.commit()
+    return claimed
+
+
+async def work(factory, turn_id, *script):
+    token = uuid4()
+    claimed = await claim(factory, turn_id, token)
     assert claimed is not None
     result = await run_turn(
         DeterministicNarrativeAssistant(script),
@@ -411,16 +423,8 @@ async def test_cancellation_and_stale_executions_are_fenced(narrative_env, assis
         )
 
     running = (await ask(client, headers, path, thread, base, "Again.")).json()
-    token, run = uuid4(), uuid4()
-    async with factory() as session:
-        claimed = await claim_turn(
-            session,
-            turn_id=UUID(running["id"]),
-            execution_token=token,
-            workflow_run_id=run,
-            activity_attempt=1,
-        )
-        await session.commit()
+    token = uuid4()
+    claimed = await claim(factory, running["id"], token)
     assert claimed is not None
     result = await run_turn(DeterministicNarrativeAssistant([proposal()]), claimed.story, "Again.")
     async with factory() as session:
@@ -452,15 +456,7 @@ async def test_cancellation_and_stale_executions_are_fenced(narrative_env, assis
 
     failing = (await ask(client, headers, path, thread, base, "Fail.")).json()
     token = uuid4()
-    async with factory() as session:
-        await claim_turn(
-            session,
-            turn_id=UUID(failing["id"]),
-            execution_token=token,
-            workflow_run_id=uuid4(),
-            activity_attempt=1,
-        )
-        await session.commit()
+    assert await claim(factory, failing["id"], token) is not None
     async with factory() as session:
         failed = await fail_turn(
             session,

@@ -223,6 +223,11 @@ class Settings(BaseSettings):
     narrative_assistant_turn_deadline_seconds: int = Field(default=180, ge=10, le=1800)
     narrative_assistant_context_chars: int = Field(default=24000, ge=4000, le=400000)
     narrative_assistant_max_active_turns_per_workspace: int = Field(default=1, ge=1, le=20)
+    narrative_assistant_worker_enabled: bool = False
+    narrative_assistant_task_queue: str = Field(
+        default="narrative-assistant", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
+    )
+    narrative_assistant_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
 
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
