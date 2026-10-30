@@ -241,3 +241,4 @@ class ProviderUsageOperation(StrEnum):
     EXTRACTION = "extraction"
     RERANK = "rerank"
     FAITHFULNESS = "faithfulness"
+    NARRATIVE_ASSISTANT = "narrative_assistant"

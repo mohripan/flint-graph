@@ -208,6 +208,21 @@ class Settings(BaseSettings):
     narrative_relay_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
     narrative_relay_batch_size: int = Field(default=10, ge=1, le=100)
 
+    # Conversational authoring (ADR 0038). Unset resolves to deterministic in test
+    # and disabled elsewhere; real providers are never selected implicitly.
+    narrative_assistant_provider: (
+        Literal["disabled", "deterministic", "ollama", "anthropic"] | None
+    ) = None
+    narrative_assistant_ollama_model: str | None = Field(default=None, min_length=1, max_length=200)
+    narrative_assistant_ollama_context_tokens: int = Field(default=16384, ge=4096, le=262144)
+    narrative_assistant_anthropic_model: str | None = Field(
+        default=None, min_length=1, max_length=200
+    )
+    narrative_assistant_max_output_tokens: int = Field(default=4096, ge=256, le=32768)
+    narrative_assistant_temperature: float = Field(default=0.6, ge=0.0, le=2.0)
+    narrative_assistant_turn_deadline_seconds: int = Field(default=180, ge=10, le=1800)
+    narrative_assistant_context_chars: int = Field(default=24000, ge=4000, le=400000)
+
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True
@@ -325,6 +340,12 @@ class Settings(BaseSettings):
             self.query_answer_provider = answer_support_default
         if self.query_support_provider is None:
             self.query_support_provider = answer_support_default
+        if self.narrative_assistant_provider is None:
+            self.narrative_assistant_provider = (
+                "deterministic" if self.env == "test" else "disabled"
+            )
+        if self.narrative_assistant_anthropic_model is None:
+            self.narrative_assistant_anthropic_model = self.anthropic_answer_model
 
         embedding_provider = self.embedding_provider
         if embedding_provider is None:
@@ -451,9 +472,29 @@ class Settings(BaseSettings):
                 )
         if self.query_default_candidate_limit > self.query_max_candidate_limit:
             raise ValueError("query_default_candidate_limit must be <= query_max_candidate_limit")
+        if self.narrative_assistant_provider == "ollama":
+            if not self.narrative_assistant_ollama_model:
+                raise ValueError(
+                    "narrative_assistant_ollama_model is required when the narrative "
+                    "assistant uses ollama; choose a locally installed model explicitly"
+                )
+            # ~4 characters per token for story context, plus bounded history (8 x 2000
+            # characters), instructions/schema and the response must fit the window.
+            needed = (
+                self.narrative_assistant_context_chars // 4
+                + 4000
+                + 1500
+                + self.narrative_assistant_max_output_tokens
+            )
+            if self.narrative_assistant_ollama_context_tokens < needed:
+                raise ValueError(
+                    "narrative_assistant_ollama_context_tokens must cover the story context, "
+                    "history, instructions and narrative_assistant_max_output_tokens"
+                )
         uses_anthropic = "anthropic" in (
             self.query_answer_provider,
             self.query_support_provider,
+            self.narrative_assistant_provider,
         )
         if (
             uses_anthropic

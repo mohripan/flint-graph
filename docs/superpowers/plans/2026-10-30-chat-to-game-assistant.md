@@ -1,11 +1,16 @@
 # Chat-to-game assistant implementation plan
 
 Tracking: [#168](https://github.com/mohripan/flint-graph/issues/168).
-Progress 2026-10-30: steps 1–2 delivered (edit operations, collected diagnostics,
-pinned v1 prompt/schema and focus-first context). A live probe with the local
-`gemma-4-12B` QAT model returned a fully valid 4-operation proposal in ~31 s once
-the schema gave each node type an exact shape; a looser shared node schema let
-constrained decoding mix fields across types.
+Progress 2026-10-30: steps 1–3 delivered (edit operations, collected diagnostics,
+pinned v1 prompt/schema, focus-first context, provider port with Ollama/Anthropic/
+deterministic adapters, settings and the bounded repair loop). A live probe with the
+local `gemma-4-12B` QAT model returned a fully valid 4-operation proposal in ~31 s
+once the schema gave each node type an exact shape; a looser shared node schema let
+constrained decoding mix fields across types. Through the real adapter and turn
+loop, three requests (scene/choice/ending insertion, a route question, a new state
+variable with a gated option) all succeeded on the first attempt in 14–60 s.
+Prompt v2 candidate: replies still sometimes say a change "was added".
+The Anthropic adapter is offline-tested only; no paid call was made.
 
 Scope/authorization: the [approved design](../specs/2026-10-30-chat-to-game-assistant-design.md),
 [ADR 0038](../../adr/0038-conversational-authoring-through-reviewed-proposals.md) and the
