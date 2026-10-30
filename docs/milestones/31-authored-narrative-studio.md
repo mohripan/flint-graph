@@ -21,6 +21,15 @@ are complete; the studio builds on that authored runtime.
 ## Next work
 
 - #124: immutable releases, durable isolated build jobs and authorized artifacts.
+  [Focused design](../superpowers/specs/2026-10-30-narrative-releases-design.md)
+  and [implementation plan](../superpowers/plans/2026-10-30-narrative-releases.md)
+  are committed after the same reviewer checked fencing, replay and transport
+  bounds. Implementation started with a pure fenced-attempt transition boundary:
+  queued cancellation, active execution replacement, stale cleanup/publication,
+  completion-before-cancel and recovery cleanup have six passing unit tests.
+  Ruff and mypy (177 source files) pass. These tests establish transition behavior;
+  the release ledger/API, actual engine jobs and artifact downloads are still pending
+  and have no live delivery claim yet. The existing studio/API/preview remain running.
 
 Text authoring needs no model or searchable corpus. Hosted assets and AI assistance
 have separate later boundaries. Existing GraphRAG data and #109 work remain preserved.
