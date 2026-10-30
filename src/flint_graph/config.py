@@ -229,6 +229,27 @@ class Settings(BaseSettings):
     )
     narrative_assistant_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
 
+    # Local image generation (ADR 0039). The API admits jobs only when enabled; the
+    # opt-in worker needs the isolated runtime, the model and its pinned manifest.
+    narrative_image_generation_enabled: bool = False
+    narrative_image_worker_enabled: bool = False
+    narrative_image_task_queue: str = Field(
+        default="narrative-image", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
+    )
+    narrative_image_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_image_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_image_model_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    narrative_image_max_active_jobs_per_workspace: int = Field(default=2, ge=1, le=20)
+    narrative_image_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
+    narrative_image_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+    # Shared single GPU: let the worker ask Ollama to unload this model before
+    # retrying a job that found the GPU busy. Off unless an operator sets it.
+    narrative_image_release_ollama_model: str | None = Field(
+        default=None, min_length=1, max_length=200
+    )
+
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True
@@ -276,6 +297,25 @@ class Settings(BaseSettings):
                 "The narrative worker requires an absolute private root "
                 "and pinned builder/toolchain"
             )
+        if self.narrative_image_worker_enabled:
+            queues = {
+                self.temporal_task_queue,
+                self.narrative_task_queue,
+                self.narrative_assistant_task_queue,
+            }
+            if self.narrative_image_task_queue in queues:
+                raise ValueError("A separate narrative image task queue is required")
+            if (
+                not self.narrative_image_runtime_dir
+                or not self.narrative_image_model_dir
+                or not Path(self.narrative_image_runtime_dir).is_absolute()
+                or not Path(self.narrative_image_model_dir).is_absolute()
+                or not self.narrative_image_model_manifest_sha256
+            ):
+                raise ValueError(
+                    "The narrative image worker requires absolute runtime and model "
+                    "directories and a pinned model manifest"
+                )
         return self
 
     @field_validator("active_retrieval_index_version_id", mode="before")

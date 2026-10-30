@@ -1,0 +1,530 @@
+"""Character profiles, portrait jobs and immutable images (ADR 0039); no GPU or Temporal."""
+
+import hashlib
+import struct
+import zlib
+from dataclasses import replace
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import select
+from temporalio.exceptions import ApplicationError
+from temporalio.testing import ActivityEnvironment
+
+from flint_graph.api.dependencies import get_narrative_artifact_store
+from flint_graph.application.narrative_image_workflow import (
+    CANCELLED_TOPIC,
+    IMAGE_WORKFLOW,
+    QUEUED_TOPIC,
+    RUN_IMAGE_ACTIVITY,
+    ImageJobPayload,
+    image_job_workflow_id,
+)
+from flint_graph.application.services.narrative_image_relay import (
+    recover_stale_image_jobs,
+    relay_image_batch,
+)
+from flint_graph.application.services.narrative_images import register_image_workflow
+from flint_graph.config import Settings, get_settings
+from flint_graph.domain.enums import OutboxMessageStatus
+from flint_graph.infrastructure.db.models import NarrativeAsset, NarrativeImageJob, OutboxMessage
+from flint_graph.infrastructure.narrative_artifact_store import ArtifactStoreError
+from flint_graph.infrastructure.narrative_imagegen import (
+    GeneratedImage,
+    GenerationResult,
+    ImageGenerationError,
+    ModelIdentity,
+)
+from flint_graph.main import app
+from flint_graph.worker.activities.narrative_image import NarrativeImageActivities
+
+MODEL = ModelIdentity("cagliostrolab/animagine-xl-4.0", "c" * 40, "openrail++")
+
+
+def png(width, height, shade=10):
+    def chunk(kind, payload):
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload))
+        )
+
+    row = b"\x00" + bytes([shade, 20, 30]) * width
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(row * height))
+        + chunk(b"IEND", b"")
+    )
+
+
+class MemoryStore:
+    def __init__(self):
+        self.objects = {}
+
+    async def put_once(self, key, data, *, expected_sha256, content_type, max_bytes):
+        assert content_type == "image/png" and len(data) <= max_bytes
+        assert hashlib.sha256(data).hexdigest() == expected_sha256
+        self.objects[key] = data
+
+    async def get_verified(self, key, *, expected_size, expected_sha256, max_bytes):
+        data = self.objects.get(key)
+        if data is None or hashlib.sha256(data).hexdigest() != expected_sha256:
+            raise ArtifactStoreError("artifact_integrity")
+        assert len(data) == expected_size <= max_bytes
+        return data
+
+
+class FakeGenerator:
+    model = MODEL
+
+    def __init__(self, *failures):
+        self.failures, self.requests = list(failures), []
+
+    async def generate(self, request, *, on_progress):
+        self.requests.append(request)
+        if self.failures:
+            raise ImageGenerationError(self.failures.pop(0))
+        images = []
+        for index, seed in enumerate(request.seeds):
+            data, thumb = png(request.width, request.height, index), png(16, 24, index)
+            images.append(
+                GeneratedImage(
+                    index=index,
+                    seed=seed,
+                    data=data,
+                    sha256=hashlib.sha256(data).hexdigest(),
+                    width=request.width,
+                    height=request.height,
+                    thumbnail=thumb,
+                    thumbnail_sha256=hashlib.sha256(thumb).hexdigest(),
+                    thumbnail_width=16,
+                    thumbnail_height=24,
+                )
+            )
+            await on_progress(index + 1)
+        return GenerationResult(
+            images=tuple(images),
+            runtime={"torch": "fake", "diffusers": "fake", "cuda": "0", "device": "Fake"},
+            prompt_tokens=20,
+            truncated=False,
+        )
+
+
+class Releaser:
+    def __init__(self):
+        self.calls = 0
+
+    async def release(self):
+        self.calls += 1
+
+
+class Dispatcher:
+    def __init__(self, closed=False):
+        self.started, self.cancelled, self.run_id, self.is_closed = [], [], uuid4(), closed
+
+    async def start(self, payload):
+        self.started.append(payload)
+        return self.run_id
+
+    async def cancel(self, payload, *, run_id):
+        self.cancelled.append((payload, run_id))
+
+    async def closed(self, payload, *, run_id):
+        return self.is_closed
+
+
+def use_settings(enabled=True):
+    # Keep the suite's OIDC test settings so roles are enforced as in production.
+    original = app.dependency_overrides.get(get_settings, lambda: Settings(env="test"))
+    configured = original().model_copy(update={"narrative_image_generation_enabled": enabled})
+    app.dependency_overrides[get_settings] = lambda: configured
+    return original
+
+
+@pytest.fixture
+async def studio(narrative_env, oidc_auth):
+    client, factory, _ = narrative_env
+    original = use_settings()
+    store = MemoryStore()
+    app.dependency_overrides[get_narrative_artifact_store] = lambda: store
+    owner = {"Authorization": "Bearer " + oidc_auth("character-owner")}
+    try:
+        workspace = (
+            await client.post("/v1/workspaces", headers=owner, json={"name": "Characters"})
+        ).json()
+        headers = {**owner, "X-Tenant-ID": workspace["id"]}
+        project = (
+            await client.post(
+                "/v1/narrative/projects",
+                headers=headers,
+                json={"name": "Lighthouse", "idempotency_key": str(uuid4())},
+            )
+        ).json()
+        base = f"/v1/narrative/projects/{project['id']}"
+        yield client, factory, store, headers, base, workspace, oidc_auth
+    finally:
+        app.dependency_overrides[get_settings] = original
+        app.dependency_overrides.pop(get_narrative_artifact_store, None)
+
+
+def job_body(**changes):
+    return {
+        "appearance": "silver hair, amber eyes, navy coat",
+        "character_type": "woman",
+        "framing": "portrait",
+        "count": 2,
+        "idempotency_key": str(uuid4()),
+        **changes,
+    }
+
+
+def environment(payload, run_id, attempt=1):
+    env = ActivityEnvironment()
+    env.info = replace(
+        env.info,
+        activity_type=RUN_IMAGE_ACTIVITY,
+        workflow_id=image_job_workflow_id(payload),
+        workflow_type=IMAGE_WORKFLOW,
+        workflow_run_id=str(run_id),
+        attempt=attempt,
+    )
+    return env
+
+
+async def queue_job(client, headers, base, character="mira", **changes):
+    response = await client.post(
+        f"{base}/characters/{character}/portrait-jobs", headers=headers, json=job_body(**changes)
+    )
+    assert response.status_code == 202, response.text
+    job = response.json()
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=job["id"]
+    )
+    return job, payload
+
+
+async def registered(factory, payload):
+    run_id = uuid4()
+    async with factory() as session:
+        await register_image_workflow(
+            session,
+            tenant_id=UUID(payload["tenant_id"]),
+            job_id=UUID(payload["job_id"]),
+            workflow_run_id=run_id,
+        )
+        await session.commit()
+    return run_id
+
+
+async def run_job(factory, store, payload, generator=None, attempt=1, releaser=None, run_id=None):
+    run_id = run_id or await registered(factory, payload)
+    work = NarrativeImageActivities(
+        factory=factory, generator=generator or FakeGenerator(), store=store, releaser=releaser
+    )
+    return await environment(payload, run_id, attempt).run(work.run, payload)
+
+
+async def job_row(factory, payload):
+    async with factory() as session:
+        return await session.scalar(
+            select(NarrativeImageJob).where(NarrativeImageJob.id == UUID(payload["job_id"]))
+        )
+
+
+@pytest.mark.anyio
+async def test_profiles_save_with_versions_and_respect_roles(studio):
+    client, _, _, headers, base, workspace, oidc_auth = studio
+    assert (await client.get(f"{base}/characters", headers=headers)).json() == {
+        "project_id": base.rsplit("/", 1)[1],
+        "profiles": [],
+    }
+    body = {"base_version": 0, "appearance": "tall", "character_type": "man", "framing": "portrait"}
+    saved = await client.put(f"{base}/characters/oren", headers=headers, json=body)
+    assert saved.status_code == 200
+    assert saved.json() == {
+        "character_id": "oren",
+        "appearance": "tall",
+        "character_type": "man",
+        "framing": "portrait",
+        "portrait": None,
+        "version": 1,
+    }
+    stale = await client.put(f"{base}/characters/oren", headers=headers, json=body)
+    assert stale.status_code == 409 and stale.json()["type"].endswith("stale-character")
+    updated = await client.put(
+        f"{base}/characters/oren", headers=headers, json={**body, "base_version": 1}
+    )
+    assert updated.json()["version"] == 2
+    listed = (await client.get(f"{base}/characters", headers=headers)).json()["profiles"]
+    assert [item["character_id"] for item in listed] == ["oren"]
+    for path, payload in [
+        (f"{base}/characters/Oren", body),
+        (f"{base}/characters/oren", {**body, "appearance": "x" * 601}),
+        (f"{base}/characters/oren", {**body, "character_type": "robot"}),
+        (f"{base}/characters/oren", {**body, "extra": 1}),
+    ]:
+        assert (await client.put(path, headers=headers, json=payload)).status_code == 422
+
+    added = await client.post(
+        f"/v1/workspaces/{workspace['id']}/members",
+        headers=headers,
+        json={
+            "oidc_issuer": "https://keycloak.example/realms/flintgraph",
+            "oidc_subject": "character-viewer",
+            "role": "viewer",
+        },
+    )
+    assert added.status_code == 201, added.text
+    viewer = {**headers, "Authorization": "Bearer " + oidc_auth("character-viewer")}
+    assert (await client.get(f"{base}/characters", headers=viewer)).status_code == 200
+    denied = await client.put(f"{base}/characters/oren", headers=viewer, json=body)
+    assert denied.status_code == 403
+    denied_job = await client.post(
+        f"{base}/characters/oren/portrait-jobs", headers=viewer, json=job_body()
+    )
+    assert denied_job.status_code == 403
+    foreign = (
+        await client.post("/v1/workspaces", headers=headers, json={"name": "Elsewhere"})
+    ).json()
+    elsewhere = {**headers, "X-Tenant-ID": foreign["id"]}
+    assert (await client.get(f"{base}/characters", headers=elsewhere)).status_code == 404
+    head = (await client.get(base, headers=headers)).json()["head_revision_id"]
+    archived = await client.post(
+        f"{base}/archive", headers=headers, json={"base_revision_id": head, "archived": True}
+    )
+    assert archived.status_code == 200, archived.text
+    frozen = await client.put(
+        f"{base}/characters/oren", headers=headers, json={**body, "base_version": 2}
+    )
+    assert frozen.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_portrait_jobs_are_built_server_side_idempotent_and_bounded(studio):
+    client, factory, _, headers, base, *_ = studio
+    body = job_body()
+    created = await client.post(f"{base}/characters/mira/portrait-jobs", headers=headers, json=body)
+    assert created.status_code == 202
+    job = created.json()
+    assert job["status"] == "queued" and job["count"] == 2 and len(job["seeds"]) == 2
+    assert job["prompt"].startswith("1girl, mature female, solo, silver hair, amber eyes")
+    assert (job["width"], job["height"], job["steps"], job["guidance"]) == (832, 1216, 28, 5.0)
+    replay = await client.post(f"{base}/characters/mira/portrait-jobs", headers=headers, json=body)
+    assert replay.status_code == 202 and replay.json()["id"] == job["id"]
+    changed = await client.post(
+        f"{base}/characters/mira/portrait-jobs",
+        headers=headers,
+        json={**body, "appearance": "different"},
+    )
+    assert changed.status_code == 409
+    for bad in [job_body(count=0), job_body(count=5), job_body(appearance=""), job_body(x=1)]:
+        response = await client.post(
+            f"{base}/characters/mira/portrait-jobs", headers=headers, json=bad
+        )
+        assert response.status_code == 422
+    await queue_job(client, headers, base, character="oren")
+    limited = await client.post(
+        f"{base}/characters/mira/portrait-jobs", headers=headers, json=job_body()
+    )
+    assert limited.status_code == 429
+    jobs = (await client.get(f"{base}/characters/mira/portrait-jobs", headers=headers)).json()
+    assert [item["id"] for item in jobs["jobs"]] == [job["id"]]
+    async with factory() as session:
+        [message] = [
+            m
+            for m in await session.scalars(select(OutboxMessage))
+            if m.aggregate_id == UUID(job["id"])
+        ]
+    assert message.topic == QUEUED_TOPIC
+    assert set(message.payload) == {"schema_version", "tenant_id", "job_id"}, "IDs only"
+
+
+@pytest.mark.anyio
+async def test_disabled_generation_refuses_jobs_but_profiles_still_work(studio):
+    client, _, _, headers, base, *_ = studio
+    disabled = app.dependency_overrides[get_settings]().model_copy(
+        update={"narrative_image_generation_enabled": False}
+    )
+    app.dependency_overrides[get_settings] = lambda: disabled
+    refused = await client.post(
+        f"{base}/characters/mira/portrait-jobs", headers=headers, json=job_body()
+    )
+    assert refused.status_code == 503 and refused.json()["type"].endswith(
+        "image-generation-unavailable"
+    )
+    body = {"base_version": 0, "appearance": "", "character_type": "other", "framing": "full_body"}
+    assert (
+        await client.put(f"{base}/characters/mira", headers=headers, json=body)
+    ).status_code == 200
+
+
+@pytest.mark.anyio
+async def test_relay_runs_the_job_and_stores_verified_candidates(studio):
+    client, factory, store, headers, base, *_ = studio
+    job, payload = await queue_job(client, headers, base)
+    dispatcher = Dispatcher()
+    assert await relay_image_batch(factory, dispatcher=dispatcher) == 1
+    assert dispatcher.started == [payload]
+    outcome = await run_job(factory, store, payload, run_id=dispatcher.run_id)
+    assert outcome == {"job_id": job["id"], "status": "completed"}
+    done = (await client.get(f"{base}/image-jobs/{job['id']}", headers=headers)).json()
+    assert done["status"] == "completed" and done["progress"] == 2
+    assert done["model"] == f"{MODEL.repo}@{MODEL.revision}"
+    assert [asset["status"] for asset in done["assets"]] == ["candidate", "candidate"]
+    asset = done["assets"][0]
+    assert asset["seed"] == job["seeds"][0] and asset["license"] == "openrail++"
+    assert asset["provenance"]["prompt"] == job["prompt"]
+    assert asset["provenance"]["model_revision"] == MODEL.revision
+    image = await client.get(f"{base}/assets/{asset['id']}/content", headers=headers)
+    assert image.status_code == 200 and image.headers["content-type"] == "image/png"
+    assert hashlib.sha256(image.content).hexdigest() == asset["sha256"]
+    assert "immutable" in image.headers["cache-control"]
+    assert image.headers["x-content-type-options"] == "nosniff"
+    thumb = await client.get(
+        f"{base}/assets/{asset['id']}/content?variant=thumbnail", headers=headers
+    )
+    assert thumb.status_code == 200 and thumb.content.startswith(b"\x89PNG")
+    replay = await run_job(factory, store, payload, attempt=2, run_id=dispatcher.run_id)
+    assert replay["status"] == "stale", "A finished job never runs again"
+    store.objects.clear()
+    missing = await client.get(f"{base}/assets/{asset['id']}/content", headers=headers)
+    assert missing.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_choosing_a_portrait_approves_it_and_discards_are_guarded(studio):
+    client, factory, store, headers, base, *_ = studio
+    job, payload = await queue_job(client, headers, base)
+    await run_job(factory, store, payload)
+    first, second = (await client.get(f"{base}/image-jobs/{job['id']}", headers=headers)).json()[
+        "assets"
+    ]
+    chosen = await client.put(
+        f"{base}/characters/mira/portrait",
+        headers=headers,
+        json={"base_version": 0, "asset_id": first["id"]},
+    )
+    assert chosen.status_code == 200, chosen.text
+    profile = chosen.json()
+    assert profile["version"] == 1 and profile["portrait"]["id"] == first["id"]
+    assert profile["portrait"]["status"] == "approved"
+    blocked = await client.post(f"{base}/assets/{first['id']}/discard", headers=headers)
+    assert blocked.status_code == 409
+    discarded = await client.post(f"{base}/assets/{second['id']}/discard", headers=headers)
+    assert discarded.status_code == 200 and discarded.json()["status"] == "discarded"
+    refused = await client.put(
+        f"{base}/characters/mira/portrait",
+        headers=headers,
+        json={"base_version": 1, "asset_id": second["id"]},
+    )
+    assert refused.status_code == 409
+    listed = (await client.get(f"{base}/characters/mira/portrait-jobs", headers=headers)).json()
+    assert [asset["id"] for asset in listed["jobs"][0]["assets"]] == [first["id"]]
+    cleared = await client.put(
+        f"{base}/characters/mira/portrait",
+        headers=headers,
+        json={"base_version": 1, "asset_id": None},
+    )
+    assert cleared.json()["portrait"] is None
+    assert (
+        await client.post(f"{base}/assets/{first['id']}/discard", headers=headers)
+    ).status_code == 200
+    unknown = await client.put(
+        f"{base}/characters/mira/portrait",
+        headers=headers,
+        json={"base_version": 2, "asset_id": str(uuid4())},
+    )
+    assert unknown.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_cancellation_before_and_during_execution(studio):
+    client, factory, store, headers, base, *_ = studio
+    job, payload = await queue_job(client, headers, base)
+    cancelled = await client.post(f"{base}/image-jobs/{job['id']}/cancel", headers=headers)
+    assert cancelled.json()["status"] == "cancelled"
+    dispatcher = Dispatcher()
+    assert await relay_image_batch(factory, dispatcher=dispatcher) == 1
+    assert dispatcher.started == []
+
+    job, payload = await queue_job(client, headers, base)
+    run_id = await registered(factory, payload)
+
+    class CancelledDuringRun(FakeGenerator):
+        async def generate(self, request, *, on_progress):
+            response = await client.post(f"{base}/image-jobs/{job['id']}/cancel", headers=headers)
+            assert response.json()["cancel_requested"] is True
+            return await super().generate(request, on_progress=on_progress)
+
+    outcome = await run_job(factory, store, payload, CancelledDuringRun(), run_id=run_id)
+    assert outcome["status"] == "cancelled"
+    assert store.objects == {} or (await job_row(factory, payload)).status == "cancelled"
+    async with factory() as session:
+        assets = list(
+            await session.scalars(
+                select(NarrativeAsset).where(NarrativeAsset.job_id == UUID(job["id"]))
+            )
+        )
+        cancels = list(
+            await session.scalars(
+                select(OutboxMessage).where(OutboxMessage.topic == CANCELLED_TOPIC)
+            )
+        )
+    assert assets == [] and len(cancels) == 1
+
+
+@pytest.mark.anyio
+async def test_gpu_contention_retries_releases_ollama_and_fails_with_a_safe_code(studio):
+    client, factory, store, headers, base, *_ = studio
+    _, payload = await queue_job(client, headers, base)
+    run_id = await registered(factory, payload)
+    with pytest.raises(ApplicationError) as raised:
+        await run_job(factory, store, payload, FakeGenerator("gpu_busy"), run_id=run_id)
+    assert raised.value.type == "gpu_busy" and not raised.value.non_retryable
+    assert (await job_row(factory, payload)).status == "running"
+    failed = await run_job(
+        factory, store, payload, FakeGenerator("gpu_busy"), attempt=3, run_id=run_id
+    )
+    assert failed["status"] == "failed"
+    assert (await job_row(factory, payload)).error_code == "gpu_busy"
+
+    _, payload = await queue_job(client, headers, base, character="oren")
+    releaser = Releaser()
+    generator = FakeGenerator("gpu_busy")
+    outcome = await run_job(factory, store, payload, generator, releaser=releaser)
+    assert outcome["status"] == "completed"
+    assert releaser.calls == 1 and len(generator.requests) == 2
+
+
+@pytest.mark.anyio
+async def test_unregistered_and_foreign_runs_cannot_claim_and_recovery_closes_lost_runs(studio):
+    client, factory, store, headers, base, *_ = studio
+    _, payload = await queue_job(client, headers, base)
+    work = NarrativeImageActivities(
+        factory=factory, generator=FakeGenerator(), store=store, releaser=None
+    )
+    with pytest.raises(ApplicationError) as raised:
+        await environment(payload, uuid4()).run(work.run, payload)
+    assert raised.value.type == "registration_pending"
+    run_id = await registered(factory, payload)
+    assert (await environment(payload, uuid4()).run(work.run, payload))["status"] == "stale"
+    assert (await job_row(factory, payload)).status == "queued"
+    async with factory() as session:
+        row = await session.get(NarrativeImageJob, UUID(payload["job_id"]))
+        row.created_at = row.created_at.replace(year=2020)
+        await session.commit()
+    assert await recover_stale_image_jobs(factory, dispatcher=Dispatcher(closed=False)) == 0
+    assert await recover_stale_image_jobs(factory, dispatcher=Dispatcher(closed=True)) == 1
+    job = await job_row(factory, payload)
+    assert (job.status, job.error_code, job.workflow_run_id) == (
+        "failed",
+        "worker_interrupted",
+        run_id,
+    )
+    async with factory() as session:
+        published = await session.scalar(
+            select(OutboxMessage).where(OutboxMessage.aggregate_id == UUID(payload["job_id"]))
+        )
+    assert published.status == OutboxMessageStatus.PENDING

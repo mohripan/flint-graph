@@ -1,0 +1,27 @@
+[project]
+name = "flint-graph-imagegen"
+version = "0.1.0"
+description = "Isolated local image-generation child for FlintGraph narrative assets"
+requires-python = "==3.12.*"
+dependencies = [
+    "torch==2.11.0",
+    "diffusers==0.42.1",
+    "transformers==5.22.1",
+    "accelerate==1.15.0",
+    "safetensors==0.8.0",
+    "pillow==13.0.0",
+    "nvidia-ml-py==13.615.71",
+]
+
+[tool.uv]
+package = false
+# CUDA wheels exist only for Windows and Linux; the child never runs elsewhere.
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

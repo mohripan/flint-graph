@@ -46,6 +46,18 @@ def release_artifact_key(
     )
 
 
+def asset_object_key(
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    asset_id: UUID,
+    variant: Literal["image", "thumbnail"],
+) -> str:
+    if variant not in ("image", "thumbnail"):
+        raise ValueError("Invalid asset variant")
+    return f"tenants/{tenant_id}/narrative/projects/{project_id}/assets/{asset_id}/{variant}.png"
+
+
 class S3NarrativeArtifactStore:
     def __init__(self, client: Any, *, bucket: str) -> None:
         object_uri(bucket, "validate")
@@ -142,6 +154,6 @@ class S3NarrativeArtifactStore:
         self._expect(key, len(data), expected_sha256, max_bytes)
         if not isinstance(data, bytes) or hashlib.sha256(data).hexdigest() != expected_sha256:
             raise ArtifactStoreError("artifact_integrity")
-        if content_type not in ("application/zip", "application/json"):
-            raise ValueError("Invalid release artifact content type")
+        if content_type not in ("application/zip", "application/json", "image/png"):
+            raise ValueError("Invalid narrative artifact content type")
         return await asyncio.to_thread(self._put, key, data, expected_sha256, content_type)
