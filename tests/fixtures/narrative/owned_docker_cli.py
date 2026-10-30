@@ -7,6 +7,7 @@ process boundaries without mocking the runner's internal methods.
 import hashlib
 import json
 import os
+import struct
 import subprocess
 import sys
 import tarfile
@@ -18,18 +19,28 @@ args = sys.argv[3:]
 state_file = root / "state.json"
 identity = "c" * 64
 image = "sha256:" + "a" * 64
+
+
+def pack(settings: bytes) -> bytes:
+    """A minimal Godot 4.7 pack directory with one project.binary entry."""
+    name = b"project.binary\0\0"
+    header = struct.pack("<4s5I2Q", b"GDPC", 4, 4, 7, 2, 2, 104, 104 + len(settings))
+    entry = struct.pack("<I", len(name)) + name + struct.pack("<QQ", 0, len(settings))
+    return header + bytes(64) + settings + struct.pack("<I", 1) + entry + bytes(16) + bytes(4)
+
+
 files = {
     name: b"fixture"
     for name in (
         "index.html",
         "index.js",
         "index.wasm",
-        "index.pck",
         "index.png",
         "index.audio.worklet.js",
         "index.audio.position.worklet.js",
     )
 }
+files["index.pck"] = pack(b"" if mode == "empty_settings" else b"ECFG" + bytes(12))
 
 
 def state():
@@ -59,7 +70,9 @@ elif args[0] == "create":
     execution = next(
         x.split("=", 1)[1] for x in args if x.startswith("io.flintgraph.narrative.execution=")
     )
-    state_file.write_text(json.dumps({"execution": execution}), encoding="utf-8")
+    tmpfs = dict(args[i + 1].split(":", 1) for i, x in enumerate(args) if x == "--tmpfs")
+    state_file.write_text(json.dumps({"execution": execution, "tmpfs": tmpfs}), encoding="utf-8")
+    (root / "created-tmpfs.json").write_text(json.dumps(tmpfs), encoding="utf-8")
     print(identity)
 elif args[:2] == ["container", "inspect"]:
     saved = state()
@@ -85,7 +98,7 @@ elif args[:2] == ["container", "inspect"]:
                         "PidsLimit": 128,
                         "CapDrop": ["ALL"],
                         "SecurityOpt": ["no-new-privileges"],
-                        "Tmpfs": {"/scratch": "rw,size=268435456,mode=1777"},
+                        "Tmpfs": saved.get("tmpfs", {}),
                     },
                     "Mounts": [{"Type": "bind", "Destination": "/input", "RW": False}],
                 }

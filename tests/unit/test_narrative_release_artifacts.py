@@ -1,6 +1,7 @@
 """The bounded child-byte transport is separate from engine execution."""
 
 import io
+import struct
 import tarfile
 import tracemalloc
 import zipfile
@@ -11,7 +12,56 @@ from flint_graph.narrative.release_artifacts import (
     ArtifactError,
     ArtifactLimits,
     read_child_files,
+    web_pack_has_project_settings,
 )
+
+
+def godot_pack(entries, *, version=4, flags=2, entry_flags=0, count=None):
+    """Minimal Godot 4.7 pack: fixed header, relative file data, trailing directory."""
+    base = 40 + 64
+    body, rows = b"", []
+    for name, data in entries:
+        rows.append((name.encode(), len(body), len(data)))
+        body += data
+    directory = base + len(body)
+    header = struct.pack("<4s5I2Q", b"GDPC", version, 4, 7, 2, flags, base, directory)
+    output = header + bytes(64) + body + struct.pack("<I", len(rows) if count is None else count)
+    for name, start, size in rows:
+        padded = name + b"\0" * (-len(name) % 4)
+        output += struct.pack("<I", len(padded)) + padded + struct.pack("<QQ", start, size)
+        output += bytes(16) + struct.pack("<I", entry_flags)
+    return output
+
+
+SETTINGS = b"ECFG" + bytes(12)
+
+
+def test_exported_web_pack_must_contain_engine_project_settings():
+    assert web_pack_has_project_settings(
+        godot_pack([("content/story.json", b"{}"), ("project.binary", SETTINGS)])
+    )
+    # Godot 4.7 exits successfully when it cannot stage project.binary, leaving
+    # an empty entry that browsers reject as "Couldn't load project data".
+    for broken in [
+        godot_pack([("project.binary", b"")]),
+        godot_pack([("content/story.json", b"{}")]),
+        godot_pack([("project.binary", b"[remap]\npath=x")]),
+        godot_pack([("project.binary", SETTINGS)], version=3),
+        godot_pack([("project.binary", SETTINGS)], flags=3),
+        godot_pack([("project.binary", SETTINGS)], entry_flags=1),
+        godot_pack([("project.binary", SETTINGS)], count=1_000_000),
+        godot_pack([("project.binary", SETTINGS)])[:-30],
+        b"GDPC",
+        b"",
+    ]:
+        assert not web_pack_has_project_settings(broken)
+
+
+def test_project_settings_offsets_cannot_point_outside_the_pack():
+    pack = bytearray(godot_pack([("project.binary", SETTINGS)]))
+    directory = struct.unpack_from("<Q", pack, 32)[0]
+    struct.pack_into("<Q", pack, directory + 4 + 4 + 16, 2**40)
+    assert not web_pack_has_project_settings(bytes(pack))
 
 
 def archive(entries):

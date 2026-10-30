@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import tracemalloc
+import zipfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -96,6 +97,30 @@ def external_fixture(tmp_path, mode):
 
 async def current():
     pass
+
+
+@pytest.mark.anyio
+async def test_child_gets_bounded_writable_tmp_and_publishable_web_pack(tmp_path):
+    # Godot stages project.binary under the fixed /tmp even when TMPDIR is set.
+    runner, scratch = external_fixture(tmp_path, "normal")
+    built = await runner.build(load_text_package(STORY), execution_id=uuid4(), check=current)
+    with zipfile.ZipFile(io.BytesIO(built.web_zip)) as web:
+        assert web.read("index.pck").startswith(b"GDPC")
+    assert json.loads((tmp_path / "created-tmpfs.json").read_text()) == {
+        "/scratch": "rw,size=268435456,mode=1777",
+        "/tmp": "rw,size=16777216,mode=1777",
+    }
+    assert list(scratch.iterdir()) == []
+    assert not (tmp_path / "state.json").exists()
+
+
+@pytest.mark.anyio
+async def test_web_pack_without_project_settings_is_never_returned(tmp_path):
+    runner, scratch = external_fixture(tmp_path, "empty_settings")
+    with pytest.raises(BuildError, match=r"^artifact_invalid$"):
+        await runner.build(load_text_package(STORY), execution_id=uuid4(), check=current)
+    assert list(scratch.iterdir()) == []
+    assert not (tmp_path / "state.json").exists()
 
 
 @pytest.mark.anyio

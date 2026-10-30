@@ -14,7 +14,11 @@ import pytest
 from flint_graph.narrative.build_child import WEB_FILES
 from flint_graph.narrative.export import TEMPLATE_FILES, export_godot
 from flint_graph.narrative.package import load_text_package
-from flint_graph.narrative.release_artifacts import make_artifact_zip, read_child_files
+from flint_graph.narrative.release_artifacts import (
+    make_artifact_zip,
+    read_child_files,
+    web_pack_has_project_settings,
+)
 
 
 def docker(*args):
@@ -91,6 +95,8 @@ def test_real_trusted_child_exports_or_rejects_changed_runtime(tmp_path, monkeyp
             "1g",
             "--tmpfs",
             "/scratch:rw,size=268435456,mode=1777",
+            "--tmpfs",
+            "/tmp:rw,size=16777216,mode=1777",
             "--mount",
             "type=bind,source=" + str(source) + ",target=/input,readonly",
             image,
@@ -104,7 +110,10 @@ def test_real_trusted_child_exports_or_rejects_changed_runtime(tmp_path, monkeyp
         assert config["NanoCpus"] == 2000000000 and config["PidsLimit"] == 128
         assert config["CapDrop"] == ["ALL"] and "no-new-privileges" in config["SecurityOpt"]
         assert not config["Privileged"] and not config["Devices"]
-        assert config["Tmpfs"] == {"/scratch": "rw,size=268435456,mode=1777"}
+        assert config["Tmpfs"] == {
+            "/scratch": "rw,size=268435456,mode=1777",
+            "/tmp": "rw,size=16777216,mode=1777",
+        }
         binds = [mount for mount in effective["Mounts"] if mount["Type"] == "bind"]
         assert len(binds) == 1 and binds[0]["Destination"] == "/input" and not binds[0]["RW"]
         deadline = time.monotonic() + 120
@@ -150,6 +159,8 @@ def test_real_trusted_child_exports_or_rejects_changed_runtime(tmp_path, monkeyp
             assert {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()} == (
                 outcome["files"][name]
             )
+        # A browser cannot boot a pack whose project.binary failed to stage.
+        assert web_pack_has_project_settings(files["index.pck"])
         source_zip, web_zip = make_artifact_zip(source_files), make_artifact_zip(files)
         evidence = os.environ.get("FLINT_GRAPH_NARRATIVE_BUILD_EVIDENCE_DIR")
         if evidence:

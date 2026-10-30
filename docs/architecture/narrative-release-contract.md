@@ -40,8 +40,9 @@ These settings admit durable queue intent; a separately started narrative relay
 and worker are required to execute it. Ordinary API startup never invokes Docker
 or downloads a toolchain. Missing configuration rejects new requests with503.
 The connected worker and separate operator processes/periodic recovery are
-qualified. Keep ordinary local release admission disabled during Releases UI
-delivery. See the [worker/relay runbook](../runbooks/narrative-build-worker.md).
+qualified, and the Studio Releases dialog is the user-facing client. See the
+[worker/relay runbook](../runbooks/narrative-build-worker.md) and the
+[Releases UI report](../reports/2026-10-30-narrative-releases-ui.md).
 
 ## Identity, transactions and replay
 
@@ -99,8 +100,10 @@ authorize artifact insertion. Completion remains reserved for publication. Bound
 immutable publication and downloads have real engine/store/HTTP qualification;
 the separate relay/workflow/activities now also have a connected native proof.
 Operator processes and periodic recovery/sweeps now have actual process-loss and
-natural-expiry proof. Releases UI/browser acceptance remains pending. See the
+natural-expiry proof. See the
 [recovery report](../reports/2026-10-30-narrative-build-recovery.md).
+Releases UI/browser acceptance passed; see the
+[Releases UI report](../reports/2026-10-30-narrative-releases-ui.md).
 
 See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
 and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).
@@ -136,6 +139,19 @@ decoder and removes only label-verified immutable container IDs plus token-marke
 scratch. Unconfirmed cleanup retains a safe marker for future owned recovery.
 Actual export and task cancellation passed. See the
 [runner report](../reports/2026-10-30-narrative-build-runner.md).
+
+The child's only writable paths are two bounded tmpfs mounts:
+`/scratch` (256 MiB) and `/tmp` (16 MiB), both mode 1777. The host requires
+exactly this map in the effective configuration. Godot's Linux export stages
+`project.binary` under the fixed `/tmp`, ignoring `TMPDIR`. With a read-only
+`/tmp`, it logs an error, exits 0 and packs an empty settings entry that browsers
+cannot boot.
+
+The host therefore also requires the exported Godot 4.7 pack (format 4,
+unencrypted) to carry a non-empty `project.binary` starting with `ECFG` before
+producing artifacts. Otherwise it fails closed with `artifact_invalid`. Releases
+published before this check have unbootable browser builds; a new release of
+the same revision replaces them.
 
 ## Implemented immutable publication and authorized attachments
 

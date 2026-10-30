@@ -70,6 +70,8 @@ def test_owned_engine_child_watchdog_survives_absent_supervisor(tmp_path):
             "1g",
             "--tmpfs",
             "/scratch:rw,size=268435456,mode=1777",
+            "--tmpfs",
+            "/tmp:rw,size=16777216,mode=1777",
             "--mount",
             "type=bind,source=" + str(source) + ",target=/input,readonly",
             image,

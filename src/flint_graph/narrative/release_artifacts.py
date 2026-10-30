@@ -6,6 +6,7 @@ USTAR inventory is accepted; automatic extended/sparse/longname parsing is absen
 
 import io
 import re
+import struct
 import tarfile
 import zipfile
 from collections.abc import Buffer, Mapping
@@ -152,6 +153,43 @@ def read_child_files(
         padding = (-member.size) % 512
         if any(reader.exact(padding)):
             raise ArtifactError("invalid_padding")
+
+
+def web_pack_has_project_settings(pck: bytes) -> bool:
+    """Whether a pinned Godot 4.7 Web pack carries readable engine project settings.
+
+    Godot exits successfully even when it cannot stage ``project.binary``, which
+    leaves an empty entry that browsers refuse to boot. Only the unencrypted pack
+    format of the pinned engine (version 4) is accepted; anything else fails closed.
+    """
+    try:
+        magic, version, *_, flags, base, directory = struct.unpack_from("<4s5I2Q", pck, 0)
+        if magic != b"GDPC" or version != 4 or flags & 1:
+            return False
+        (count,) = struct.unpack_from("<I", pck, directory)
+        if count > 4096:
+            return False
+        offset = directory + 4
+        for _ in range(count):
+            (length,) = struct.unpack_from("<I", pck, offset)
+            if length > 4096:
+                return False
+            name = pck[offset + 4 : offset + 4 + length].rstrip(b"\0")
+            offset += 4 + length
+            start, size = struct.unpack_from("<QQ", pck, offset)
+            (entry_flags,) = struct.unpack_from("<I", pck, offset + 32)
+            offset += 36
+            if name == b"project.binary":
+                begin = base + start
+                return (
+                    not entry_flags & 1
+                    and 4 <= size
+                    and begin + size <= len(pck)
+                    and pck[begin : begin + 4] == b"ECFG"
+                )
+        return False
+    except struct.error:
+        return False
 
 
 class _ZipBuffer(io.BytesIO):

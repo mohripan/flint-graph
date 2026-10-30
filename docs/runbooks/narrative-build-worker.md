@@ -24,6 +24,13 @@ Worker settings:
   image identity; `FLINT_GRAPH_NARRATIVE_RELEASE_TOOLCHAIN_SHA256`: prepared receipt.
 - `FLINT_GRAPH_NARRATIVE_RECOVERY_INTERVAL_SECONDS`: 30 by default, 5–3600 allowed.
 
+Each build child runs read-only and network-none, with exactly two bounded tmpfs
+mounts: `/scratch` (256 MiB) and `/tmp` (16 MiB). Godot's Linux export needs a
+writable `/tmp` to stage `project.binary`. Without it, the export still exits 0
+but produces an unbootable browser build. The worker rejects any other effective
+mount profile, and any Web pack without readable project settings
+(`artifact_invalid`). Restart workers after upgrading so they load this profile.
+
 Run `uv run python -m flint_graph.processes.narrative_worker`. One activity executes
 per worker; it can receive workflow tasks while independent maintenance loops
 inspect closed runs and expired owned scratch. Shutdown gives activities 30 seconds
@@ -76,6 +83,12 @@ current protocol supports activity retries within one run. Use the authorized
 release retry API for a new user attempt after failed/cancelled work. Changing a
 release's captured compiler/image/toolchain is not a retry operation.
 
-Use API release/job/events to inspect safe public state, and Temporal task-queue
-pollers to check worker presence. Logs use fixed codes/counts, never private source
-or driver errors. See the [actual process-loss, cancel/retry and cleanup report](../reports/2026-10-30-narrative-build-recovery.md).
+Use the Studio **Releases** dialog or API release/job/events to inspect safe public
+state, and Temporal task-queue pollers to check worker presence. Logs use fixed
+codes/counts, never private source or driver errors. See the
+[actual process-loss, cancel/retry and cleanup report](../reports/2026-10-30-narrative-build-recovery.md).
+
+Releases published before the `/tmp` mount and pack check have unbootable browser
+builds; their source ZIPs are unaffected. Published releases are immutable, so
+request a new release of the same saved revision. See the
+[Releases UI report](../reports/2026-10-30-narrative-releases-ui.md).

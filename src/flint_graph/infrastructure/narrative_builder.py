@@ -31,10 +31,14 @@ from flint_graph.narrative.release_artifacts import (
     ArtifactError,
     make_artifact_zip,
     read_child_files,
+    web_pack_has_project_settings,
 )
 from flint_graph.narrative.values import PackageError, StoryPackage
 
 Check = Callable[[], Awaitable[None]]
+# The only writable child paths. Godot's Linux export stages project.binary under
+# the fixed /tmp regardless of TMPDIR, so a read-only /tmp yields an unbootable pack.
+_TMPFS = {"/scratch": "rw,size=268435456,mode=1777", "/tmp": "rw,size=16777216,mode=1777"}
 _SAFE_FAILURES = {
     "input_integrity",
     "engine_failed",
@@ -308,7 +312,7 @@ class DockerNarrativeBuilder:
             or config.get("Devices")
             or config.get("DeviceRequests")
             or config.get("SecurityOpt") != ["no-new-privileges"]
-            or config.get("Tmpfs") != {"/scratch": "rw,size=268435456,mode=1777"}
+            or config.get("Tmpfs") != _TMPFS
             or len(binds) != 1
             or binds[0].get("Destination") != "/input"
             or binds[0].get("RW")
@@ -677,8 +681,7 @@ class DockerNarrativeBuilder:
                     "1g",
                     "--memory-swap",
                     "1g",
-                    "--tmpfs",
-                    "/scratch:rw,size=268435456,mode=1777",
+                    *(arg for item in _TMPFS.items() for arg in ("--tmpfs", ":".join(item))),
                     "--mount",
                     "type=bind,source=" + str(source) + ",target=/input,readonly",
                     self.image,
@@ -698,6 +701,8 @@ class DockerNarrativeBuilder:
                         "sha256": hashlib.sha256(data).hexdigest(),
                     }:
                         raise BuildError("artifact_invalid")
+                if not web_pack_has_project_settings(files["index.pck"]):
+                    raise BuildError("artifact_invalid")
                 for target, original in {
                     "LICENSE.runtime.txt": "LICENSE.runtime.txt",
                     "GODOT-NOTICE.txt": "GODOT-NOTICE.txt",
