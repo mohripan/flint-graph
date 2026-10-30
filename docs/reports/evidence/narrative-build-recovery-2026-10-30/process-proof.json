@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "real_http": true,
+  "separate_operator_processes": true,
+  "active_engine_worker_killed": true,
+  "same_run_replacement_attempt": 2,
+  "complete_verified_artifact_set": true,
+  "private_history_canary_absent": true,
+  "natural_expired_container_and_scratch_removed": true,
+  "sibling_sentinel_preserved": true,
+  "fixture_project_archived": true,
+  "downloads": {
+    "source": {
+      "sha256": "834ce149392c76d552789e077dcef9e515c29632ad9bd52198bc147040c90308",
+      "bytes": 126667
+    },
+    "web": {
+      "sha256": "ff69271d97974964c3cb33e076f792d1748f69565d10718b2841dea6a6c39df6",
+      "bytes": 10368008
+    },
+    "manifest": {
+      "sha256": "1bf8285ca36ca1d29870e480d06767ec3e377eec4da2b97b7844d65e10d6ed64",
+      "bytes": 934
+    }
+  }
+}

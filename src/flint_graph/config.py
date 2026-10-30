@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
@@ -197,6 +198,15 @@ class Settings(BaseSettings):
     )
     narrative_release_toolchain_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     narrative_release_max_active_jobs_per_workspace: int = Field(default=10, ge=1, le=100)
+    narrative_worker_enabled: bool = False
+    narrative_relay_enabled: bool = False
+    narrative_task_queue: str = Field(
+        default="narrative-build", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
+    )
+    narrative_build_work_root: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_recovery_interval_seconds: float = Field(default=30, ge=5, le=3600)
+    narrative_relay_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+    narrative_relay_batch_size: int = Field(default=10, ge=1, le=100)
 
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
@@ -228,6 +238,24 @@ class Settings(BaseSettings):
     # rather than a fabricated one.
     usage_pricing: dict[str, dict[str, float]] = Field(default_factory=dict)
     usage_currency: str = "USD"
+
+    @model_validator(mode="after")
+    def validate_narrative_process_settings(self) -> Self:
+        if (
+            self.narrative_worker_enabled or self.narrative_relay_enabled
+        ) and self.narrative_task_queue == self.temporal_task_queue:
+            raise ValueError("A separate narrative task queue is required")
+        if self.narrative_worker_enabled and (
+            not self.narrative_release_builder_image_digest
+            or not self.narrative_release_toolchain_sha256
+            or not self.narrative_build_work_root
+            or not Path(self.narrative_build_work_root).is_absolute()
+        ):
+            raise ValueError(
+                "The narrative worker requires an absolute private root "
+                "and pinned builder/toolchain"
+            )
+        return self
 
     @field_validator("active_retrieval_index_version_id", mode="before")
     @classmethod
@@ -274,9 +302,7 @@ class Settings(BaseSettings):
         allowed_rates = {"input_per_million", "output_per_million"}
         for key, rates in value.items():
             if ":" not in key:
-                raise ValueError(
-                    f"usage_pricing key '{key}' must use '<provider>:<model>' form"
-                )
+                raise ValueError(f"usage_pricing key '{key}' must use '<provider>:<model>' form")
             unknown = sorted(set(rates) - allowed_rates)
             if unknown:
                 raise ValueError(
@@ -284,9 +310,7 @@ class Settings(BaseSettings):
                 )
             for rate_name, rate in rates.items():
                 if rate < 0:
-                    raise ValueError(
-                        f"usage_pricing['{key}']['{rate_name}'] must not be negative"
-                    )
+                    raise ValueError(f"usage_pricing['{key}']['{rate_name}'] must not be negative")
         return value
 
     @model_validator(mode="after")
@@ -395,8 +419,7 @@ class Settings(BaseSettings):
                 )
             if "postgres" not in (self.readiness_required_dependencies or []):
                 raise ValueError(
-                    "readiness_required_dependencies must include 'postgres' in "
-                    "staging/production"
+                    "readiness_required_dependencies must include 'postgres' in staging/production"
                 )
             if self.object_store_access_key_id == "flint_graph":
                 raise ValueError("object_store_access_key_id must not use the local default")
@@ -427,15 +450,15 @@ class Settings(BaseSettings):
                     "openai_compatible"
                 )
         if self.query_default_candidate_limit > self.query_max_candidate_limit:
-            raise ValueError(
-                "query_default_candidate_limit must be <= query_max_candidate_limit"
-            )
+            raise ValueError("query_default_candidate_limit must be <= query_max_candidate_limit")
         uses_anthropic = "anthropic" in (
             self.query_answer_provider,
             self.query_support_provider,
         )
-        if uses_anthropic and not self.anthropic_api_key and not os.environ.get(
-            "ANTHROPIC_API_KEY"
+        if (
+            uses_anthropic
+            and not self.anthropic_api_key
+            and not os.environ.get("ANTHROPIC_API_KEY")
         ):
             raise ValueError(
                 "anthropic_api_key (or the ANTHROPIC_API_KEY environment variable) is "

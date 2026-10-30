@@ -130,6 +130,90 @@ async def test_recovery_refuses_unverified_scratch_before_removing_any_container
     assert folder.exists() and (tmp_path / "state.json").exists()
 
 
+def managed_record(scratch, execution, expires, image="sha256:" + "a" * 64):
+    folder = scratch / ("build-" + execution.hex + "-recovered")
+    folder.mkdir()
+    (folder / ".owner").write_text(str(execution), encoding="ascii")
+    record = {
+        "schema_version": "1",
+        "execution_id": str(execution),
+        "expires_at": expires,
+        "image": image,
+        "toolchain_sha256": "b" * 64,
+    }
+    (folder / ".execution.json").write_text(
+        json.dumps(record, sort_keys=True, separators=(",", ":"))
+    )
+    return folder
+
+
+@pytest.mark.anyio
+async def test_expired_sweep_only_removes_verified_managed_execution(tmp_path):
+    runner, scratch = external_fixture(tmp_path, "normal")
+    expired, live = uuid4(), uuid4()
+    old = managed_record(scratch, expired, 1)
+    fresh = managed_record(scratch, live, 9999999999)
+    unrelated = scratch / "creator-export"
+    unrelated.mkdir()
+    (unrelated / "keep.txt").write_bytes(b"creator owned")
+    (tmp_path / "state.json").write_text(json.dumps({"execution": str(expired), "expires": "1"}))
+    assert await runner.sweep_expired() == 1
+    assert not old.exists() and fresh.exists()
+    assert (unrelated / "keep.txt").read_bytes() == b"creator owned"
+    assert await runner.sweep_expired() == 0
+
+
+@pytest.mark.anyio
+async def test_sweep_refuses_metadata_container_identity_mismatch(tmp_path):
+    runner, scratch = external_fixture(tmp_path, "normal")
+    execution = uuid4()
+    old = managed_record(scratch, execution, 1, image="sha256:" + "e" * 64)
+    (tmp_path / "state.json").write_text(json.dumps({"execution": str(execution), "expires": "1"}))
+    assert await runner.sweep_expired() == 0
+    assert old.exists() and (tmp_path / "state.json").exists()
+
+
+@pytest.mark.anyio
+async def test_sweep_progresses_past_a_thousand_retained_siblings(tmp_path, monkeypatch):
+    runner, scratch = external_fixture(tmp_path, "normal")
+    for index in range(1000):
+        (scratch / f"000-retained-{index:04}").write_bytes(b"retain")
+    execution = uuid4()
+    old = managed_record(scratch, execution, 1)
+    (tmp_path / "state.json").write_text(json.dumps({"execution": str(execution), "expires": "1"}))
+    native_scandir = os.scandir
+
+    class OrderedScan:
+        def __init__(self, native):
+            self.native = native
+            self.entries = iter(sorted(native, key=lambda entry: entry.name))
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return next(self.entries)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            self.native.close()
+
+    def ordered_scandir(path):
+        # Only the external root enumeration order is fixed. Other paths/FDs
+        # retain their native iterator/context-manager behavior for shutil.
+        scan = native_scandir(path)
+        return OrderedScan(scan) if path == scratch else scan
+
+    monkeypatch.setattr(os, "scandir", ordered_scandir)
+    assert await runner.sweep_expired() == 0
+    assert old.exists()
+    assert await runner.sweep_expired() == 1
+    assert not old.exists()
+    assert len(list(scratch.iterdir())) == 1000
+
+
 def process_alive(pid):
     if sys.platform == "win32":
         result = subprocess.check_output(

@@ -71,7 +71,10 @@ elif args[:2] == ["container", "inspect"]:
                     "Image": image,
                     "Config": {
                         "User": "10001:10001",
-                        "Labels": {"io.flintgraph.narrative.execution": saved["execution"]},
+                        "Labels": {
+                            "io.flintgraph.narrative.execution": saved["execution"],
+                            "io.flintgraph.narrative.expires": saved.get("expires", "9999999999"),
+                        },
                     },
                     "HostConfig": {
                         "NetworkMode": "none",

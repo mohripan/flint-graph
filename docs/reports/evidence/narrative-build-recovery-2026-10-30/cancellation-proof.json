@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "real_http_active_engine_cancellation": true,
+  "cancelled_child_and_scratch_removed": true,
+  "cancelled_artifacts_unavailable": true,
+  "new_user_attempt_same_immutable_package": true,
+  "retry_key_replay_same_job": true,
+  "exact_three_artifacts_from_retry_only": true,
+  "fixture_project_archived": true,
+  "downloads": {
+    "source": {
+      "bytes": 126630,
+      "sha256": "f680daccd9268c0fe63fc85bc7afab14930ba4e0fd0357991c2cf7edd0cbd16e"
+    },
+    "web": {
+      "bytes": 10367964,
+      "sha256": "5e6f05bce2273f3fda81160be336acbac02cbc82cb0d907e491b6f0f239d906a"
+    },
+    "manifest": {
+      "bytes": 934,
+      "sha256": "4df476b472d34b7de7653ca9c5d3f2e4cafd916488758a90bdf83980659bb0ae"
+    }
+  }
+}

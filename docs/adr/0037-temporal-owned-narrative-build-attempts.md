@@ -1,8 +1,10 @@
 # ADR0037: Temporal-owned narrative build attempts
 
 Status: accepted for implementation under #124 and the user's autonomous delivery
-authorization,2026-10-30. Focused continuation of the immutable release design;
-automatic dispatch remains unimplemented at this decision checkpoint.
+authorization,2026-10-30. Focused continuation of the immutable release design.
+Implementation: separate dispatch/workflow/activities, operator processes and
+periodic recovery are now live qualified; see the
+[recovery report](../reports/2026-10-30-narrative-build-recovery.md).
 
 ## Context
 

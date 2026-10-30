@@ -23,6 +23,7 @@ from flint_graph.application.narrative_workflow import (
     ReleasePayload,
     release_workflow_id,
 )
+from flint_graph.application.services.narrative_release_recovery import recover_narrative_jobs
 from flint_graph.application.services.narrative_release_relay import relay_narrative_batch
 from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.db.models import NarrativeReleaseArtifact, NarrativeReleaseJob
@@ -239,4 +240,31 @@ async def test_exhaustion_before_first_claim_finalizes_registered_attempt_zero(l
     async with factory() as session:
         stored = await session.get(NarrativeReleaseJob, UUID(data["job_id"]))
         assert stored.activity_attempt == 0 and stored.execution_token is None
+    assert list(scratch.iterdir()) == []
+
+
+async def test_periodic_recovery_observes_exact_real_closed_run(live_release):
+    client, factory, headers, item, data, temporal, dispatcher, _queue, activities, scratch = (
+        live_release
+    )
+    assert await relay_narrative_batch(factory, dispatcher=dispatcher) == 1
+    async with factory() as session:
+        job = await session.get(NarrativeReleaseJob, UUID(data["job_id"]))
+        run_id = job.workflow_run_id
+    live = await recover_narrative_jobs(
+        factory, dispatcher=dispatcher, builder=activities.builder, limit=1
+    )
+    assert live.inspected == 1 and live.recovered == 0 and live.next_id == UUID(data["job_id"])
+    end = await recover_narrative_jobs(
+        factory, dispatcher=dispatcher, builder=activities.builder, after_id=live.next_id, limit=1
+    )
+    assert end.inspected == 0 and end.next_id is None
+    handle = temporal.get_workflow_handle(release_workflow_id(data), run_id=str(run_id))
+    await handle.terminate(reason="Owned native fixture interruption")
+    closed = await recover_narrative_jobs(
+        factory, dispatcher=dispatcher, builder=activities.builder
+    )
+    assert closed.inspected == closed.recovered == 1
+    job = (await client.get(item, headers=headers)).json()["job"]
+    assert job["status"] == "failed" and job["error_code"] == "worker_interrupted"
     assert list(scratch.iterdir()) == []

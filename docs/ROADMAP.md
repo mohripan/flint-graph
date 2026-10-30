@@ -41,10 +41,10 @@ complete. #124 durable release/build jobs and authorized downloads remain next.
 Its ledger, lifecycle, cancellation/retry APIs, execution fences/private input
 loading, trusted engine/host runner and immutable publication/authorized downloads
 are delivered. The separate relay/workflow/activities now have a connected native
-Temporal/PostgreSQL/Godot/MinIO/authorized-download proof. Operator processes,
-periodic closed-run/owned cleanup recovery and Releases UI/browser acceptance
-remain; this is not yet a qualified deployment recovery path. See the
-[current worker report](reports/2026-10-30-narrative-temporal-worker.md).
+Temporal/PostgreSQL/Godot/MinIO/authorized-download proof. Separate operator
+processes, periodic closed-run/owned cleanup and actual process-loss/restart plus
+active cancellation/retry are now qualified. Releases UI and complete browser
+acceptance remain. See the [recovery report](reports/2026-10-30-narrative-build-recovery.md).
 The added presentation track preserves v1 releases/saves and precedes the final
 #132 game. Prompt work starts with #134 → #135; requiring all of M35 before M32
 would create a cycle because #140 consumes #126. See the delivery queue for the

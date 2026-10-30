@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import time
 from pathlib import Path
 from uuid import uuid4
 from zipfile import ZipFile
@@ -13,6 +14,90 @@ import pytest
 
 from flint_graph.infrastructure.narrative_builder import DockerNarrativeBuilder
 from flint_graph.narrative.package import load_text_package
+
+
+async def native_docker(*args):
+    process = await asyncio.create_subprocess_exec(
+        "docker", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    output, _ = await process.communicate()
+    assert process.returncode == 0
+    return output.decode().strip()
+
+
+@pytest.mark.anyio
+async def test_actual_expired_sweep_preserves_unexpired_sibling(tmp_path):
+    runner, _ = configured(tmp_path)
+    resources = []
+    folders = []
+    try:
+        for expires in (1, int(time.time()) + 3600):
+            token = uuid4()
+            folder = tmp_path / ("build-" + token.hex + "-fixture")
+            await asyncio.to_thread(folder.mkdir)
+            await asyncio.to_thread((folder / ".owner").write_text, str(token), encoding="ascii")
+            record = {
+                "schema_version": "1",
+                "execution_id": str(token),
+                "expires_at": expires,
+                "image": runner.image,
+                "toolchain_sha256": runner.toolchain,
+            }
+            await asyncio.to_thread(
+                (folder / ".execution.json").write_text,
+                json.dumps(record, sort_keys=True, separators=(",", ":")),
+                encoding="ascii",
+            )
+            identity = await native_docker(
+                "create",
+                "--pull",
+                "never",
+                "--name",
+                "flint-narrative-build-" + token.hex,
+                "--label",
+                "io.flintgraph.narrative.execution=" + str(token),
+                "--label",
+                "io.flintgraph.narrative.expires=" + str(expires),
+                "--network",
+                "none",
+                "--read-only",
+                "--user",
+                "10001:10001",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges",
+                "--pids-limit",
+                "128",
+                "--memory",
+                "64m",
+                "--memory-swap",
+                "64m",
+                runner.image,
+            )
+            resources.append((identity, str(token)))
+            folders.append(folder)
+        assert await runner.sweep_expired() == 1
+        assert not folders[0].exists() and folders[1].exists()
+        info = json.loads(await native_docker("container", "inspect", resources[1][0]))[0]
+        assert info["Id"] == resources[1][0] and info["State"]["Status"] == "created"
+    finally:
+        for identity, token in resources:
+            present = await native_docker(
+                "container",
+                "ls",
+                "--all",
+                "--no-trunc",
+                "--filter",
+                "id=" + identity,
+                "--format",
+                "{{.ID}}",
+            )
+            if present:
+                assert present == identity
+                info = json.loads(await native_docker("container", "inspect", identity))[0]
+                assert info["Config"]["Labels"]["io.flintgraph.narrative.execution"] == token
+                await native_docker("rm", "--force", identity)
 
 
 def configured(tmp_path):

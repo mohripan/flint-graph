@@ -10,8 +10,9 @@ standalone codec/child/host-runner qualification are delivered. Reports under
 `docs/reports/2026-10-30-narrative-*` distinguish actual PostgreSQL, native image
 and fault proofs. Object publication/downloads, worker/activity/startup recovery,
 The connected relay/workflow/activities are now native-qualified too; see the
-Temporal worker report. Operator processes, periodic recovery/sweeps and Releases
-UI/end-to-end qualification remain open; #124 stays open.
+Temporal worker report. Operator processes and periodic recovery/sweeps now have
+actual process-loss/cancel/retry/natural-expiry qualification too; see the build
+recovery report. Releases UI/end-to-end qualification remain open; #124 stays open.
 
 1. Add public API/transition tests before implementation. Introduce migration 0018,
    scoped immutable release identity, jobs/events/artifacts and release admission,

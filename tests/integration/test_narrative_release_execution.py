@@ -17,11 +17,148 @@ from flint_graph.application.services.narrative_release_execution import (
     register_release_workflow,
     workflow_cleanup_plan,
 )
+from flint_graph.application.services.narrative_release_recovery import (
+    recover_narrative_jobs,
+    run_narrative_maintenance,
+)
 from flint_graph.application.services.narrative_releases import BuildIdentity
 from flint_graph.config import Settings, get_settings
 from flint_graph.domain.errors import NotFoundError
 from flint_graph.infrastructure.db.models import NarrativeRelease, NarrativeReleaseJob
 from flint_graph.main import app
+
+
+class ClosedRunBoundary:
+    def __init__(self, closed):
+        self.is_closed = closed
+
+    async def closed(self, payload, *, run_id):
+        return self.is_closed
+
+
+class CleanupBoundary:
+    def __init__(self):
+        self.tokens = []
+        self.entered = asyncio.Event()
+        self.proceed = asyncio.Event()
+        self.proceed.set()
+
+    async def cleanup_execution(self, token):
+        self.tokens.append(token)
+        self.entered.set()
+        await self.proceed.wait()
+
+    async def sweep_expired(self):
+        self.entered.set()
+        await self.proceed.wait()
+        return 0
+
+
+@pytest.mark.anyio
+async def test_blocked_sweep_cannot_delay_database_closed_run_recovery(execution_case):
+    client, factory, _, headers, item, scope, _ = execution_case
+    async with factory() as session:
+        await register_release_workflow(session, **scope, workflow_run_id=uuid4())
+        await session.commit()
+    cleaner = CleanupBoundary()
+    cleaner.proceed.clear()
+    task = asyncio.create_task(
+        run_narrative_maintenance(
+            factory, dispatcher=ClosedRunBoundary(True), builder=cleaner, interval_seconds=5
+        )
+    )
+    try:
+        await asyncio.wait_for(cleaner.entered.wait(), 5)
+        for _ in range(100):
+            if (await client.get(item, headers=headers)).json()["job"]["status"] == "failed":
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("A held sweep prevented independent database recovery")
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.anyio
+async def test_blocked_run_inspection_respects_pass_budget_and_advances_cursor(execution_case):
+    _, factory, _, _, _, scope, _ = execution_case
+    async with factory() as session:
+        await register_release_workflow(session, **scope, workflow_run_id=uuid4())
+        await session.commit()
+
+    class BlockedInspector:
+        async def closed(self, payload, *, run_id):
+            await asyncio.Event().wait()
+
+    result = await asyncio.wait_for(
+        recover_narrative_jobs(
+            factory,
+            dispatcher=BlockedInspector(),
+            builder=CleanupBoundary(),
+            limit=1,
+            pass_budget_seconds=0.05,
+        ),
+        2,
+    )
+    assert result.inspected == 1 and result.recovered == 0 and result.next_id == scope["job_id"]
+
+
+@pytest.mark.anyio
+async def test_periodic_recovery_skips_live_run_and_finalizes_closed_registered_zero(
+    execution_case,
+):
+    client, factory, _, headers, item, scope, _ = execution_case
+    run_id, inspector, cleanup = uuid4(), ClosedRunBoundary(False), CleanupBoundary()
+    async with factory() as session:
+        await register_release_workflow(session, **scope, workflow_run_id=run_id)
+        await session.commit()
+    first = await recover_narrative_jobs(factory, dispatcher=inspector, builder=cleanup)
+    assert first.inspected == 1 and first.recovered == 0
+    assert (await client.get(item, headers=headers)).json()["job"]["status"] == "queued"
+    inspector.is_closed = True
+    second = await recover_narrative_jobs(factory, dispatcher=inspector, builder=cleanup)
+    assert second.inspected == 1 and second.recovered == 1
+    assert (await client.get(item, headers=headers)).json()["job"]["status"] == "failed"
+    assert not cleanup.tokens
+    replay = await recover_narrative_jobs(factory, dispatcher=inspector, builder=cleanup)
+    assert replay.inspected == replay.recovered == 0
+
+
+@pytest.mark.anyio
+async def test_periodic_recovery_cleanup_releases_locks_and_cannot_finalize_replacement(
+    execution_case,
+):
+    client, factory, _, headers, item, scope, _ = execution_case
+    run_id, old, new = uuid4(), uuid4(), uuid4()
+    cleanup = CleanupBoundary()
+    cleanup.proceed.clear()
+    async with factory() as session:
+        await register_release_workflow(session, **scope, workflow_run_id=run_id)
+        await claim_release_execution(
+            session, **scope, token=old, workflow_run_id=run_id, activity_attempt=1
+        )
+        await session.commit()
+    task = asyncio.create_task(
+        recover_narrative_jobs(factory, dispatcher=ClosedRunBoundary(True), builder=cleanup)
+    )
+    try:
+        await asyncio.wait_for(cleanup.entered.wait(), 5)
+        async with factory() as session:
+            replacement = await asyncio.wait_for(
+                claim_release_execution(
+                    session, **scope, token=new, workflow_run_id=run_id, activity_attempt=2
+                ),
+                5,
+            )
+            assert replacement.acquired
+            await session.commit()
+    finally:
+        cleanup.proceed.set()
+        result = await asyncio.wait_for(task, 5)
+    assert result.recovered == 0 and cleanup.tokens == [old]
+    assert (await client.get(item, headers=headers)).json()["job"]["status"] == "running"
 
 
 @pytest.fixture

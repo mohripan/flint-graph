@@ -2,7 +2,7 @@
 
 Status: in progress, 2026-10-30. [Tracking issue #113](https://github.com/mohripan/flint-graph/issues/113).
 Two of three focused issues are complete. The remaining release issue #124 has a
-connected native backend proof; operator recovery and the Releases UI remain.
+qualified backend/recovery path; Releases UI and final browser acceptance remain.
 
 ## Available now
 
@@ -19,20 +19,19 @@ connected native backend proof; operator recovery and the Releases UI remain.
   downloads. The separate relay/workflow/activities now pass an actual
   Temporal→PostgreSQL→Godot→MinIO→API download proof. Real-server tests also cover
   duplicate/closed dispatch, bounded retries and shielded cancellation.
-  [Current scope](../reports/2026-10-30-narrative-temporal-worker.md).
+  Separate worker/relay processes and periodic recovery are now qualified too:
+  actual process kill/restart, active engine cancellation/retry and natural expired
+  cleanup passed. [Current scope](../reports/2026-10-30-narrative-build-recovery.md).
 
 ## Required to finish #124 and this milestone
 
-1. Operator worker/relay entry points, periodic exact closed-run recovery and
-   ownership-checked expired child/scratch sweeps. Qualify process loss/restart,
-   stale completion and cancellation with the connected services.
-2. Studio Releases UI: request a saved revision, reload server state, inspect jobs,
+1. Studio Releases UI: request a saved revision, reload server state, inspect jobs,
    cancel/retry and download authorized attachments.
-3. Real browser author→save→background build→download→play proof and equivalent
+2. Real browser author→save→background build→download→play proof and equivalent
    authored routes, followed by reviewed documentation and green CI.
 
-Release admission on the ordinary local API stays disabled until the worker and
-recovery path are ready. Manual authoring and isolated preview remain available.
+Release admission on the ordinary local API stays disabled during the Releases UI
+delivery. Manual authoring and isolated preview remain available.
 Text authoring needs no model or searchable corpus. AI assistance, asset authoring
 and package-v2 presentation are later milestones.
 

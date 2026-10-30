@@ -23,9 +23,13 @@ are now qualified too (real MinIO, PostgreSQL and17 HTTP calls with actual engin
 build/downloaded-source import): read `docs/reports/2026-10-30-narrative-release-publication.md`.
 The relay/workflow/activities now pass connected real Temporal/PostgreSQL/Godot/
 MinIO/authorized-download qualification; see
-`docs/reports/2026-10-30-narrative-temporal-worker.md`. Long-running operator
-processes, periodic closed-run/owned cleanup recovery and Releases UI/end-to-end
-proof remain pending. Completion requires verified atomic publication;
+`docs/reports/2026-10-30-narrative-temporal-worker.md`. Separate operator worker/
+relay processes, periodic closed-run recovery and fair bounded expired cleanup
+now have real process-kill/restart, active-cancel/retry and natural-expiry proof:
+`docs/reports/2026-10-30-narrative-build-recovery.md`. Owned worker/relay receipts
+are in ignored `notes/narrative-worker-owned.json` / `narrative-relay-owned.json`;
+preserve their private root/queue across restarts. Releases UI/end-to-end proof
+remain pending. Completion requires verified atomic publication;
 ordinary API release creation remains disabled. Preserve private owned fixtures.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`

@@ -11,12 +11,14 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-from collections.abc import Awaitable, Callable
+from collections import deque
+from collections.abc import Awaitable, Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -123,6 +125,8 @@ class DockerNarrativeBuilder:
             root,
             docker_command,
         )
+        self._sweep_scan: Generator[Path, None, None] | None = None
+        self._sweep_pending: deque[tuple[Path, UUID, str, int]] = deque()
 
     def _blocking_command(
         self,
@@ -243,7 +247,14 @@ class DockerNarrativeBuilder:
         ):
             raise BuildError("runtime_unavailable")
 
-    async def _remove(self, name: str, execution: str) -> None:
+    async def _remove(
+        self,
+        name: str,
+        execution: str,
+        *,
+        expected_image: str | None = None,
+        expected_expiry: str | None = None,
+    ) -> None:
         status, raw = await self._command(
             "container",
             "ls",
@@ -266,6 +277,12 @@ class DockerNarrativeBuilder:
             info.get("Id") != identity
             or info.get("Config", {}).get("Labels", {}).get("io.flintgraph.narrative.execution")
             != execution
+            or (expected_image is not None and info.get("Image") != expected_image)
+            or (
+                expected_expiry is not None
+                and info.get("Config", {}).get("Labels", {}).get("io.flintgraph.narrative.expires")
+                != expected_expiry
+            )
         ):
             raise BuildError("build_io")
         status, _ = await self._command("rm", "--force", identity)
@@ -416,15 +433,20 @@ class DockerNarrativeBuilder:
         await asyncio.to_thread(self._scratch_cleanup, folder, execution, False)
 
     def _verify_scratch(self, folder: Path, execution: str) -> None:
+        marker = folder / ".owner"
         if (
             folder.resolve(strict=True) != folder
             or folder.parent != self.root
             or not folder.name.startswith("build-" + execution.replace("-", "") + "-")
             or folder.is_symlink()
-            or (folder / ".owner").is_symlink()
-            or (folder / ".owner").read_text(encoding="ascii") != execution
+            or marker.is_symlink()
+            or not stat.S_ISREG(marker.stat(follow_symlinks=False).st_mode)
+            or marker.stat(follow_symlinks=False).st_size != 36
         ):
             raise BuildError("build_io")
+        with marker.open("rb") as stream:
+            if stream.read(37) != execution.encode("ascii"):
+                raise BuildError("build_io")
 
     def _scratch_cleanup(self, folder: Path, execution: str, retained: bool) -> None:
         self._verify_scratch(folder, execution)
@@ -461,6 +483,106 @@ class DockerNarrativeBuilder:
         if interrupted:
             raise asyncio.CancelledError
 
+    @staticmethod
+    def _scan_scratch(root: Path) -> Generator[Path, None, None]:
+        with os.scandir(root) as entries:
+            for entry in entries:
+                yield Path(entry.path)
+
+    async def sweep_expired(self) -> int:
+        """Recover expired first-party scratch only; unknown/legacy roots are retained."""
+
+        def candidates() -> list[tuple[Path, UUID, str, int]]:
+            if self.root.resolve(strict=True) != self.root:
+                raise BuildError("build_io")
+            if self._sweep_scan is None:
+                self._sweep_scan = self._scan_scratch(self.root)
+            result = []
+            for _ in range(1000):
+                folder = next(self._sweep_scan, None)
+                if folder is None:
+                    self._sweep_scan = None
+                    break
+                if not folder.name.startswith("build-"):
+                    continue
+                try:
+                    if folder.is_symlink() or folder.resolve(strict=True) != folder:
+                        continue
+                    metadata = folder / ".execution.json"
+                    info = metadata.stat(follow_symlinks=False)
+                    if not stat.S_ISREG(info.st_mode) or not 1 <= info.st_size <= 1024:
+                        continue
+                    with metadata.open("rb") as stream:
+                        raw = stream.read(1025)
+                    record = json.loads(raw)
+                    if (
+                        not isinstance(record, dict)
+                        or set(record)
+                        != {
+                            "schema_version",
+                            "execution_id",
+                            "expires_at",
+                            "image",
+                            "toolchain_sha256",
+                        }
+                        or record["schema_version"] != "1"
+                        or not isinstance(record["execution_id"], str)
+                        or len(record["execution_id"]) != 36
+                        or json.dumps(record, sort_keys=True, separators=(",", ":")).encode() != raw
+                        or type(record["expires_at"]) is not int
+                        or not 0 < record["expires_at"] <= time.time()
+                        or not isinstance(record["image"], str)
+                        or not re.fullmatch(r"sha256:[0-9a-f]{64}", record["image"])
+                        or not isinstance(record["toolchain_sha256"], str)
+                        or not re.fullmatch(r"[0-9a-f]{64}", record["toolchain_sha256"])
+                    ):
+                        continue
+                    token = UUID(record["execution_id"])
+                    if str(token) != record["execution_id"]:
+                        continue
+                    self._verify_scratch(folder, str(token))
+                    result.append((folder, token, record["image"], record["expires_at"]))
+                    if len(result) == 5:
+                        break
+                except (OSError, ValueError, TypeError, KeyError, RecursionError):
+                    continue
+            return result
+
+        removed = 0
+        deadline = time.monotonic() + 15
+        if not self._sweep_pending:
+            self._sweep_pending.extend(await asyncio.to_thread(candidates))
+        for _ in range(5):
+            if not self._sweep_pending or time.monotonic() >= deadline:
+                break
+            folder, token, image, expires = self._sweep_pending.popleft()
+
+            async def clean(
+                folder: Path = folder,
+                token: UUID = token,
+                image: str = image,
+                expires: int = expires,
+            ) -> None:
+                await asyncio.to_thread(self._verify_scratch, folder, str(token))
+                await self._remove(
+                    "flint-narrative-build-" + token.hex,
+                    str(token),
+                    expected_image=image,
+                    expected_expiry=str(expires),
+                )
+                await asyncio.to_thread(self._scratch_cleanup, folder, str(token), False)
+
+            try:
+                _, interrupted = await _join_owned(asyncio.create_task(clean()))
+                removed += 1
+                if interrupted:
+                    raise asyncio.CancelledError
+            except (BuildError, OSError):
+                # Back off after an unavailable daemon/uncertain ownership.
+                # Keep unattempted candidates for the next bounded pass.
+                break
+        return removed
+
     async def build(
         self, package: StoryPackage, *, execution_id: UUID, check: Check
     ) -> BuiltArtifacts:
@@ -484,6 +606,21 @@ class DockerNarrativeBuilder:
                     tempfile.mkdtemp(prefix="build-" + execution_id.hex + "-", dir=self.root)
                 )
                 (folder / ".owner").write_text(execution, encoding="ascii")
+                expires = int(time.time()) + 240
+                (folder / ".execution.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "1",
+                            "execution_id": execution,
+                            "expires_at": expires,
+                            "image": self.image,
+                            "toolchain_sha256": self.toolchain,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    encoding="ascii",
+                )
                 source = folder / "input"
                 export_godot(validated, source)
                 names = (
@@ -522,7 +659,7 @@ class DockerNarrativeBuilder:
                     "--label",
                     "io.flintgraph.narrative.execution=" + execution,
                     "--label",
-                    "io.flintgraph.narrative.expires=" + str(int(time.time()) + 180),
+                    "io.flintgraph.narrative.expires=" + str(expires),
                     "--network",
                     "none",
                     "--read-only",

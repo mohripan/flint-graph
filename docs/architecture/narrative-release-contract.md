@@ -39,9 +39,9 @@ Building is disabled by default. Explicit operator settings are
 These settings admit durable queue intent; a separately started narrative relay
 and worker are required to execute it. Ordinary API startup never invokes Docker
 or downloads a toolchain. Missing configuration rejects new requests with503.
-The connected native worker path is qualified; long-running operator processes
-and periodic recovery are still pending. Keep ordinary release admission disabled
-until that delivery is ready.
+The connected worker and separate operator processes/periodic recovery are
+qualified. Keep ordinary local release admission disabled during Releases UI
+delivery. See the [worker/relay runbook](../runbooks/narrative-build-worker.md).
 
 ## Identity, transactions and replay
 
@@ -98,8 +98,9 @@ unavailable builder can fail owned work. These services never launch a child or
 authorize artifact insertion. Completion remains reserved for publication. Bounded
 immutable publication and downloads have real engine/store/HTTP qualification;
 the separate relay/workflow/activities now also have a connected native proof.
-Operator processes, periodic recovery/sweeps and Releases UI/browser acceptance
-remain pending. See the [worker report](../reports/2026-10-30-narrative-temporal-worker.md).
+Operator processes and periodic recovery/sweeps now have actual process-loss and
+natural-expiry proof. Releases UI/browser acceptance remains pending. See the
+[recovery report](../reports/2026-10-30-narrative-build-recovery.md).
 
 See the [initial ledger report](../reports/2026-10-30-narrative-release-ledger.md)
 and [lifecycle qualification](../reports/2026-10-30-narrative-release-lifecycle.md).
