@@ -12,7 +12,8 @@ Read [the product direction](product/narrative-game-studio.md),
 [the first focused implementation design](superpowers/specs/2026-10-27-portable-story-runtime-design.md).
 The written M30 design was approved for implementation on 2026-10-27.
 The [GitHub delivery queue](product/narrative-game-backlog.md) links milestones
-30–34 and issues #112–#132, including focused acceptance and live verification.
+30–38 and issues #112–#167, including shared conversation additions, focused
+acceptance and live verification. The new #133–#167 work is planned, not delivered.
 
 | Planned milestone | Outcome | Dependency |
 | --- | --- | --- |
@@ -21,6 +22,10 @@ The [GitHub delivery queue](product/narrative-game-backlog.md) links milestones
 | 32 | Bounded narrative proposals, world/character knowledge, continuity and reviewed revisions | 31 |
 | 33 | Asset library, approved image variations, provenance and release bindings | 31 |
 | 34 | Complete game, three reachable endings, 15–30 minute playtest, release/recovery qualification | 31–33 |
+| 35 | Typed prompt catalog, reviewed Langfuse promotion and locked offline fallback | #134/#135 before #126; #140 follows #126 |
+| 36 | Accurate context counts, budgets, manifests and measured prefix caching | Prompt catalog; preserve parent-call reservations |
+| 37 | Reviewed opt-in memory, branch summaries and accepted character knowledge | Context planning, canon and conversation branches |
+| 38 | Package v2 characters/backgrounds/staging/audio, player controls and real parity | #124 releases, #128 assets, #157 written v2 contract |
 
 Use the approved narrative track as the next delivery order. Milestones 15–29
 below retain historical plans/progress and deferred issues; their old sequential
@@ -33,6 +38,12 @@ editable Godot export, real player and native/browser qualification. Under
 immutable revisions and recoverable conflicts. #123 adds the manual studio and
 isolated local Godot preview, with live qualification, CI and real container smoke
 complete. #124 durable release/build jobs and authorized downloads remain next.
+Its ledger, lifecycle and cancellation/retry APIs are delivered; isolated builds,
+publication/downloads, Temporal execution and Releases UI still need qualification.
+The added presentation track preserves v1 releases/saves and precedes the final
+#132 game. Prompt work starts with #134 → #135; requiring all of M35 before M32
+would create a cycle because #140 consumes #126. See the delivery queue for the
+reviewed dependency order and shared #147–#149 conversation work.
 
 ## Historical GraphRAG roadmap and foundation backlog
 

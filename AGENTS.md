@@ -23,6 +23,14 @@ and the M30 report for actual progress before claiming a complete authoring prod
 
 ## Project Snapshot
 
+The user added #133–#167 on 2026-10-30: M35 prompt management, M36 context
+engineering, M37 controlled memory, M38 package-v2 visual novel presentation,
+plus shared conversations and narrative assistant/art work. Read the updated
+`docs/product/narrative-game-backlog.md` dependency map. Finish #124's bounded v1
+release work first; #134/#135 precede #126, while #140 follows #126. Package v2
+requires #124/#128/#157 and preserves existing v1 releases/saves. Planned issues
+are not delivered functionality; the final #132 game should exercise M38 parity.
+
 FlintGraph is an early GraphRAG platform. Through Milestone 13 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, an OIDC-backed workspace access boundary for MVP use, and controlled-deployment public API hardening.
 
 Implemented path:
