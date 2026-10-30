@@ -2,13 +2,58 @@
 
 import re
 from collections import deque
-from typing import Any
+from collections.abc import Callable
+from functools import partial
+from typing import Any, TypeVar
 
 from flint_graph.narrative.values import Diagnostic, PackageError
 
 ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 INT_MIN = -(2**31)
 INT_MAX = 2**31 - 1
+_T = TypeVar("_T")
+_STORY_FIELDS = {
+    "schema_version",
+    "id",
+    "title",
+    "language",
+    "entry",
+    "characters",
+    "variables",
+    "nodes",
+    "assets",
+}
+_RESERVED = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
+}
+
+
+class _Full(Exception):
+    pass
+
+
+class _Errors:
+    """Raise the first error (manual saves) or collect a bounded list (proposal repair)."""
+
+    def __init__(self, limit: int | None) -> None:
+        self.limit = limit
+        self.found: list[Diagnostic] = []
+
+    def check(self, step: Callable[[], _T]) -> _T | None:
+        if self.limit is None:
+            return step()
+        try:
+            return step()
+        except PackageError as error:
+            self.found.append(Diagnostic(error.code, error.location))
+            if len(self.found) >= self.limit:
+                raise _Full from None
+            return None
 
 
 def fields(value: Any, required: set[str], optional: set[str], location: str) -> dict[str, Any]:
@@ -115,66 +160,123 @@ def _variables(value: Any) -> dict[str, Any]:
 
 
 def validate_story(story: Any) -> tuple[Diagnostic, ...]:
-    fields(
-        story,
-        {
-            "schema_version",
-            "id",
-            "title",
-            "language",
-            "entry",
-            "characters",
-            "variables",
-            "nodes",
-            "assets",
-        },
-        set(),
-        "story",
-    )
-    if story["schema_version"] != "1":
+    """Raise the first error a manual save would report; return structural warnings."""
+    return _validate(story, _Errors(None))
+
+
+def collect_story_diagnostics(
+    story: Any, limit: int = 50
+) -> tuple[tuple[Diagnostic, ...], tuple[Diagnostic, ...]]:
+    """Return up to ``limit`` errors (first equals ``validate_story``'s) and warnings.
+
+    Each header section and each node reports at most its first error, so a model
+    repairing a proposal sees every independent problem in one pass.
+    """
+    if type(limit) is not int or not 1 <= limit <= 1000:
+        raise ValueError("Invalid diagnostic limit")
+    errors = _Errors(limit)
+    try:
+        warnings = _validate(story, errors)
+    except _Full:
+        warnings = ()
+    found = tuple(errors.found)
+    return found, () if found else warnings
+
+
+def _schema(value: Any) -> None:
+    if value != "1":
         raise PackageError("unsupported_schema", "schema_version")
-    identifier(story["id"], "id")
-    text(story["title"], "title")
-    if type(story["language"]) is not str or not re.fullmatch(
-        r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", story["language"]
-    ):
+
+
+def _language(value: Any) -> None:
+    if type(value) is not str or not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", value):
         raise PackageError("invalid_value", "language")
-    characters = mapping(story["characters"], 256, "characters")
+
+
+def _characters(value: Any) -> dict[str, Any]:
+    characters = mapping(value, 256, "characters")
     for key, character in characters.items():
         fields(character, {"name"}, set(), f"characters.{key}")
         text(character["name"], f"characters.{key}.name")
-    variables = _variables(story["variables"])
-    assets = mapping(story["assets"], 256, "assets")
+    return characters
+
+
+def _assets(value: Any) -> dict[str, Any]:
+    assets = mapping(value, 256, "assets")
     for key, asset in assets.items():
         location = f"assets.{key}"
-        if key in {
-            "con",
-            "prn",
-            "aux",
-            "nul",
-            *(f"com{i}" for i in range(1, 10)),
-            *(f"lpt{i}" for i in range(1, 10)),
-        }:
+        if key in _RESERVED:
             raise PackageError("unsafe_path", location)
         fields(asset, {"path", "sha256"}, set(), location)
         if asset["path"] != f"assets/{key}.png":
             raise PackageError("unsafe_path", location)
         if type(asset["sha256"]) is not str or not re.fullmatch(r"[0-9a-f]{64}", asset["sha256"]):
             raise PackageError("invalid_hash", location)
-    nodes = mapping(story["nodes"], 10000, "nodes")
-    reference(story["entry"], nodes, "entry")
-    text_ids: set[str] = set()
-    endings: set[str] = set()
-    graph: dict[str, list[str]] = {}
+    return assets
 
-    def display(item: dict[str, Any], location: str) -> None:
+
+def _missing_ending() -> None:
+    raise PackageError("missing_ending", "nodes")
+
+
+def _validate(story: Any, errors: _Errors) -> tuple[Diagnostic, ...]:
+    # Check order defines which error a manual save reports first; keep it stable.
+    if errors.check(lambda: fields(story, _STORY_FIELDS, set(), "story")) is None:
+        return ()
+    errors.check(lambda: _schema(story["schema_version"]))
+    errors.check(lambda: identifier(story["id"], "id"))
+    errors.check(lambda: text(story["title"], "title"))
+    errors.check(lambda: _language(story["language"]))
+    characters = errors.check(lambda: _characters(story["characters"]))
+    variables = errors.check(lambda: _variables(story["variables"]))
+    assets = errors.check(lambda: _assets(story["assets"]))
+    nodes = errors.check(lambda: mapping(story["nodes"], 10000, "nodes"))
+    if characters is None or variables is None or assets is None or nodes is None:
+        return ()
+    errors.check(lambda: reference(story["entry"], nodes, "entry"))
+    scenes = _Nodes(characters, variables, assets, nodes)
+    for key, node in nodes.items():
+        errors.check(partial(scenes.check, key, node))
+    if not scenes.endings:
+        errors.check(_missing_ending)
+    if errors.found:
+        return ()
+    return _graph_warnings(scenes.graph, story["entry"])
+
+
+class _Nodes:
+    def __init__(
+        self,
+        characters: dict[str, Any],
+        variables: dict[str, Any],
+        assets: dict[str, Any],
+        nodes: dict[str, Any],
+    ) -> None:
+        self.characters, self.variables, self.assets, self.nodes = (
+            characters,
+            variables,
+            assets,
+            nodes,
+        )
+        self.text_ids: set[str] = set()
+        self.endings: set[str] = set()
+        self.graph: dict[str, list[str]] = {}
+
+    def display(self, item: dict[str, Any], location: str) -> None:
         key = identifier(item["text_id"], location + ".text_id")
-        if key in text_ids:
+        if key in self.text_ids:
             raise PackageError("duplicate_id", location + ".text_id")
-        text_ids.add(key)
+        self.text_ids.add(key)
         text(item["text"], location + ".text")
 
-    for key, node in nodes.items():
+    def check(self, key: str, node: Any) -> None:
+        characters, variables, assets, nodes = (
+            self.characters,
+            self.variables,
+            self.assets,
+            self.nodes,
+        )
+        display = self.display
         location = f"nodes.{key}"
         if type(node) is not dict:
             raise PackageError("invalid_node", location)
@@ -231,15 +333,12 @@ def validate_story(story: Any) -> tuple[Diagnostic, ...]:
             fields(node, {"type", "text_id", "text", "ending"}, set(), location)
             display(node, location)
             ending = identifier(node["ending"], location + ".ending")
-            if ending in endings:
+            if ending in self.endings:
                 raise PackageError("duplicate_id", location + ".ending")
-            endings.add(ending)
+            self.endings.add(ending)
         else:
             raise PackageError("invalid_node", location)
-        graph[key] = targets
-    if not endings:
-        raise PackageError("missing_ending", "nodes")
-    return _graph_warnings(graph, story["entry"])
+        self.graph[key] = targets
 
 
 def _graph_warnings(graph: dict[str, list[str]], entry: str) -> tuple[Diagnostic, ...]:
