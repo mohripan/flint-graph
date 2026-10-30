@@ -7,7 +7,7 @@ Completion is deliberately absent: only verified atomic publication may complete
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,9 +123,34 @@ async def claim_release_execution(
     release_id: UUID,
     job_id: UUID,
     token: UUID,
+    workflow_run_id: UUID | None = None,
+    activity_attempt: int | None = None,
 ) -> ExecutionClaim:
+    if (workflow_run_id is None) != (activity_attempt is None) or (
+        activity_attempt is not None and (type(activity_attempt) is not int or activity_attempt < 1)
+    ):
+        raise ValueError("Invalid release activity ownership")
     _, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
     before = release_attempt(job)
+    if before.id != active_id or before.status not in (
+        ReleaseJobStatus.QUEUED,
+        ReleaseJobStatus.RUNNING,
+    ):
+        return ExecutionClaim(before, acquired=False)
+    if workflow_run_id is not None:
+        if job.workflow_run_id is None:
+            if before.status == ReleaseJobStatus.QUEUED:
+                raise ReleaseInputError("execution_registration_pending")
+            return ExecutionClaim(before, acquired=False)
+        if (
+            job.workflow_run_id != workflow_run_id
+            or activity_attempt is None
+            or job.activity_attempt is None
+            or activity_attempt < job.activity_attempt
+        ):
+            return ExecutionClaim(before, acquired=False)
+    elif job.workflow_run_id is not None:
+        return ExecutionClaim(before, acquired=False)
     after = claim_execution(before, token=token, active_job_id=active_id)
     if before == after:
         return ExecutionClaim(before, acquired=False)
@@ -133,6 +158,8 @@ async def claim_release_execution(
     # can fail an owned attempt instead of stranding accepted work in queued state.
     # This lease alone never authorizes engine launch or publication.
     job.status, job.execution_token = after.status.value, after.execution_token
+    if workflow_run_id is not None:
+        job.activity_attempt = activity_attempt
     if job.started_at is None:
         job.started_at = datetime.now(UTC)
     append_execution_event(
@@ -219,3 +246,108 @@ async def load_release_input(
     ):
         raise ReleaseInputError("package_integrity")
     return package
+
+
+async def register_release_workflow(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    release_id: UUID,
+    job_id: UUID,
+    workflow_run_id: UUID,
+) -> bool:
+    """Relay records the exact accepted run before its outbox publication commits."""
+    _, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
+    if job.workflow_run_id is not None:
+        if job.workflow_run_id != workflow_run_id:
+            raise ReleaseInputError("execution_registration_conflict")
+        return False
+    if job.status in ("completed", "failed", "cancelled") or active_id != job.id:
+        return False
+    if job.status != "queued" or job.execution_token is not None:
+        raise ReleaseInputError("execution_registration_conflict")
+    job.workflow_run_id, job.activity_attempt = workflow_run_id, 0
+    append_execution_event(session, job, "release.dispatched")
+    await session.flush()
+    return True
+
+
+@dataclass(frozen=True)
+class WorkflowCleanupPlan:
+    execution_token: UUID | None
+    activity_attempt: int
+
+
+async def workflow_cleanup_plan(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    release_id: UUID,
+    job_id: UUID,
+    workflow_run_id: UUID,
+) -> WorkflowCleanupPlan | None:
+    """Only a matching run's terminal supervisor may use this internal plan.
+
+    SDK context or an exact closed-run observation must authorize the caller.
+    Physical cleanup happens after commit, before token-checked finalization.
+    """
+    _, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
+    if (
+        active_id != job.id
+        or job.workflow_run_id != workflow_run_id
+        or job.activity_attempt is None
+        or job.status not in ("queued", "running")
+    ):
+        return None
+    if job.status == "queued" and (job.activity_attempt != 0 or job.execution_token is not None):
+        return None
+    return WorkflowCleanupPlan(job.execution_token, job.activity_attempt)
+
+
+async def finalize_release_workflow(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    release_id: UUID,
+    job_id: UUID,
+    workflow_run_id: UUID,
+    expected_token: UUID | None,
+    expected_attempt: int,
+    cancelled: bool = False,
+    error_code: str = "worker_interrupted",
+) -> bool:
+    """Run-authorized supervisor; never ordinary old build-attempt cleanup."""
+    if error_code not in FAILURE_CODES:
+        raise ValueError("Invalid release failure code")
+    _, job, active_id = await lock_release_execution(session, tenant_id, release_id, job_id)
+    if (
+        job.workflow_run_id != workflow_run_id
+        or job.activity_attempt != expected_attempt
+        or job.execution_token != expected_token
+        or active_id != job.id
+        or job.status not in ("queued", "running")
+    ):
+        return False
+    before = release_attempt(job)
+    if before.status == ReleaseJobStatus.QUEUED:
+        if expected_attempt != 0 or expected_token is not None:
+            return False
+        token = uuid4()
+        before = claim_execution(before, token=token, active_job_id=active_id)
+    else:
+        if expected_token is None:
+            return False
+        token = expected_token
+    after = finish_execution(
+        before, token=token, active_job_id=active_id, outcome="cancelled" if cancelled else "failed"
+    )
+    job.status, job.execution_token, job.cancel_requested = (
+        after.status.value,
+        None,
+        after.cancel_requested,
+    )
+    job.error_code = None if after.status == ReleaseJobStatus.CANCELLED else error_code
+    job.finished_at = datetime.now(UTC)
+    append_execution_event(session, job, "release." + after.status.value)
+    await session.flush()
+    return True

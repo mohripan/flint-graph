@@ -5,18 +5,22 @@ from dataclasses import replace
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
 
 from flint_graph.application.services.narrative_release_execution import (
     ReleaseInputError,
     claim_release_execution,
+    finalize_release_workflow,
     finish_release_failure,
     load_release_input,
+    register_release_workflow,
+    workflow_cleanup_plan,
 )
 from flint_graph.application.services.narrative_releases import BuildIdentity
 from flint_graph.config import Settings, get_settings
 from flint_graph.domain.errors import NotFoundError
-from flint_graph.infrastructure.db.models import NarrativeRelease
+from flint_graph.infrastructure.db.models import NarrativeRelease, NarrativeReleaseJob
 from flint_graph.main import app
 
 
@@ -155,6 +159,45 @@ async def test_old_cleanup_cannot_affect_an_explicit_retry(execution_case):
 
 
 @pytest.mark.anyio
+async def test_unknown_manual_running_work_cannot_be_registered_or_supervised(execution_case):
+    client, factory, _, headers, item, scope, _build = execution_case
+    token, run = uuid4(), uuid4()
+    async with factory() as session:
+        await claim_release_execution(session, **scope, token=token)
+        await session.commit()
+    async with factory() as session:
+        with pytest.raises(ReleaseInputError, match=r"^execution_registration_conflict$"):
+            await register_release_workflow(session, **scope, workflow_run_id=run)
+        assert await workflow_cleanup_plan(session, **scope, workflow_run_id=run) is None
+        assert not await finalize_release_workflow(
+            session, **scope, workflow_run_id=run, expected_token=token, expected_attempt=0
+        )
+        await session.commit()
+    assert (await client.get(item, headers=headers)).json()["job"]["status"] == "running"
+    async with factory() as session:
+        assert await finish_release_failure(
+            session, **scope, token=token, error_code="worker_interrupted"
+        )
+        await session.commit()
+
+
+@pytest.mark.anyio
+async def test_owner_pair_constraints_reject_partial_or_negative_identity(execution_case):
+    _, factory, _, _, _, scope, _build = execution_case
+    for run, attempt in [(None, 1), (uuid4(), None), (uuid4(), -1)]:
+        async with factory() as session:
+            with pytest.raises(IntegrityError):
+                await session.execute(
+                    update(NarrativeReleaseJob)
+                    .where(
+                        NarrativeReleaseJob.id == scope["job_id"],
+                    )
+                    .values(workflow_run_id=run, activity_attempt=attempt)
+                )
+            await session.rollback()
+
+
+@pytest.mark.anyio
 async def test_foreign_execution_scope_and_unreviewed_error_text_are_rejected(execution_case):
     client, factory, _, headers, item, scope, _build = execution_case
     async with factory() as session:
@@ -286,3 +329,99 @@ async def test_cancelled_input_is_denied_before_missing_builder_resolution(execu
         assert await finish_release_failure(session, **scope, token=token, cancelled=True)
         await session.commit()
     assert (await client.get(item, headers=headers)).json()["job"]["status"] == "cancelled"
+
+
+@pytest.mark.anyio
+async def test_workflow_registration_is_independent_and_required_before_build_claim(execution_case):
+    client, factory, _, headers, item, scope, _build = execution_case
+    run, token = uuid4(), uuid4()
+    async with factory() as session:
+        with pytest.raises(ReleaseInputError, match=r"^execution_registration_pending$"):
+            await claim_release_execution(
+                session, **scope, token=token, workflow_run_id=run, activity_attempt=1
+            )
+        assert await register_release_workflow(session, **scope, workflow_run_id=run)
+        assert not await register_release_workflow(session, **scope, workflow_run_id=run)
+        await session.commit()
+    async with factory() as session:
+        assert not (await claim_release_execution(session, **scope, token=uuid4())).acquired
+        assert not (
+            await claim_release_execution(
+                session, **scope, token=uuid4(), workflow_run_id=uuid4(), activity_attempt=1
+            )
+        ).acquired
+        claim = await claim_release_execution(
+            session, **scope, token=token, workflow_run_id=run, activity_attempt=1
+        )
+        assert claim.acquired
+        await session.commit()
+    metadata = await client.get(item, headers=headers)
+    assert metadata.json()["job"]["status"] == "running" and str(run) not in metadata.text
+
+
+@pytest.mark.anyio
+async def test_late_lower_attempt_and_stale_supervisor_cannot_take_a_newer_execution(
+    execution_case,
+):
+    client, factory, _, headers, item, scope, _build = execution_case
+    run, first, newer = uuid4(), uuid4(), uuid4()
+    async with factory() as session:
+        await register_release_workflow(session, **scope, workflow_run_id=run)
+        await claim_release_execution(
+            session, **scope, token=first, workflow_run_id=run, activity_attempt=2
+        )
+        await session.commit()
+    async with factory() as session:
+        assert not (
+            await claim_release_execution(
+                session, **scope, token=uuid4(), workflow_run_id=run, activity_attempt=1
+            )
+        ).acquired
+        assert (
+            await claim_release_execution(
+                session, **scope, token=newer, workflow_run_id=run, activity_attempt=3
+            )
+        ).acquired
+        await session.commit()
+    async with factory() as session:
+        assert await workflow_cleanup_plan(session, **scope, workflow_run_id=uuid4()) is None
+        plan = await workflow_cleanup_plan(session, **scope, workflow_run_id=run)
+        assert plan.execution_token == newer and plan.activity_attempt == 3
+        assert not await finalize_release_workflow(
+            session, **scope, workflow_run_id=run, expected_token=first, expected_attempt=2
+        )
+        assert await finalize_release_workflow(
+            session, **scope, workflow_run_id=run, expected_token=newer, expected_attempt=3
+        )
+        await session.commit()
+    assert (await client.get(item, headers=headers)).json()["job"]["status"] == "failed"
+
+
+@pytest.mark.anyio
+async def test_registered_job_can_fail_after_all_activities_exhaust_before_first_claim(
+    execution_case,
+):
+    client, factory, _, headers, item, scope, _build = execution_case
+    run = uuid4()
+    async with factory() as session:
+        await register_release_workflow(session, **scope, workflow_run_id=run)
+        await session.commit()
+    async with factory() as session:
+        plan = await workflow_cleanup_plan(session, **scope, workflow_run_id=run)
+        assert plan.execution_token is None and plan.activity_attempt == 0
+        assert await finalize_release_workflow(
+            session, **scope, workflow_run_id=run, expected_token=None, expected_attempt=0
+        )
+        await session.commit()
+    job = (await client.get(item, headers=headers)).json()["job"]
+    assert job["status"] == "failed" and job["error_code"] == "worker_interrupted"
+    retried = await client.post(
+        item + "/retry", headers=headers, json={"idempotency_key": str(uuid4())}
+    )
+    assert retried.status_code == 202
+    async with factory() as session:
+        assert not await finalize_release_workflow(
+            session, **scope, workflow_run_id=run, expected_token=None, expected_attempt=0
+        )
+        await session.commit()
+    assert (await client.get(item, headers=headers)).json()["job"]["status"] == "queued"

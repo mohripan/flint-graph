@@ -90,6 +90,12 @@ class NarrativeReleaseJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "status <> 'completed' OR NOT cancel_requested",
             name="ck_narrative_release_not_cancelled_completed",
         ),
+        CheckConstraint(
+            "(workflow_run_id IS NULL AND activity_attempt IS NULL) OR "
+            "(workflow_run_id IS NOT NULL AND activity_attempt IS NOT NULL "
+            "AND activity_attempt >= 0)",
+            name="ck_narrative_release_workflow_owner",
+        ),
         Index(
             "uq_narrative_release_active_job",
             "release_id",
@@ -98,6 +104,7 @@ class NarrativeReleaseJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             sqlite_where=text("status IN ('queued','running')"),
         ),
         Index("ix_narrative_release_workspace_status", "tenant_id", "status"),
+        Index("ix_narrative_release_run_status", "status", "workflow_run_id"),
     )
     tenant_id: Mapped[UUID]
     project_id: Mapped[UUID]
@@ -107,6 +114,8 @@ class NarrativeReleaseJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), default="queued")
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     execution_token: Mapped[UUID | None]
+    workflow_run_id: Mapped[UUID | None]
+    activity_attempt: Mapped[int | None]
     next_event_sequence: Mapped[int] = mapped_column(Integer, default=1)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
