@@ -221,6 +221,10 @@ class Settings(BaseSettings):
     narrative_assistant_max_output_tokens: int = Field(default=4096, ge=256, le=32768)
     narrative_assistant_temperature: float = Field(default=0.6, ge=0.0, le=2.0)
     narrative_assistant_turn_deadline_seconds: int = Field(default=180, ge=10, le=1800)
+    # Ollama thinks by default on capable models; keep it explicit and separately
+    # budgeted. False is the latency switch (measured ~9x faster on a 12B model).
+    narrative_assistant_thinking: bool = True
+    narrative_assistant_thinking_tokens: int = Field(default=8192, ge=512, le=65536)
     narrative_assistant_context_chars: int = Field(default=24000, ge=4000, le=400000)
     narrative_assistant_max_active_turns_per_workspace: int = Field(default=1, ge=1, le=20)
     narrative_assistant_worker_enabled: bool = False

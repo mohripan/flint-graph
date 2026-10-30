@@ -496,6 +496,8 @@ async def test_viewers_read_threads_but_cannot_write_or_decide(narrative_env, oi
         f"{path}/assistant/threads",
         f"{path}/assistant/threads/{thread['id']}",
         f"{path}/assistant/threads/{thread['id']}/turns",
+        f"{path}/assistant/threads/{thread['id']}/turns/{turn['id']}/events",
+        f"{path}/assistant/threads/{thread['id']}/turns/{turn['id']}/events/stream",
         f"{path}/assistant/proposals/{proposal_id}",
     ]:
         assert (await client.get(read, headers=viewer)).status_code == 200

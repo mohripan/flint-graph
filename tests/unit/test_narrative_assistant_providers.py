@@ -1,5 +1,6 @@
 """Narrative assistant providers: Ollama default, Anthropic opt-in, deterministic tests."""
 
+import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -33,7 +34,7 @@ def settings(**overrides: Any) -> Settings:
     return Settings(_env_file=None, **{**base, **overrides})
 
 
-def ollama(handler) -> OllamaNarrativeAssistant:
+def ollama(handler, **options: Any) -> OllamaNarrativeAssistant:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="http://ollama.test"
     )
@@ -44,37 +45,145 @@ def ollama(handler) -> OllamaNarrativeAssistant:
         temperature=0.6,
         timeout_seconds=30,
         http_client=client,
+        **options,
     )
 
 
+def ndjson(*chunks: Any) -> bytes:
+    return b"".join(json.dumps(chunk).encode() + b"\n" for chunk in chunks)
+
+
+def chat(*parts: tuple[str, str], **final: Any) -> bytes:
+    lines = [{"message": {"role": "assistant", kind: text}, "done": False} for kind, text in parts]
+    done = {"model": "gemma-local", "message": {"role": "assistant", "content": ""}, "done": True}
+    return ndjson(*lines, {**done, **final})
+
+
+class Deltas:
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str]] = []
+
+    async def __call__(self, kind: str, text: str) -> None:
+        self.seen.append((kind, text))
+
+
 @pytest.mark.anyio
-async def test_ollama_chat_uses_the_schema_bounded_options_and_reports_usage():
-    seen = {}
+async def test_ollama_streams_the_schema_bounded_chat_with_thinking_off_explicitly():
+    seen: list[tuple[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["path"] = request.url.path
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(
-            200,
-            json={
+        seen.append((request.url.path, json.loads(request.content)))
+        body = chat(
+            ("content", '{"reply":"h'),
+            ("content", 'i","proposal":null}'),
+            prompt_eval_count=120,
+            eval_count=30,
+        )
+        return httpx.Response(200, content=body)
+
+    deltas = Deltas()
+    reply = await ollama(handler).respond(MESSAGES, RESPONSE_SCHEMA, deltas)
+    # Ollama thinks by default on thinking models unless it is told not to.
+    assert seen == [
+        (
+            "/api/chat",
+            {
                 "model": "gemma-local",
-                "message": {"role": "assistant", "content": '{"reply":"hi","proposal":null}'},
-                "prompt_eval_count": 120,
-                "eval_count": 30,
+                "messages": MESSAGES,
+                "stream": True,
+                "think": False,
+                "format": RESPONSE_SCHEMA,
+                "options": {"temperature": 0.6, "num_ctx": 16384, "num_predict": 2048},
             },
         )
-
-    reply = await ollama(handler).respond(MESSAGES, RESPONSE_SCHEMA)
-    assert seen["path"] == "/api/chat"
-    assert seen["body"] == {
-        "model": "gemma-local",
-        "messages": MESSAGES,
-        "stream": False,
-        "format": RESPONSE_SCHEMA,
-        "options": {"temperature": 0.6, "num_ctx": 16384, "num_predict": 2048},
-    }
+    ]
+    assert deltas.seen == [("content", '{"reply":"h'), ("content", 'i","proposal":null}')]
     assert reply.content == '{"reply":"hi","proposal":null}'
     assert (reply.model, reply.input_tokens, reply.output_tokens) == ("gemma-local", 120, 30)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "capabilities,thinks", [(["completion", "thinking"], True), (["completion"], False)]
+)
+async def test_thinking_is_requested_only_from_capable_models_with_its_own_budget(
+    capabilities, thinks
+):
+    paths: list[str] = []
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/api/show":
+            assert json.loads(request.content) == {"model": "gemma-local"}
+            return httpx.Response(200, json={"capabilities": capabilities})
+        bodies.append(json.loads(request.content))
+        answer = chat(("thinking", "Plan it."), ("content", '{"reply":"ok","proposal":null}'))
+        return httpx.Response(200, content=answer)
+
+    model = ollama(handler, thinking=True, thinking_tokens=4096)
+    deltas = Deltas()
+    await model.respond(MESSAGES, RESPONSE_SCHEMA, deltas)
+    await model.respond(MESSAGES, RESPONSE_SCHEMA)
+    assert paths == ["/api/show", "/api/chat", "/api/chat"]
+    for body in bodies:
+        assert body["think"] is thinks
+        assert body["options"]["num_predict"] == 2048 + (4096 if thinks else 0)
+        assert body["options"]["num_ctx"] == 16384 + (4096 if thinks else 0)
+    assert ("thinking", "Plan it.") in deltas.seen
+
+
+@pytest.mark.anyio
+async def test_a_failed_capability_check_is_retried_and_does_not_enable_thinking():
+    shows: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            shows.append(1)
+            return httpx.Response(500, text="busy")
+        assert json.loads(request.content)["think"] is False
+        return httpx.Response(200, content=chat(("content", '{"reply":"ok","proposal":null}')))
+
+    model = ollama(handler, thinking=True)
+    await model.respond(MESSAGES, RESPONSE_SCHEMA)
+    await model.respond(MESSAGES, RESPONSE_SCHEMA)
+    assert len(shows) == 2
+
+
+class SlowStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield ndjson({"message": {"content": '{"reply":'}, "done": False})
+        await asyncio.sleep(5)
+        yield b""
+
+
+@pytest.mark.anyio
+async def test_the_whole_streamed_call_keeps_the_deadline_and_observers_can_stop_it():
+    def slow(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=SlowStream())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(slow), base_url="http://o")
+    model = OllamaNarrativeAssistant(
+        model="gemma-local",
+        context_tokens=16384,
+        max_output_tokens=2048,
+        temperature=0.6,
+        timeout_seconds=0.2,
+        http_client=client,
+    )
+    with pytest.raises(AssistantModelError) as raised:
+        await model.respond(MESSAGES, RESPONSE_SCHEMA)
+    assert raised.value.code == "provider_timeout"
+
+    async def stop(kind: str, text: str) -> None:
+        raise AssistantModelError("cancelled")
+
+    def quick(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=chat(("content", '{"reply":"x","proposal":null}')))
+
+    with pytest.raises(AssistantModelError) as raised:
+        await ollama(quick).respond(MESSAGES, RESPONSE_SCHEMA, stop)
+    assert raised.value.code == "cancelled"
 
 
 @pytest.mark.anyio
@@ -83,8 +192,16 @@ async def test_ollama_chat_uses_the_schema_bounded_options_and_reports_usage():
     [
         (httpx.Response(500, text="model PRIVATE STORY TEXT failed"), "provider_unavailable"),
         (httpx.Response(404, text="model not found"), "provider_unavailable"),
-        (httpx.Response(200, json={"message": {}}), "invalid_response"),
-        (httpx.Response(200, text="not json"), "invalid_response"),
+        (httpx.Response(200, content=chat()), "invalid_response"),
+        (httpx.Response(200, content=b"not json\n"), "invalid_response"),
+        (httpx.Response(200, content=b'["PRIVATE"]\n'), "invalid_response"),
+        (httpx.Response(200, content=ndjson({"error": "PRIVATE STORY"})), "provider_unavailable"),
+        # A stream that ends without its final line is incomplete.
+        (httpx.Response(200, content=ndjson({"message": {"content": "{"}})), "invalid_response"),
+        (
+            httpx.Response(200, content=chat(("content", "x" * (256 * 1024 + 1)))),
+            "invalid_response",
+        ),
         (httpx.ReadTimeout("slow"), "provider_timeout"),
         (httpx.ConnectError("refused"), "provider_unavailable"),
     ],
@@ -193,6 +310,17 @@ async def test_deterministic_assistant_replays_a_script_then_answers_without_pro
     assert fallback["proposal"] is None and fallback["reply"]
 
 
+@pytest.mark.anyio
+async def test_deterministic_assistant_streams_scripted_thinking_and_content_in_chunks():
+    script = [("Think.", '{"reply":"abc","proposal":null}')]
+    model = DeterministicNarrativeAssistant(script, chunk_chars=8)
+    deltas = Deltas()
+    reply = await model.respond(MESSAGES, RESPONSE_SCHEMA, deltas)
+    assert deltas.seen[0] == ("thinking", "Think.")
+    assert "".join(text for kind, text in deltas.seen if kind == "content") == reply.content
+    assert max(len(text) for _, text in deltas.seen) <= 8
+
+
 def test_test_env_is_offline_and_other_envs_are_disabled_unless_chosen():
     assert settings(env="test").narrative_assistant_provider == "deterministic"
     assert settings(env="local").narrative_assistant_provider == "disabled"
@@ -206,6 +334,8 @@ def test_test_env_is_offline_and_other_envs_are_disabled_unless_chosen():
         narrative_assistant_ollama_model="gemma-local",
     )
     assert isinstance(build_narrative_assistant(chosen), OllamaNarrativeAssistant)
+    assert chosen.narrative_assistant_thinking is True
+    assert chosen.narrative_assistant_thinking_tokens == 8192
 
 
 def test_real_providers_need_an_explicit_model_or_key_and_a_context_that_fits(monkeypatch):

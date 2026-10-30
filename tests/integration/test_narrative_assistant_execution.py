@@ -233,7 +233,7 @@ class Failing:
     def __init__(self, code):
         self.code = code
 
-    async def respond(self, messages, schema):
+    async def respond(self, messages, schema, on_delta=None):
         raise AssistantModelError(self.code)
 
 
@@ -396,7 +396,7 @@ async def test_reply_and_proposal_never_reach_activity_results_or_outbox(turn_ca
     class Echo:
         provider = "scripted"
 
-        async def respond(self, messages, schema):
+        async def respond(self, messages, schema, on_delta=None):
             return ModelReply(VALID, "echo", 1, 1)
 
     outcome = await environment(payload, run_id).run(activities(factory, Echo()).run, payload)

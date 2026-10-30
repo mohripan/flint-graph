@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -197,3 +198,40 @@ class NarrativeAssistantProposal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT")
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NarrativeAssistantTurnEvent(UUIDPrimaryKeyMixin, Base):
+    """Bounded live progress of one turn: steps, thinking, reply text and its end."""
+
+    __tablename__ = "narrative_assistant_turn_events"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "sequence", name="uq_narrative_assistant_turn_event_sequence"),
+        ForeignKeyConstraint(
+            ["turn_id", "thread_id", "project_id", "tenant_id"],
+            [
+                "narrative_assistant_turns.id",
+                "narrative_assistant_turns.thread_id",
+                "narrative_assistant_turns.project_id",
+                "narrative_assistant_turns.tenant_id",
+            ],
+            name="fk_narrative_assistant_turn_event_turn",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("sequence > 0", name="ck_narrative_assistant_turn_event_sequence"),
+        CheckConstraint("attempt >= 0", name="ck_narrative_assistant_turn_event_attempt"),
+        CheckConstraint(
+            "kind IN ('step','thinking','text','status')",
+            name="ck_narrative_assistant_turn_event_kind",
+        ),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    thread_id: Mapped[UUID]
+    turn_id: Mapped[UUID]
+    sequence: Mapped[int] = mapped_column(Integer)
+    attempt: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(16))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

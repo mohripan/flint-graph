@@ -28,6 +28,16 @@ class HistoryTurn:
     content: str
 
 
+@dataclass(frozen=True)
+class ContextStats:
+    """Counts shown to the creator while a turn reads the story; IDs only, no text."""
+
+    scenes: int
+    outlined: int
+    focus: str | None
+    history: int
+
+
 def build_messages(
     story: dict[str, Any],
     request: str,
@@ -36,17 +46,29 @@ def build_messages(
     history: Sequence[HistoryTurn] = (),
     budget: int = 32000,
 ) -> list[dict[str, str]]:
+    return build_turn_messages(story, request, focus=focus, history=history, budget=budget)[0]
+
+
+def build_turn_messages(
+    story: dict[str, Any],
+    request: str,
+    *,
+    focus: str | None = None,
+    history: Sequence[HistoryTurn] = (),
+    budget: int = 32000,
+) -> tuple[list[dict[str, str]], ContextStats]:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for turn in list(history)[-HISTORY_TURNS:]:
+    recent = list(history)[-HISTORY_TURNS:]
+    for turn in recent:
         messages.append({"role": turn.role, "content": turn.content[:HISTORY_CHARS]})
-    context = render_story(story, focus, budget)
+    context, outlined, shown = _render(story, focus, budget)
     messages.append(
         {
             "role": "user",
             "content": f"<story>\n{context}\n</story>\n\nRequest:\n{request[:REQUEST_CHARS]}",
         }
     )
-    return messages
+    return messages, ContextStats(len(story["nodes"]), outlined, shown, len(recent))
 
 
 def _safe(text: str) -> str:
@@ -107,6 +129,11 @@ def _targets(node: dict[str, Any]) -> list[str]:
 
 
 def render_story(story: dict[str, Any], focus: str | None, budget: int) -> str:
+    return _render(story, focus, budget)[0]
+
+
+def _render(story: dict[str, Any], focus: str | None, budget: int) -> tuple[str, int, str | None]:
+    """Return the context text, the number of outlined scenes and the shown focus scene."""
     nodes: dict[str, Any] = story["nodes"]
     header = [
         f"title: {_quote(story['title'])}",
@@ -166,4 +193,4 @@ def render_story(story: dict[str, Any], focus: str | None, budget: int) -> str:
         lines.append(f"({len(nodes) - len(chosen)} scenes omitted, farthest from the focus first)")
     if focus_block:
         lines.append(focus_block)
-    return "\n".join(lines)
+    return "\n".join(lines), len(chosen), focus if focus_block else None

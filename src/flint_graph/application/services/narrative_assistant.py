@@ -19,6 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.narrative_assistant_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
 from flint_graph.application.services.audit import AuditActor, record_audit_event
+from flint_graph.application.services.narrative_assistant_events import (
+    add_status_event,
+    add_turn_event,
+    events_after,
+)
 from flint_graph.application.services.narrative_projects import (
     create_revision,
     get_project,
@@ -39,6 +44,7 @@ from flint_graph.infrastructure.db.models import (
     NarrativeRevision,
     Tenant,
 )
+from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
 from flint_graph.narrative.assistant.context import HistoryTurn
 from flint_graph.narrative.assistant.operations import Proposal, check_proposal
 from flint_graph.narrative.assistant.turn import TurnResult
@@ -328,6 +334,59 @@ async def list_turns(
     return [(turn, proposal) for turn, proposal in rows.tuples()]
 
 
+async def turn_status(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    thread_id: UUID,
+    turn_id: UUID,
+    include_archived: bool,
+) -> str:
+    """Authorize a turn read in its project and thread; foreign turns are not found."""
+    thread = await get_thread(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        include_archived=include_archived,
+    )
+    status = await session.scalar(
+        select(NarrativeAssistantTurn.status).where(
+            NarrativeAssistantTurn.tenant_id == tenant_id,
+            NarrativeAssistantTurn.thread_id == thread.id,
+            NarrativeAssistantTurn.id == turn_id,
+        )
+    )
+    if status is None:
+        raise NotFoundError("Assistant message was not found.")
+    return status
+
+
+async def list_turn_events(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    thread_id: UUID,
+    turn_id: UUID,
+    after_sequence: int,
+    limit: int,
+    include_archived: bool,
+) -> list[NarrativeAssistantTurnEvent]:
+    await turn_status(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        turn_id=turn_id,
+        include_archived=include_archived,
+    )
+    return await events_after(
+        session, tenant_id=tenant_id, turn_id=turn_id, after_sequence=after_sequence, limit=limit
+    )
+
+
 async def _turn(
     session: AsyncSession, *, tenant_id: UUID, thread: NarrativeAssistantThread, turn_id: UUID
 ) -> NarrativeAssistantTurn:
@@ -368,6 +427,7 @@ async def cancel_turn(
         return turn
     if turn.status == "queued":
         turn.status, turn.finished_at = "cancelled", _now()
+        await add_status_event(session, turn)
     else:
         turn.cancel_requested = True
         await append_outbox_message(
@@ -590,7 +650,7 @@ async def abandon_turn(
     if turn is None or turn.workflow_run_id != workflow_run_id or turn.status not in _ACTIVE:
         return None
     turn.error_code = error_code[:80]
-    _finish(turn, "cancelled" if turn.cancel_requested else "failed")
+    await _finish(session, turn, "cancelled" if turn.cancel_requested else "failed")
     await session.flush()
     return turn
 
@@ -616,13 +676,15 @@ async def claim_turn(
     if turn.workflow_run_id != workflow_run_id:
         return None
     if turn.cancel_requested:
-        _finish(turn, "cancelled")
+        await _finish(session, turn, "cancelled")
         await session.flush()
         return None
     turn.status = "running"
     turn.execution_token = execution_token
     turn.activity_attempt = activity_attempt
     turn.started_at = turn.started_at or _now()
+    # Readers discard streamed text of an earlier attempt when a new one starts.
+    await add_turn_event(session, turn, "step", {"name": "start", "state": "done"})
     base = await session.scalar(
         select(NarrativeRevision).where(
             NarrativeRevision.id == turn.base_revision_id,
@@ -663,8 +725,9 @@ def _owned(turn: NarrativeAssistantTurn | None, token: UUID) -> bool:
     return turn is not None and turn.status == "running" and turn.execution_token == token
 
 
-def _finish(turn: NarrativeAssistantTurn, status: str) -> None:
+async def _finish(session: AsyncSession, turn: NarrativeAssistantTurn, status: str) -> None:
     turn.status, turn.execution_token, turn.finished_at = status, None, _now()
+    await add_status_event(session, turn)
 
 
 async def complete_turn(
@@ -681,7 +744,7 @@ async def complete_turn(
     if not _owned(turn, execution_token):
         return turn
     if turn.cancel_requested:
-        _finish(turn, "cancelled")
+        await _finish(session, turn, "cancelled")
         await session.flush()
         return turn
     turn.reply = result.reply
@@ -691,7 +754,7 @@ async def complete_turn(
     turn.attempts = result.attempts
     turn.input_tokens = result.input_tokens
     turn.output_tokens = result.output_tokens
-    _finish(turn, "completed")
+    await _finish(session, turn, "completed")
     if result.proposal is not None or result.diagnostics:
         session.add(
             NarrativeAssistantProposal(
@@ -732,6 +795,6 @@ async def fail_turn(
         raise NotFoundError("Assistant message was not found.")
     if _owned(turn, execution_token):
         turn.error_code = error_code[:80]
-        _finish(turn, "cancelled" if turn.cancel_requested else "failed")
+        await _finish(session, turn, "cancelled" if turn.cancel_requested else "failed")
         await session.flush()
     return turn

@@ -1,12 +1,18 @@
 """Project assistant threads, turns and proposal decisions (ADR 0038).
 
-Requests record intent only; no model runs inside an API request.
+Requests record intent only; no model runs inside an API request. Live turn
+progress is read back from PostgreSQL by sequence, as JSON or server-sent events.
 """
 
+import asyncio
+from collections.abc import AsyncIterator
+from typing import cast
 from uuid import UUID
 
-from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Header, Query
+from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from flint_graph.api.dependencies import (
     AuditActorDep,
@@ -23,6 +29,7 @@ from flint_graph.api.narrative_assistant_schemas import (
     AssistantThreadCreate,
     AssistantThreadResponse,
     AssistantTurnCreate,
+    AssistantTurnEventResponse,
     AssistantTurnResponse,
 )
 from flint_graph.api.narrative_schemas import NarrativeRevisionResponse
@@ -34,13 +41,22 @@ from flint_graph.application.services.narrative_assistant import (
     get_proposal,
     get_thread,
     list_threads,
+    list_turn_events,
     list_turns,
     post_turn,
     reject_proposal,
+    turn_status,
 )
+from flint_graph.application.services.narrative_assistant_events import events_after
 from flint_graph.infrastructure.db.models import NarrativeAssistantProposal, NarrativeAssistantTurn
+from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}/assistant", tags=["narrative"])
+
+_TERMINAL = ("completed", "failed", "cancelled")
+STREAM_POLL_SECONDS = 0.25
+STREAM_KEEPALIVE_SECONDS = 10.0
+STREAM_MAX_SECONDS = 300.0
 
 
 def turn_response(
@@ -179,6 +195,124 @@ async def list_turns_endpoint(
         include_archived=include_archived,
     )
     return [turn_response(turn, proposal) for turn, proposal in rows]
+
+
+@router.get(
+    "/threads/{thread_id}/turns/{turn_id}/events",
+    response_model=list[AssistantTurnEventResponse],
+)
+async def list_turn_events_endpoint(
+    project_id: UUID,
+    thread_id: UUID,
+    turn_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    after_sequence: int = Query(default=0, ge=0, le=2**31 - 1),
+    limit: int = Query(default=200, ge=1, le=500),
+    include_archived: bool = False,
+) -> list[AssistantTurnEventResponse]:
+    rows = await list_turn_events(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        turn_id=turn_id,
+        after_sequence=after_sequence,
+        limit=limit,
+        include_archived=include_archived,
+    )
+    return [AssistantTurnEventResponse.model_validate(row) for row in rows]
+
+
+def _frame(event: NarrativeAssistantTurnEvent) -> str:
+    data = AssistantTurnEventResponse.model_validate(event).model_dump_json()
+    return f"id: {event.sequence}\nevent: {event.kind}\ndata: {data}\n\n"
+
+
+def _cursor(after_sequence: int, last_event_id: str | None) -> int:
+    try:
+        resumed = int(last_event_id or 0)
+    except ValueError:
+        resumed = 0
+    return max(after_sequence, min(max(resumed, 0), 2**31 - 1))
+
+
+async def _turn_events(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    tenant_id: UUID,
+    turn_id: UUID,
+    cursor: int,
+) -> AsyncIterator[str]:
+    # Each poll uses its own short session: no connection or lock is held between polls.
+    loop = asyncio.get_running_loop()
+    started = quiet = loop.time()
+    yield "retry: 1000\n\n"
+    while loop.time() - started < STREAM_MAX_SECONDS:
+        async with factory() as session:
+            rows = await events_after(
+                session, tenant_id=tenant_id, turn_id=turn_id, after_sequence=cursor, limit=200
+            )
+            status = None
+            if not rows:
+                status = await session.scalar(
+                    select(NarrativeAssistantTurn.status).where(
+                        NarrativeAssistantTurn.id == turn_id
+                    )
+                )
+        for row in rows:
+            cursor = row.sequence
+            yield _frame(row)
+            if row.kind == "status":
+                return
+        if rows:
+            quiet = loop.time()
+            continue
+        # The terminal event commits with the status, so a finished turn with nothing
+        # newer is caught up (turns from before live progress have no events at all).
+        if status in _TERMINAL:
+            return
+        if loop.time() - quiet >= STREAM_KEEPALIVE_SECONDS:
+            quiet = loop.time()
+            yield ": keep-alive\n\n"
+        await asyncio.sleep(STREAM_POLL_SECONDS)
+
+
+@router.get("/threads/{thread_id}/turns/{turn_id}/events/stream")
+async def stream_turn_events_endpoint(
+    project_id: UUID,
+    thread_id: UUID,
+    turn_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    after_sequence: int = Query(default=0, ge=0, le=2**31 - 1),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID", max_length=12),
+    include_archived: bool = False,
+) -> StreamingResponse:
+    await turn_status(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        turn_id=turn_id,
+        include_archived=include_archived,
+    )
+    bind = session.bind
+    if bind is None:
+        raise RuntimeError("database session is not bound")
+    factory = async_sessionmaker(bind=cast(AsyncEngine, bind), expire_on_commit=False)
+    # Release the request session (and any user-row lock) before the long body.
+    await session.commit()
+    return StreamingResponse(
+        _turn_events(
+            factory,
+            tenant_id=tenant_id,
+            turn_id=turn_id,
+            cursor=_cursor(after_sequence, last_event_id),
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/threads/{thread_id}/turns/{turn_id}/cancel", response_model=AssistantTurnResponse)

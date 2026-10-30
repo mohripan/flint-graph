@@ -1,4 +1,8 @@
-"""Assistant activity edge: model calls and story text stay here; history gets IDs/status."""
+"""Assistant activity edge: model calls and story text stay here; history gets IDs/status.
+
+Streamed steps, thinking and reply text are written to PostgreSQL by a fenced
+``TurnEventWriter``; a lost fence or a requested stop ends the model call early.
+"""
 
 import asyncio
 from contextlib import suppress
@@ -26,6 +30,7 @@ from flint_graph.application.services.narrative_assistant import (
     complete_turn,
     fail_turn,
 )
+from flint_graph.application.services.narrative_assistant_events import TurnEventWriter
 from flint_graph.infrastructure.db.models import NarrativeAssistantTurn
 from flint_graph.narrative.assistant.turn import AssistantModel, AssistantModelError, run_turn
 
@@ -104,6 +109,8 @@ class NarrativeAssistantActivities:
         if self.model is None:
             return await self._fail(turn_id, token, "assistant_unavailable")
         beating = asyncio.create_task(_heartbeat())
+        # Live progress goes straight to PostgreSQL; Temporal only sees IDs and status.
+        events = TurnEventWriter(self.factory, turn_id=turn_id, execution_token=token)
         try:
             result = await run_turn(
                 self.model,
@@ -112,7 +119,9 @@ class NarrativeAssistantActivities:
                 focus=work.focus,
                 history=work.history,
                 budget=self.context_chars,
+                observer=events,
             )
+            await events.flush()
         except AssistantModelError as error:
             if error.code in _TRANSIENT and attempt < self.max_attempts:
                 # The turn stays running; the next attempt of this run replaces the token.

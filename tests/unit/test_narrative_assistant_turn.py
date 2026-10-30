@@ -69,7 +69,7 @@ class Script:
         self.contents = list(contents)
         self.calls = []
 
-    async def respond(self, messages, schema):
+    async def respond(self, messages, schema, on_delta=None):
         self.calls.append((copy.deepcopy(messages), schema))
         content = self.contents.pop(0)
         if isinstance(content, Exception):

@@ -77,3 +77,13 @@ class AssistantTurnResponse(BaseModel):
     updated_at: datetime
     finished_at: datetime | None
     proposal: AssistantProposalSummary | None
+
+
+class AssistantTurnEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    turn_id: UUID
+    sequence: int
+    attempt: int
+    kind: str
+    payload: dict[str, Any]
+    created_at: datetime
