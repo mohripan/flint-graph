@@ -14,6 +14,7 @@ import { imageJobStarted, useBackgroundJobs } from "./imageJobs";
 import { Viewer } from "./CharacterStudio";
 import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
+import { ClipPlayButton } from "./VoiceControls";
 
 const PAGE = 48;
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
@@ -196,6 +197,10 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
       <span className="studio-visually-hidden">Select {asset.name}</span></label>}
     {image ? <button type="button" className={`studio-asset-preview ${asset.kind}`} onClick={onView} aria-label={`View ${asset.name}`}>
       {url ? <img src={url} alt="" /> : <span>Loading…</span>}</button>
+      : asset.media_type === "audio/wav" ? <div className="studio-asset-preview audio">
+        <span aria-hidden="true">♪</span>
+        {asset.provenance.text ? <p>“{String(asset.provenance.text)}”</p> : null}
+        <ClipPlayButton assetId={asset.id} label="Listen" /></div>
       : <FontSample tenantId={tenantId} projectId={projectId} asset={asset} />}
     <figcaption>
       {editing ? <input className="studio-asset-rename" autoFocus defaultValue={asset.name} maxLength={120} aria-label="Asset name"
@@ -204,7 +209,7 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
           if (event.key === "Escape") setEditing(false);
         }} onBlur={event => { if (event.currentTarget.value.trim() !== asset.name) void onRename(event.currentTarget.value); setEditing(false); }} />
         : <strong title={asset.name} onDoubleClick={() => canWrite && setEditing(true)}>{asset.name}</strong>}
-      <small>{KIND_LABELS[asset.kind] ?? asset.kind}{asset.width ? ` · ${asset.width}×${asset.height}` : ""} · {asset.license}</small>
+      <small>{KIND_LABELS[asset.kind] ?? asset.kind}{asset.width ? ` · ${asset.width}×${asset.height}` : ""}{asset.duration_ms ? ` · ${(asset.duration_ms / 1000).toFixed(1)} s` : ""} · {asset.license}</small>
       {folder && <small title={folder}>In {folder}</small>}
       {asset.status === "candidate" && <span className="studio-asset-badge">To review</span>}
       {canWrite && <span className="studio-asset-actions">
@@ -250,12 +255,13 @@ function UploadDialog({ tenantId, projectId, initialKind, onClose, onUploaded }:
     <form className="studio-peek-body studio-form" onSubmit={event => void submit(event)}>
       <div className="studio-section-heading"><h2>{title}</h2>
         <button type="button" className="studio-secondary" onClick={onClose}>Close</button></div>
-      <Field label="File" hint="PNG images up to 10 MB (transparency kept), or TTF/OTF fonts up to 8 MB.">
-        <input type="file" accept=".png,.ttf,.otf,image/png,font/ttf,font/otf" onChange={event => {
+      <Field label="File" hint="PNG images up to 10 MB (transparency kept), TTF/OTF fonts up to 8 MB, or 16-bit WAV voice clips up to 60 seconds.">
+        <input type="file" accept=".png,.ttf,.otf,.wav,image/png,font/ttf,font/otf,audio/wav" onChange={event => {
           const chosen = event.target.files?.[0] ?? null;
           setFile(chosen);
-          if (chosen) { setName(suggestName(chosen.name)); if (kindForFile(chosen.name) === "font") setKind("font");
-            else if (kind === "font") setKind(initialKind === "font" ? "image" : initialKind); }
+          if (chosen) { setName(suggestName(chosen.name)); const detected = kindForFile(chosen.name);
+            if (detected !== "image") setKind(detected);
+            else if (kind === "font" || kind === "voice") setKind(initialKind === "font" || initialKind === "voice" ? "image" : initialKind); }
         }} /></Field>
       <Field label="Kind"><select value={kind} onChange={event => setKind(event.target.value as UploadKind)}>
         {UPLOAD_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>

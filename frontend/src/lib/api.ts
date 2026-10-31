@@ -20,19 +20,30 @@ export type CharacterType = "girl" | "boy" | "woman" | "man" | "other";
 export type CharacterFraming = "portrait" | "full_body";
 export interface NarrativeImage {
   id: string; character_id: string | null; kind: string; source: "generated" | "uploaded"; name: string;
-  status: "candidate" | "approved" | "discarded"; media_type: "image/png" | "font/ttf" | "font/otf";
-  folder_id?: string | null;
+  status: "candidate" | "approved" | "discarded"; media_type: "image/png" | "font/ttf" | "font/otf" | "audio/wav";
+  folder_id?: string | null; duration_ms?: number | null;
   width: number | null; height: number | null; sha256: string; size_bytes: number;
   thumbnail_width: number | null; thumbnail_height: number | null; seed: number | null; job_id: string | null;
   license: string; notice: string | null; provenance: Record<string, unknown>; created_at: string;
   approved_at: string | null; rights_declared_at: string | null;
 }
 export interface AssetUpload {
-  file: File; kind: "background" | "sprite" | "image" | "font"; name: string; license: string; notice: string;
+  file: File; kind: "background" | "sprite" | "image" | "font" | "voice"; name: string; license: string; notice: string;
+  character_id?: string;
+}
+// Voices (ADR 0043): Kokoro voice packs, and jobs that speak lines or vocalizations.
+export interface VoiceOption { id: string; name: string; accent: string; gender: string }
+export interface VoiceJob {
+  id: string; character_id: string; voice: string; speed: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number; count: number; cancel_requested: boolean; error_code: string | null;
+  items: Array<{ mode: "full" | "vocalization"; text: string; node_id: string | null }>;
+  model: string | null; created_at: string; started_at: string | null; finished_at: string | null;
+  assets: NarrativeImage[];
 }
 export interface CharacterProfile {
   character_id: string; appearance: string; character_type: CharacterType; framing: CharacterFraming;
-  portrait: NarrativeImage | null; version: number;
+  portrait: NarrativeImage | null; version: number; voice?: string | null;
 }
 export interface ImageJob {
   id: string; purpose: "character_portrait" | "background" | "character_expression"; character_id: string | null;
@@ -445,6 +456,53 @@ export const api = {
     return response.arrayBuffer();
   },
 
+  async getNarrativeAudio(tenantId: string, projectId: string, assetId: string, signal?: AbortSignal): Promise<Blob> {
+    const response = await fetch(`${BASE}${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}/content`,
+      { headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error" });
+    if (!response.ok) throw await parseError(response);
+    const blob = await response.blob();
+    if (blob.type !== "audio/wav") throw new ApiError("The voice clip could not be loaded.", 502);
+    return blob;
+  },
+
+  getVoiceCatalog(tenantId: string, projectId: string, signal?: AbortSignal):
+    Promise<{ available: boolean; voices: VoiceOption[] }> {
+    return jsonRequest(`${projectPath(projectId)}/voices`, { headers: tenantHeaders(tenantId), signal });
+  },
+
+  setCharacterVoice(tenantId: string, projectId: string, characterId: string, baseVersion: number,
+    voice: string | null, signal?: AbortSignal): Promise<CharacterProfile> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/voice`, {
+      method: "PUT", headers: tenantHeaders(tenantId), signal, json: { base_version: baseVersion, voice },
+    });
+  },
+
+  createVoiceJob(tenantId: string, projectId: string, characterId: string,
+    items: Array<{ mode: "full" | "vocalization"; text: string; node_id?: string | null }>,
+    signal?: AbortSignal): Promise<VoiceJob> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/voice-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: { items, idempotency_key: crypto.randomUUID() },
+    });
+  },
+
+  listVoiceJobs(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ jobs: VoiceJob[] }> {
+    return jsonRequest(`${projectPath(projectId)}/voice-jobs?limit=30`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  getVoiceJob(tenantId: string, projectId: string, jobId: string, signal?: AbortSignal): Promise<VoiceJob> {
+    return jsonRequest(`${projectPath(projectId)}/voice-jobs/${encodeURIComponent(jobId)}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  cancelVoiceJob(tenantId: string, projectId: string, jobId: string, signal?: AbortSignal): Promise<VoiceJob> {
+    return jsonRequest(`${projectPath(projectId)}/voice-jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
   // A saved revision's asset bytes as bound when it was saved (playtests, ADR 0040).
   async getRevisionAsset(tenantId: string, projectId: string, revisionId: string, key: string,
     signal?: AbortSignal): Promise<ArrayBuffer> {
@@ -475,6 +533,7 @@ export const api = {
     form.set("license", upload.license);
     form.set("notice", upload.notice);
     form.set("rights_declared", "true");
+    if (upload.character_id) form.set("character_id", upload.character_id);
     const response = await fetch(`${BASE}${projectPath(projectId)}/assets`, {
       method: "POST", body: form, signal, headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) },
     });

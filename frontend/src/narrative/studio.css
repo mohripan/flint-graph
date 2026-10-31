@@ -279,6 +279,21 @@
 .studio-asset-rename { min-height:32px; border:1px solid #8c672a; border-radius:4px; padding:0 6px; font:inherit; font-weight:600; }
 .studio-check { display:flex; gap:10px; align-items:flex-start; font-size:14px; margin:6px 0 12px; }
 .studio-check input { margin-top:3px; width:18px; height:18px; }
+/* Voiced lines (ADR 0043): per-line voice, clips and the character's voice. */
+.studio-line-voice { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:6px; font-size:13px; }
+.studio-script-voice, .studio-script-sound { min-height:34px; border:1px solid #c2d0d8; border-radius:6px; padding:0 8px; font:inherit; background:#fff; }
+.studio-script-sound { width:9em; }
+.studio-voice-clip { display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px 10px; }
+.studio-voice-clip select { min-height:30px; max-width:220px; }
+.studio-voice-clip.candidate { padding:2px 8px; border-radius:6px; background:#fbf6ea; }
+.studio-voice-note { color:#4e6577; }
+.studio-play { white-space:nowrap; }
+.studio-scene-voices { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; margin:0 0 12px; }
+.studio-character-voice { display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 14px; margin:4px 0 8px; }
+.studio-character-voice .studio-field { margin:0; }
+.studio-asset-preview.audio { flex-direction:column; gap:6px; cursor:default; background:#eef3f6; color:#182635; padding:10px; text-align:center; }
+.studio-asset-preview.audio span { font-size:32px; line-height:1; }
+.studio-asset-preview.audio p { margin:0; font-size:13px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 /* Asset folders (ADR 0043): groups and folders beside the grid. */
 .studio-library { display:grid; grid-template-columns:220px minmax(0,1fr); gap:18px; align-items:start; }
 .studio-library-rail { display:flex; flex-direction:column; gap:4px; padding:10px; border:1px solid #d4dfe6; border-radius:10px; background:#fbfcfd; position:sticky; top:12px; max-height:calc(100vh - 140px); overflow:auto; }

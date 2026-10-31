@@ -11,6 +11,7 @@ import { Field } from "./FormFields";
 import { refreshLibrary } from "./libraryAssets";
 import { addCharacter, deleteCharacter } from "./model";
 import type { StoryDraft } from "./types";
+import { CharacterVoice } from "./VoiceControls";
 
 interface Props {
   story: StoryDraft; readOnly: boolean;
@@ -199,6 +200,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
             {FRAMINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select></Field>
         </div>
+        {story.schema_version === "2" && <CharacterVoice id={id} name={character.name} readOnly={readOnly} onError={onError} />}
         <label className="studio-check"><input type="checkbox" checked={sprite} disabled={!canCutOut(framing)}
           onChange={event => setTransparent(event.target.checked)} />
           <span>Transparent background: cut the character out as a stage sprite

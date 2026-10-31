@@ -20,8 +20,10 @@ type Display = { text_id: string; text: string };
 export type StagePosition = "left" | "center" | "right";
 // ``x`` (runtime 0.4.0) is the placement's horizontal centre as % of the screen width.
 export interface StageShow { character: string; sprite: string; position: StagePosition; x?: number }
+// A spoken line or a short vocalization (ADR 0043); without ``audio`` it plays nothing.
+export interface LineVoice { mode: "full" | "vocalization"; text?: string; audio?: string }
 export type StoryNode =
-  | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string })
+  | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string; voice?: LineVoice })
   | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[] }
   | (Display & { type: "choice"; options: ChoiceOption[] })
   | { type: "set"; next: string; operations: Array<{ op: "set" | "increment"; variable: string; value: Scalar }> }
@@ -45,7 +47,7 @@ export interface StoryDraft {
   entry: string;
   characters: Record<string, StoryCharacter>;
   variables: Record<string, VariableDeclaration>;
-  assets: Record<string, { kind?: "image" | "font"; path: string; sha256: string }>;
+  assets: Record<string, { kind?: "image" | "font" | "audio"; path: string; sha256: string }>;
   theme?: StoryTheme;
   nodes: Record<string, StoryNode>;
 }

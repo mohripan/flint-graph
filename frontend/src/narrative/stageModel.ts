@@ -26,7 +26,8 @@ function available(base: string, used: (key: string) => boolean): string {
 // ---- Library assets bound by SHA-256 ----------------------------------------------------
 
 export interface LibraryAsset { sha256: string; media_type: string; name: string }
-const EXTENSIONS: Record<string, string> = { "image/png": "png", "font/ttf": "ttf", "font/otf": "otf" };
+const EXTENSIONS: Record<string, string> = { "image/png": "png", "font/ttf": "ttf", "font/otf": "otf", "audio/wav": "wav" };
+const KINDS: Record<string, "image" | "font" | "audio"> = { png: "image", ttf: "font", otf: "font", wav: "audio" };
 
 export function slug(name: string): string {
   let text = name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -43,12 +44,12 @@ export function assetKeyFor(story: StoryDraft, sha256: string): string | undefin
 /** Reuse or add the story asset for a library file: one key per file, named after it. */
 export function bindAsset(story: StoryDraft, asset: LibraryAsset): { story: StoryDraft; key: string } {
   const extension = EXTENSIONS[asset.media_type];
-  if (!extension) throw new Error("Only PNG images and TTF/OTF fonts can be used in a story.");
-  const kind = extension === "png" ? "image" : "font";
+  if (!extension) throw new Error("Only PNG images, TTF/OTF fonts and WAV voice clips can be used in a story.");
+  const kind = KINDS[extension];
   const existing = Object.entries(story.assets).find(([, item]) =>
     item.sha256 === asset.sha256 && (item.kind ?? "image") === kind && item.path.endsWith(`.${extension}`));
   if (existing) return { story, key: existing[0] };
-  if (Object.keys(story.assets).length >= 256) throw new Error("A story can use at most 256 images and fonts.");
+  if (Object.keys(story.assets).length >= 256) throw new Error("A story can use at most 256 assets.");
   const key = available(slug(asset.name) || kind, candidate => has(story.assets, candidate));
   return { key, story: { ...story, assets: { ...story.assets,
     [key]: { kind, path: `assets/${key}.${extension}`, sha256: asset.sha256 } } } };
@@ -59,6 +60,7 @@ export function usedAssets(story: StoryDraft): Set<string> {
   for (const node of Object.values(story.nodes)) {
     if (node.type === "stage" && typeof node.background === "string") used.add(node.background);
     if (node.type === "stage" && typeof node.cg === "string") used.add(node.cg);
+    if (node.type === "line" && node.voice?.audio) used.add(node.voice.audio);
   }
   for (const character of Object.values(story.characters)) {
     for (const key of Object.values(character.sprites ?? {})) used.add(key);

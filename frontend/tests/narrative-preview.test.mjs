@@ -37,7 +37,7 @@ test("v2 playtests check every declared asset's size and hash before loading", a
   assert.deepEqual(Object.keys(await protocol.checkedAssets(declared, { type, dusk })), ["dusk", "type"]);
   for (const fetched of [{ dusk }, { dusk, type, extra: dusk }, { dusk: type, type }, { dusk, type: new ArrayBuffer(8388609) }])
     await assert.rejects(protocol.checkedAssets(declared, fetched));
-  await assert.rejects(protocol.checkedAssets({ ...declared, dusk: { ...declared.dusk, kind: "audio" } }, { dusk, type }));
+  await assert.rejects(protocol.checkedAssets({ ...declared, dusk: { ...declared.dusk, kind: "video" } }, { dusk, type }));
   assert.equal(protocol.storyAssets('{"schema_version":"1","assets":{}}'), null);
   assert.deepEqual(protocol.storyAssets(JSON.stringify({ schema_version: "2", assets: declared })), declared);
 });

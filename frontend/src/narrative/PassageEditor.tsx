@@ -8,6 +8,8 @@ import { SceneStage, UpgradeNotice } from "./StageEditor";
 import { setLineExpression, setLineSpeaker } from "./stageModel";
 import type { StageSnapshot } from "./stageModel";
 import type { StoryDraft } from "./types";
+import { LineVoiceControls, SceneVoices, VoiceJobsProvider } from "./VoiceControls";
+import { withSpeaker } from "./voiceModel";
 
 // One scene as a script: every line in order, with state changes inline and the
 // choice, condition or ending that closes it. Edits change the same story nodes
@@ -31,13 +33,14 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
   const last = story.nodes[passage.nodes[passage.nodes.length - 1]];
   const run = (action: () => void) => { try { action(); } catch (error) { onError(error instanceof Error ? error.message : String(error)); } };
   const characters = Object.entries(story.characters);
-  return <div className="studio-script">
+  return <VoiceJobsProvider><div className="studio-script">
     <div className="studio-section-heading"><div><p className="studio-eyebrow">Scene</p>
       <h2 className="studio-script-title">{passage.title}</h2></div>
       <code>{passage.id}{story.entry === passage.id ? " · start" : ""}</code></div>
     {staged ? <SceneStage story={story} head={passage.id} inherited={inherited} readOnly={readOnly}
       onChange={onChange} onError={onError} />
       : onUpgrade && <UpgradeNotice readOnly={readOnly} onUpgrade={onUpgrade} />}
+    {staged && <SceneVoices story={story} ids={body} readOnly={readOnly} onError={onError} />}
     <ol ref={list} className="studio-script-lines">
       {body.map(id => {
         const node = story.nodes[id];
@@ -61,7 +64,7 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
             {node.speaker && story.characters[node.speaker] &&
               <CharacterAvatar characterId={node.speaker} name={story.characters[node.speaker].name} />}
             <select aria-label="Speaker" className="studio-script-speaker" disabled={readOnly} value={node.speaker ?? ""}
-              onChange={event => run(() => onChange(setLineSpeaker(story, id, event.target.value || null), `${id}:speaker`))}>
+              onChange={event => run(() => onChange(withSpeaker(setLineSpeaker(story, id, event.target.value || null), story, id), `${id}:speaker`))}>
               <option value="">Narration</option>
               {characters.map(([key, character]) => <option key={key} value={key}>{character.name}</option>)}
             </select>
@@ -72,6 +75,7 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
                 {Object.keys(story.characters[node.speaker]?.sprites ?? {}).map(sprite =>
                   <option key={sprite} value={sprite}>{sprite}</option>)}
               </select>}
+            {staged && <LineVoiceControls story={story} id={id} readOnly={readOnly} onChange={onChange} onError={onError} />}
           </div>
           <textarea data-line={id} aria-label="Line" className="studio-script-text studio-prose" readOnly={readOnly}
             rows={Math.min(8, Math.max(1, Math.ceil(node.text.length / 70)))} value={node.text}
@@ -104,5 +108,5 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
         if (!window.confirm(`Delete the scene "${passage.title}" and its ${passage.nodes.length} steps?`)) return;
         onDeleted(deletePassage(story, passage.nodes));
       })}>Delete scene</button></div>}
-  </div>;
+  </div></VoiceJobsProvider>;
 }

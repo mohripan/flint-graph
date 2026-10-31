@@ -1,7 +1,7 @@
 // Library filters, upload checks and naming for the Assets tab (ADR 0040).
 
 export type AssetFilter = "all" | "background" | "sprite" | "image" | "font" | "character_portrait" | "candidates";
-export type UploadKind = "background" | "sprite" | "image" | "font";
+export type UploadKind = "background" | "sprite" | "image" | "font" | "voice";
 
 export const FILTERS: Array<[AssetFilter, string]> = [
   ["all", "All"], ["background", "Backgrounds"], ["sprite", "Sprites"], ["image", "CGs"],
@@ -9,9 +9,11 @@ export const FILTERS: Array<[AssetFilter, string]> = [
 ];
 export const UPLOAD_KINDS: Array<[UploadKind, string]> = [
   ["background", "Background"], ["sprite", "Character sprite"], ["image", "CG / image"], ["font", "Font"],
+  ["voice", "Voice clip (WAV)"],
 ];
 export const KIND_LABELS: Record<string, string> = {
   background: "Background", sprite: "Sprite", image: "CG / image", font: "Font", character_portrait: "Portrait",
+  voice: "Voice clip",
 };
 const MB = 1024 * 1024;
 
@@ -29,6 +31,11 @@ export function uploadKindForFilter(filter: AssetFilter): UploadKind {
 // Mirrors the server's limits so creators hear about a wrong file before uploading.
 export function uploadProblem(file: { name: string; size: number }, kind: UploadKind): string | null {
   const extension = file.name.toLowerCase().split(".").pop() ?? "";
+  if (kind === "voice") {
+    if (extension !== "wav") return "Voice clips must be WAV files (16-bit PCM).";
+    if (file.size > 10 * MB) return "Voice clips can be at most 10 MB.";
+    return null;
+  }
   if (kind === "font") {
     if (!["ttf", "otf"].includes(extension)) return "Fonts must be TTF or OTF files.";
     if (file.size > 8 * MB) return "Fonts can be at most 8 MB.";
@@ -40,7 +47,7 @@ export function uploadProblem(file: { name: string; size: number }, kind: Upload
 }
 
 export function kindForFile(name: string): UploadKind {
-  return /\.(ttf|otf)$/i.test(name) ? "font" : "image";
+  return /\.(ttf|otf)$/i.test(name) ? "font" : /\.wav$/i.test(name) ? "voice" : "image";
 }
 
 export function suggestName(fileName: string): string {

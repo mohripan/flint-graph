@@ -20,9 +20,9 @@ const KIND_ORDER: Array<[string, string]> = [
 const byName = (left: string, right: string) => left.localeCompare(right, undefined, { sensitivity: "base" });
 
 /** Upload into the kind the creator is viewing (master's CG section opens with "image"). */
-export function uploadKindForView(view: LibraryView): "background" | "sprite" | "image" | "font" {
-  return view.type === "kind" && ["sprite", "image", "font"].includes(view.kind)
-    ? view.kind as "sprite" | "image" | "font" : "background";
+export function uploadKindForView(view: LibraryView): "background" | "sprite" | "image" | "font" | "voice" {
+  return view.type === "kind" && ["sprite", "image", "font", "voice"].includes(view.kind)
+    ? view.kind as "sprite" | "image" | "font" | "voice" : "background";
 }
 
 export function viewQuery(view: LibraryView): { kind?: string; status?: string; folder?: string; character_id?: string } {
