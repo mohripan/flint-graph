@@ -7,3 +7,5 @@ runtimes/godot/**/*.ttf -text
 runtimes/godot/fonts/LICENSE-Lora.txt whitespace=-blank-at-eol
 frontend/src/narrative/Lora.ttf -text
 frontend/public/LICENSE-Lora.txt text eol=lf whitespace=-blank-at-eol
+# Exact upstream license bytes: their SHA-256 is what creators accept and what releases name.
+src/flint_graph/narrative/voice_licenses/*.txt -text whitespace=-blank-at-eol,-blank-at-eof

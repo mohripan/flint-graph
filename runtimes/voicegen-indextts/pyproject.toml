@@ -1,0 +1,28 @@
+[project]
+name = "flint-graph-voicegen-indextts"
+version = "0.1.0"
+description = "Isolated local IndexTTS-2.5 voice child for FlintGraph narrative assets (ADR 0044)"
+requires-python = "==3.11.*"
+dependencies = [
+    "indextts",
+    "torch==2.8.0",
+    "torchaudio==2.8.0",
+    "nvidia-ml-py==13.615.71",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+# The web demo, DeepSpeed and the custom kernels are never used.
+override-dependencies = ["gradio; sys_platform == 'never'"]
+
+[tool.uv.sources]
+# bilibili Model Use License Agreement (code and weights); see ADR 0044.
+indextts = { git = "https://github.com/index-tts/index-tts", rev = "d9e41aac89fd00b3d71497fddb287b7f24613712" }
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

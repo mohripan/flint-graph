@@ -1,0 +1,32 @@
+[project]
+name = "flint-graph-voicegen-chatterbox"
+version = "0.1.0"
+description = "Isolated local Chatterbox voice child for FlintGraph narrative assets (ADR 0044)"
+requires-python = "==3.11.*"
+dependencies = [
+    "chatterbox-tts==0.1.7",
+    "resemble-perth==1.0.1",
+    "torch==2.8.0",
+    "torchaudio==2.8.0",
+    "numpy<2",
+    "nvidia-ml-py==13.615.71",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+# Chatterbox pins torch 2.6, which has no CUDA 12.8 (Blackwell) build; the web demo is never used.
+override-dependencies = [
+    "torch==2.8.0",
+    "torchaudio==2.8.0",
+    "gradio; sys_platform == 'never'",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
