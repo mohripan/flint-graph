@@ -10,7 +10,6 @@ from flint_graph.narrative.values import Diagnostic, PackageError
 
 ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 COLOR = re.compile(r"#[0-9a-f]{6}(?:[0-9a-f]{2})?\Z")
-OPAQUE_COLOR = re.compile(r"#[0-9a-f]{6}\Z")
 POSITIONS = ("left", "center", "right")
 INT_MIN = -(2**31)
 INT_MAX = 2**31 - 1
@@ -245,8 +244,8 @@ def asset_of(value: Any, assets: dict[str, Any], kind: str, location: str) -> st
     return key
 
 
-def _color(value: Any, location: str, *, alpha: bool = True) -> None:
-    if type(value) is not str or not (COLOR if alpha else OPAQUE_COLOR).fullmatch(value):
+def _color(value: Any, location: str) -> None:
+    if type(value) is not str or not COLOR.fullmatch(value):
         raise PackageError("invalid_value", location)
 
 
@@ -262,7 +261,8 @@ def _characters_v2(value: Any, assets: dict[str, Any]) -> dict[str, Any]:
         fields(character, {"name"}, {"color", "sprites", "stage"}, location)
         text(character["name"], location + ".name")
         if "color" in character:
-            _color(character["color"], location + ".color", alpha=False)
+            # Name colours may be translucent, like the theme's (#rrggbbaa).
+            _color(character["color"], location + ".color")
         if "stage" in character:
             # Framing on stage (runtime 0.4.0): drawn height as % of the screen and the
             # top edge as % of the screen height; larger figures are cut off below.

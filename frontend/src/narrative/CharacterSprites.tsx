@@ -4,8 +4,8 @@ import { useNarrativeImage } from "./characterImages";
 import { AssetThumb, SPRITE_KINDS, firstBackground, libraryAsset, useApprovedAssets } from "./libraryAssets";
 import { UpgradeNotice } from "./StageEditor";
 import {
-  DEFAULT_SCALE, bindAsset, expressionId, figureBox, removeSprite, setCharacterColor, setCharacterFraming, setSprite,
-  spriteUses,
+  DEFAULT_SCALE, bindAsset, expressionId, figureBox, joinColor, removeSprite, setCharacterColor, setCharacterFraming,
+  setSprite, splitColor, spriteUses,
 } from "./stageModel";
 import type { CharacterFraming, StoryDraft } from "./types";
 
@@ -44,8 +44,13 @@ export function CharacterSprites({ id, story, tenantId, projectId, readOnly, onC
     <fieldset className="studio-form" disabled={readOnly}>
       <div className="studio-look-color">
         <span className="studio-stage-label">Name colour</span>
-        <input type="color" aria-label="Name colour" value={character.color ?? "#d5ae68"}
-          onChange={event => run(() => setCharacterColor(story, id, event.target.value), `character:${id}:color`)} />
+        <input type="color" aria-label="Name colour" value={splitColor(character.color ?? "#d5ae68").rgb}
+          onChange={event => run(() => setCharacterColor(story, id,
+            joinColor(event.target.value, splitColor(character.color ?? "#d5ae68").alpha)), `character:${id}:color`)} />
+        <input type="range" min={0} max={100} aria-label="Name colour opacity"
+          value={Math.round(splitColor(character.color ?? "#d5ae68").alpha / 2.55)}
+          onChange={event => run(() => setCharacterColor(story, id,
+            joinColor(splitColor(character.color ?? "#d5ae68").rgb, Number(event.target.value) * 2.55)), `character:${id}:color`)} />
         <code>{character.color ?? "theme"}</code>
         {character.color && <button type="button" className="studio-link" onClick={() => run(() => setCharacterColor(story, id, null))}>Use the theme</button>}
       </div>

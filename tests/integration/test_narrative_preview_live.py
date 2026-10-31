@@ -305,7 +305,7 @@ def test_dynamic_preview_validates_v2_stage_rules_and_asset_identity(tmp_path: P
         node("l1", {"type": "line", "speaker": "oren", "expression": "neutral", "text_id": "l1", "text": "Hi.", "next": "s1"}),  # noqa: E501
         node("l1", {"type": "line", "speaker": "mira", "background": "dusk", "text_id": "l1", "text": "Hi.", "next": "s1"}),  # noqa: E501
         lambda s: s["characters"]["mira"].update(color="#D5AE68"),
-        lambda s: s["characters"]["mira"].update(color="#d5ae68ff"),
+        lambda s: s["characters"]["mira"].update(color="#d5ae68f"),
         lambda s: s["characters"]["mira"]["sprites"].update(neutral="type"),
         lambda s: s["theme"].update(extra={}),
         lambda s: s["theme"]["textbox"].update(position="left"),

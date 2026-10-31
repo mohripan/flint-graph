@@ -11,7 +11,6 @@ static var _ids := RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}\\z")
 static var _languages := RegEx.create_from_string("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*\\z")
 static var _hashes := RegEx.create_from_string("^[0-9a-f]{64}\\z")
 static var _colors := RegEx.create_from_string("^#[0-9a-f]{6}([0-9a-f]{2})?\\z")
-static var _opaque := RegEx.create_from_string("^#[0-9a-f]{6}\\z")
 
 static func _fields(value: Variant, required: Array, optional: Array = []) -> bool:
 	if not value is Dictionary: return false
@@ -169,7 +168,7 @@ static func _story(story: Variant) -> bool:
 			if not _fields(framing, [], ["scale", "top"]): return false
 			if framing.has("scale") and not _within(framing["scale"], 40, 300): return false
 			if framing.has("top") and not _within(framing["top"], -50, 100): return false
-		if character.has("color") and not _color(character["color"], _opaque): return false
+		if character.has("color") and not _color(character["color"], _colors): return false
 		if character.has("sprites"):
 			if not _map(character["sprites"], 32): return false
 			for sprite: Variant in character["sprites"].values():

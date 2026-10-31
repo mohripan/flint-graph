@@ -61,11 +61,11 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
         <h3>Name box</h3>
         <label className="studio-check"><input type="checkbox" checked={theme.name.show}
           onChange={event => set("name", "show", event.target.checked)} /><span>Show the speaker's name</span></label>
-        {color("name", "background", "Background")}
+        {color("name", "background", "Background", true)}
         {color("name", "text", "Text")}
         <p className="studio-hint">A character with its own colour (Characters) fills the name box with it.</p>
         <h3>Choices</h3>
-        {color("choices", "background", "Background")}
+        {color("choices", "background", "Background", true)}
         {color("choices", "text", "Text")}
         {color("choices", "border", "Border")}
         <h3>Font</h3>
