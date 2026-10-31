@@ -49,6 +49,10 @@ explicit and budgeted. Read `docs/reports/2026-10-31-assistant-live-turns.md`.
 On format 2 the assistant (prompt v2) edits sprites, framing, colours, stage nodes,
 expressions and the theme, uses library files by ID, and suggests image jobs that
 the creator starts with Generate: `docs/reports/2026-10-31-assistant-v2-tools.md`.
+Expressions (ADR 0041 slice A, migration 0026) repaint only the face of an approved
+base sprite as `character_expression` image jobs, so expressions swap on stage without
+jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) and
+character-referenced scene art (slice C) are planned with IP-Adapter.
 Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
 `notes/models/`; no generation pipeline exists yet. The Studio rail is now a
