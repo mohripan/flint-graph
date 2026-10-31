@@ -241,12 +241,13 @@ At 390 px the two-character panel stacks without horizontal scrolling.
 
 ## Checks
 
-On branch `claude/scene-art-cgs`, rebased onto master 77cb2c8 (runtime 0.6.1). The
+On branch `claude/scene-art-cgs`, rebased onto master b4b6729 (runtime 0.6.1). The
 one-character Studio QA ran before the rebase on a runtime 0.6.0 playtest build; the
 two-character QA ran on the rebased branch with a 0.6.1 build. Scene art does not
 touch the runtime.
 
-- `uv run pytest`: 1822 passed, 108 skipped (SQLite). The scene-art and character
+- `uv run pytest`: 1822 passed, 108 skipped (SQLite), on 77cb2c8; after the rebase onto
+  b4b6729 (prompt docs and a skipped Langfuse contract test) the image suites passed again. The scene-art and character
   image suites also passed on PostgreSQL (`FLINT_GRAPH_NARRATIVE_PG_URL`, a throwaway
   schema migrated to 0030): 17 passed.
 - `uv run ruff check .` and `uv run mypy`: clean.
