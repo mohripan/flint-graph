@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { api } from "../lib/api";
+import type { CarriedVoiceLicenses } from "../lib/api";
 import { ReleaseHistory } from "./ReleaseHistory";
 import {
   activeRelease, artifactLabel, buildBlocker, buildTargets, formatBytes, mergeReleases, newerRelease, prepareRelease,
@@ -224,6 +225,7 @@ export function ReleasesDialog({ tenantId, projectId, headId, revision, history,
           onChange={event => setTargetId(event.target.value)}>
           {targets.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select>
           <small>Unsaved changes are never part of a release.</small></label>
+        <CarriedLicenses tenantId={tenantId} projectId={projectId} revisionId={target} />
         {dirty && <div className="studio-notice studio-release-dirty"><span id={`${ids}-dirty`}>You have unsaved changes. Save them as a revision to build them.</span>
           <button type="button" className="studio-secondary" aria-disabled={saving} onClick={() => void saveDraft()}>{saving ? "Saving…" : "Save revision"}</button></div>}
         <div className="studio-actions"><button type="button" className="studio-primary" aria-disabled={Boolean(blocker)}
@@ -292,4 +294,30 @@ export function ReleasesDialog({ tenantId, projectId, headId, revision, history,
       <span ref={anchorHost} hidden />
     </div>
   </StudioDialog>;
+}
+
+/** The voice model licenses a build of this revision will carry, and the lines causing each (#178). */
+function CarriedLicenses({ tenantId, projectId, revisionId }: { tenantId: string; projectId: string; revisionId: string }) {
+  const [carried, setCarried] = useState<CarriedVoiceLicenses | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setCarried(null);
+    api.getRevisionVoiceLicenses(tenantId, projectId, revisionId, controller.signal).then(setCarried, () => undefined);
+    return () => controller.abort();
+  }, [tenantId, projectId, revisionId]);
+  const duties = carried?.licenses.filter(item => item.obligations !== "none") ?? [];
+  if (!carried || !carried.licenses.length) return null;
+  return <section className="studio-release-licenses" aria-label="Voice licenses in this release">
+    <h3>Voice licenses this release carries</h3>
+    {!duties.length && <p className="studio-hint">The voice clips in this revision put no duties on the game. NOTICES credits each model.</p>}
+    <ul>{carried.licenses.map(item => <li key={item.id}>
+      <strong>{item.name}</strong>{" "}
+      <span className="studio-hint">{item.obligations === "player_terms" ? "NOTICES plus a one-time license screen for players"
+        : item.obligations === "attribution" ? "NOTICES" : "no duties"}</span>
+      {item.obligations !== "none" && <p className="studio-hint">{item.summary}</p>}
+      {item.obligations !== "none" && item.lines.length > 0 && <p className="studio-hint">Caused by {item.lines.length === 1 ? "line" : "lines"}{" "}
+        {item.lines.map(line => line.node_id).join(", ")}. Regenerate {item.lines.length === 1 ? "it" : "them"} with another voice model to drop this.</p>}
+    </li>)}</ul>
+    {carried.player_terms && <p className="studio-notice">Players will see a license screen once before they play, and can reread it from the menu.</p>}
+  </section>;
 }

@@ -223,6 +223,7 @@ class AuditAction(StrEnum):
     NARRATIVE_VOICE_JOB_CANCELLED = "narrative.voice_job_cancelled"
     NARRATIVE_VOICE_REFERENCE_CREATED = "narrative.voice_reference_created"
     NARRATIVE_VOICE_REFERENCE_DELETED = "narrative.voice_reference_deleted"
+    NARRATIVE_VOICE_LICENSE_ACCEPTED = "narrative.voice_license_accepted"
     NARRATIVE_CHARACTER_PORTRAIT_CHOSEN = "narrative.character_portrait_chosen"
     NARRATIVE_ASSET_DISCARDED = "narrative.asset_discarded"
     WORKSPACE_CREATED = "workspace.created"

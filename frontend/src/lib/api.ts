@@ -31,17 +31,32 @@ export interface AssetUpload {
   file: File; kind: "background" | "sprite" | "image" | "font" | "voice"; name: string; license: string; notice: string;
   character_id?: string;
 }
-// Voices (ADR 0043): Kokoro voice packs, and jobs that speak lines or vocalizations.
+// Voices (ADR 0043/0044): catalog models with their licenses, stock voices or private
+// references to clone, and jobs that speak lines or vocalizations with a delivery.
 export interface VoiceOption { id: string; name: string; accent: string; gender: string }
+export type LicenseObligations = "none" | "attribution" | "player_terms";
+export interface VoiceLicenseSummary { id: string; name: string; sha256: string; obligations: LicenseObligations; summary: string }
+export interface VoiceLicenseText extends VoiceLicenseSummary { text: string; notice: string; player_terms: string }
+export interface VoiceModelOption {
+  id: string; name: string; description: string; default: boolean; cloning: boolean; languages: string[];
+  deliveries: Record<string, "full" | "approximate">; tags: string[]; watermark: string | null;
+  reference_transcript: "unused" | "optional"; stock_voices: Array<{ id: string; name: string; description: string }>;
+  license: VoiceLicenseSummary; accepted: boolean;
+}
+export interface VoiceCatalog { available: boolean; voices: VoiceOption[]; models: VoiceModelOption[] }
+export interface VoiceDelivery { emotion: string; intensity: number; tag: string | null }
+export interface VoiceJobItem {
+  mode: "full" | "vocalization"; text: string; node_id?: string | null; delivery?: VoiceDelivery | null;
+}
 export interface VoiceJob {
-  id: string; character_id: string; voice: string; speed: number;
+  id: string; character_id: string; voice_model: string; voice: string | null; reference_id: string | null;
+  language: string; speed: number;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   progress: number; count: number; cancel_requested: boolean; error_code: string | null;
-  items: Array<{ mode: "full" | "vocalization"; text: string; node_id: string | null }>;
+  items: Array<{ mode: "full" | "vocalization"; text: string; node_id: string | null; delivery?: VoiceDelivery }>;
   model: string | null; created_at: string; started_at: string | null; finished_at: string | null;
   assets: NarrativeImage[];
 }
-// Private voice references (#175): a sample to clone a character voice from.
 export interface VoiceReference {
   id: string; name: string; speaker_name: string; consent: "self" | "permission";
   consent_declared_by_user_id: string; consent_declared_at: string; transcript: string | null;
@@ -52,9 +67,15 @@ export interface VoiceReferenceUpload {
   file: Blob; name: string; speaker_name: string; consent: "self" | "permission"; transcript: string;
   source: "upload" | "recording";
 }
+export interface LineDelivery extends VoiceDelivery { node_id: string }
+export interface CarriedVoiceLicenses {
+  licenses: Array<VoiceLicenseSummary & { lines: Array<{ node_id: string; asset: string }> }>;
+  player_terms: boolean;
+}
 export interface CharacterProfile {
   character_id: string; appearance: string; character_type: CharacterType; framing: CharacterFraming;
   portrait: NarrativeImage | null; version: number; voice?: string | null;
+  voice_model?: string | null; voice_reference_id?: string | null;
 }
 export interface ImageJob {
   id: string; purpose: "character_portrait" | "background" | "character_expression" | "scene_art"; character_id: string | null;
@@ -479,23 +500,38 @@ export const api = {
     return blob;
   },
 
-  getVoiceCatalog(tenantId: string, projectId: string, signal?: AbortSignal):
-    Promise<{ available: boolean; voices: VoiceOption[] }> {
-    return jsonRequest(`${projectPath(projectId)}/voices`, { headers: tenantHeaders(tenantId), signal });
+  getVoiceCatalog(tenantId: string, projectId: string, signal?: AbortSignal): Promise<VoiceCatalog> {
+    return jsonRequest(`${projectPath(projectId)}/voices`, { headers: tenantHeaders(tenantId), signal, cache: "no-store" });
   },
 
+  /** A stock voice (``voice``) or a reference to clone, spoken by ``model`` (Kokoro when unset). */
   setCharacterVoice(tenantId: string, projectId: string, characterId: string, baseVersion: number,
-    voice: string | null, signal?: AbortSignal): Promise<CharacterProfile> {
+    voice: string | null, signal?: AbortSignal, choice: { model?: string | null; reference_id?: string | null } = {}):
+    Promise<CharacterProfile> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/voice`, {
-      method: "PUT", headers: tenantHeaders(tenantId), signal, json: { base_version: baseVersion, voice },
+      method: "PUT", headers: tenantHeaders(tenantId), signal,
+      json: { base_version: baseVersion, voice, model: choice.model ?? null, reference_id: choice.reference_id ?? null },
     });
   },
 
-  createVoiceJob(tenantId: string, projectId: string, characterId: string,
-    items: Array<{ mode: "full" | "vocalization"; text: string; node_id?: string | null }>,
-    signal?: AbortSignal): Promise<VoiceJob> {
+  createVoiceJob(tenantId: string, projectId: string, characterId: string, items: VoiceJobItem[],
+    signal?: AbortSignal, language = "en"): Promise<VoiceJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/voice-jobs`, {
-      method: "POST", headers: tenantHeaders(tenantId), signal, json: { items, idempotency_key: crypto.randomUUID() },
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { items, idempotency_key: crypto.randomUUID(), language },
+    });
+  },
+
+  getVoiceLicense(tenantId: string, licenseId: string, signal?: AbortSignal): Promise<VoiceLicenseText> {
+    return jsonRequest(`/v1/narrative/voice-licenses/${encodeURIComponent(licenseId)}`, {
+      headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  acceptVoiceLicense(tenantId: string, modelId: string, licenseSha256: string, signal?: AbortSignal):
+    Promise<{ model_id: string; license_id: string; license_sha256: string; accepted_at: string }> {
+    return jsonRequest(`/v1/narrative/voice-models/${encodeURIComponent(modelId)}/license-acceptance`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: { license_sha256: licenseSha256 },
     });
   },
 
@@ -536,6 +572,30 @@ export const api = {
     Promise<VoiceReference> {
     return jsonRequest(`${projectPath(projectId)}/voice-references/${encodeURIComponent(referenceId)}`, {
       method: "DELETE", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  listLineDeliveries(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ deliveries: LineDelivery[] }> {
+    return jsonRequest(`${projectPath(projectId)}/line-deliveries`, { headers: tenantHeaders(tenantId), signal, cache: "no-store" });
+  },
+
+  setLineDelivery(tenantId: string, projectId: string, nodeId: string, delivery: VoiceDelivery, signal?: AbortSignal):
+    Promise<LineDelivery> {
+    return jsonRequest(`${projectPath(projectId)}/line-deliveries/${encodeURIComponent(nodeId)}`, {
+      method: "PUT", headers: tenantHeaders(tenantId), signal, json: delivery,
+    });
+  },
+
+  clearLineDelivery(tenantId: string, projectId: string, nodeId: string, signal?: AbortSignal): Promise<void> {
+    return jsonRequest(`${projectPath(projectId)}/line-deliveries/${encodeURIComponent(nodeId)}`, {
+      method: "DELETE", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  getRevisionVoiceLicenses(tenantId: string, projectId: string, revisionId: string, signal?: AbortSignal):
+    Promise<CarriedVoiceLicenses> {
+    return jsonRequest(`${projectPath(projectId)}/revisions/${encodeURIComponent(revisionId)}/voice-licenses`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
   },
 

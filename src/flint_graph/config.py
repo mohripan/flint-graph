@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DETERMINISTIC_EMBEDDING_MODEL = "deterministic-test"
@@ -43,6 +43,16 @@ _DEPLOYED_REQUIRED_DEPENDENCIES: list[str] = [
 ]
 # Provider outages degrade answers but should not pull a replica out of service.
 _DEPLOYED_OPTIONAL_DEPENDENCIES: list[str] = ["embedding_provider", "answer_provider"]
+
+
+class NarrativeVoiceModelInstall(BaseModel):
+    """Where an installed catalog voice model and its isolated runtime live (ADR 0044)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_dir: str = Field(min_length=1, max_length=2048)
+    manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    runtime_dir: str = Field(min_length=1, max_length=2048)
 
 
 class Settings(BaseSettings):
@@ -300,6 +310,10 @@ class Settings(BaseSettings):
     narrative_voice_max_active_jobs_per_workspace: int = Field(default=4, ge=1, le=20)
     narrative_voice_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
     narrative_voice_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+    # Catalog models installed beside Kokoro (ADR 0044), as JSON keyed by model ID, e.g.
+    # {"chatterbox": {"model_dir": ..., "manifest_sha256": ..., "runtime_dir": ...}}.
+    # Only these are offered to creators; licenses and capabilities come from code.
+    narrative_voice_models: dict[str, NarrativeVoiceModelInstall] = Field(default_factory=dict)
 
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
@@ -403,7 +417,28 @@ class Settings(BaseSettings):
                     "The narrative voice worker requires absolute runtime and model "
                     "directories and a pinned model manifest"
                 )
+            for install in self.narrative_voice_models.values():
+                if not (
+                    Path(install.model_dir).is_absolute()
+                    and Path(install.runtime_dir).is_absolute()
+                ):
+                    raise ValueError("Installed voice models need absolute directories")
         return self
+
+    @field_validator("narrative_voice_models", mode="after")
+    @classmethod
+    def _known_voice_models(
+        cls, value: dict[str, NarrativeVoiceModelInstall]
+    ) -> dict[str, NarrativeVoiceModelInstall]:
+        from flint_graph.narrative.voice_models import DEFAULT_MODEL, MODELS
+
+        unknown = sorted(set(value) - set(MODELS))
+        if unknown or DEFAULT_MODEL in value:
+            raise ValueError(
+                "narrative_voice_models lists catalog models other than Kokoro, which uses "
+                "the narrative_voice_model_* settings"
+            )
+        return value
 
     @field_validator("narrative_image_content_policy", mode="after")
     @classmethod

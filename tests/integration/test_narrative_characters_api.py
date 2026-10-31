@@ -291,6 +291,8 @@ async def test_profiles_save_with_versions_and_respect_roles(studio):
         "framing": "portrait",
         "portrait": None,
         "voice": None,
+        "voice_model": None,
+        "voice_reference_id": None,
         "version": 1,
     }
     stale = await client.put(f"{base}/characters/oren", headers=headers, json=body)

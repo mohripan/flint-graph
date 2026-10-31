@@ -53,7 +53,7 @@ class FakeVoices:
         return VoiceResult(clips=tuple(clips), runtime=RUNTIME)
 
 
-async def run_voice_job(factory, store, payload, generator=None):
+async def run_voice_job(factory, store, payload, generator=None, generators=None):
     run_id = uuid4()
     async with factory() as session:
         await register_voice_workflow(
@@ -73,7 +73,10 @@ async def run_voice_job(factory, store, payload, generator=None):
         attempt=1,
     )
     work = NarrativeVoiceActivities(
-        factory=factory, generator=generator or FakeVoices(), store=store
+        factory=factory,
+        generator=generator or FakeVoices(),
+        store=store,
+        generators=generators or {},
     )
     return await env.run(work.run, payload)
 

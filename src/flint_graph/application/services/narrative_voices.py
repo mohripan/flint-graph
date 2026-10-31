@@ -1,11 +1,16 @@
-"""Character voices and local voice jobs (ADR 0043).
+"""Character voices and local voice jobs (ADR 0043, ADR 0044).
 
-A character's profile stores a Kokoro voice ID. API requests only record intent: a
-job is queued with an ID-only outbox message and Kokoro runs later (on the GPU, or
-the CPU when the shared card is busy) in a fenced activity of the registered workflow
-run (ADR 0037). Every spoken text becomes a candidate voice clip; only approval lets
-a story bind it. Audit metadata and
-outbox payloads carry identifiers, never the spoken text.
+A character's profile names a catalog voice model (Kokoro-82M by default) and either
+one of its stock voices or a private voice reference to clone (#176). API requests
+only record intent: a job is queued with an ID-only outbox message and the model runs
+later (on the GPU, or the CPU when the shared card is busy) in a fenced activity of
+the registered workflow run (ADR 0037). A job snapshots the model, the reference hash
+and its consent record, the language and each line's delivery (#177); a model whose
+license puts duties on its audio runs only for a creator who accepted that license in
+the workspace (#178). Every spoken text becomes a candidate voice clip whose
+provenance names the model and license, so obligations follow the clip; only approval
+lets a story bind it. Audit metadata and outbox payloads carry identifiers, never the
+spoken text or a speaker's name.
 """
 
 import re
@@ -26,7 +31,8 @@ from flint_graph.application.narrative_image_workflow import (
 )
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_characters import Profile, _editable
-from flint_graph.application.services.narrative_projects import get_project
+from flint_graph.application.services.narrative_package_v2 import bind_story_assets
+from flint_graph.application.services.narrative_projects import get_project, get_revision
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
 from flint_graph.domain.enums import AuditAction
 from flint_graph.domain.errors import (
@@ -39,6 +45,8 @@ from flint_graph.infrastructure.db.models import (
     NarrativeAsset,
     NarrativeCharacterProfile,
     NarrativeVoiceJob,
+    NarrativeVoiceLicenseAcceptance,
+    NarrativeVoiceReference,
     Tenant,
 )
 from flint_graph.infrastructure.narrative_imagegen import ModelIdentity
@@ -48,7 +56,17 @@ from flint_graph.infrastructure.narrative_voicegen import (
     VoiceRequest,
     VoiceResult,
 )
+from flint_graph.narrative.json_format import parse_json
 from flint_graph.narrative.values import canonical_json
+from flint_graph.narrative.voice_models import (
+    DEFAULT_MODEL,
+    LICENSES,
+    MODELS,
+    Delivery,
+    VoiceModelSpec,
+    clean_delivery,
+    license_by_sha256,
+)
 from flint_graph.narrative.voices import MAX_ITEMS, VOICE_IDS, clean_voice_text
 
 _ACTIVE = ("queued", "running")
@@ -60,11 +78,149 @@ def _now() -> datetime:
 
 
 @dataclass(frozen=True)
+class ReferenceWork:
+    """Which reference audio the activity reads from storage for the child."""
+
+    id: UUID
+    sha256: str
+    size_bytes: int
+    transcript: str | None
+
+
+@dataclass(frozen=True)
 class VoiceWork:
     tenant_id: UUID
     project_id: UUID
     job_id: UUID
     request: VoiceRequest
+    reference: ReferenceWork | None = None
+
+
+def _invalid_choice(detail: str) -> DomainError:
+    return DomainError(422, "Invalid voice", detail, "invalid-voice")
+
+
+def installed_spec(model_id: str, installed: frozenset[str]) -> VoiceModelSpec:
+    """A catalog model this server can run, or 422."""
+    spec = MODELS.get(model_id)
+    if spec is None or model_id not in installed:
+        raise _invalid_choice("Choose one of the voice models installed on this server.")
+    return spec
+
+
+def stock_voice_ids(spec: VoiceModelSpec) -> frozenset[str]:
+    if spec.engine == "kokoro":
+        return VOICE_IDS
+    return frozenset(voice.id for voice in spec.stock_voices)
+
+
+async def active_reference(
+    session: AsyncSession, *, tenant_id: UUID, project_id: UUID, reference_id: UUID
+) -> NarrativeVoiceReference:
+    reference = await session.scalar(
+        select(NarrativeVoiceReference).where(
+            NarrativeVoiceReference.tenant_id == tenant_id,
+            NarrativeVoiceReference.project_id == project_id,
+            NarrativeVoiceReference.id == reference_id,
+        )
+    )
+    if reference is None:
+        raise NotFoundError("Voice reference was not found.")
+    if reference.status != "active":
+        raise DomainError(
+            409,
+            "Reference deleted",
+            "This voice reference was deleted. Choose another reference.",
+            "voice-reference-deleted",
+        )
+    return reference
+
+
+async def has_accepted(
+    session: AsyncSession, *, tenant_id: UUID, user_id: UUID, spec: VoiceModelSpec
+) -> bool:
+    if spec.license.obligations == "none":
+        return True
+    found = await session.scalar(
+        select(NarrativeVoiceLicenseAcceptance.id).where(
+            NarrativeVoiceLicenseAcceptance.tenant_id == tenant_id,
+            NarrativeVoiceLicenseAcceptance.user_id == user_id,
+            NarrativeVoiceLicenseAcceptance.model_id == spec.id,
+            NarrativeVoiceLicenseAcceptance.license_sha256 == spec.license.sha256,
+        )
+    )
+    return found is not None
+
+
+async def accepted_models(
+    session: AsyncSession, *, tenant_id: UUID, user_id: UUID
+) -> frozenset[str]:
+    """Models whose current license text this creator accepted in this workspace."""
+    rows = await session.execute(
+        select(
+            NarrativeVoiceLicenseAcceptance.model_id,
+            NarrativeVoiceLicenseAcceptance.license_sha256,
+        ).where(
+            NarrativeVoiceLicenseAcceptance.tenant_id == tenant_id,
+            NarrativeVoiceLicenseAcceptance.user_id == user_id,
+        )
+    )
+    return frozenset(
+        model_id
+        for model_id, digest in rows
+        if model_id in MODELS and MODELS[model_id].license.sha256 == digest
+    )
+
+
+async def accept_license(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    user_id: UUID,
+    model_id: str,
+    license_sha256: str,
+    installed: frozenset[str],
+    actor: AuditActor,
+) -> NarrativeVoiceLicenseAcceptance:
+    spec = MODELS.get(model_id)
+    if spec is None or model_id not in installed:
+        raise NotFoundError("Voice model was not found.")
+    if license_sha256 != spec.license.sha256:
+        raise DomainError(
+            409,
+            "License changed",
+            "This license text changed since you opened it. Read it again before accepting.",
+            "voice-license-changed",
+        )
+    scope = (
+        NarrativeVoiceLicenseAcceptance.tenant_id == tenant_id,
+        NarrativeVoiceLicenseAcceptance.user_id == user_id,
+        NarrativeVoiceLicenseAcceptance.model_id == model_id,
+        NarrativeVoiceLicenseAcceptance.license_sha256 == license_sha256,
+    )
+    existing = await session.scalar(select(NarrativeVoiceLicenseAcceptance).where(*scope))
+    if existing is not None:
+        return existing
+    acceptance = NarrativeVoiceLicenseAcceptance(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        model_id=model_id,
+        license_id=spec.license_id,
+        license_sha256=license_sha256,
+    )
+    session.add(acceptance)
+    await session.flush()
+    await record_audit_event(
+        session,
+        tenant_id=tenant_id,
+        action=AuditAction.NARRATIVE_VOICE_LICENSE_ACCEPTED,
+        actor=actor,
+        resource_type="narrative_voice_model",
+        resource_id=model_id,
+        metadata={"license_id": spec.license_id, "license_sha256": license_sha256},
+    )
+    await session.refresh(acceptance)
+    return acceptance
 
 
 async def set_character_voice(
@@ -76,9 +232,24 @@ async def set_character_voice(
     base_version: int,
     voice: str | None,
     author_user_id: UUID,
+    model: str | None = None,
+    reference_id: UUID | None = None,
+    installed: frozenset[str] = frozenset({DEFAULT_MODEL}),
 ) -> Profile:
-    if voice is not None and voice not in VOICE_IDS:
-        raise DomainError(422, "Invalid voice", "Choose one of the listed voices.", "invalid-voice")
+    """A stock voice or a reference to clone; switching never touches made clips."""
+    if voice is not None and reference_id is not None:
+        raise _invalid_choice("Choose a stock voice or a voice reference, not both.")
+    spec = None
+    if voice is not None or reference_id is not None:
+        spec = installed_spec(model or DEFAULT_MODEL, installed | {DEFAULT_MODEL})
+        if voice is not None and voice not in stock_voice_ids(spec):
+            raise _invalid_choice("Choose one of the listed voices.")
+        if reference_id is not None:
+            if not spec.cloning:
+                raise _invalid_choice(f"{spec.name} cannot clone a voice from a reference.")
+            await active_reference(
+                session, tenant_id=tenant_id, project_id=project_id, reference_id=reference_id
+            )
     profile = await _editable(
         session,
         tenant_id=tenant_id,
@@ -88,6 +259,8 @@ async def set_character_voice(
         author_user_id=author_user_id,
     )
     profile.voice = voice
+    profile.voice_model = spec.id if spec is not None else None
+    profile.voice_reference_id = reference_id
     await session.flush()
     portrait = (
         await session.get(NarrativeAsset, profile.portrait_asset_id)
@@ -101,9 +274,12 @@ def _invalid(detail: str) -> DomainError:
     return DomainError(422, "Invalid voice request", detail, "invalid-voice-request")
 
 
-def clean_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def clean_items(
+    items: list[dict[str, Any]], spec: VoiceModelSpec | None = None
+) -> list[dict[str, Any]]:
     if not 1 <= len(items) <= MAX_ITEMS:
         raise _invalid(f"Ask for 1 to {MAX_ITEMS} clips at a time.")
+    model = spec or MODELS[DEFAULT_MODEL]
     cleaned = []
     for item in items:
         node_id = item.get("node_id")
@@ -111,10 +287,23 @@ def clean_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             raise _invalid("Check the line each clip is for.")
         try:
             text = clean_voice_text(str(item.get("text", "")), str(item.get("mode", "")))
+            delivery = clean_delivery(item.get("delivery"), model)
         except ValueError as error:
             raise _invalid(str(error)) from None
-        cleaned.append({"mode": item["mode"], "text": text, "node_id": node_id})
+        cleaned.append(
+            {"mode": item["mode"], "text": text, "node_id": node_id, "delivery": delivery.as_dict()}
+        )
     return cleaned
+
+
+def _consent(reference: NarrativeVoiceReference) -> dict[str, Any]:
+    return {
+        "reference_id": str(reference.id),
+        "consent": reference.consent,
+        "speaker_name": reference.speaker_name,
+        "declared_by_user_id": str(reference.consent_declared_by_user_id),
+        "declared_at": reference.consent_declared_at.isoformat(),
+    }
 
 
 async def create_voice_job(
@@ -129,6 +318,8 @@ async def create_voice_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
+    installed: frozenset[str] = frozenset({DEFAULT_MODEL}),
+    language: str = "en",
 ) -> NarrativeVoiceJob:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -139,7 +330,6 @@ async def create_voice_job(
     project = await get_project(
         session, tenant_id=tenant_id, project_id=project_id, for_update=True
     )
-    cleaned = clean_items(items)
     profile = await session.scalar(
         select(NarrativeCharacterProfile).where(
             NarrativeCharacterProfile.tenant_id == tenant_id,
@@ -148,7 +338,18 @@ async def create_voice_job(
         )
     )
     voice = profile.voice if profile is not None else None
-    identity = {"character_id": character_id, "voice": voice, "items": cleaned}
+    reference_id = profile.voice_reference_id if profile is not None else None
+    model_id = (profile.voice_model if profile is not None else None) or DEFAULT_MODEL
+    spec = MODELS.get(model_id)
+    cleaned = clean_items(items, spec)
+    identity = {
+        "character_id": character_id,
+        "model": model_id,
+        "voice": voice,
+        "reference_id": str(reference_id) if reference_id else None,
+        "language": language,
+        "items": cleaned,
+    }
     request_hash = sha256(canonical_json(identity)).hexdigest()
     existing = await session.scalar(
         select(NarrativeVoiceJob).where(
@@ -169,13 +370,36 @@ async def create_voice_job(
             "Voice generation is not configured on this server. Lines can stay silent.",
             "voice-generation-unavailable",
         )
-    if voice is None:
+    if voice is None and reference_id is None:
         raise DomainError(
             409,
             "No voice chosen",
             "Choose a voice for this character first.",
             "voice-not-chosen",
         )
+    if spec is None or model_id not in installed | {DEFAULT_MODEL}:
+        raise DomainError(
+            409,
+            "Voice model unavailable",
+            "This character's voice model is not installed on this server. Choose another.",
+            "voice-model-unavailable",
+        )
+    if language not in spec.languages:
+        raise _invalid(f"{spec.name} does not speak this story's language.")
+    if not await has_accepted(session, tenant_id=tenant_id, user_id=author_user_id, spec=spec):
+        raise DomainError(
+            409,
+            "License not accepted",
+            f"Read and accept the {spec.license.name} before generating with {spec.name}.",
+            "voice-license-not-accepted",
+        )
+    reference = (
+        await active_reference(
+            session, tenant_id=tenant_id, project_id=project_id, reference_id=reference_id
+        )
+        if reference_id is not None
+        else None
+    )
     active = (
         await session.scalar(
             select(func.count(NarrativeVoiceJob.id)).where(
@@ -194,7 +418,12 @@ async def create_voice_job(
         requested_by_user_id=author_user_id,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
+        voice_model=model_id,
         voice=voice,
+        reference_id=reference.id if reference else None,
+        reference_sha256=reference.sha256 if reference else None,
+        consent=_consent(reference) if reference else None,
+        language=language,
         speed=1.0,
         seed=secrets.randbelow(2**32),
         items=cleaned,
@@ -222,10 +451,66 @@ async def create_voice_job(
         actor=actor,
         resource_type="narrative_voice_job",
         resource_id=job.id,
-        metadata={"project_id": str(project_id), "count": job.count},
+        metadata={"project_id": str(project_id), "count": job.count, "model": model_id},
     )
     await session.refresh(job)
     return job
+
+
+@dataclass(frozen=True)
+class CarriedLicense:
+    license_id: str
+    name: str
+    obligations: str
+    summary: str
+    # (line node ID, story asset key) pairs whose clips cause this license.
+    lines: tuple[tuple[str, str], ...]
+
+
+async def revision_voice_licenses(
+    session: AsyncSession, *, tenant_id: UUID, project_id: UUID, revision_id: UUID
+) -> list[CarriedLicense]:
+    """The voice model licenses a release of this revision carries, and why (#178)."""
+    revision = await get_revision(
+        session, tenant_id=tenant_id, project_id=project_id, revision_id=revision_id
+    )
+    story = parse_json(revision.story_json.encode("utf-8"), limit=5 * 1024 * 1024)
+    audio = {key: item for key, item in story["assets"].items() if item["kind"] == "audio"}
+    if not audio:
+        return []
+    bound = await bind_story_assets(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        assets=audio,
+        budget=2**40,
+        lock=False,
+    )
+    by_key: dict[str, list[str]] = {}
+    for node_id, node in sorted(story["nodes"].items()):
+        clip = node.get("voice", {}).get("audio") if node["type"] == "line" else None
+        if clip is not None:
+            by_key.setdefault(clip, []).append(node_id)
+    found: dict[str, list[tuple[str, str]]] = {}
+    for item in bound:
+        named = item.asset.provenance.get("license") if item.asset.source == "generated" else None
+        license = license_by_sha256(str(named.get("sha256"))) if isinstance(named, dict) else None
+        if license is not None:
+            lines = found.setdefault(license.id, [])
+            lines.extend((node_id, item.key) for node_id in by_key.get(item.key, []))
+    carried = []
+    for license_id in sorted(found):
+        license = LICENSES[license_id]
+        carried.append(
+            CarriedLicense(
+                license_id=license.id,
+                name=license.name,
+                obligations=license.obligations,
+                summary=license.summary,
+                lines=tuple(sorted(found[license_id])),
+            )
+        )
+    return carried
 
 
 async def _assets(session: AsyncSession, job_ids: list[UUID]) -> dict[UUID, list[NarrativeAsset]]:
@@ -395,6 +680,21 @@ async def claim_voice_job(
         _finish(job, "cancelled")
         await session.flush()
         return None
+    reference = (
+        await session.get(NarrativeVoiceReference, job.reference_id)
+        if job.reference_id is not None
+        else None
+    )
+    if job.reference_id is not None and (
+        reference is None
+        or reference.status != "active"
+        or reference.sha256 != job.reference_sha256
+    ):
+        # Deleting a reference blocks every job that has not spoken yet.
+        job.error_code = "reference_deleted"
+        _finish(job, "failed")
+        await session.flush()
+        return None
     job.status = "running"
     job.execution_token = execution_token
     job.activity_attempt = activity_attempt
@@ -409,7 +709,26 @@ async def claim_voice_job(
             voice=job.voice,
             speed=job.speed,
             seed=job.seed,
-            items=tuple(VoiceItem(text=item["text"], mode=item["mode"]) for item in job.items),
+            items=tuple(
+                VoiceItem(
+                    text=item["text"],
+                    mode=item["mode"],
+                    delivery=Delivery(**item["delivery"]) if item.get("delivery") else None,
+                )
+                for item in job.items
+            ),
+            model=job.voice_model,
+            language=job.language,
+        ),
+        reference=(
+            ReferenceWork(
+                id=reference.id,
+                sha256=reference.sha256,
+                size_bytes=reference.size_bytes,
+                transcript=reference.transcript,
+            )
+            if reference is not None
+            else None
         ),
     )
 
@@ -433,6 +752,51 @@ def clip_name(job: NarrativeVoiceJob, index: int) -> str:
     if item["mode"] == "vocalization":
         return f"{job.character_id} ({item['text']})"[:120]
     return f"{job.character_id}: {textwrap.shorten(item['text'], width=80, placeholder='…')}"[:120]
+
+
+def _provenance(
+    job: NarrativeVoiceJob,
+    model: ModelIdentity,
+    item: dict[str, Any],
+    clip: GeneratedClip,
+    result: VoiceResult,
+) -> dict[str, Any]:
+    """What made this clip; the license travels with it, not with the character."""
+    spec = MODELS[job.voice_model]
+    made: dict[str, Any] = {
+        "generator": f"local-{spec.engine}",
+        "model_id": spec.id,
+        "model_repo": model.repo,
+        "model_revision": model.revision,
+        "license": {
+            "id": spec.license.id,
+            "name": spec.license.name,
+            "sha256": spec.license.sha256,
+            "obligations": spec.license.obligations,
+        },
+        "voice": job.voice,
+        "speed": job.speed,
+        "mode": item["mode"],
+        "text": item["text"],
+        "node_id": item.get("node_id"),
+        "delivery": item.get("delivery") or Delivery().as_dict(),
+        "language": job.language,
+        "seed": job.seed + clip.index,
+        "device": clip.device,
+        "watermark": spec.watermark,
+        "runtime": result.runtime,
+    }
+    if job.consent is not None:
+        consent = job.consent
+        made["reference"] = {
+            "id": consent["reference_id"],
+            "sha256": job.reference_sha256,
+            "consent": consent["consent"],
+            "speaker_name": consent["speaker_name"],
+            "declared_by_user_id": consent["declared_by_user_id"],
+            "declared_at": consent["declared_at"],
+        }
+    return made
 
 
 async def complete_voice_job(
@@ -459,6 +823,7 @@ async def complete_voice_job(
         await session.flush()
         return job
     finished = _now()
+    spec = MODELS[job.voice_model]
     # Identical bytes are one asset per project; a repeated clip adds nothing new.
     known = set(
         await session.scalars(
@@ -492,20 +857,9 @@ async def complete_voice_job(
                 size_bytes=len(clip.data),
                 duration_ms=max(1, clip.duration_ms),
                 seed=job.seed + clip.index,
-                provenance={
-                    "generator": "local-kokoro",
-                    "model_repo": model.repo,
-                    "model_revision": model.revision,
-                    "voice": job.voice,
-                    "speed": job.speed,
-                    "mode": item["mode"],
-                    "text": item["text"],
-                    "node_id": item.get("node_id"),
-                    "seed": job.seed + clip.index,
-                    "device": clip.device,
-                    "runtime": result.runtime,
-                },
-                license=model.license[:120],
+                provenance=_provenance(job, model, item, clip, result),
+                license=spec.license.name[:120],
+                notice=spec.license.notice or None,
                 status="candidate",
                 created_by_user_id=job.requested_by_user_id,
             )

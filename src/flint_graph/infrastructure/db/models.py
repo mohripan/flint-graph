@@ -85,9 +85,6 @@ from flint_graph.infrastructure.db.narrative_character_models import (
 from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeVoiceJob as NarrativeVoiceJob,
 )
-from flint_graph.infrastructure.db.narrative_voice_models import (
-    NarrativeVoiceReference as NarrativeVoiceReference,
-)
 from flint_graph.infrastructure.db.narrative_models import NarrativeProject as NarrativeProject
 from flint_graph.infrastructure.db.narrative_models import (
     NarrativeProjectLayout as NarrativeProjectLayout,
@@ -104,6 +101,15 @@ from flint_graph.infrastructure.db.narrative_release_models import (
 )
 from flint_graph.infrastructure.db.narrative_release_models import (
     NarrativeReleaseJob as NarrativeReleaseJob,
+)
+from flint_graph.infrastructure.db.narrative_voice_models import (
+    NarrativeLineDelivery as NarrativeLineDelivery,
+)
+from flint_graph.infrastructure.db.narrative_voice_models import (
+    NarrativeVoiceLicenseAcceptance as NarrativeVoiceLicenseAcceptance,
+)
+from flint_graph.infrastructure.db.narrative_voice_models import (
+    NarrativeVoiceReference as NarrativeVoiceReference,
 )
 
 

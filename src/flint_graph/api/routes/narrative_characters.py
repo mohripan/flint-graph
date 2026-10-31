@@ -84,6 +84,8 @@ def _profile(row: NarrativeCharacterProfile, portrait: NarrativeAsset | None) ->
         framing=row.framing,
         portrait=AssetResponse.model_validate(portrait) if portrait is not None else None,
         voice=row.voice,
+        voice_model=row.voice_model or ("kokoro-82m" if row.voice else None),
+        voice_reference_id=row.voice_reference_id,
         version=row.version,
     )
 

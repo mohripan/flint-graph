@@ -1,8 +1,9 @@
 """Explicit opt-in voice worker: dispatch, local speech and recovery (ADR 0043).
 
 It consumes only voice outbox topics and runs on its own task queue, one job at a
-time. The Kokoro directory is verified against its pinned manifest before any job
-runs. Logs carry counts, never the spoken text.
+time. The Kokoro directory and every other installed catalog model (ADR 0044) are
+verified against their pinned manifests before any job runs. Logs carry counts,
+never the spoken text.
 """
 
 import asyncio
@@ -25,7 +26,11 @@ from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_image_temporal import TemporalImageDispatcher
 from flint_graph.infrastructure.narrative_voicegen import (
+    LocalEngineVoiceGenerator,
     LocalVoiceGenerator,
+    VoiceGenerator,
+    engine_spec,
+    verify_engine_model,
     verify_voice_model,
     voice_runtime_paths,
 )
@@ -87,12 +92,40 @@ def build_generator(configured: Settings) -> LocalVoiceGenerator:
     )
 
 
+def build_engines(configured: Settings, cuda_cache: Path) -> dict[str, VoiceGenerator]:
+    """One verified generator per installed catalog model besides Kokoro."""
+    engines: dict[str, VoiceGenerator] = {}
+    for model_id, install in configured.narrative_voice_models.items():
+        spec = engine_spec(model_id)
+        python, script = voice_runtime_paths(Path(install.runtime_dir))
+        if not python.is_file() or not script.is_file():
+            raise SystemExit(f"The {model_id} voice runtime is not installed; run uv sync there.")
+        model_dir = Path(install.model_dir)
+        try:
+            identity = verify_engine_model(model_dir, install.manifest_sha256, spec)
+        except (OSError, ValueError):
+            raise SystemExit(f"The {model_id} voice model does not match its pin.") from None
+        engines[model_id] = LocalEngineVoiceGenerator(
+            spec=spec,
+            python=python,
+            script=script,
+            model_dir=model_dir.resolve(),
+            model=identity,
+            deadline_seconds=configured.narrative_voice_job_deadline_seconds,
+            device=configured.narrative_voice_device,
+            cuda_cache=cuda_cache,
+        )
+    return engines
+
+
 async def run_worker(settings: Settings | None = None) -> None:
     configured = settings or get_settings()
     if not configured.narrative_voice_worker_enabled:
         raise SystemExit("The voice worker is disabled; explicit operator opt-in is required.")
     generator = await asyncio.to_thread(build_generator, configured)
-    logger.info("voice model verified")
+    assert generator.cuda_cache is not None
+    engines = await asyncio.to_thread(build_engines, configured, generator.cuda_cache)
+    logger.info("voice models verified: %d", 1 + len(engines))
     # No generic tracing interceptor: workflow headers/memo stay closed, IDs-only.
     temporal = await Client.connect(
         configured.temporal_address, namespace=configured.temporal_namespace
@@ -105,7 +138,9 @@ async def run_worker(settings: Settings | None = None) -> None:
     factory = async_sessionmaker(engine, expire_on_commit=False)
     client = create_s3_client(configured, max_attempts=3)
     store = S3NarrativeArtifactStore(client, bucket=configured.object_store_bucket)
-    activities = NarrativeVoiceActivities(factory=factory, generator=generator, store=store)
+    activities = NarrativeVoiceActivities(
+        factory=factory, generator=generator, store=store, generators=engines
+    )
     try:
         async with Worker(
             temporal,

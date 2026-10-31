@@ -300,7 +300,7 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class NarrativeVoiceJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """One fenced local Kokoro run speaking up to 24 texts in one character's voice."""
+    """One fenced local voice-model run speaking up to 24 texts in one character's voice."""
 
     __tablename__ = "narrative_voice_jobs"
     __table_args__ = (
@@ -334,6 +334,22 @@ class NarrativeVoiceJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("count BETWEEN 1 AND 24", name="ck_narrative_voice_job_count"),
         CheckConstraint("progress BETWEEN 0 AND count", name="ck_narrative_voice_job_progress"),
         CheckConstraint("speed BETWEEN 0.7 AND 1.3", name="ck_narrative_voice_job_speed"),
+        ForeignKeyConstraint(
+            ["reference_id", "project_id", "tenant_id"],
+            [
+                "narrative_voice_references.id",
+                "narrative_voice_references.project_id",
+                "narrative_voice_references.tenant_id",
+            ],
+            name="fk_narrative_voice_job_reference",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(voice IS NOT NULL AND reference_id IS NULL AND reference_sha256 IS NULL "
+            "AND consent IS NULL) OR (voice IS NULL AND reference_id IS NOT NULL "
+            "AND reference_sha256 IS NOT NULL AND consent IS NOT NULL)",
+            name="ck_narrative_voice_job_one_voice",
+        ),
         Index(
             "ix_narrative_voice_job_active",
             "tenant_id",
@@ -349,10 +365,18 @@ class NarrativeVoiceJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     idempotency_key: Mapped[UUID]
     request_hash: Mapped[str] = mapped_column(String(64))
-    voice: Mapped[str] = mapped_column(String(32))
+    # A catalog model (ADR 0044) and either its stock voice or a voice reference, whose
+    # hash and consent record are copied here when the job is queued.
+    voice_model: Mapped[str] = mapped_column(String(64), default="kokoro-82m")
+    voice: Mapped[str | None] = mapped_column(String(32))
+    reference_id: Mapped[UUID | None]
+    reference_sha256: Mapped[str | None] = mapped_column(String(64))
+    consent: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True))
+    language: Mapped[str] = mapped_column(String(8), default="en")
     speed: Mapped[float] = mapped_column(Float)
     seed: Mapped[int] = mapped_column(BigInteger)
-    # [{"mode": "full" | "vocalization", "text": str, "node_id": str | None}]
+    # [{"mode": "full" | "vocalization", "text": str, "node_id": str | None,
+    #   "delivery": {"emotion": str, "intensity": float, "tag": str | None}}]
     items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     count: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), default="queued")
@@ -425,7 +449,21 @@ class NarrativeCharacterProfile(TimestampMixin, Base):
             name="fk_narrative_character_profile_portrait",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["voice_reference_id", "project_id", "tenant_id"],
+            [
+                "narrative_voice_references.id",
+                "narrative_voice_references.project_id",
+                "narrative_voice_references.tenant_id",
+            ],
+            name="fk_narrative_character_profile_reference",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("version > 0", name="ck_narrative_character_profile_version"),
+        CheckConstraint(
+            "voice IS NULL OR voice_reference_id IS NULL",
+            name="ck_narrative_character_profile_one_voice",
+        ),
     )
     project_id: Mapped[UUID]
     character_id: Mapped[str] = mapped_column(String(64))
@@ -434,7 +472,10 @@ class NarrativeCharacterProfile(TimestampMixin, Base):
     character_type: Mapped[str] = mapped_column(String(16))
     framing: Mapped[str] = mapped_column(String(16))
     portrait_asset_id: Mapped[UUID | None]
-    # A Kokoro voice ID (ADR 0043), e.g. "af_heart"; editor metadata like the portrait.
+    # A stock voice of ``voice_model`` (a Kokoro voice ID such as "af_heart" when the
+    # model is unset), or none when the voice is cloned from ``voice_reference_id``.
     voice: Mapped[str | None] = mapped_column(String(32))
+    voice_model: Mapped[str | None] = mapped_column(String(64))
+    voice_reference_id: Mapped[UUID | None]
     version: Mapped[int] = mapped_column(Integer)
     updated_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))

@@ -1,7 +1,14 @@
-"""Voice activity edge (ADR 0043): texts and clips stay here; history gets IDs and status."""
+"""Voice activity edge (ADR 0043/0044): texts, references and clips stay here.
+
+Temporal history gets IDs and status only. Each catalog model has its own local
+generator; a cloned voice's reference audio is read from private storage, verified
+against the hash the job snapshotted and handed to that model's child, nowhere else.
+"""
 
 import asyncio
+from collections.abc import Mapping
 from contextlib import suppress
+from dataclasses import replace
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -21,6 +28,7 @@ from flint_graph.application.narrative_image_workflow import (
 )
 from flint_graph.application.services.narrative_voices import (
     VoiceRegistrationPending,
+    VoiceWork,
     abandon_voice_job,
     claim_voice_job,
     complete_voice_job,
@@ -31,14 +39,17 @@ from flint_graph.infrastructure.db.models import NarrativeVoiceJob
 from flint_graph.infrastructure.narrative_artifact_store import (
     ArtifactStoreError,
     asset_object_key,
+    voice_reference_object_key,
 )
 from flint_graph.infrastructure.narrative_voicegen import (
     GeneratedClip,
+    ReferenceInput,
     VoiceGenerationError,
     VoiceGenerator,
     VoiceRequest,
     VoiceResult,
 )
+from flint_graph.narrative.voice_models import DEFAULT_MODEL
 from flint_graph.narrative.wav import AUDIO_LIMIT
 from flint_graph.worker.activities.narrative_image import ImageStore
 
@@ -67,8 +78,13 @@ class NarrativeVoiceActivities:
         factory: async_sessionmaker[AsyncSession],
         generator: VoiceGenerator | None,
         store: ImageStore,
+        generators: Mapping[str, VoiceGenerator] | None = None,
     ) -> None:
         self.factory, self.generator, self.store = factory, generator, store
+        # Kokoro (the default) plus every other installed catalog model by ID.
+        self.generators: dict[str, VoiceGenerator] = dict(generators or {})
+        if generator is not None:
+            self.generators.setdefault(DEFAULT_MODEL, generator)
 
     @staticmethod
     def _context(payload: object, *, finalizer: bool = False) -> tuple[ImageJobPayload, UUID, int]:
@@ -113,6 +129,24 @@ class NarrativeVoiceActivities:
 
         return await generator.generate(request, on_progress=progress)
 
+    async def _request(self, work: VoiceWork) -> VoiceRequest:
+        if work.reference is None:
+            return work.request
+        data = await self.store.get_verified(
+            voice_reference_object_key(
+                tenant_id=work.tenant_id,
+                project_id=work.project_id,
+                reference_id=work.reference.id,
+            ),
+            expected_size=work.reference.size_bytes,
+            expected_sha256=work.reference.sha256,
+            max_bytes=AUDIO_LIMIT,
+        )
+        reference = ReferenceInput(
+            data=data, sha256=work.reference.sha256, transcript=work.reference.transcript
+        )
+        return replace(work.request, reference=reference)
+
     async def _store(
         self, tenant_id: UUID, project_id: UUID, clips: tuple[GeneratedClip, ...]
     ) -> list[tuple[UUID, GeneratedClip]]:
@@ -149,12 +183,16 @@ class NarrativeVoiceActivities:
             raise ApplicationError("registration_pending", type="registration_pending") from None
         if work is None:
             return _outcome(job_id, None)
-        if self.generator is None:
+        generator = self.generators.get(work.request.model)
+        if generator is None:
             return await self._fail(job_id, token, "voice_generation_unavailable")
-        generator = self.generator
         beating = asyncio.create_task(_heartbeat())
         try:
-            result = await self._generate(generator, work.request, job_id, token)
+            try:
+                request = await self._request(work)
+            except ArtifactStoreError:
+                return await self._fail(job_id, token, "reference_unavailable")
+            result = await self._generate(generator, request, job_id, token)
             stored = await self._store(work.tenant_id, work.project_id, result.clips)
         except VoiceGenerationError as error:
             return await self._fail(job_id, token, error.code)

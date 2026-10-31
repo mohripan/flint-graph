@@ -284,7 +284,11 @@ async def load_release_input(
         )
     except DomainError:
         raise ReleaseInputError("input_integrity") from None
-    if compose_notices(revision.notices, bound) != revision.notices:
+    try:
+        recomposed = compose_notices(revision.notices, bound)
+    except PackageError:
+        raise ReleaseInputError("input_integrity") from None
+    if recomposed != revision.notices:
         raise ReleaseInputError("input_integrity")
     sources = tuple(
         AssetSource(

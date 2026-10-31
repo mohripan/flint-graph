@@ -175,8 +175,11 @@ class ProfileResponse(BaseModel):
     character_type: str
     framing: str
     portrait: AssetResponse | None
-    # A Kokoro voice ID (ADR 0043); editor metadata like the portrait.
+    # A stock voice of ``voice_model`` or a reference to clone (ADR 0043/0044); editor
+    # metadata like the portrait.
     voice: str | None = None
+    voice_model: str | None = None
+    voice_reference_id: UUID | None = None
     version: int
 
 

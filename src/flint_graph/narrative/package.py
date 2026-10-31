@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flint_graph.narrative.font import validate_font
 from flint_graph.narrative.json_format import parse_json
+from flint_graph.narrative.player_terms import player_terms
 from flint_graph.narrative.png import validate_png
 from flint_graph.narrative.validation import validate_story
 from flint_graph.narrative.values import Asset, PackageError, StoryPackage, canonical_json
@@ -45,6 +46,7 @@ def load_text_package(
         raise PackageError("invalid_text", "NOTICES.txt") from None
     if "\x00" in notice_text:
         raise PackageError("invalid_text", "NOTICES.txt")
+    player_terms(notice_text)  # A malformed terms block is refused everywhere (ADR 0044).
     canonical = canonical_json(story)
     if len(canonical) > STORY_LIMIT:
         raise PackageError("size_limit", "story.json")
@@ -154,6 +156,7 @@ def load_package(root: Path) -> StoryPackage:
         notice_text = notices.decode("utf-8")
         if "\x00" in notice_text:
             raise PackageError("invalid_text", "NOTICES.txt")
+        player_terms(notice_text)
         assets: list[Asset] = []
         total = len(canonical_json(story)) + len(notices)
         for key, item in sorted(story["assets"].items()):
