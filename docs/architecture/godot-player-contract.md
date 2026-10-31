@@ -1,6 +1,6 @@
 # Godot authored player
 
-M30 / #120, trusted runtime **0.5.0** (story format 2 with CGs/gallery, ADR 0042), qualified with Godot
+M30 / #120, trusted runtime **0.6.0** (story format 2 with CGs/gallery, ADR 0042, and voiced lines, ADR 0043), qualified with Godot
 `4.7.2.stable.official.ed1daf0bf` on Windows x86-64. The exported source runs
 without the backend, a model, credentials or an account. The compiler supplies a
 strictly validated immutable package; arbitrary creator scripts are not inputs.
@@ -64,6 +64,15 @@ carry it, with absent fields in older saves loading as null. Gallery lists every
 CG in stable structural first-use order; seen entries unlock outside slot saves
 in `user://flint_graph/gallery-<story id>.json`. Studio playtests override both
 gallery persistence hooks to keep unlocks in memory. See [ADR 0042](../adr/0042-event-cgs-and-gallery.md).
+
+Runtime 0.6.0 adds `audio` assets (canonical 16-bit PCM WAV, `assets/<id>.wav`, up to
+10 MiB and 60 s) and an optional line `voice` (`full` or `vocalization` with its
+sound, optionally an `audio` clip). Views and frames carry `voice`: the settled line's
+clip or null. The stage view parses the canonical WAV form strictly (anything else
+stays silent), starts the clip one frame after the line settles, stops it on the next
+screen and replays it after Load or Restart. The toolbar's Voice slider (0–100 %,
+steps of 10) is stored in `user://flint_graph/settings.json`; Studio playtests keep it
+in memory. See [ADR 0043](../adr/0043-asset-folders-and-line-voices.md).
 
 ## Local saves and stale input
 

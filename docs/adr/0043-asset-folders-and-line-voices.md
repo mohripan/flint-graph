@@ -1,7 +1,9 @@
 # ADR 0043: Asset folders and voiced dialogue lines
 
-Date: 2026-10-31. Status: accepted for implementation (tracking #163 groundwork, #128,
-#161). Design: [spec](../superpowers/specs/2026-10-31-asset-folders-and-line-voices-design.md).
+Date: 2026-10-31. Status: accepted and delivered (tracking #163 groundwork, #128, #161).
+Design: [spec](../superpowers/specs/2026-10-31-asset-folders-and-line-voices-design.md).
+Delivery: [report](../reports/2026-10-31-asset-folders-and-line-voices.md),
+[runbook](../runbooks/narrative-voice-generation.md).
 
 ## Context
 

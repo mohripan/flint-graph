@@ -53,8 +53,8 @@ containers and playtest build. In order, it:
    playtest build was made for another frontend origin or Godot runtime version
    (rebuild it as below);
 3. applies `alembic upgrade head` (`--no-migrate` skips it);
-4. runs the API, the release worker and relay, the assistant and image workers, the
-   playtest server and the frontend, prefixing each line of output with its name,
+4. runs the API, the release worker and relay, the assistant, image and voice
+   workers, the playtest server and the frontend, prefixing each line of output with its name,
    and prints `ready` once the API, playtest and frontend answer.
 
 Ctrl+C stops every process it started. Closing the window or killing the launcher

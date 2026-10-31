@@ -108,6 +108,16 @@ panel picks CGs and previews the overlay; Assets → CGs browses and uploads the
 library with a dedicated CG panel. See
 `docs/reports/2026-10-31-event-cgs.md` for parity, private builder/preview and real
 release qualification. Art generation from character references remains separate work.
+[ADR 0043](docs/adr/0043-asset-folders-and-line-voices.md) adds editor-only asset folders
+(migration 0028; automatic groups by kind and character) and voiced lines on runtime 0.6.0:
+format 2 `audio` assets (canonical WAV) and an optional line `voice` (full or a
+vocalization such as "fufu"; silent by default), played by all four implementations with a
+player Voice slider. Clips come from Kokoro-82M on the CPU through the opt-in
+`narrative_voice_worker` and the isolated `runtimes/voicegen` child (migration 0029; a
+Kokoro voice per character profile), or from WAV uploads. Read
+`docs/reports/2026-10-31-asset-folders-and-line-voices.md` and
+`docs/runbooks/narrative-voice-generation.md`; the launcher's `voice` service needs the
+voice settings in `studio.local.env`.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-31",
+  "runtime_version": "0.6.0",
+  "builder": {
+    "image": "sha256:9ba436ec35788419d20a005ac1ffbbcb0eb0a3ab7fe543528b4302dc8eb93292",
+    "toolchain_sha256": "10d8bc618dce4067d5abaa784db4a4713a3d3ab090fc913891cd24ebd92f1b96"
+  },
+  "voice_model": {
+    "repo": "hexgrad/Kokoro-82M",
+    "revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+    "license": "apache-2.0",
+    "runtime": {"torch": "2.11.0+cpu", "kokoro": "0.9.4", "misaki": "0.9.4", "device": "cpu"}
+  },
+  "child_probe": {
+    "items": ["full: The lanterns are lit again. Someone must have come back.", "vocalization: Fufu"],
+    "voice": "bf_emma",
+    "samples": [93600, 20400],
+    "wall_seconds_including_load": 13.4
+  },
+  "live_run": {
+    "voices": {"mira": "bf_emma", "quen": "af_bella"},
+    "lines": {"opening": "full", "laugh": "vocalization fufu", "tide": "narration (no voice control)", "late": "silent"},
+    "clips": {
+      "mira_the_lanterns_are_lit_again_someone_must_have_come_b": {"sha256": "880dd022d9105e5d6a06307a4dfc0f26053dc3ba8945af1ba0bce5c51a8b39b1", "seconds": 3.9},
+      "quen_fufu": {"sha256": "ee5852507bb2c0d97fb2e9b3682a5d034bc88139a8fa8b3278dcf771653ca0ea", "seconds": 1.5}
+    },
+    "revision": 3,
+    "release": {
+      "status": "completed",
+      "source_assets": ["content/assets/mira_the_lanterns_are_lit_again_someone_must_have_come_b.wav", "content/assets/quen_fufu.wav"],
+      "web_zip_bytes": 10553605,
+      "played": [
+        {"node": "opening", "clip": "mira_the_lanterns_are_lit_again_someone_must_have_come_b", "playing": true},
+        {"node": "laugh", "clip": "quen_fufu", "playing": true},
+        {"node": "tide", "clip": null, "playing": false}
+      ],
+      "voice_volume_after_reload": 30
+    },
+    "folders": {"created": ["Voices", "Voices / Harbor scene"], "moved": 2}
+  }
+}
