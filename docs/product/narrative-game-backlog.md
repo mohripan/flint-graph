@@ -2,7 +2,9 @@
 
 Created: 2026-10-27; dependency review updated 2026-10-30. The original five
 milestones contained 21 issues. The user added #133–#167 across four further
-milestones and shared conversation work. These additions are planned, not delivered.
+milestones and shared conversation work. On 2026-10-31 the user added M39
+(#173–#177) for voice references and expressive delivery. These additions are
+planned, not delivered.
 
 The [product brief](narrative-game-studio.md) explains the direction. Review the
 [M30 written contract](../superpowers/specs/2026-10-27-portable-story-runtime-design.md)
@@ -163,6 +165,24 @@ data-only staging and bounded formats, with no arbitrary scripts/shaders or remo
 assets. Manual uploads must work without a model. The shared runtime needs actual
 Python/browser/Godot parity and accessibility qualification. #167 specializes #129
 for consistent v2 art; it does not bypass asset review or model-call budgets.
+
+## M39: expressive and cloned character voices
+
+[Milestone](https://github.com/mohripan/flint-graph/milestone/26) ·
+[Tracking issue #173](https://github.com/mohripan/flint-graph/issues/173)
+
+| Issue | Deliverable | Dependency/order |
+| --- | --- | --- |
+| [#174](https://github.com/mohripan/flint-graph/issues/174) | Choose, pin and isolate a local cloning/expressive voice model; ADR | ADR 0043; first |
+| [#175](https://github.com/mohripan/flint-graph/issues/175) | Private voice references with a consent declaration | ADR 0043; parallel with #174 |
+| [#176](https://github.com/mohripan/flint-graph/issues/176) | Character voices cloned from an approved reference | #174, #175 |
+| [#177](https://github.com/mohripan/flint-graph/issues/177) | Per-line delivery (emotion and intensity), defaulting from the line's expression | #174; coordinate with #176 |
+
+[ADR 0043](../adr/0043-asset-folders-and-line-voices.md) delivered line voices with
+Kokoro-82M, which has fixed English voices and no emotion control. Kokoro stays the
+default; the new model is opt-in per character. Cloning needs a recorded consent
+declaration, references are private project data that never ship, and weights must
+allow use in released games. No paid or remote voice service is required.
 
 ## Current sequencing
 
