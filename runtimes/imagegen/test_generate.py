@@ -107,7 +107,7 @@ class MaskToAlphaTest(unittest.TestCase):
         self.assertGreater(float(mask.min()), 0.99)
 
 
-class RequestTest(unittest.TestCase):
+class ChildRequestCase(unittest.TestCase):
     def setUp(self):
         self.work = tempfile.TemporaryDirectory()
         root = Path(self.work.name)
@@ -141,6 +141,8 @@ class RequestTest(unittest.TestCase):
             timeout=60,
         )
 
+
+class RequestTest(ChildRequestCase):
     def test_bad_cutout_fields_are_rejected_before_any_model_loads(self):
         sha = hashlib.sha256(b"weights").hexdigest()
         for cutout in (
@@ -174,6 +176,121 @@ class RequestTest(unittest.TestCase):
     def test_segmenter_bytes_must_match_the_pinned_hash(self):
         with self.assertRaises(SystemExit):
             generate.load_segmenter({"model": str(self.segmenter), "sha256": "0" * 64})
+
+
+def sprite(width=200, height=300):
+    """A transparent figure: a blue body with a skin-coloured head near the top."""
+    pixels = np.zeros((height, width, 4), dtype=np.uint8)
+    pixels[40:290, 60:140] = (30, 60, 160, 255)
+    pixels[20:70, 75:125] = (240, 200, 180, 255)
+    return Image.fromarray(pixels, "RGBA")
+
+
+class FaceInpaintTest(unittest.TestCase):
+    def test_context_is_a_square_around_the_face_padded_with_white(self):
+        base = sprite()
+        box = (75, 20, 125, 70)
+        region, crop = generate.face_context(base, box)
+        self.assertEqual(region.size, (generate.INPAINT_SIZE, generate.INPAINT_SIZE))
+        self.assertEqual(region.mode, "RGB")
+        left, top, right, bottom = crop
+        self.assertEqual(right - left, bottom - top)
+        self.assertEqual(right - left, round(50 * generate.FACE_CONTEXT))
+        self.assertEqual(((left + right) / 2, (top + bottom) / 2), (100, 45))
+        # The crop reaches above the image; that part is white, never black.
+        self.assertLess(top, 0)
+        self.assertEqual(region.getpixel((generate.INPAINT_SIZE // 2, 2)), (255, 255, 255))
+        # Transparent pixels inside the image are white too, like the renders.
+        self.assertEqual(region.getpixel((4, generate.INPAINT_SIZE // 2)), (255, 255, 255))
+
+    def test_mask_covers_the_face_and_fades_out_well_before_the_crop_edge(self):
+        box = (75, 20, 125, 70)
+        _, crop = generate.face_context(sprite(), box)
+        mask = np.asarray(generate.face_mask(box, crop))
+        middle = generate.INPAINT_SIZE // 2
+        self.assertEqual(mask[middle, middle], 255)
+        self.assertEqual(mask[0, 0], 0)
+        self.assertEqual(mask[middle, 0], 0)
+        self.assertEqual(mask[-1, middle], 0)
+
+    def test_paste_changes_only_the_face_and_keeps_size_and_alpha(self):
+        base = sprite()
+        box = (75, 20, 125, 70)
+        region, crop = generate.face_context(base, box)
+        mask = generate.face_mask(box, crop)
+        painted = Image.new("RGB", region.size, (255, 0, 0))
+        result = generate.paste_face(base, painted, crop, mask)
+        self.assertEqual((result.size, result.mode), (base.size, "RGBA"))
+        before, after = np.asarray(base), np.asarray(result)
+        self.assertTrue((before[..., 3] == after[..., 3]).all(), "alpha never changes")
+        self.assertTrue((before[200:, :] == after[200:, :]).all(), "the body is untouched")
+        self.assertEqual(tuple(after[45, 100, :3]), (255, 0, 0), "the face is repainted")
+        opaque = generate.paste_face(base.convert("RGB"), painted, crop, mask)
+        self.assertEqual((opaque.size, opaque.mode), (base.size, "RGB"))
+
+
+class InpaintRequestTest(ChildRequestCase):
+    def setUp(self):
+        super().setUp()
+        root = Path(self.work.name)
+        self.base = root / "base.png"
+        sprite().save(self.base, format="PNG")
+        self.inpaint = {
+            "image": str(self.base),
+            "sha256": hashlib.sha256(self.base.read_bytes()).hexdigest(),
+            "box": [75, 20, 125, 70],
+            "strength": 0.85,
+            "prompts": ["1girl, smile"],
+        }
+        self.request = {**self.request, "width": 200, "height": 300, "inpaint": self.inpaint}
+
+    def read(self, request):
+        stdin = sys.stdin
+        try:
+            sys.stdin = io.TextIOWrapper(io.BytesIO(json.dumps(request).encode()))
+            return generate.read_request()
+        finally:
+            sys.stdin = stdin
+
+    def test_valid_inpaint_requests_pass_validation(self):
+        self.assertEqual(self.read(self.request)["inpaint"]["box"], [75, 20, 125, 70])
+
+    def test_high_resolution_sprites_are_accepted_up_to_the_limit(self):
+        for height, accepted in ((2432, True), (2600, False)):
+            Image.new("RGBA", (1664, height)).save(self.base, format="PNG")
+            inpaint = {**self.inpaint, "sha256": hashlib.sha256(self.base.read_bytes()).hexdigest()}
+            request = {**self.request, "width": 1664, "height": height, "inpaint": inpaint}
+            if accepted:
+                self.assertEqual(self.read(request)["height"], height)
+            else:
+                completed = self.run_child(request)
+                self.assertEqual(completed.returncode, 2)
+
+    def test_bad_inpaint_fields_are_rejected_before_any_model_loads(self):
+        cases = [
+            {"image": "base.png"},
+            {"sha256": "0" * 64},
+            {"box": [75, 20, 85, 30]},
+            {"box": [150, 20, 250, 70]},
+            {"box": [75, 20, 125]},
+            {"strength": 0.1},
+            {"strength": True},
+            {"prompts": []},
+            {"prompts": ["a", "b"]},
+            {"extra": 1},
+        ]
+        for change in cases:
+            completed = self.run_child({**self.request, "inpaint": {**self.inpaint, **change}})
+            self.assertEqual(completed.returncode, 2, change)
+            self.assertEqual(json.loads(completed.stdout.decode().splitlines()[-1])["code"],
+                             "bad_request", change)
+        for request in (
+            {**self.request, "width": 201},
+            {**self.request, "cutout": {"model": str(self.segmenter),
+                                        "sha256": hashlib.sha256(b"weights").hexdigest()}},
+        ):
+            completed = self.run_child(request)
+            self.assertEqual(completed.returncode, 2)
 
 
 @unittest.skipUnless(os.getenv("FLINT_IMAGEGEN_CUTOUT_MODEL"), "set the anime-seg ONNX path")

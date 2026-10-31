@@ -102,10 +102,12 @@ class FakeGenerator:
         width, height = (
             (BOX[2] - BOX[0], BOX[3] - BOX[1]) if cut else (request.width, request.height)
         )
+        # A repainted face keeps the base's size and transparency.
+        alpha = cut or (request.inpaint is not None and request.inpaint.image[25] == 6)
         images = []
         for index, seed in enumerate(request.seeds):
-            data = png(width, height, index, seed, alpha=cut)
-            thumb = png(16, 24, index, seed, alpha=cut)
+            data = png(width, height, index, seed, alpha=alpha)
+            thumb = png(16, 24, index, seed, alpha=alpha)
             images.append(
                 GeneratedImage(
                     index=index,
@@ -626,3 +628,85 @@ async def test_unregistered_and_foreign_runs_cannot_claim_and_recovery_closes_lo
             select(OutboxMessage).where(OutboxMessage.aggregate_id == UUID(payload["job_id"]))
         )
     assert published.status == OutboxMessageStatus.PENDING
+
+
+@pytest.mark.anyio
+async def test_expression_jobs_repaint_the_face_of_a_base_sprite(studio):
+    client, factory, store, headers, base, *_ = studio
+    sprite = png(300, 500, 40, 7, alpha=True)
+    uploaded = await client.post(
+        f"{base}/assets",
+        headers=headers,
+        data={"kind": "sprite", "name": "Mira base", "license": "Own work", "notice": "",
+              "rights_declared": "true"},
+        files={"file": ("mira.png", sprite, "image/png")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    asset = uploaded.json()
+    profile = {"base_version": 0, "appearance": "shoulder-length white hair, red eyes",
+               "character_type": "girl", "framing": "full_body"}
+    saved = await client.put(f"{base}/characters/mira", headers=headers, json=profile)
+    assert saved.status_code == 200
+    body = {"base_asset_id": asset["id"], "face_box": [100, 20, 160, 80],
+            "expressions": ["happy", "Fond of tea"], "idempotency_key": str(uuid4())}
+    path = f"{base}/characters/mira/expression-jobs"
+    for bad, status in (
+        ({"face_box": [250, 20, 310, 80]}, 422),
+        ({"face_box": [100, 20, 110, 80]}, 422),
+        ({"face_box": [100, 20, 200, 30]}, 422),
+        ({"base_asset_id": str(uuid4())}, 404),
+        ({"expressions": ["a", "b", "c", "d", "e"]}, 422),
+        ({"expressions": ["<b>"]}, 422),
+    ):
+        attempt = {**body, **bad, "idempotency_key": str(uuid4())}
+        refused = await client.post(path, headers=headers, json=attempt)
+        assert refused.status_code == status, (bad, refused.text)
+        if status == 422 and "face_box" not in bad and len(bad["expressions"]) < 5:
+            assert refused.json()["type"].endswith("invalid-expression-request")
+    created = await client.post(path, headers=headers, json=body)
+    assert created.status_code == 202, created.text
+    job = created.json()
+    shape = (job["purpose"], job["count"], job["width"], job["height"])
+    assert shape == ("character_expression", 2, 300, 500)
+    assert job["expressions"] == ["happy", "fond_of_tea"] and job["strength"] == 0.9
+    assert job["face_box"] == [100, 20, 160, 80] and job["base_asset_id"] == asset["id"]
+    assert job["prompts"][0].startswith("1girl, solo, close-up, face, smile, open mouth, happy, ")
+    assert "white hair" in job["prompts"][1] and "fond of tea" in job["prompts"][1]
+    assert (await client.post(path, headers=headers, json=body)).json()["id"] == job["id"]
+    changed = await client.post(path, headers=headers, json={**body, "expressions": ["sad"]})
+    assert changed.status_code == 409
+    generator = FakeGenerator()
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=job["id"]
+    )
+    assert (await run_job(factory, store, payload, generator))["status"] == "completed"
+    sent = generator.requests[0]
+    assert sent.inpaint.image == sprite and sent.inpaint.box == (100, 20, 160, 80)
+    assert sent.inpaint.prompts == tuple(job["prompts"]) and (sent.width, sent.height) == (300, 500)
+    listed = (await client.get(path, headers=headers)).json()["jobs"]
+    assert [item["id"] for item in listed] == [job["id"]]
+    results = listed[0]["assets"]
+    assert [item["name"] for item in results] == ["mira happy", "mira fond_of_tea"]
+    assert {item["kind"] for item in results} == {"sprite"}
+    assert results[0]["provenance"]["expression"] == "happy"
+    assert results[0]["provenance"]["base_asset_id"] == asset["id"]
+    assert results[1]["provenance"]["prompt"] == job["prompts"][1]
+    content = await client.get(f"{base}/assets/{results[0]['id']}/content", headers=headers)
+    assert content.content[25] == 6, "the expression stays a transparent sprite"
+    # A discarded base cannot start new expressions.
+    await client.post(f"{base}/assets/{asset['id']}/discard", headers=headers)
+    gone = await client.post(path, headers=headers, json={**body, "idempotency_key": str(uuid4())})
+    assert gone.status_code == 404
+    # High-resolution sprites (up to 1664 x 2432) are bases too; larger images are not.
+    for height, status in ((2432, 202), (2600, 422)):
+        tall = await client.post(
+            f"{base}/assets",
+            headers=headers,
+            data={"kind": "sprite", "name": f"Mira {height}", "license": "Own work",
+                  "notice": "", "rights_declared": "true"},
+            files={"file": ("tall.png", png(200, height, 40, height, alpha=True), "image/png")},
+        )
+        assert tall.status_code == 201, tall.text
+        attempt = {**body, "base_asset_id": tall.json()["id"], "idempotency_key": str(uuid4())}
+        started = await client.post(path, headers=headers, json=attempt)
+        assert started.status_code == status, started.text

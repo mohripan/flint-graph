@@ -9,6 +9,11 @@ output directory and exits, which releases all GPU memory.
 With a ``cutout`` request it also separates the figure from its plain background
 with a pinned anime segmentation model (ONNX, run on the CPU from bytes it hashed
 itself) and writes cropped RGBA sprites instead of opaque images.
+
+With an ``inpaint`` request (ADR 0041) it repaints only the face of a base image,
+one prompt per seed: a square around the face box is upscaled, inpainted under a
+feathered ellipse, scaled back and pasted, and the base alpha is restored. Size,
+silhouette and everything outside the face stay exactly as they were.
 """
 
 import hashlib
@@ -35,6 +40,15 @@ CROP_MARGIN = 16
 BLEED_PIXELS = 8
 # A plausible full-body figure covers part of the frame, never none or nearly all.
 MIN_COVERAGE, MAX_COVERAGE = 0.005, 0.9
+# Face inpainting: the face is redrawn at this size with this much context around it.
+INPAINT_SIZE = 1024
+FACE_CONTEXT = 2.4
+BASE_LIMIT = 16 * 1024 * 1024
+MIN_BASE, MAX_BASE = 64, 2560  # covers 2x high-resolution sprites (1664 x 2432)
+MIN_FACE = 16
+# The mask reaches a little past the box sideways and down (cheeks, chin) but barely
+# up, so little hair is repainted; feathering hides the seam.
+MASK_GROW, MASK_GROW_UP, MASK_FEATHER = 0.12, 0.06, 20
 
 
 class CutoutError(Exception):
@@ -92,11 +106,12 @@ def read_request() -> dict:
     }
     if (
         type(request) is not dict
-        or set(request) - {"cutout"} != expected
+        or set(request) - {"cutout", "inpaint"} != expected
         or request["protocol"] != PROTOCOL
     ):
         fail("bad_request")
     request.setdefault("cutout", None)
+    request.setdefault("inpaint", None)
     cutout = request["cutout"]
     if cutout is not None and (
         type(cutout) is not dict
@@ -110,12 +125,15 @@ def read_request() -> dict:
     ):
         fail("bad_request")
     seeds = request["seeds"]
+    inpaint = request["inpaint"]
+    if inpaint is not None and (cutout is not None or not valid_inpaint(inpaint, request)):
+        fail("bad_request")
     if (
         not all(
             type(request[key]) is str
             for key in ("model_dir", "output_dir", "prompt", "negative_prompt")
         )
-        or (request["width"], request["height"]) not in SIZES
+        or (inpaint is None and (request["width"], request["height"]) not in SIZES)
         or type(request["steps"]) is not int
         or not 1 <= request["steps"] <= 50
         or type(request["guidance"]) not in (int, float)
@@ -138,6 +156,117 @@ def read_request() -> dict:
     if cutout is not None and not Path(cutout["model"]).is_file():
         fail("model_invalid")
     return request
+
+
+def png_size(data: bytes) -> tuple[int, int] | None:
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def valid_inpaint(inpaint: object, request: dict) -> bool:
+    """The base image is the parent's verified copy; check it again before any model."""
+    if (
+        type(inpaint) is not dict
+        or set(inpaint) != {"image", "sha256", "box", "strength", "prompts"}
+        or type(inpaint["image"]) is not str
+        or not Path(inpaint["image"]).is_absolute()
+        or type(inpaint["sha256"]) is not str
+        or type(inpaint["strength"]) not in (int, float)
+        or not 0.3 <= inpaint["strength"] <= 1
+        or type(inpaint["prompts"]) is not list
+        or type(request["seeds"]) is not list
+        or len(inpaint["prompts"]) != len(request["seeds"])
+        or any(
+            type(prompt) is not str or not 1 <= len(prompt) <= 2000
+            for prompt in inpaint["prompts"]
+        )
+        or type(inpaint["box"]) is not list
+        or len(inpaint["box"]) != 4
+        or any(type(value) is not int for value in inpaint["box"])
+    ):
+        return False
+    path = Path(inpaint["image"])
+    if not path.is_file() or path.stat().st_size > BASE_LIMIT:
+        return False
+    data = path.read_bytes()
+    size = png_size(data)
+    if hashlib.sha256(data).hexdigest() != inpaint["sha256"] or size is None:
+        return False
+    width, height = size
+    left, top, right, bottom = inpaint["box"]
+    return (
+        (request["width"], request["height"]) == size
+        and MIN_BASE <= width <= MAX_BASE
+        and MIN_BASE <= height <= MAX_BASE
+        and 0 <= left < right <= width
+        and 0 <= top < bottom <= height
+        and right - left >= MIN_FACE
+        and bottom - top >= MIN_FACE
+    )
+
+
+def face_context(image, box):
+    """The face with context around it: a white-padded square upscaled for inpainting."""
+    from PIL import Image
+
+    left, top, right, bottom = box
+    side = round(max(right - left, bottom - top) * FACE_CONTEXT)
+    cx, cy = (left + right) / 2, (top + bottom) / 2
+    crop = (round(cx - side / 2), round(cy - side / 2))
+    crop = (*crop, crop[0] + side, crop[1] + side)
+    flat = Image.new("RGBA", image.size, (255, 255, 255, 255))
+    flat.alpha_composite(image.convert("RGBA"))
+    padded = Image.new("RGB", (side, side), (255, 255, 255))
+    padded.paste(flat.convert("RGB"), (-crop[0], -crop[1]))
+    return padded.resize((INPAINT_SIZE, INPAINT_SIZE), Image.LANCZOS), crop
+
+
+def face_mask(box, crop):
+    """A feathered ellipse over the face, in the coordinates of the upscaled context."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    scale = INPAINT_SIZE / (crop[2] - crop[0])
+    left, top, right, bottom = (
+        (box[0] - crop[0]) * scale,
+        (box[1] - crop[1]) * scale,
+        (box[2] - crop[0]) * scale,
+        (box[3] - crop[1]) * scale,
+    )
+    grow = MASK_GROW * (right - left)
+    mask = Image.new("L", (INPAINT_SIZE, INPAINT_SIZE), 0)
+    ImageDraw.Draw(mask).ellipse(
+        (left - grow, top - MASK_GROW_UP * (bottom - top), right + grow, bottom + grow), fill=255
+    )
+    return mask.filter(ImageFilter.GaussianBlur(MASK_FEATHER))
+
+
+def paste_face(base, painted, crop, mask):
+    """Blend the repainted face into the base; only opaque pixels change, alpha never."""
+    import numpy as np
+    from PIL import Image
+
+    side = crop[2] - crop[0]
+    patch = painted.convert("RGB").resize((side, side), Image.LANCZOS)
+    weight = np.zeros((base.height, base.width), dtype=np.float32)
+    small = np.asarray(mask.resize((side, side), Image.LANCZOS), dtype=np.float32) / 255
+    layer = np.zeros((base.height, base.width, 3), dtype=np.float32)
+    # Where the square lies inside the base image.
+    x0, y0 = max(crop[0], 0), max(crop[1], 0)
+    x1, y1 = min(crop[2], base.width), min(crop[3], base.height)
+    if x1 > x0 and y1 > y0:
+        source = np.asarray(patch, dtype=np.float32)
+        layer[y0:y1, x0:x1] = source[y0 - crop[1] : y1 - crop[1], x0 - crop[0] : x1 - crop[0]]
+        weight[y0:y1, x0:x1] = small[y0 - crop[1] : y1 - crop[1], x0 - crop[0] : x1 - crop[0]]
+    pixels = np.asarray(base.convert("RGBA") if base.mode == "RGBA" else base.convert("RGB"))
+    if base.mode == "RGBA":
+        # Soft edges keep their colour: repainting them would mix in the white backdrop.
+        weight *= pixels[..., 3] == 255
+    rgb = pixels[..., :3].astype(np.float32)
+    blended = np.rint(weight[..., None] * layer + (1 - weight[..., None]) * rgb).astype(np.uint8)
+    if base.mode == "RGBA":
+        return Image.fromarray(np.dstack([blended, pixels[..., 3]]), "RGBA")
+    return Image.fromarray(blended, "RGB")
 
 
 def load_segmenter(cutout: dict) -> tuple[object, str]:
@@ -280,8 +409,14 @@ def main() -> None:
     os.environ["DISABLE_TELEMETRY"] = "1"
     import diffusers
     import torch
-    from diffusers import EulerAncestralDiscreteScheduler, StableDiffusionXLPipeline
+    from diffusers import (
+        EulerAncestralDiscreteScheduler,
+        StableDiffusionXLInpaintPipeline,
+        StableDiffusionXLPipeline,
+    )
     from PIL import Image
+
+    inpaint = request["inpaint"]
 
     if not torch.cuda.is_available():
         fail("gpu_unavailable")
@@ -297,8 +432,10 @@ def main() -> None:
     segmenter, onnxruntime_version = (
         load_segmenter(request["cutout"]) if request["cutout"] else (None, None)
     )
+    # Face inpainting runs the same weights as masked img2img (a 4-channel UNet).
+    kind = StableDiffusionXLInpaintPipeline if inpaint else StableDiffusionXLPipeline
     try:
-        pipeline = StableDiffusionXLPipeline.from_pretrained(
+        pipeline = kind.from_pretrained(
             request["model_dir"],
             torch_dtype=torch.float16,
             use_safetensors=True,
@@ -311,7 +448,8 @@ def main() -> None:
     pipeline.to("cuda")
     # Decoding 832x1216 latents in tiles keeps the peak within the free-memory floor.
     pipeline.vae.enable_tiling()
-    tokens = len(pipeline.tokenizer(request["prompt"]).input_ids)
+    prompts = inpaint["prompts"] if inpaint else [request["prompt"]] * len(request["seeds"])
+    tokens = max(len(pipeline.tokenizer(prompt).input_ids) for prompt in prompts)
     limit = pipeline.tokenizer.model_max_length
     emit(
         "loaded",
@@ -327,18 +465,40 @@ def main() -> None:
         | ({"onnxruntime": onnxruntime_version} if segmenter is not None else {}),
     )
     output = Path(request["output_dir"])
+    if inpaint:
+        base = Image.open(inpaint["image"])
+        base.load()
+        base = base.convert("RGBA" if "A" in base.getbands() else "RGB")
+        box = tuple(inpaint["box"])
+        context, crop = face_context(base, box)
+        mask = face_mask(box, crop)
     for index, seed in enumerate(request["seeds"]):
         began = time.monotonic()
         try:
-            image = pipeline(
-                prompt=request["prompt"],
-                negative_prompt=request["negative_prompt"],
-                width=request["width"],
-                height=request["height"],
-                num_inference_steps=request["steps"],
-                guidance_scale=float(request["guidance"]),
-                generator=torch.Generator("cuda").manual_seed(seed),
-            ).images[0]
+            if inpaint:
+                painted = pipeline(
+                    prompt=prompts[index],
+                    negative_prompt=request["negative_prompt"],
+                    image=context,
+                    mask_image=mask,
+                    width=INPAINT_SIZE,
+                    height=INPAINT_SIZE,
+                    strength=float(inpaint["strength"]),
+                    num_inference_steps=request["steps"],
+                    guidance_scale=float(request["guidance"]),
+                    generator=torch.Generator("cuda").manual_seed(seed),
+                ).images[0]
+                image = paste_face(base, painted, crop, mask)
+            else:
+                image = pipeline(
+                    prompt=request["prompt"],
+                    negative_prompt=request["negative_prompt"],
+                    width=request["width"],
+                    height=request["height"],
+                    num_inference_steps=request["steps"],
+                    guidance_scale=float(request["guidance"]),
+                    generator=torch.Generator("cuda").manual_seed(seed),
+                ).images[0]
         except torch.OutOfMemoryError:
             fail("out_of_memory")
         extra: dict[str, object] = {}

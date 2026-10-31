@@ -33,7 +33,7 @@ export interface CharacterProfile {
   portrait: NarrativeImage | null; version: number;
 }
 export interface ImageJob {
-  id: string; purpose: "character_portrait" | "background"; character_id: string | null;
+  id: string; purpose: "character_portrait" | "background" | "character_expression"; character_id: string | null;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   progress: number; count: number; cancel_requested: boolean; error_code: string | null; appearance: string;
   character_type: CharacterType; framing: CharacterFraming; prompt: string; negative_prompt: string;
@@ -42,6 +42,9 @@ export interface ImageJob {
   finished_at: string | null; assets: NarrativeImage[];
   // Transparent stage sprites: the segmenter and its ONNX SHA-256 once the cutout ran.
   transparent: boolean; cutout: { model: string; sha256: string } | null;
+  // Expressions repainted from a base image (ADR 0041): one expression and prompt per image.
+  base_asset_id?: string | null; face_box?: number[] | null; strength?: number | null;
+  expressions?: string[] | null; prompts?: string[] | null;
 }
 import type {
   AnswerProvenance,
@@ -370,6 +373,21 @@ export const api = {
   }, signal?: AbortSignal): Promise<ImageJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait-jobs`, {
       method: "POST", headers: tenantHeaders(tenantId), signal, json: body,
+    });
+  },
+
+  createExpressionJob(tenantId: string, projectId: string, characterId: string, body: {
+    base_asset_id: string; face_box: number[]; expressions: string[]; idempotency_key: string;
+  }, signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/expression-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: body,
+    });
+  },
+
+  listExpressionJobs(tenantId: string, projectId: string, characterId: string, signal?: AbortSignal):
+    Promise<{ jobs: ImageJob[] }> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/expression-jobs`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
   },
 

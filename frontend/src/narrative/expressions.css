@@ -1,0 +1,30 @@
+/* Expressions repainted from a sprite (ADR 0041). */
+.expression-studio { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+.expression-studio > .studio-secondary { align-self:flex-start; }
+.expression-panel { display:flex; flex-direction:column; gap:10px; padding:12px 14px; border:1px solid #d4dfe6; border-radius:10px; background:#fbfcfd; }
+.expression-base { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
+.expression-base select { min-height:38px; border:1px solid #b4c4ce; border-radius:6px; padding:0 8px; font-size:14px; }
+.expression-frame { position:relative; width:min(100%, 280px); max-height:460px; touch-action:none; user-select:none; border-radius:8px; overflow:hidden;
+  background-color:#f4f6f8;
+  background-image:linear-gradient(45deg,#d9e0e6 25%,transparent 25%,transparent 75%,#d9e0e6 75%),linear-gradient(45deg,#d9e0e6 25%,transparent 25%,transparent 75%,#d9e0e6 75%);
+  background-size:16px 16px; background-position:0 0,8px 8px; }
+.expression-frame img { display:block; width:100%; height:100%; object-fit:contain; pointer-events:none; }
+.expression-box { position:absolute; box-sizing:border-box; border:2px solid #d5ae68; border-radius:50%; background:#d5ae6826; cursor:move; box-shadow:0 0 0 1px #18263580; }
+.expression-box:focus-visible { outline:3px solid #8c672a; outline-offset:2px; }
+.expression-handle { position:absolute; right:-7px; bottom:-7px; width:14px; height:14px; border-radius:3px; background:#d5ae68; border:2px solid #182635; cursor:nwse-resize; }
+.expression-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.expression-chips button { min-height:34px; padding:4px 12px; border:1px solid #c2d0d8; border-radius:999px; background:#fff; color:#36576f; font-size:13px; cursor:pointer; }
+.expression-chips button[aria-pressed="true"] { background:#182635; border-color:#182635; color:#f0f4f6; }
+.expression-custom { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.expression-custom input { min-height:40px; flex:1 1 200px; border:1px solid #b4c4ce; border-radius:6px; padding:0 10px; font-size:14px; }
+.expression-results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+.expression-result { margin:0; display:flex; flex-direction:column; gap:6px; padding:6px; border:1px solid #d4dfe6; border-radius:8px; background:#fff; }
+.expression-thumb { display:flex; align-items:center; justify-content:center; aspect-ratio:3/4; border-radius:6px; overflow:hidden;
+  background-color:#f4f6f8;
+  background-image:linear-gradient(45deg,#d9e0e6 25%,transparent 25%,transparent 75%,#d9e0e6 75%),linear-gradient(45deg,#d9e0e6 25%,transparent 25%,transparent 75%,#d9e0e6 75%);
+  background-size:12px 12px; background-position:0 0,6px 6px; }
+.expression-thumb img { width:100%; height:100%; object-fit:contain; }
+.expression-thumb.face { position:relative; display:block; aspect-ratio:1; }
+.expression-thumb.face img { position:absolute; height:auto; max-width:none; }
+.expression-result figcaption { display:flex; flex-direction:column; align-items:flex-start; gap:4px; font-size:13px; }
+.expression-result small { color:#4e6577; }

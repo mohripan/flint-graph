@@ -11,6 +11,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     CutoutModel,
     GenerationRequest,
     ImageGenerationError,
+    InpaintRequest,
     LocalImageGenerator,
     ModelIdentity,
     verify_cutout_model,
@@ -239,3 +240,70 @@ def test_cutout_model_is_the_single_onnx_file_of_its_pinned_manifest(tmp_path):
         verify_cutout_model(
             tmp_path, pin({"README.md": weights, "a.onnx": weights, "b.onnx": weights})
         )
+
+
+def base_png(width=300, height=500, alpha=True):
+    import struct
+    import zlib
+
+    def chunk(kind, payload):
+        crc = struct.pack(">I", zlib.crc32(kind + payload))
+        return struct.pack(">I", len(payload)) + kind + payload + crc
+
+    row = b"\x00" + bytes([90, 60, 200, 255][: 4 if alpha else 3]) * width
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6 if alpha else 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(row * height, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def inpaint_request(mode="ok", alpha=True, seeds=(7, 8)):
+    return GenerationRequest(
+        prompt=f"{mode}, face",
+        negative_prompt="lowres",
+        width=300,
+        height=500,
+        steps=28,
+        guidance=6.0,
+        seeds=tuple(seeds),
+        inpaint=InpaintRequest(
+            image=base_png(alpha=alpha),
+            box=(100, 20, 160, 80),
+            strength=0.85,
+            prompts=tuple(f"{mode}, expression {seed}" for seed in seeds),
+        ),
+    )
+
+
+@pytest.mark.anyio
+async def test_inpainting_keeps_the_base_size_and_transparency(tmp_path):
+    for alpha in (True, False):
+        result = await generator().generate(inpaint_request(alpha=alpha), on_progress=ignore)
+        assert [(image.width, image.height) for image in result.images] == [(300, 500)] * 2
+        assert all(image.data[25] == (6 if alpha else 2) for image in result.images)
+        assert all(image.box is None for image in result.images)
+        assert result.cutout is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mode", ["flatexpr", "wrongsize", "basehash"])
+async def test_inpainting_output_and_base_are_checked(mode):
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator().generate(inpaint_request(mode), on_progress=ignore)
+    assert raised.value.code == ("model_invalid" if mode == "basehash" else "invalid_output")
+
+
+@pytest.mark.anyio
+async def test_inpainting_needs_one_prompt_per_seed_and_no_cutout(tmp_path):
+    from dataclasses import replace
+
+    request = inpaint_request()
+    for bad in (
+        replace(request, inpaint=replace(request.inpaint, prompts=("only one",))),
+        replace(request, cutout=True),
+    ):
+        with pytest.raises(ImageGenerationError) as raised:
+            await generator(cutout=segmenter(tmp_path)).generate(bad, on_progress=ignore)
+        assert raised.value.code == "bad_request"

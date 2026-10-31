@@ -293,3 +293,104 @@ def _save_evidence(target: Path, data: bytes, job: dict, alpha: dict) -> None:
     target.mkdir(parents=True, exist_ok=True)
     (target / f"{name}.png").write_bytes(data)
     (target / f"{name}.json").write_text(json.dumps({"job": job, "alpha": alpha}, indent=2))
+
+
+DIFF_PROBE = """
+import json, sys
+import numpy as np
+from PIL import Image
+base = np.asarray(Image.open(sys.argv[1]).convert("RGBA")).astype(int)
+out = np.asarray(Image.open(sys.argv[2]).convert("RGBA")).astype(int)
+l, t, r, b = map(int, sys.argv[3].split(","))
+side = round(max(r - l, b - t) * 2.4)
+cx, cy = (l + r) / 2, (t + b) / 2
+x0, y0 = round(cx - side / 2), round(cy - side / 2)
+outside = np.ones(base.shape[:2], bool)
+outside[max(0, y0):y0 + side, max(0, x0):x0 + side] = False
+print(json.dumps({
+    "same_size": base.shape == out.shape,
+    "alpha_equal": bool((base[..., 3] == out[..., 3]).all()),
+    "outside_changed": int((np.abs(base - out).max(axis=2)[outside] > 0).sum()),
+    "face_change": round(float(np.abs(base[t:b, l:r, :3] - out[t:b, l:r, :3]).mean()), 2),
+}))
+"""
+
+
+@pytest.mark.skipif(
+    not (
+        os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_EXPRESSION_BASE")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_EXPRESSION_FACE_BOX")
+    ),
+    reason="requires the isolated runtime, the local model, a base sprite and its face box",
+)
+async def test_real_gpu_expressions_repaint_only_the_face(live_case, tmp_path):
+    case = live_case
+    python, script = runtime_paths(Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR"]))
+    model_dir = Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR"])
+    model = await asyncio.to_thread(
+        verify_model, model_dir, os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256"]
+    )
+    generator = LocalImageGenerator(
+        python=python, script=script, model_dir=model_dir, model=model, deadline_seconds=900
+    )
+    base_bytes = await asyncio.to_thread(
+        Path(os.environ["FLINT_GRAPH_NARRATIVE_EXPRESSION_BASE"]).read_bytes
+    )
+    box = [int(item) for item in os.environ["FLINT_GRAPH_NARRATIVE_EXPRESSION_FACE_BOX"].split(",")]
+    client, headers, base = case["client"], case["headers"], case["base"]
+    uploaded = await client.post(
+        f"{base}/assets",
+        headers=headers,
+        data={"kind": "sprite", "name": "Base", "license": "openrail++", "notice": "",
+              "rights_declared": "true"},
+        files={"file": ("base.png", base_bytes, "image/png")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    profile = {"base_version": 0, "character_type": "girl", "framing": "full_body",
+               "appearance": "shoulder-length silver hair, amber eyes, navy coat"}
+    saved = await client.put(f"{base}/characters/mira", headers=headers, json=profile)
+    assert saved.status_code == 200, saved.text
+    expressions = ["happy", "angry", "sad", "surprised"]
+    created = await client.post(
+        f"{base}/characters/mira/expression-jobs",
+        headers=headers,
+        json={"base_asset_id": uploaded.json()["id"], "face_box": box,
+              "expressions": expressions, "idempotency_key": str(uuid4())},
+    )
+    assert created.status_code == 202, created.text
+    loaded = os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL")
+    releaser = OllamaGpuReleaser("http://127.0.0.1:11434", loaded) if loaded else None
+    async with worker(case, generator, releaser):
+        done = await case["until"](created.json()["id"], {"completed", "failed"}, 1200)
+    assert done["status"] == "completed", done["error_code"]
+    assert [asset["provenance"]["expression"] for asset in done["assets"]] == expressions
+    original = tmp_path / "base.png"
+    await asyncio.to_thread(original.write_bytes, base_bytes)
+    results = {}
+    for asset in done["assets"]:
+        content = await client.get(f"{base}/assets/{asset['id']}/content", headers=headers)
+        assert hashlib.sha256(content.content).hexdigest() == asset["sha256"]
+        path = tmp_path / f"{asset['provenance']['expression']}.png"
+        await asyncio.to_thread(path.write_bytes, content.content)
+        probe = await asyncio.create_subprocess_exec(
+            str(python), "-I", "-c", DIFF_PROBE, str(original), str(path), ",".join(map(str, box)),
+            stdout=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await probe.communicate()
+        result = json.loads(stdout)
+        results[asset["provenance"]["expression"]] = result
+        assert result["same_size"] and result["alpha_equal"], result
+        assert result["outside_changed"] == 0, result
+        assert result["face_change"] > 3, result
+    if save := os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_SAVE_DIR"):
+        target = Path(save)
+        await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
+        for name in expressions:
+            data = await asyncio.to_thread((tmp_path / f"{name}.png").read_bytes)
+            await asyncio.to_thread((target / f"{name}.png").write_bytes, data)
+        await asyncio.to_thread(
+            (target / "job.json").write_text, json.dumps({"job": done, "checks": results}, indent=2)
+        )

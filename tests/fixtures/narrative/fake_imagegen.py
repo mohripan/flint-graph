@@ -41,10 +41,18 @@ mode = request["prompt"].split(",")[0]
 output = Path(request["output_dir"])
 width, height = request["width"], request["height"]
 cutout = request.get("cutout")
+inpaint = request.get("inpaint")
 # The real child hashes the segmenter bytes it loads; so does this stand-in.
 if cutout and hashlib.sha256(Path(cutout["model"]).read_bytes()).hexdigest() != cutout["sha256"]:
     emit("error", code="model_invalid")
     raise SystemExit(2)
+base_alpha = False
+if inpaint:
+    base = Path(inpaint["image"]).read_bytes()
+    if mode == "basehash" or hashlib.sha256(base).hexdigest() != inpaint["sha256"]:
+        emit("error", code="model_invalid")
+        raise SystemExit(2)
+    base_alpha = base[25] == 6
 if mode == "busy":
     emit("busy", free_bytes=1, required_bytes=2)
     emit("error", code="gpu_busy")
@@ -77,6 +85,10 @@ for index, seed in enumerate(request["seeds"]):
             box = [400, 40, 912, 1176]
         if mode != "nobox":
             extra["box"] = box
+    elif inpaint:
+        alpha = base_alpha and mode != "flatexpr"
+        image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40, alpha)
+        thumbnail = png(256, round(height * 256 / width), index * 40, alpha)
     else:
         image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40)
         thumbnail = png(256, round(height * 256 / width), index * 40)

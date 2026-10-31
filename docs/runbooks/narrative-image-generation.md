@@ -70,8 +70,17 @@ it, transparent jobs fail with `cutout_unavailable` and everything else works.
   provenance has the crop box inside the 832×1216 render.
 - Backgrounds: 1344×768 scenery with `no humans`, from the Assets tab
   (`POST /v1/narrative/projects/{id}/assets/background-jobs`).
+- Character expressions (ADR 0041): Characters → On stage → "Generate
+  expressions…" (`POST /v1/narrative/projects/{id}/characters/{character}/expression-jobs`).
+  The child repaints only the face inside a box on an approved sprite, image or
+  portrait, at strength 0.9, up to four expressions per job, about 10 s each after
+  the model loads. Results keep the base's exact size and alpha, so expressions
+  swap on stage without the figure moving. They become candidates of the base's
+  kind, named `{character} {expression}`. "Use as" approves one and sets it as that
+  expression's sprite. The worker fetches the base hash-verified from the store,
+  and the child checks the hash again.
 
-Both use the same worker, queue and limits. Candidates wait in the library until a
+All of them use the same worker, queue and limits. Candidates wait in the library until a
 member approves them. Uploads (PNG images, static TTF/OTF fonts) need no worker.
 
 ## How portrait prompts are built

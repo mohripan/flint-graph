@@ -29,7 +29,12 @@ from flint_graph.domain.errors import (
     NotFoundError,
     TooManyRequestsError,
 )
-from flint_graph.infrastructure.db.models import NarrativeAsset, NarrativeImageJob, Tenant
+from flint_graph.infrastructure.db.models import (
+    NarrativeAsset,
+    NarrativeCharacterProfile,
+    NarrativeImageJob,
+    Tenant,
+)
 from flint_graph.infrastructure.narrative_imagegen import (
     GeneratedImage,
     GenerationRequest,
@@ -37,9 +42,12 @@ from flint_graph.infrastructure.narrative_imagegen import (
     ModelIdentity,
 )
 from flint_graph.narrative.imagegen import (
+    ExpressionRequest,
     ImageRequest,
     background_request,
     clean_appearance,
+    expression_names,
+    expression_request,
     portrait_request,
 )
 from flint_graph.narrative.values import canonical_json
@@ -52,6 +60,18 @@ def _now() -> datetime:
 
 
 @dataclass(frozen=True)
+class InpaintPlan:
+    """The base image to repaint; its bytes are fetched, hash-verified, after the claim."""
+
+    asset_id: UUID
+    sha256: str
+    size_bytes: int
+    box: tuple[int, int, int, int]
+    strength: float
+    prompts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ImageWork:
     """Everything an execution needs, loaded inside the claim transaction."""
 
@@ -59,6 +79,89 @@ class ImageWork:
     project_id: UUID
     job_id: UUID
     request: GenerationRequest
+    inpaint: InpaintPlan | None = None
+
+
+# Expression bases: what the child accepts, and images a character can be drawn from.
+BASE_KINDS = ("sprite", "image", "character_portrait")
+MIN_BASE, MAX_BASE, MIN_FACE = 64, 2560, 16  # up to 2x high-resolution sprites
+
+
+def _invalid(detail: str) -> DomainError:
+    return DomainError(422, "Invalid expression request", detail, "invalid-expression-request")
+
+
+async def create_expression_job(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    character_id: str,
+    author_user_id: UUID,
+    base_asset_id: UUID,
+    face_box: tuple[int, int, int, int],
+    expressions: list[str],
+    idempotency_key: UUID,
+    actor: AuditActor,
+    available: bool,
+    max_active_jobs: int,
+) -> NarrativeImageJob:
+    """Queue face repaints of one base image, one per expression (ADR 0041)."""
+    base = await session.scalar(
+        select(NarrativeAsset).where(
+            NarrativeAsset.tenant_id == tenant_id,
+            NarrativeAsset.project_id == project_id,
+            NarrativeAsset.id == base_asset_id,
+            NarrativeAsset.status != "discarded",
+        )
+    )
+    if base is None or base.media_type != "image/png" or base.kind not in BASE_KINDS:
+        raise NotFoundError("Choose a sprite, image or portrait of this project.")
+    width, height = base.width or 0, base.height or 0
+    if not (MIN_BASE <= width <= MAX_BASE and MIN_BASE <= height <= MAX_BASE):
+        raise _invalid(f"Expressions need an image between {MIN_BASE} and {MAX_BASE} pixels.")
+    left, top, right, bottom = face_box
+    box_width, box_height = right - left, bottom - top
+    if not (
+        0 <= left < right <= width
+        and 0 <= top < bottom <= height
+        and min(box_width, box_height) >= MIN_FACE
+        and 0.5 <= box_width / box_height <= 2
+    ):
+        raise _invalid("Place the face box over the face, inside the image.")
+    try:
+        expression_names(expressions)
+    except ValueError as error:
+        raise _invalid(str(error)) from None
+    profile = await session.scalar(
+        select(NarrativeCharacterProfile).where(
+            NarrativeCharacterProfile.tenant_id == tenant_id,
+            NarrativeCharacterProfile.project_id == project_id,
+            NarrativeCharacterProfile.character_id == character_id,
+        )
+    )
+    appearance = profile.appearance if profile else ""
+    character_type = profile.character_type if profile else "other"
+    return await _queue_job(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        author_user_id=author_user_id,
+        purpose="character_expression",
+        character_id=character_id,
+        appearance=appearance,
+        character_type=character_type,
+        framing="face",
+        transparent=False,
+        build=lambda: expression_request(appearance, character_type, expressions),
+        count=len(expressions),
+        idempotency_key=idempotency_key,
+        actor=actor,
+        available=available,
+        max_active_jobs=max_active_jobs,
+        base=(base, (left, top, right, bottom)),
+        expressions=expressions,
+    )
 
 
 async def create_portrait_job(
@@ -146,12 +249,14 @@ async def _queue_job(
     character_type: str,
     framing: str,
     transparent: bool,
-    build: Callable[[], ImageRequest],
+    build: Callable[[], ImageRequest | ExpressionRequest],
     count: int,
     idempotency_key: UUID,
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
+    base: tuple[NarrativeAsset, tuple[int, int, int, int]] | None = None,
+    expressions: list[str] | None = None,
 ) -> NarrativeImageJob:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -173,6 +278,9 @@ async def _queue_job(
     # Only sprite requests carry the flag, so earlier requests keep their hashes.
     if transparent:
         identity["transparent"] = True
+    if base is not None:
+        identity |= {"base_asset_id": str(base[0].id), "face_box": list(base[1]),
+                     "expressions": expressions}
     request_hash = sha256(canonical_json(identity)).hexdigest()
     existing = await session.scalar(
         select(NarrativeImageJob).where(
@@ -197,6 +305,21 @@ async def _queue_job(
         built = build()
     except ValueError as error:
         raise DomainError(422, "Invalid description", str(error), "invalid-appearance") from None
+    if isinstance(built, ExpressionRequest):
+        assert base is not None
+        size = (base[0].width or 0, base[0].height or 0)
+        built_fields: dict[str, Any] = {
+            "prompt": built.prompts[0],
+            "width": size[0],
+            "height": size[1],
+            "base_asset_id": base[0].id,
+            "face_box": list(base[1]),
+            "strength": built.strength,
+            "expressions": list(built.ids),
+            "prompts": list(built.prompts),
+        }
+    else:
+        built_fields = {"prompt": built.prompt, "width": built.width, "height": built.height}
     active = (
         await session.scalar(
             select(func.count(NarrativeImageJob.id)).where(
@@ -219,10 +342,7 @@ async def _queue_job(
         appearance=appearance,
         character_type=character_type,
         framing=framing,
-        prompt=built.prompt,
         negative_prompt=built.negative_prompt,
-        width=built.width,
-        height=built.height,
         steps=built.steps,
         guidance=built.guidance,
         seeds=[secrets.randbelow(2**32) for _ in range(count)],
@@ -231,6 +351,7 @@ async def _queue_job(
         status="queued",
         progress=0,
         cancel_requested=False,
+        **built_fields,
     )
     session.add(job)
     await session.flush()
@@ -444,7 +565,22 @@ async def claim_image_job(
     job.progress = 0
     job.started_at = job.started_at or _now()
     await session.flush()
+    plan = None
+    if job.purpose == "character_expression":
+        # The composite foreign key keeps the base in this project; RESTRICT keeps it.
+        base = await session.get(NarrativeAsset, job.base_asset_id)
+        assert base is not None and job.face_box and job.prompts and job.strength
+        left, top, right, bottom = job.face_box
+        plan = InpaintPlan(
+            asset_id=base.id,
+            sha256=base.sha256,
+            size_bytes=base.size_bytes,
+            box=(left, top, right, bottom),
+            strength=job.strength,
+            prompts=tuple(job.prompts),
+        )
     return ImageWork(
+        inpaint=plan,
         tenant_id=job.tenant_id,
         project_id=job.project_id,
         job_id=job.id,
@@ -504,6 +640,11 @@ async def complete_image_job(
     # Lists are newest first; earlier candidates of one job get slightly later times so
     # they read 1, 2, 3, 4 even where the clock does not advance between rows.
     finished = _now()
+    kind = _asset_kind(job)
+    if job.purpose == "character_expression":
+        # A repainted face is the same kind of image as its base.
+        base = await session.get(NarrativeAsset, job.base_asset_id)
+        kind = base.kind if base is not None else "sprite"
     # Identical bytes are one asset per project; a repeated image adds nothing new.
     known = set(
         await session.scalars(
@@ -540,12 +681,20 @@ async def complete_image_job(
                 "license": cutout.identity.license,
                 "box": list(image.box),
             }
+        if job.purpose == "character_expression" and job.expressions and job.prompts:
+            provenance |= {
+                "prompt": job.prompts[image.index],
+                "expression": job.expressions[image.index],
+                "base_asset_id": str(job.base_asset_id),
+                "face_box": job.face_box,
+                "strength": job.strength,
+            }
         session.add(
             NarrativeAsset(
                 id=asset_id,
                 tenant_id=job.tenant_id,
                 project_id=job.project_id,
-                kind=_asset_kind(job),
+                kind=kind,
                 source="generated",
                 name=_asset_name(job, image.index),
                 created_at=finished - timedelta(microseconds=image.index),
@@ -592,6 +741,8 @@ def _asset_name(job: NarrativeImageJob, index: int) -> str:
     """A readable default the creator can rename: what was asked for, numbered."""
     if job.purpose == "background":
         base = textwrap.shorten(clean_appearance(job.appearance), width=60, placeholder="…")
+    elif job.purpose == "character_expression" and job.expressions:
+        return f"{job.character_id} {job.expressions[index]}"
     else:
         base = f"{job.character_id} {'sprite' if job.transparent else 'portrait'}"
     return f"{base} {index + 1}"

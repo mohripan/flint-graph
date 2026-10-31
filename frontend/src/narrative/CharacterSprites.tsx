@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AssetThumb, SPRITE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
 import { UpgradeNotice } from "./StageEditor";
+import { ExpressionStudio } from "./ExpressionStudio";
 import { bindAsset, expressionId, removeSprite, setCharacterColor, setSprite, spriteUses } from "./stageModel";
 import type { StoryDraft } from "./types";
 
@@ -76,5 +77,6 @@ export function CharacterSprites({ id, story, tenantId, projectId, readOnly, onC
           <AssetThumb tenantId={tenantId} projectId={projectId} asset={asset} label={asset.name} /><small>{asset.name}</small></button>)}
       </div>}
     </fieldset>
+    <ExpressionStudio id={id} story={story} tenantId={tenantId} projectId={projectId} readOnly={readOnly} onChange={onChange} onError={onError} />
   </section>;
 }

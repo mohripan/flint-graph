@@ -1,7 +1,7 @@
 """Character profile, portrait job and image contracts (ADR 0039)."""
 
 from datetime import datetime
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
@@ -45,6 +45,19 @@ class PortraitJobCreate(BaseModel):
         if self.transparent and self.framing != "full_body":
             raise ValueError("Transparent sprites need full-body framing")
         return self
+
+
+class ExpressionJobCreate(BaseModel):
+    """Repaint the face of a base image once per expression (ADR 0041)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_asset_id: UUID
+    face_box: list[Annotated[int, Field(ge=0, le=4096)]] = Field(min_length=4, max_length=4)
+    expressions: list[Annotated[str, Field(min_length=1, max_length=40)]] = Field(
+        min_length=1, max_length=4
+    )
+    idempotency_key: UUID
 
 
 class AssetResponse(BaseModel):
@@ -136,6 +149,12 @@ class ImageJobResponse(BaseModel):
     cutout: CutoutResponse | None
     prompt_tokens: int | None
     truncated: bool | None
+    # Expression jobs (ADR 0041): the base image, its face box and one entry per image.
+    base_asset_id: UUID | None = None
+    face_box: list[int] | None = None
+    strength: float | None = None
+    expressions: list[str] | None = None
+    prompts: list[str] | None = None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

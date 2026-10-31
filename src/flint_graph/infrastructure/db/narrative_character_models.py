@@ -33,6 +33,15 @@ CUTOUT_RULE = (
     "OR (transparent AND cutout_model IS NOT NULL AND cutout_sha256 IS NOT NULL)) "
     "AND (status <> 'completed' OR NOT transparent OR cutout_model IS NOT NULL)"
 )
+# Expression jobs repaint the face of a base asset of the same project (migration 0026).
+PURPOSE_RULE = (
+    "(purpose IN ('character_portrait','character_expression') AND character_id IS NOT NULL) "
+    "OR (purpose = 'background' AND character_id IS NULL)"
+)
+EXPRESSION_RULE = (
+    "(purpose = 'character_expression') = (base_asset_id IS NOT NULL AND face_box IS NOT NULL "
+    "AND strength IS NOT NULL AND expressions IS NOT NULL AND prompts IS NOT NULL)"
+)
 
 
 class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -69,10 +78,14 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         CheckConstraint("count BETWEEN 1 AND 4", name="ck_narrative_image_job_count"),
         CheckConstraint("progress BETWEEN 0 AND count", name="ck_narrative_image_job_progress"),
-        CheckConstraint(
-            "(purpose = 'character_portrait' AND character_id IS NOT NULL) "
-            "OR (purpose = 'background' AND character_id IS NULL)",
-            name="ck_narrative_image_job_purpose",
+        CheckConstraint(PURPOSE_RULE, name="ck_narrative_image_job_purpose"),
+        CheckConstraint(EXPRESSION_RULE, name="ck_narrative_image_job_expression"),
+        ForeignKeyConstraint(
+            ["base_asset_id", "project_id", "tenant_id"],
+            ["narrative_assets.id", "narrative_assets.project_id", "narrative_assets.tenant_id"],
+            name="fk_narrative_image_job_base_asset",
+            ondelete="RESTRICT",
+            use_alter=True,
         ),
         CheckConstraint(TRANSPARENT_RULE, name="ck_narrative_image_job_transparent"),
         CheckConstraint(CUTOUT_RULE, name="ck_narrative_image_job_cutout"),
@@ -105,6 +118,12 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     seeds: Mapped[list[int]] = mapped_column(JSON)
     count: Mapped[int] = mapped_column(Integer)
     transparent: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Expressions (ADR 0041): the face of this base asset, repainted once per expression.
+    base_asset_id: Mapped[UUID | None]
+    face_box: Mapped[list[int] | None] = mapped_column(JSON)
+    strength: Mapped[float | None] = mapped_column(Float)
+    expressions: Mapped[list[str] | None] = mapped_column(JSON)
+    prompts: Mapped[list[str] | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(16), default="queued")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)

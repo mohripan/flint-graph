@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import suppress
+from dataclasses import replace
 from typing import Literal, Protocol, cast
 from uuid import UUID, uuid4
 
@@ -21,6 +22,7 @@ from flint_graph.application.narrative_image_workflow import (
 )
 from flint_graph.application.services.narrative_images import (
     ImageRegistrationPending,
+    ImageWork,
     abandon_image_job,
     claim_image_job,
     complete_image_job,
@@ -41,6 +43,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     GpuReleaser,
     ImageGenerationError,
     ImageGenerator,
+    InpaintRequest,
 )
 
 # A busy or exhausted GPU may free up; other failures would repeat identically.
@@ -58,6 +61,10 @@ class ImageStore(Protocol):
         content_type: str,
         max_bytes: int,
     ) -> object: ...
+
+    async def get_verified(
+        self, key: str, *, expected_size: int, expected_sha256: str, max_bytes: int
+    ) -> bytes: ...
 
 
 class _CancelRequested(Exception):
@@ -140,6 +147,29 @@ class NarrativeImageActivities:
                 raise error from None
             return await generator.generate(request, on_progress=progress)
 
+    async def _request(self, work: ImageWork) -> GenerationRequest:
+        """Expression jobs carry their base image's verified bytes to the child."""
+        plan = work.inpaint
+        if plan is None:
+            return work.request
+        image = await self.store.get_verified(
+            asset_object_key(
+                tenant_id=work.tenant_id,
+                project_id=work.project_id,
+                asset_id=plan.asset_id,
+                variant="image",
+            ),
+            expected_size=plan.size_bytes,
+            expected_sha256=plan.sha256,
+            max_bytes=IMAGE_LIMIT,
+        )
+        return replace(
+            work.request,
+            inpaint=InpaintRequest(
+                image=image, box=plan.box, strength=plan.strength, prompts=plan.prompts
+            ),
+        )
+
     async def _store(
         self, work_tenant: UUID, work_project: UUID, images: tuple[GeneratedImage, ...]
     ) -> list[tuple[UUID, GeneratedImage]]:
@@ -185,7 +215,8 @@ class NarrativeImageActivities:
         generator = self.generator
         beating = asyncio.create_task(_heartbeat())
         try:
-            result = await self._generate(generator, work.request, job_id, token)
+            request = await self._request(work)
+            result = await self._generate(generator, request, job_id, token)
             stored = await self._store(work.tenant_id, work.project_id, result.images)
         except ImageGenerationError as error:
             if error.code in _TRANSIENT and attempt < self.max_attempts:

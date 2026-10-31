@@ -192,6 +192,90 @@ def portrait_request(
     )
 
 
+# Expressions repaint only the face of a base sprite (ADR 0041). Presets carry tag sets
+# that read clearly at the default strength; anything else is used as tags as typed.
+EXPRESSION_TAGS = {
+    "happy": "smile, open mouth, happy",
+    "laughing": "laughing, closed eyes, open mouth, smile",
+    "sad": "sad, frown, furrowed brow, looking down",
+    "crying": "crying, tears, sad, open mouth",
+    "angry": "angry, frown, v-shaped eyebrows, glaring, clenched teeth",
+    "surprised": "surprised, wide-eyed, open mouth, :o, raised eyebrows",
+    "embarrassed": "embarrassed, blush, wavy mouth, looking away",
+    "worried": "worried, frown, furrowed brow, sweatdrop",
+    "smug": "smug, smirk, half-closed eyes",
+    "thinking": "pensive, closed mouth, looking up",
+    "sleepy": "sleepy, half-closed eyes, yawning",
+    "determined": "determined, serious, closed mouth, v-shaped eyebrows",
+}
+MAX_EXPRESSIONS = 4
+EXPRESSION_GUIDANCE = 6.0
+EXPRESSION_STRENGTH = 0.9
+# "looking at viewer" would fight expressions that look away or down.
+EXPRESSION_QUALITY = "safe, masterpiece, high score, great score, absurdres"
+_EXPRESSION_NAME = re.compile(r"[a-z0-9][a-z0-9 '\-]{0,39}\Z")
+
+
+@dataclass(frozen=True)
+class ExpressionRequest:
+    ids: tuple[str, ...]
+    prompts: tuple[str, ...]
+    negative_prompt: str
+    steps: int
+    guidance: float
+    strength: float
+
+
+def expression_id(name: str) -> str:
+    """The sprite key a story uses for an expression name."""
+    key = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:60]
+    return key if re.match(r"[a-z]", key) else f"e_{key}"[:64]
+
+
+def expression_names(expressions: list[str]) -> list[str]:
+    """Normalized expression names; ValueError when one is not a short tag."""
+    names = [re.sub(r"\s+", " ", str(name)).strip().lower() for name in expressions]
+    if not 1 <= len(names) <= MAX_EXPRESSIONS:
+        raise ValueError(f"Choose one to {MAX_EXPRESSIONS} expressions")
+    if any(not _EXPRESSION_NAME.fullmatch(name) for name in names):
+        raise ValueError("Expressions are short words: letters, digits, spaces, - and '")
+    if len({expression_id(name) for name in names}) != len(names):
+        raise ValueError("Each expression can be asked for once")
+    return names
+
+
+def expression_request(
+    appearance: str, character_type: str, expressions: list[str]
+) -> ExpressionRequest:
+    """One face-inpainting prompt per expression: subject, expression, then looks."""
+    if character_type not in CHARACTER_TYPES:
+        raise ValueError("Unknown character type")
+    if len(appearance) > MAX_APPEARANCE * 2:
+        raise ValueError("Appearance is too long")
+    names = expression_names(expressions)
+    ids = tuple(expression_id(name) for name in names)
+    tags = appearance_tags(clean_appearance(appearance), character_type) if appearance else []
+    prompts = tuple(
+        ", ".join(
+            part
+            for part in (
+                CHARACTER_TYPES[character_type],
+                "solo, close-up, face",
+                EXPRESSION_TAGS.get(name, name),
+                *tags,
+                "white background",
+                EXPRESSION_QUALITY,
+            )
+            if part
+        )
+        for name in names
+    )
+    negative = _portrait_negative(tags, character_type, False) + ", expressionless"
+    return ExpressionRequest(
+        ids, prompts, negative, STEPS, EXPRESSION_GUIDANCE, EXPRESSION_STRENGTH
+    )
+
+
 BACKGROUND_SIZE = (1344, 768)
 BACKGROUND_QUALITY = "safe, masterpiece, high score, great score, absurdres"
 # People in a background would be fixed into every scene that uses it.

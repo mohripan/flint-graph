@@ -25,6 +25,7 @@ from flint_graph.api.narrative_character_schemas import (
     CHARACTER_ID,
     AssetResponse,
     CutoutResponse,
+    ExpressionJobCreate,
     ImageJobListResponse,
     ImageJobResponse,
     PortraitChoice,
@@ -43,6 +44,7 @@ from flint_graph.application.services.narrative_characters import (
 )
 from flint_graph.application.services.narrative_images import (
     cancel_image_job,
+    create_expression_job,
     create_portrait_job,
     get_image_job,
     list_image_jobs,
@@ -110,6 +112,11 @@ def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJ
         ),
         prompt_tokens=job.prompt_tokens,
         truncated=job.truncated,
+        base_asset_id=job.base_asset_id,
+        face_box=job.face_box,
+        strength=job.strength,
+        expressions=job.expressions,
+        prompts=job.prompts,
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
@@ -227,6 +234,59 @@ async def list_character_portrait_jobs(
         tenant_id=tenant_id,
         project_id=project_id,
         purpose="character_portrait",
+        character_id=character_id,
+        limit=limit,
+    )
+    return ImageJobListResponse(jobs=[job_response(job, assets) for job, assets in rows])
+
+
+@router.post(
+    "/characters/{character_id}/expression-jobs", response_model=ImageJobResponse, status_code=202
+)
+async def create_character_expression_job(
+    project_id: UUID,
+    character_id: CharacterId,
+    payload: ExpressionJobCreate,
+    tenant_id: TenantMemberDep,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: AuditActorDep,
+) -> ImageJobResponse:
+    left, top, right, bottom = payload.face_box
+    job = await _persist(
+        session,
+        create_expression_job(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            character_id=character_id,
+            author_user_id=current_user.user.id,
+            base_asset_id=payload.base_asset_id,
+            face_box=(left, top, right, bottom),
+            expressions=payload.expressions,
+            idempotency_key=payload.idempotency_key,
+            actor=actor,
+            available=settings.narrative_image_generation_enabled,
+            max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
+        ),
+    )
+    return job_response(job, [])
+
+
+@router.get("/characters/{character_id}/expression-jobs", response_model=ImageJobListResponse)
+async def list_character_expression_jobs(
+    project_id: UUID,
+    character_id: CharacterId,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> ImageJobListResponse:
+    rows = await list_image_jobs(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        purpose="character_expression",
         character_id=character_id,
         limit=limit,
     )

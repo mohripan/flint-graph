@@ -5,11 +5,13 @@ import pytest
 from flint_graph.narrative.imagegen import (
     CHARACTER_TYPES,
     CUTOUT_TAGS,
+    EXPRESSION_TAGS,
     FRAMINGS,
     MAX_APPEARANCE,
     NEGATIVE,
     appearance_tags,
     background_request,
+    expression_request,
     portrait_request,
 )
 
@@ -191,3 +193,46 @@ def test_transparent_sprites_are_full_body_on_a_plain_white_background():
 def test_invalid_portrait_input_is_rejected(appearance, character_type, framing):
     with pytest.raises(ValueError):
         portrait_request(appearance, character_type, framing)
+
+
+def test_expression_prompts_put_the_expression_first_and_use_the_appearance_tags():
+    request = expression_request(
+        "shoulder-length white hair, red eyes", "boy", ["happy", "Fond of tea"]
+    )
+    assert request.ids == ("happy", "fond_of_tea")
+    happy, custom = request.prompts
+    assert happy.startswith("1boy, male focus, solo, close-up, face, smile, open mouth, happy, ")
+    assert "medium hair" in happy and "white hair" in happy and "red eyes" in happy
+    assert happy.endswith("white background, safe, masterpiece, high score, great score, absurdres")
+    assert "looking at viewer" not in happy
+    assert "close-up, face, fond of tea, " in custom
+    assert request.negative_prompt.endswith(
+        "1girl, female focus, breasts, long hair, very long hair, expressionless"
+    )
+    assert (request.steps, request.guidance, request.strength) == (28, 6.0, 0.9)
+    assert set(EXPRESSION_TAGS) >= {"happy", "sad", "angry", "surprised", "embarrassed", "thinking"}
+
+
+@pytest.mark.parametrize(
+    "expressions",
+    [
+        [],
+        ["happy"] * 2,
+        ["happy", "sad", "angry", "smug", "worried"],
+        ["<script>"],
+        ["x" * 41],
+        [""],
+        ["happy", "Happy"],
+    ],
+)
+def test_expression_lists_are_bounded_unique_and_plain(expressions):
+    with pytest.raises(ValueError):
+        expression_request("", "girl", expressions)
+
+
+def test_expressions_work_without_an_appearance_description():
+    request = expression_request("", "other", ["surprised"])
+    assert request.prompts == (
+        "solo, close-up, face, surprised, wide-eyed, open mouth, :o, raised eyebrows, "
+        "white background, safe, masterpiece, high score, great score, absurdres",
+    )

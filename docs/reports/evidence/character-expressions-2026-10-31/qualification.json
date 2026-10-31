@@ -1,0 +1,62 @@
+{
+  "schema_version": "1",
+  "date": "2026-10-31",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU, 12 GB",
+  "runtime": {"torch": "2.11.0+cu128", "diffusers": "0.42.1", "cuda": "12.8"},
+  "model": "cagliostrolab/animagine-xl-4.0@2b7c1b397761bf5bd3cc42e5b39ec99314a75a96",
+  "base_sprite": {"size": [808, 1212], "mode": "RGBA", "source": "transparent sprite from the cutout qualification"},
+  "live_test_final": {
+    "test": "tests/integration/test_narrative_image_workflow_live.py::test_real_gpu_expressions_repaint_only_the_face",
+    "result": "passed in 273 s (the Ollama assistant model reloaded on the GPU during the job)",
+    "strength": 0.9,
+    "face_box": [350, 40, 480, 170],
+    "prompt_tokens": 57,
+    "truncated": false,
+    "checks": {
+      "happy": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 24.2},
+      "angry": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 47.3},
+      "sad": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 25.3},
+      "surprised": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 35.2}
+    },
+    "visual": "happy and angry clear; every face changes eyes and brows; sad and surprised keep a closed-mouth smile"
+  },
+  "live_test": {
+    "test": "tests/integration/test_narrative_image_workflow_live.py::test_real_gpu_expressions_repaint_only_the_face",
+    "path": "API job -> outbox relay -> owned Temporal -> image activity -> real child -> MinIO -> hash-verified content",
+    "result": "passed in 83 s (Ollama assistant model released once)",
+    "strength": 0.85,
+    "face_box": [350, 40, 480, 170],
+    "prompt_tokens": 57,
+    "truncated": false,
+    "checks": {
+      "happy": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 20.6},
+      "angry": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 38.4},
+      "sad": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 28.1},
+      "surprised": {"same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 27.3}
+    }
+  },
+  "strength_tuning": {
+    "0.85": "sad and surprised kept the base smile; mouths barely changed",
+    "0.9": "happy and angry read clearly; eyes and brows change on every expression; surprised opened its mouth in one run, not in the final one; slight hair drift at the mask edge; chosen default",
+    "0.95": "hair inside the mask drifts in colour (scratch test)"
+  },
+  "studio": {
+    "browser": "headless Edge over the DevTools protocol, 1366x1000",
+    "stack": "worktree API (port 8102, own database), own image worker queue, real child on the GPU",
+    "job": {"strength": 0.9, "face_box": [353, 41, 483, 171], "expressions": ["happy", "angry"], "prompt_tokens": 57,
+            "truncated": false, "started_to_finished_seconds": 63},
+    "steps": [
+      {"name": "default face box from alpha", "box": [353, 41, 483, 171]},
+      {"name": "arrow key moves the box", "after": "359, 41, 130 pixels wide"},
+      {"name": "chips", "pressed": ["happy", "angry"], "button": "Generate 2 expressions"},
+      {"name": "progress", "status": "Loading the model..."},
+      {"name": "results", "results": ["happy", "angry"], "preview": "zoomed onto the face"},
+      {"name": "use as happy", "sprites": ["neutral", "happy"], "result_label": "In use", "asset_status": "approved"},
+      {"name": "save", "notice": "Saved revision 3."}
+    ],
+    "checks": {
+      "happy": {"mode": "RGBA", "same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 22.6},
+      "angry": {"mode": "RGBA", "same_size": true, "alpha_equal": true, "outside_crop_changed_pixels": 0, "face_mean_change": 40.2}
+    }
+  }
+}

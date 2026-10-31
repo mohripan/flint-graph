@@ -81,6 +81,16 @@ class CutoutModel:
 
 
 @dataclass(frozen=True)
+class InpaintRequest:
+    """Repaint the face of a base image (ADR 0041); bytes already hash-verified."""
+
+    image: bytes
+    box: tuple[int, int, int, int]
+    strength: float
+    prompts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GenerationRequest:
     prompt: str
     negative_prompt: str
@@ -91,6 +101,8 @@ class GenerationRequest:
     seeds: tuple[int, ...]
     # Cut the figure out of its background into a cropped RGBA sprite.
     cutout: bool = False
+    # Repaint only the face of a base image, one prompt per seed; the size is the base's.
+    inpaint: InpaintRequest | None = None
 
 
 @dataclass(frozen=True)
@@ -273,6 +285,11 @@ class LocalImageGenerator:
     ) -> GenerationResult:
         if not 1 <= len(request.seeds) <= MAX_IMAGES:
             raise ImageGenerationError("bad_request")
+        inpaint = request.inpaint
+        if inpaint is not None and (
+            request.cutout or len(inpaint.prompts) != len(request.seeds)
+        ):
+            raise ImageGenerationError("bad_request")
         if request.cutout and self.cutout is None:
             raise ImageGenerationError("cutout_unavailable")
         cutout = (
@@ -284,21 +301,31 @@ class LocalImageGenerator:
             work = Path(directory)
             output = work / "out"
             output.mkdir()
-            body = json.dumps(
-                {
-                    "protocol": PROTOCOL,
-                    "model_dir": str(self.model_dir),
-                    "output_dir": str(output),
-                    "prompt": request.prompt,
-                    "negative_prompt": request.negative_prompt,
-                    "width": request.width,
-                    "height": request.height,
-                    "steps": request.steps,
-                    "guidance": request.guidance,
-                    "seeds": list(request.seeds),
-                    "cutout": cutout,
+            fields: dict[str, Any] = {
+                "protocol": PROTOCOL,
+                "model_dir": str(self.model_dir),
+                "output_dir": str(output),
+                "prompt": request.prompt,
+                "negative_prompt": request.negative_prompt,
+                "width": request.width,
+                "height": request.height,
+                "steps": request.steps,
+                "guidance": request.guidance,
+                "seeds": list(request.seeds),
+                "cutout": cutout,
+            }
+            if inpaint is not None:
+                # The child reads its own copy from the private work folder and hashes it.
+                base = work / "base.png"
+                base.write_bytes(inpaint.image)
+                fields["inpaint"] = {
+                    "image": str(base),
+                    "sha256": hashlib.sha256(inpaint.image).hexdigest(),
+                    "box": list(inpaint.box),
+                    "strength": inpaint.strength,
+                    "prompts": list(inpaint.prompts),
                 }
-            ).encode()
+            body = json.dumps(fields).encode()
             process = await asyncio.create_subprocess_exec(
                 str(self.python),
                 "-I",
@@ -398,6 +425,8 @@ class LocalImageGenerator:
         if {path.name for path in output.iterdir()} != expected:
             raise ImageGenerationError("invalid_output")
         images = []
+        # A repainted face keeps the base's transparency exactly: a sprite stays a sprite.
+        base_alpha = request.inpaint is not None and _rgba(request.inpaint.image)
         for index, seed in enumerate(request.seeds):
             data = _read_png(output / f"{index}.png", IMAGE_LIMIT)
             thumbnail = _read_png(output / f"{index}.thumb.png", THUMBNAIL_LIMIT)
@@ -414,6 +443,10 @@ class LocalImageGenerator:
                 or thumb_width != THUMBNAIL_WIDTH
                 or thumb_height != round(height * THUMBNAIL_WIDTH / width)
                 or (box is not None and not (_rgba(data) and _rgba(thumbnail)))
+                or (
+                    request.inpaint is not None
+                    and not (_rgba(data) == _rgba(thumbnail) == base_alpha)
+                )
             ):
                 raise ImageGenerationError("invalid_output")
             images.append(
