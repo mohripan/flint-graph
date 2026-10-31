@@ -65,6 +65,13 @@ test("a second character stands on the right and needs its own approved image", 
   assert.match(cg.cgProblem({ ...two, picks: [two.picks[0], { character: "lina", reference: null }] }), /Approve/);
   assert.match(cg.cgProblem({ ...two, picks: [...two.picks, { character: "mira", reference: "c" }] }), /two/);
   assert.equal(cg.CG_MAX_CHARACTERS, 2);
+  // Two characters are experimental: say so, and start two jobs of four by default.
+  assert.equal(cg.TWO_CHARACTER_NOTE,
+    "Experimental: the two characters may swap hair or clothes. Generate a few and keep the best.");
+  assert.equal(cg.cgJobCount(two.picks), 2);
+  assert.equal(cg.cgJobCount([two.picks[0]]), 1);
+  assert.equal(cg.cgCandidates(two.picks), 2 * cg.CG_COUNT);
+  assert.equal(cg.cgCandidates([two.picks[0]]), cg.CG_COUNT);
   // The second picker offers everyone but the first character.
   assert.deepEqual(cg.otherCharacters(["mira", "quen", "lina"], "quen"), ["mira", "lina"]);
 });

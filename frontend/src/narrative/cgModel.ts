@@ -10,6 +10,19 @@ const REFERENCE_KINDS = ["character_portrait", "sprite", "image"];
 
 export interface CgPick { character: string; reference: string | null }
 
+// Two characters keep both looks in about 7 renders of 12 (ADR 0041; M40 #185 owns
+// improving it), so the Studio says so and starts two jobs of four. Jobs stay within
+// the four-image cap and run one at a time on the GPU.
+export const TWO_CHARACTER_NOTE = "Experimental: the two characters may swap hair or clothes. Generate a few and keep the best.";
+
+export function cgJobCount(picks: CgPick[]): number {
+  return picks.length === 2 ? 2 : 1;
+}
+
+export function cgCandidates(picks: CgPick[]): number {
+  return cgJobCount(picks) * CG_COUNT;
+}
+
 /** Approved images that can stand for a character: its chosen portrait first, then
  *  portraits, sprites and other images. Generated CGs never do: they carry a scene. */
 export function referenceChoices(assets: NarrativeImage[], portraitId: string | null | undefined): NarrativeImage[] {

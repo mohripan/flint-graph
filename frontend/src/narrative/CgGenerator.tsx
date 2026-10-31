@@ -3,7 +3,8 @@ import type { FormEvent } from "react";
 import { api } from "../lib/api";
 import type { CharacterProfile, ImageJob, NarrativeImage } from "../lib/api";
 import {
-  CG_COUNT, CG_MAX_CHARACTERS, CG_SCENE_LIMIT, cgProblem, cgRequest, defaultReference, otherCharacters, referenceChoices,
+  CG_MAX_CHARACTERS, CG_SCENE_LIMIT, TWO_CHARACTER_NOTE, cgCandidates, cgJobCount, cgProblem, cgRequest, defaultReference,
+  otherCharacters, referenceChoices,
 } from "./cgModel";
 import type { CgPick } from "./cgModel";
 import { useNarrativeImage } from "./characterImages";
@@ -25,6 +26,7 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
   const [profiles, setProfiles] = useState<CharacterProfile[] | null>(null);
   const [scene, setScene] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -41,10 +43,17 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (problem || busy || active) return;
-    setBusy(true); setError(null);
-    try { onStarted(await api.createSceneArtJob(tenantId, projectId, cgRequest({ picks, scene }))); }
-    catch (failure) { setError(message(failure, "Could not start generating CGs.")); }
-    finally { setBusy(false); }
+    setBusy(true); setError(null); setNotice(null);
+    // Two characters start two jobs; the workspace's job limit may refuse the second.
+    let started = 0;
+    try {
+      for (; started < cgJobCount(picks); started += 1) {
+        onStarted(await api.createSceneArtJob(tenantId, projectId, cgRequest({ picks, scene })));
+      }
+    } catch (failure) {
+      if (started) setNotice("Started 4 CGs. Generate more when they are done.");
+      else setError(message(failure, "Could not start generating CGs."));
+    } finally { setBusy(false); }
   }
 
   if (!ids.length) return <p className="studio-hint">Add a character in the Characters tab first: a CG is drawn from an approved image of them.</p>;
@@ -62,17 +71,18 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
     {picks.length < CG_MAX_CHARACTERS && ids.length > 1 && <button type="button" className="studio-link"
       onClick={() => setPicks(current => [...current, { character: otherCharacters(ids, current[0].character)[0], reference: null }])}>
       Add a second character</button>}
-    {two && <p className="studio-hint studio-cg-two">Two characters are less reliable than one: check that each kept their own hair and outfit before approving.</p>}
+    {two && <p className="studio-notice studio-cg-two" role="note">{TWO_CHARACTER_NOTE}</p>}
     <Field label="Scene" hint={`Where they are, what they are doing, the time of day and the mood.${two ? " The first character stands on the left." : ""}`}>
       <textarea rows={2} maxLength={CG_SCENE_LIMIT} value={scene}
         placeholder={`${subject} sitting on the couch by the window at night`}
         onChange={event => setScene(event.target.value)} /></Field>
     <div className="studio-actions">
       <button type="submit" className="studio-primary" disabled={busy || Boolean(active) || Boolean(problem)}>
-        {active ? "Generating…" : `Generate ${CG_COUNT} CGs`}</button>
+        {active ? "Generating…" : `Generate ${cgCandidates(picks)} CGs`}</button>
       {active && <><span role="status" className="studio-hint">{jobStatus(active)}</span>
         {!active.cancel_requested && <button type="button" className="studio-link" onClick={() => onCancel(active)}>Cancel</button>}</>}
     </div>
+    {notice && <p className="studio-hint" role="status">{notice}</p>}
     {(error || failed) && <p className="studio-error" role="alert">{error ?? failed}</p>}
   </form>;
 }
