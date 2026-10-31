@@ -285,6 +285,10 @@ class Settings(BaseSettings):
     narrative_voice_model_manifest_sha256: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
     )
+    # "auto" speaks on the GPU when the shared card has about 1 GiB free, else the CPU.
+    narrative_voice_device: Literal["auto", "cpu"] = "auto"
+    # Compiled CUDA kernels kept between jobs (no secrets); unset uses the system temp.
+    narrative_voice_cuda_cache_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_voice_max_active_jobs_per_workspace: int = Field(default=4, ge=1, le=20)
     narrative_voice_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
     narrative_voice_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)

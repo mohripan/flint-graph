@@ -1,10 +1,12 @@
 """Trusted parent for the isolated local Kokoro child (ADR 0043).
 
-The child runs from its own locked CPU environment with ``python -I``, a minimal
-environment without credentials and a watchdog. Nothing it returns is trusted:
-output lines are bounded, events must follow the protocol in order, the output
-directory must hold exactly one WAV per text, and every clip must be canonical
-24 kHz mono 16-bit PCM of the announced length before its bytes leave this module.
+The child runs from its own locked CUDA environment with ``python -I``, a minimal
+environment without credentials and a watchdog. It uses the GPU when the shared
+card has room and the CPU otherwise; each clip reports the device that spoke it.
+Nothing it returns is trusted: output lines are bounded, events must follow the
+protocol in order, the output directory must hold exactly one WAV per text, and
+every clip must be canonical 24 kHz mono 16-bit PCM of the announced length before
+its bytes leave this module.
 """
 
 import asyncio
@@ -31,8 +33,18 @@ SAMPLE_RATE = 24000
 LINE_LIMIT = 16 * 1024
 CHILD_CODES = {"bad_request", "model_invalid", "empty_speech", "too_long"}
 RUNTIME_KEYS = {"torch", "kokoro", "misaki", "device"}
-# What the interpreter needs; nothing that carries secrets.
-_PASSTHROUGH = ("SYSTEMROOT", "WINDIR", "PATH", "USERNAME", "USER", "LOGNAME")
+DEVICES = ("cuda", "cpu")
+# What the interpreter and the CUDA runtime need; nothing that carries secrets.
+_PASSTHROUGH = (
+    "SYSTEMROOT",
+    "WINDIR",
+    "PATH",
+    "CUDA_VISIBLE_DEVICES",
+    "LD_LIBRARY_PATH",
+    "USERNAME",
+    "USER",
+    "LOGNAME",
+)
 
 
 class VoiceGenerationError(Exception):
@@ -61,6 +73,7 @@ class GeneratedClip:
     data: bytes
     sha256: str
     frames: int
+    device: str = "cpu"  # "cuda" or "cpu": what spoke this clip
 
     @property
     def duration_ms(self) -> int:
@@ -126,9 +139,14 @@ class LocalVoiceGenerator:
         model_dir: Path,
         model: ModelIdentity,
         deadline_seconds: int,
+        device: str = "auto",
+        cuda_cache: Path | None = None,
     ) -> None:
+        if device not in ("auto", "cpu"):
+            raise ValueError("Voice device must be auto or cpu")
         self.python, self.script, self.model_dir = python, script, model_dir
-        self.model, self.deadline = model, deadline_seconds
+        self.model, self.deadline, self.device = model, deadline_seconds, device
+        self.cuda_cache = cuda_cache
 
     def _environment(self, work: Path) -> dict[str, str]:
         environment = {key: os.environ[key] for key in _PASSTHROUGH if key in os.environ}
@@ -147,6 +165,11 @@ class LocalVoiceGenerator:
                 "PYTHONDONTWRITEBYTECODE": "1",
             }
         )
+        if self.cuda_cache is not None:
+            # CUDA compiles its kernels for this GPU on first use; without a lasting
+            # cache every job pays that again (measured 26 s against 8.5 s per job).
+            environment["CUDA_CACHE_PATH"] = str(self.cuda_cache)
+            environment["CUDA_CACHE_MAXSIZE"] = str(4 * 1024**3)
         return environment
 
     async def generate(self, request: VoiceRequest, *, on_progress: Progress) -> VoiceResult:
@@ -164,6 +187,7 @@ class LocalVoiceGenerator:
                     "speed": request.speed,
                     "seed": request.seed,
                     "items": [{"text": item.text, "mode": item.mode} for item in request.items],
+                    "device": self.device,
                 }
             ).encode()
             process = await asyncio.create_subprocess_exec(
@@ -197,14 +221,14 @@ class LocalVoiceGenerator:
         body: bytes,
         request: VoiceRequest,
         on_progress: Progress,
-    ) -> tuple[dict[str, Any], list[int]]:
+    ) -> tuple[dict[str, Any], list[tuple[int, str]]]:
         assert process.stdin is not None and process.stdout is not None
         process.stdin.write(body)
         with contextlib.suppress(ConnectionError):
             await process.stdin.drain()
         process.stdin.close()
         loaded: dict[str, Any] | None = None
-        samples: list[int] = []
+        samples: list[tuple[int, str]] = []
         done = False
         for _ in range(len(request.items) + 3):
             try:
@@ -232,9 +256,10 @@ class LocalVoiceGenerator:
                     or event.get("file") != f"{index}.wav"
                     or type(count) is not int
                     or not 0 < count <= SAMPLE_RATE * 60
+                    or event.get("device") not in DEVICES
                 ):
                     raise VoiceGenerationError("invalid_output")
-                samples.append(count)
+                samples.append((count, event["device"]))
                 await on_progress(len(samples))
             elif kind == "done" and len(samples) == len(request.items):
                 done = True
@@ -247,11 +272,13 @@ class LocalVoiceGenerator:
             raise VoiceGenerationError("generation_failed")
         return loaded, samples
 
-    def _collect(self, output: Path, loaded: dict[str, Any], samples: list[int]) -> VoiceResult:
+    def _collect(
+        self, output: Path, loaded: dict[str, Any], samples: list[tuple[int, str]]
+    ) -> VoiceResult:
         if {path.name for path in output.iterdir()} != {f"{i}.wav" for i in range(len(samples))}:
             raise VoiceGenerationError("invalid_output")
         clips = []
-        for index, frames in enumerate(samples):
+        for index, (frames, device) in enumerate(samples):
             path = output / f"{index}.wav"
             if path.is_symlink() or not path.is_file() or path.stat().st_size > AUDIO_LIMIT:
                 raise VoiceGenerationError("invalid_output")
@@ -264,7 +291,11 @@ class LocalVoiceGenerator:
                 raise VoiceGenerationError("invalid_output")
             clips.append(
                 GeneratedClip(
-                    index=index, data=data, sha256=hashlib.sha256(data).hexdigest(), frames=frames
+                    index=index,
+                    data=data,
+                    sha256=hashlib.sha256(data).hexdigest(),
+                    frames=frames,
+                    device=device,
                 )
             )
         runtime = loaded.get("runtime")

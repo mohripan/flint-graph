@@ -1,9 +1,10 @@
 """Character voices and local voice jobs (ADR 0043).
 
 A character's profile stores a Kokoro voice ID. API requests only record intent: a
-job is queued with an ID-only outbox message and Kokoro runs later on the CPU in a
-fenced activity of the registered workflow run (ADR 0037). Every spoken text becomes
-a candidate voice clip; only approval lets a story bind it. Audit metadata and
+job is queued with an ID-only outbox message and Kokoro runs later (on the GPU, or
+the CPU when the shared card is busy) in a fenced activity of the registered workflow
+run (ADR 0037). Every spoken text becomes a candidate voice clip; only approval lets
+a story bind it. Audit metadata and
 outbox payloads carry identifiers, never the spoken text.
 """
 
@@ -501,6 +502,7 @@ async def complete_voice_job(
                     "text": item["text"],
                     "node_id": item.get("node_id"),
                     "seed": job.seed + clip.index,
+                    "device": clip.device,
                     "runtime": result.runtime,
                 },
                 license=model.license[:120],
@@ -509,7 +511,8 @@ async def complete_voice_job(
             )
         )
     job.model = f"{model.repo}@{model.revision}"[:200]
-    job.runtime = result.runtime
+    # The device each clip was spoken on: the GPU, or the CPU when the card was busy.
+    job.runtime = {**result.runtime, "clip_devices": ",".join(c.device for _, c in stored)}
     job.progress = job.count
     _finish(job, "completed")
     await session.flush()

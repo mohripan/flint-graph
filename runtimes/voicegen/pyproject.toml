@@ -9,6 +9,7 @@ dependencies = [
     "misaki[en]==0.9.4",
     "en-core-web-sm==3.8.0",
     "numpy",
+    "nvidia-ml-py==13.615.71",
 ]
 
 [tool.uv]
@@ -16,12 +17,12 @@ package = false
 environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
 
 [tool.uv.sources]
-# CPU wheels: Kokoro-82M is fast enough on the CPU and never competes for the GPU.
-torch = { index = "pytorch-cpu" }
+# CUDA 12.8 wheels (as runtimes/imagegen): the GPU by default, the CPU when it is busy.
+torch = { index = "pytorch-cu128" }
 # spaCy would download this model at first use; the lock pins it instead.
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true

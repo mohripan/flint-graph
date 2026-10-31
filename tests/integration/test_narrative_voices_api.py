@@ -159,6 +159,8 @@ async def test_voices_are_chosen_per_character_and_jobs_make_candidate_clips(v2)
     assert clips[1]["provenance"]["mode"] == "vocalization"
     assert clips[1]["provenance"]["node_id"] == "laugh"
     assert clips[0]["provenance"]["voice"] == "bf_emma"
+    assert clips[0]["provenance"]["device"] == "cpu"
+    assert done["runtime"] == {**RUNTIME, "clip_devices": "cpu,cpu"}
     audio = await client.get(f"{base}/assets/{clips[1]['id']}/content", headers=headers)
     assert audio.headers["content-type"] == "audio/wav" and audio.content[:4] == b"RIFF"
     thumb = await client.get(

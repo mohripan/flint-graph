@@ -11,8 +11,8 @@ Generated portraits, sprites, expressions, backgrounds and CGs pile up in one fl
 asset grid. Creators also want voiced dialogue: visual novels are usually only partly
 voiced, with some lines spoken in full, some marked only by a short sound such as
 "fufu" or "hmm", and many silent. Kokoro-82M (Apache-2.0, pinned and verified under
-`notes/models/`) is small enough to run on the CPU without competing with the image
-model or the assistant for the 12 GB GPU.
+`notes/models/`) needs well under 1 GiB of GPU memory, so it fits beside the image model
+or the assistant on the shared 12 GB card, and it can still speak on the CPU.
 
 ## Decision
 
@@ -30,10 +30,14 @@ model or the assistant for the 12 GB GPU.
    for a vocalization and refused for full voice. A voice without `audio` is an
    intent that plays nothing until a clip is chosen. Views and frames carry
    `voice`: the clip of the settled line, else `null`. Saves are unchanged.
-3. **Generation copies ADR 0039.** A CPU-only child in `runtimes/voicegen` (its own
-   uv lock, Kokoro and Misaki with a bundled spaCy model and eSpeak NG fallback, no
-   network) is started with `python -I`, a minimal environment and a watchdog by the
-   opt-in `narrative_voice_worker`. That worker owns its outbox topics, a fenced
+3. **Generation copies ADR 0039, GPU first.** A child in `runtimes/voicegen` (its own
+   uv lock with CUDA 12.8 PyTorch, Kokoro and Misaki with a bundled spaCy model and
+   eSpeak NG fallback, no network) is started with `python -I`, a minimal environment
+   and a watchdog by the opt-in `narrative_voice_worker`. It speaks on the GPU when
+   NVML reports at least 1 GiB of free dedicated memory, and otherwise, or when the card
+   runs out of memory mid-job, on the CPU instead of failing. Each clip's provenance
+   and the job record the device. A lasting CUDA kernel cache (`CUDA_CACHE_PATH`)
+   keeps compiled kernels between jobs. That worker owns its outbox topics, a fenced
    Temporal workflow on its own task queue, and create-only, hash-verified storage.
    Each character profile stores a Kokoro voice ID. A job speaks up to 24 texts in
    one voice; every clip becomes a candidate `voice` asset with provenance (model,
@@ -54,6 +58,11 @@ model or the assistant for the 12 GB GPU.
   compressed format later (Ogg Vorbis with #163).
 - Kokoro speaks English voices only in this slice (`a`/`b` voices). Other languages
   need extra Misaki dependencies.
+- The GPU is shared: a voice job takes about 1 GiB while it runs and frees it on exit;
+  with less free memory it is slower on the CPU but never blocks image jobs. The first
+  GPU job compiles CUDA kernels once (about 50 s); later jobs take about 8 s to load
+  and well under 0.1 s per line. The runtime installs CUDA PyTorch (several gigabytes).
+  Operators can force the CPU with `FLINT_GRAPH_NARRATIVE_VOICE_DEVICE=cpu`.
 - Releases built on runtime 0.5.0 keep their pinned identity; rebuilding them needs
   the new builder image.
 - The assistant may read voice fields but cannot set them yet; voice actions follow.

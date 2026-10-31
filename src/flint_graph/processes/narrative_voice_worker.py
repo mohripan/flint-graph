@@ -1,4 +1,4 @@
-"""Explicit opt-in voice worker: dispatch, local CPU speech and recovery (ADR 0043).
+"""Explicit opt-in voice worker: dispatch, local speech and recovery (ADR 0043).
 
 It consumes only voice outbox topics and runs on its own task queue, one job at a
 time. The Kokoro directory is verified against its pinned manifest before any job
@@ -7,6 +7,7 @@ runs. Logs carry counts, never the spoken text.
 
 import asyncio
 import logging
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 
@@ -70,12 +71,19 @@ def build_generator(configured: Settings) -> LocalVoiceGenerator:
         model, _ = verify_voice_model(model_dir, configured.narrative_voice_model_manifest_sha256)
     except (OSError, ValueError):
         raise SystemExit("The voice model does not match its pinned manifest.") from None
+    cache = Path(
+        configured.narrative_voice_cuda_cache_dir
+        or Path(tempfile.gettempdir()) / "flint-graph-voicegen-cuda-cache"
+    )
+    cache.mkdir(parents=True, exist_ok=True)
     return LocalVoiceGenerator(
         python=python,
         script=script,
         model_dir=model_dir.resolve(),
         model=model,
         deadline_seconds=configured.narrative_voice_job_deadline_seconds,
+        device=configured.narrative_voice_device,
+        cuda_cache=cache.resolve(),
     )
 
 

@@ -86,6 +86,8 @@ class VoiceJobResponse(BaseModel):
     error_code: str | None
     items: list[dict[str, Any]]
     model: str | None
+    # Library versions and the device: the GPU name or "cpu", plus each clip's device.
+    runtime: dict[str, str] | None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -109,6 +111,7 @@ def voice_job_response(job: NarrativeVoiceJob, assets: list[NarrativeAsset]) -> 
         error_code=job.error_code,
         items=list(job.items),
         model=job.model,
+        runtime=job.runtime,
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,

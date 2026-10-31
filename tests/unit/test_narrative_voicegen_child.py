@@ -21,13 +21,14 @@ FAKE = Path(__file__).parents[1] / "fixtures" / "narrative" / "fake_voicegen.py"
 MODEL = ModelIdentity(repo="hexgrad/Kokoro-82M", revision="f" * 40, license="apache-2.0")
 
 
-def generator(deadline=30):
+def generator(deadline=30, device="auto"):
     return LocalVoiceGenerator(
         python=Path(sys.executable),
         script=FAKE,
         model_dir=Path(__file__).parent,
         model=MODEL,
         deadline_seconds=deadline,
+        device=device,
     )
 
 
@@ -75,12 +76,37 @@ async def ignore(done):
         ("wrongindex", "invalid_output"),
         ("wrongsamples", "invalid_output"),
         ("noisy", "invalid_output"),
+        ("baddevice", "invalid_output"),
     ],
 )
 async def test_child_failures_map_to_safe_codes(first, code):
     with pytest.raises(VoiceGenerationError) as raised:
         await generator().generate(request(first), on_progress=ignore)
     assert raised.value.code == code
+
+
+@pytest.mark.anyio
+async def test_each_clip_records_the_device_that_spoke_it():
+    gpu = await generator().generate(request("gpu"), on_progress=ignore)
+    assert [clip.device for clip in gpu.clips] == ["cuda", "cuda"]
+    forced = await generator(device="cpu").generate(request("gpu"), on_progress=ignore)
+    assert [clip.device for clip in forced.clips] == ["cpu", "cpu"]
+    with pytest.raises(ValueError):
+        generator(device="tpu")
+
+
+def test_the_child_keeps_compiled_cuda_kernels_between_jobs(tmp_path):
+    cached = LocalVoiceGenerator(
+        python=Path(sys.executable),
+        script=FAKE,
+        model_dir=Path(__file__).parent,
+        model=MODEL,
+        deadline_seconds=30,
+        cuda_cache=tmp_path / "cuda",
+    )._environment(tmp_path / "work")
+    assert cached["CUDA_CACHE_PATH"] == str(tmp_path / "cuda")
+    assert cached["CUDA_CACHE_MAXSIZE"] == str(4 * 1024**3)
+    assert "CUDA_CACHE_PATH" not in generator()._environment(tmp_path / "work")
 
 
 @pytest.mark.anyio

@@ -47,11 +47,15 @@ for index in range(len(request["items"])):
     (output / f"{index}.wav").write_bytes(data)
     if mode == "extra":
         (output / "notes.txt").write_text("x")
+    device = {"gpu": "cuda", "baddevice": "tpu"}.get(mode, "cpu")
+    if request["device"] == "cpu" and device == "cuda":
+        device = "cpu"
     emit(
         "clip",
         index=index + (mode == "wrongindex"),
         file=f"{index}.wav",
         samples=frames + (mode == "wrongsamples"),
+        device=device,
     )
     if mode == "noisy":
         print("debug output", flush=True)

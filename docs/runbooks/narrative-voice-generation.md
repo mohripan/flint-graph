@@ -2,7 +2,8 @@
 
 Dialogue lines can be silent, fully voiced or marked by a short vocalization such as
 "fufu" ([ADR 0043](../adr/0043-asset-folders-and-line-voices.md)). Clips are spoken by
-Kokoro-82M on the operator's own CPU through an opt-in worker. The API only records
+Kokoro-82M on the operator's own GPU (or CPU when the card is busy) through an opt-in
+worker. The API only records
 jobs; nothing speaks inside a request and nothing calls a paid service. Creators can
 also upload their own WAV clips with a rights declaration.
 
@@ -12,8 +13,12 @@ also upload their own WAV clips with a rights declaration.
   `f3ff3571791e39611d31c381e3a41a3af07b4987`, Apache-2.0): `config.json`,
   `kokoro-v1_0.pth`, `voices/*.pt`, `README.md`, `VOICES.md` and its
   `flintgraph-download.json` manifest in one directory and no other files.
-- The isolated runtime, installed once (CPU PyTorch, Kokoro 0.9.4, Misaki 0.9.4 with
-  the pinned spaCy `en_core_web_sm` 3.8.0 wheel and the bundled eSpeak NG fallback):
+- An NVIDIA GPU with a CUDA 12.8 driver is used when it has at least 1 GiB free
+  (qualified on the shared RTX 5070 Ti Laptop GPU, 12 GB); without one, or when the
+  card is full, the same job runs on the CPU.
+- The isolated runtime, installed once (CUDA 12.8 PyTorch from the same index as
+  `runtimes/imagegen`, Kokoro 0.9.4, Misaki 0.9.4 with the pinned spaCy
+  `en_core_web_sm` 3.8.0 wheel and the bundled eSpeak NG fallback):
 
   ```powershell
   cd runtimes/voicegen
@@ -21,8 +26,8 @@ also upload their own WAV clips with a rights declaration.
   ```
 
   Nothing is downloaded at run time: spaCy's model comes from the lock, and the child
-  runs with `HF_HUB_OFFLINE=1`. No GPU is used, so voices never compete with image
-  generation or the assistant model.
+  runs with `HF_HUB_OFFLINE=1`. A voice job takes about 1 GiB of GPU memory only while
+  it runs, so it fits beside image jobs and the assistant model.
 
 ## Configuration
 
@@ -34,6 +39,8 @@ also upload their own WAV clips with a rights declaration.
 | `FLINT_GRAPH_NARRATIVE_VOICE_RUNTIME_DIR` | Absolute path of `runtimes/voicegen`. |
 | `FLINT_GRAPH_NARRATIVE_VOICE_MODEL_DIR` | Absolute path of the Kokoro directory. |
 | `FLINT_GRAPH_NARRATIVE_VOICE_MODEL_MANIFEST_SHA256` | SHA-256 of that directory's `flintgraph-download.json`; the worker verifies every file against it at start-up. |
+| `FLINT_GRAPH_NARRATIVE_VOICE_DEVICE` | `auto` (default: GPU when ≥ 1 GiB is free, else CPU) or `cpu`. |
+| `FLINT_GRAPH_NARRATIVE_VOICE_CUDA_CACHE_DIR` | Where compiled CUDA kernels are kept between jobs (default: a folder in the system temp). |
 | `FLINT_GRAPH_NARRATIVE_VOICE_MAX_ACTIVE_JOBS_PER_WORKSPACE` | Queued plus running jobs per workspace (default 4). |
 | `FLINT_GRAPH_NARRATIVE_VOICE_JOB_DEADLINE_SECONDS` | Watchdog for one child run (default 600). |
 
@@ -50,8 +57,10 @@ worker as the `voice` service; add the settings above to `studio.local.env` (see
    Vocalization only with its sound. **Generate voice** (or **Generate N missing
    voices** for a scene) queues a job per speaker with up to 24 texts.
 3. The worker claims the job (fenced like image jobs), starts
-   `runtimes/voicegen/generate.py` with `python -I`, a private temporary folder and no
-   credentials, and checks every clip: exactly one canonical 24 kHz mono 16-bit WAV
+   `runtimes/voicegen/generate.py` with `python -I`, a private temporary folder, the
+   kernel cache and no credentials. The child picks the GPU or the CPU and reports the
+   device per clip (stored in the clip's provenance and the job's runtime). The worker
+   checks every clip: exactly one canonical 24 kHz mono 16-bit WAV
    per text, of the announced length, at most 60 s and 10 MiB. Clips are stored
    create-only and hash-verified and become candidate `voice` assets with provenance
    (model, voice, text, mode, seed).
@@ -59,8 +68,10 @@ worker as the `voice` service; add the settings above to `studio.local.env` (see
    story asset by SHA-256. NOTICES credit the model. Playtests and releases play the
    clip when the line appears; the player's **Voice** slider sets the volume.
 
-Measured on the development laptop (CPU only): about 13 s for a job with two texts
-including model load (≈10 s), then 0.3–0.6 s per short line.
+Measured on the development laptop: on the GPU the first job ever compiles CUDA
+kernels (about 50 s); after that a job takes about 8.5 s (imports and model load),
+plus well under 0.1 s per line. On the CPU a job takes about 13 s for two lines,
+plus 0.2–0.6 s per further line.
 
 ## Uploads
 

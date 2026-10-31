@@ -70,9 +70,11 @@ activities `run_narrative_voice_job` / `finalize_narrative_voice_job`.
 
 ### Child protocol (`runtimes/voicegen/generate.py`, protocol 1)
 
-Request on stdin: `{protocol, model_dir, output_dir, voice, speed, seed, items:
-[{text, mode}]}`. Events on stdout: `loaded {runtime}`, one `clip {index, file,
-samples}` per item in order, `done`, or `error {code}`. The parent checks the
+Request on stdin: `{protocol, model_dir, output_dir, voice, speed, seed, device,
+items: [{text, mode}]}` with `device` `auto` (GPU when NVML reports ≥ 1 GiB free,
+else CPU) or `cpu`. Events on stdout: `loaded {runtime}`, one `clip {index, file,
+samples, device}` per item in order (`cuda` or `cpu`; a mid-job out-of-memory moves the
+rest of the job to the CPU), `done`, or `error {code}`. The parent checks the
 event order, the exact output file set, the canonical WAV form (24 kHz mono), the
 duration and size caps, then hashes and stores clips create-only. The worker
 verifies the model directory against its pinned manifest at startup.
