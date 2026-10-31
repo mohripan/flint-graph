@@ -18,17 +18,23 @@ export interface SceneLayout { project_id: string; version: number; items: Layou
 export type CharacterType = "girl" | "boy" | "woman" | "man" | "other";
 export type CharacterFraming = "portrait" | "full_body";
 export interface NarrativeImage {
-  id: string; character_id: string | null; kind: string; status: "candidate" | "approved" | "discarded";
-  width: number; height: number; sha256: string; size_bytes: number; thumbnail_width: number;
-  thumbnail_height: number; seed: number | null; job_id: string | null; license: string;
-  provenance: Record<string, unknown>; created_at: string; approved_at: string | null;
+  id: string; character_id: string | null; kind: string; source: "generated" | "uploaded"; name: string;
+  status: "candidate" | "approved" | "discarded"; media_type: "image/png" | "font/ttf" | "font/otf";
+  width: number | null; height: number | null; sha256: string; size_bytes: number;
+  thumbnail_width: number | null; thumbnail_height: number | null; seed: number | null; job_id: string | null;
+  license: string; notice: string | null; provenance: Record<string, unknown>; created_at: string;
+  approved_at: string | null; rights_declared_at: string | null;
+}
+export interface AssetUpload {
+  file: File; kind: "background" | "sprite" | "image" | "font"; name: string; license: string; notice: string;
 }
 export interface CharacterProfile {
   character_id: string; appearance: string; character_type: CharacterType; framing: CharacterFraming;
   portrait: NarrativeImage | null; version: number;
 }
 export interface ImageJob {
-  id: string; character_id: string; status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  id: string; purpose: "character_portrait" | "background"; character_id: string | null;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
   progress: number; count: number; cancel_requested: boolean; error_code: string | null; appearance: string;
   character_type: CharacterType; framing: CharacterFraming; prompt: string; negative_prompt: string;
   width: number; height: number; steps: number; guidance: number; seeds: number[]; model: string | null;
@@ -393,6 +399,71 @@ export const api = {
     const blob = await response.blob();
     if (blob.type !== "image/png") throw new ApiError("The image could not be loaded.", 502);
     return blob;
+  },
+
+  async getNarrativeFont(tenantId: string, projectId: string, assetId: string, signal?: AbortSignal):
+    Promise<ArrayBuffer> {
+    const response = await fetch(`${BASE}${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}/content`,
+      { headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error" });
+    if (!response.ok) throw await parseError(response);
+    if (!["font/ttf", "font/otf"].includes(response.headers.get("content-type") ?? ""))
+      throw new ApiError("The font could not be loaded.", 502);
+    return response.arrayBuffer();
+  },
+
+  // Asset library (ADR 0040): uploads with a rights declaration, generated backgrounds.
+  listNarrativeAssets(tenantId: string, projectId: string, query: {
+    kind?: string; status?: string; limit?: number; before?: string;
+  } = {}, signal?: AbortSignal): Promise<{ assets: NarrativeImage[]; next_before: string | null }> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
+    return jsonRequest(`${projectPath(projectId)}/assets?${params}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  async uploadNarrativeAsset(tenantId: string, projectId: string, upload: AssetUpload, signal?: AbortSignal):
+    Promise<NarrativeImage> {
+    const form = new FormData();
+    form.set("file", upload.file);
+    form.set("kind", upload.kind);
+    form.set("name", upload.name);
+    form.set("license", upload.license);
+    form.set("notice", upload.notice);
+    form.set("rights_declared", "true");
+    const response = await fetch(`${BASE}${projectPath(projectId)}/assets`, {
+      method: "POST", body: form, signal, headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) },
+    });
+    if (!response.ok) throw await parseError(response);
+    return (await response.json()) as NarrativeImage;
+  },
+
+  renameNarrativeAsset(tenantId: string, projectId: string, assetId: string, name: string, signal?: AbortSignal):
+    Promise<NarrativeImage> {
+    return jsonRequest(`${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}`, {
+      method: "PATCH", headers: tenantHeaders(tenantId), signal, json: { name },
+    });
+  },
+
+  approveNarrativeAsset(tenantId: string, projectId: string, assetId: string, signal?: AbortSignal):
+    Promise<NarrativeImage> {
+    return jsonRequest(`${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}/approve`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  createBackgroundJob(tenantId: string, projectId: string, description: string, count: number,
+    signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/assets/background-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { description, count, idempotency_key: crypto.randomUUID() },
+    });
+  },
+
+  listBackgroundJobs(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ jobs: ImageJob[] }> {
+    return jsonRequest(`${projectPath(projectId)}/assets/background-jobs`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
   },
 
   listAssistantThreads(tenantId: string, projectId: string, options: {

@@ -7,8 +7,10 @@ Audit metadata and outbox payloads carry identifiers, never prompts.
 """
 
 import secrets
+import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
 from uuid import UUID
@@ -34,7 +36,12 @@ from flint_graph.infrastructure.narrative_imagegen import (
     GenerationResult,
     ModelIdentity,
 )
-from flint_graph.narrative.imagegen import portrait_request
+from flint_graph.narrative.imagegen import (
+    ImageRequest,
+    background_request,
+    clean_appearance,
+    portrait_request,
+)
 from flint_graph.narrative.values import canonical_json
 
 _ACTIVE = ("queued", "running")
@@ -70,6 +77,75 @@ async def create_portrait_job(
     available: bool,
     max_active_jobs: int,
 ) -> NarrativeImageJob:
+    return await _queue_job(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        author_user_id=author_user_id,
+        purpose="character_portrait",
+        character_id=character_id,
+        appearance=appearance,
+        character_type=character_type,
+        framing=framing,
+        build=lambda: portrait_request(appearance, character_type, framing),
+        count=count,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        available=available,
+        max_active_jobs=max_active_jobs,
+    )
+
+
+async def create_background_job(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    author_user_id: UUID,
+    description: str,
+    count: int,
+    idempotency_key: UUID,
+    actor: AuditActor,
+    available: bool,
+    max_active_jobs: int,
+) -> NarrativeImageJob:
+    return await _queue_job(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        author_user_id=author_user_id,
+        purpose="background",
+        character_id=None,
+        appearance=description,
+        character_type="other",
+        framing="scenery",
+        build=lambda: background_request(description),
+        count=count,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        available=available,
+        max_active_jobs=max_active_jobs,
+    )
+
+
+async def _queue_job(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    author_user_id: UUID,
+    purpose: str,
+    character_id: str | None,
+    appearance: str,
+    character_type: str,
+    framing: str,
+    build: Callable[[], ImageRequest],
+    count: int,
+    idempotency_key: UUID,
+    actor: AuditActor,
+    available: bool,
+    max_active_jobs: int,
+) -> NarrativeImageJob:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
         select(Tenant).where(Tenant.id == tenant_id).with_for_update(key_share=True)
@@ -82,6 +158,7 @@ async def create_portrait_job(
     request_hash = sha256(
         canonical_json(
             {
+                "purpose": purpose,
                 "character_id": character_id,
                 "appearance": appearance,
                 "character_type": character_type,
@@ -110,9 +187,9 @@ async def create_portrait_job(
             "image-generation-unavailable",
         )
     try:
-        built = portrait_request(appearance, character_type, framing)
+        built = build()
     except ValueError as error:
-        raise DomainError(422, "Invalid appearance", str(error), "invalid-appearance") from None
+        raise DomainError(422, "Invalid description", str(error), "invalid-appearance") from None
     active = (
         await session.scalar(
             select(func.count(NarrativeImageJob.id)).where(
@@ -128,7 +205,7 @@ async def create_portrait_job(
         tenant_id=tenant_id,
         project_id=project_id,
         character_id=character_id,
-        purpose="character_portrait",
+        purpose=purpose,
         requested_by_user_id=author_user_id,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
@@ -165,7 +242,7 @@ async def create_portrait_job(
         actor=actor,
         resource_type="narrative_image_job",
         resource_id=job.id,
-        metadata={"project_id": str(project_id), "count": count},
+        metadata={"project_id": str(project_id), "purpose": purpose, "count": count},
     )
     await session.refresh(job)
     return job
@@ -186,12 +263,13 @@ async def _assets(session: AsyncSession, job_ids: list[UUID]) -> dict[UUID, list
     return grouped
 
 
-async def list_portrait_jobs(
+async def list_image_jobs(
     session: AsyncSession,
     *,
     tenant_id: UUID,
     project_id: UUID,
-    character_id: str,
+    purpose: str,
+    character_id: str | None,
     limit: int,
 ) -> list[tuple[NarrativeImageJob, list[NarrativeAsset]]]:
     await get_project(session, tenant_id=tenant_id, project_id=project_id)
@@ -201,7 +279,10 @@ async def list_portrait_jobs(
             .where(
                 NarrativeImageJob.tenant_id == tenant_id,
                 NarrativeImageJob.project_id == project_id,
-                NarrativeImageJob.character_id == character_id,
+                NarrativeImageJob.purpose == purpose,
+                NarrativeImageJob.character_id.is_(None)
+                if character_id is None
+                else NarrativeImageJob.character_id == character_id,
             )
             .order_by(NarrativeImageJob.created_at.desc(), NarrativeImageJob.id.desc())
             .limit(limit)
@@ -402,7 +483,24 @@ async def complete_image_job(
         _finish(job, "cancelled")
         await session.flush()
         return job
+    # Lists are newest first; earlier candidates of one job get slightly later times so
+    # they read 1, 2, 3, 4 even where the clock does not advance between rows.
+    finished = _now()
+    # Identical bytes are one asset per project; a repeated image adds nothing new.
+    known = set(
+        await session.scalars(
+            select(NarrativeAsset.sha256).where(
+                NarrativeAsset.tenant_id == job.tenant_id,
+                NarrativeAsset.project_id == job.project_id,
+                NarrativeAsset.sha256.in_([image.sha256 for _, image in stored]),
+                NarrativeAsset.status != "discarded",
+            )
+        )
+    )
     for asset_id, image in stored:
+        if image.sha256 in known:
+            continue
+        known.add(image.sha256)
         provenance: dict[str, Any] = {
             "generator": "local-diffusers",
             "model_repo": model.repo,
@@ -421,8 +519,10 @@ async def complete_image_job(
                 id=asset_id,
                 tenant_id=job.tenant_id,
                 project_id=job.project_id,
-                kind="character_portrait",
+                kind="background" if job.purpose == "background" else "character_portrait",
                 source="generated",
+                name=_asset_name(job, image.index),
+                created_at=finished - timedelta(microseconds=image.index),
                 job_id=job.id,
                 job_index=image.index,
                 character_id=job.character_id,
@@ -450,6 +550,15 @@ async def complete_image_job(
     _finish(job, "completed")
     await session.flush()
     return job
+
+
+def _asset_name(job: NarrativeImageJob, index: int) -> str:
+    """A readable default the creator can rename: what was asked for, numbered."""
+    if job.purpose == "background":
+        base = textwrap.shorten(clean_appearance(job.appearance), width=60, placeholder="…")
+    else:
+        base = f"{job.character_id} portrait"
+    return f"{base} {index + 1}"
 
 
 async def fail_image_job(

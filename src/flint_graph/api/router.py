@@ -6,6 +6,7 @@ from flint_graph.api.routes import (
     graph,
     health,
     narrative,
+    narrative_assets,
     narrative_assistant,
     narrative_characters,
     narrative_layout,
@@ -32,3 +33,4 @@ api_router.include_router(narrative_releases.router)
 api_router.include_router(narrative_assistant.router)
 api_router.include_router(narrative_layout.router)
 api_router.include_router(narrative_characters.router)
+api_router.include_router(narrative_assets.router)

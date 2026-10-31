@@ -43,10 +43,10 @@ from flint_graph.application.services.narrative_images import (
     cancel_image_job,
     create_portrait_job,
     get_image_job,
-    list_portrait_jobs,
+    list_image_jobs,
 )
 from flint_graph.application.services.narrative_projects import get_project
-from flint_graph.domain.errors import DomainError
+from flint_graph.domain.errors import DomainError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     NarrativeAsset,
     NarrativeCharacterProfile,
@@ -57,6 +57,7 @@ from flint_graph.infrastructure.narrative_artifact_store import (
     asset_object_key,
 )
 from flint_graph.infrastructure.narrative_imagegen import IMAGE_LIMIT, THUMBNAIL_LIMIT
+from flint_graph.narrative.font import FONT_LIMIT
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}", tags=["narrative"])
 CharacterId = Annotated[str, Path(pattern=CHARACTER_ID)]
@@ -73,9 +74,10 @@ def _profile(row: NarrativeCharacterProfile, portrait: NarrativeAsset | None) ->
     )
 
 
-def _job(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJobResponse:
+def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJobResponse:
     return ImageJobResponse(
         id=job.id,
+        purpose=job.purpose,
         character_id=job.character_id,
         status=job.status,
         progress=job.progress,
@@ -195,7 +197,7 @@ async def create_character_portrait_job(
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
         ),
     )
-    return _job(job, [])
+    return job_response(job, [])
 
 
 @router.get("/characters/{character_id}/portrait-jobs", response_model=ImageJobListResponse)
@@ -206,14 +208,15 @@ async def list_character_portrait_jobs(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> ImageJobListResponse:
-    rows = await list_portrait_jobs(
+    rows = await list_image_jobs(
         session,
         tenant_id=tenant_id,
         project_id=project_id,
+        purpose="character_portrait",
         character_id=character_id,
         limit=limit,
     )
-    return ImageJobListResponse(jobs=[_job(job, assets) for job, assets in rows])
+    return ImageJobListResponse(jobs=[job_response(job, assets) for job, assets in rows])
 
 
 @router.get("/image-jobs/{job_id}", response_model=ImageJobResponse)
@@ -223,7 +226,7 @@ async def get_image_job_endpoint(
     job, assets = await get_image_job(
         session, tenant_id=tenant_id, project_id=project_id, job_id=job_id
     )
-    return _job(job, assets)
+    return job_response(job, assets)
 
 
 @router.post("/image-jobs/{job_id}/cancel", response_model=ImageJobResponse)
@@ -243,7 +246,7 @@ async def cancel_image_job_endpoint(
     _, assets = await get_image_job(
         session, tenant_id=tenant_id, project_id=project_id, job_id=job.id
     )
-    return _job(job, assets)
+    return job_response(job, assets)
 
 
 @router.post("/assets/{asset_id}/discard", response_model=AssetResponse)
@@ -274,28 +277,39 @@ async def asset_content(
 ) -> Response:
     await get_project(session, tenant_id=tenant_id, project_id=project_id)
     asset = await get_asset(session, tenant_id=tenant_id, project_id=project_id, asset_id=asset_id)
-    thumbnail = variant == "thumbnail"
+    font = asset.media_type != "image/png"
+    if font and variant == "thumbnail":
+        raise NotFoundError("Fonts have no thumbnail.")
+    # Uploads keep only the original; generated images also carry a thumbnail.
+    thumbnail = variant == "thumbnail" and asset.thumbnail_sha256 is not None
+    stored: Literal["image", "thumbnail", "font"] = (
+        "font" if font else "thumbnail" if thumbnail else "image"
+    )
+    size = asset.thumbnail_size_bytes if thumbnail else asset.size_bytes
+    digest = asset.thumbnail_sha256 if thumbnail else asset.sha256
+    assert size is not None and digest is not None
     try:
         data = await store.get_verified(
             asset_object_key(
-                tenant_id=tenant_id, project_id=project_id, asset_id=asset.id, variant=variant
+                tenant_id=tenant_id, project_id=project_id, asset_id=asset.id, variant=stored
             ),
-            expected_size=asset.thumbnail_size_bytes if thumbnail else asset.size_bytes,
-            expected_sha256=asset.thumbnail_sha256 if thumbnail else asset.sha256,
-            max_bytes=THUMBNAIL_LIMIT if thumbnail else IMAGE_LIMIT,
+            expected_size=size,
+            expected_sha256=digest,
+            max_bytes=FONT_LIMIT if font else THUMBNAIL_LIMIT if thumbnail else IMAGE_LIMIT,
         )
     except (ArtifactStoreError, ValueError):
         raise DomainError(
-            503, "Service unavailable", "This image is unavailable.", "asset-unavailable"
+            503, "Service unavailable", "This asset is unavailable.", "asset-unavailable"
         ) from None
+    extension = {"image/png": "png", "font/ttf": "ttf", "font/otf": "otf"}[asset.media_type]
     return Response(
         content=data,
-        media_type="image/png",
+        media_type=asset.media_type,
         headers={
             # Bytes never change for an asset ID; viewers revalidate access per request.
             "Cache-Control": "private, max-age=31536000, immutable",
-            "ETag": f'"{asset.thumbnail_sha256 if thumbnail else asset.sha256}"',
+            "ETag": f'"{digest}"',
             "X-Content-Type-Options": "nosniff",
-            "Content-Disposition": f'inline; filename="{asset.id}-{variant}.png"',
+            "Content-Disposition": f'inline; filename="{asset.id}-{variant}.{extension}"',
         },
     )

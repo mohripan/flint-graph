@@ -60,6 +60,12 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         CheckConstraint("count BETWEEN 1 AND 4", name="ck_narrative_image_job_count"),
         CheckConstraint("progress BETWEEN 0 AND count", name="ck_narrative_image_job_progress"),
+        CheckConstraint(
+            "(purpose = 'character_portrait' AND character_id IS NOT NULL) "
+            "OR (purpose = 'background' AND character_id IS NULL)",
+            name="ck_narrative_image_job_purpose",
+        ),
+        Index("ix_narrative_image_job_purpose", "project_id", "purpose", "created_at", "id"),
         Index(
             "ix_narrative_image_job_active",
             "tenant_id",
@@ -71,7 +77,7 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     tenant_id: Mapped[UUID]
     project_id: Mapped[UUID]
-    character_id: Mapped[str] = mapped_column(String(64))
+    character_id: Mapped[str | None] = mapped_column(String(64))
     purpose: Mapped[str] = mapped_column(String(32), default="character_portrait")
     requested_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     idempotency_key: Mapped[UUID]
@@ -128,36 +134,72 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "status IN ('candidate','approved','discarded')", name="ck_narrative_asset_status"
         ),
-        CheckConstraint("kind IN ('character_portrait')", name="ck_narrative_asset_kind"),
-        CheckConstraint("media_type = 'image/png'", name="ck_narrative_asset_media_type"),
         CheckConstraint(
-            "size_bytes > 0 AND width > 0 AND height > 0", name="ck_narrative_asset_shape"
+            "kind IN ('character_portrait','background','sprite','image','font')",
+            name="ck_narrative_asset_kind",
+        ),
+        CheckConstraint(
+            "media_type IN ('image/png','font/ttf','font/otf')",
+            name="ck_narrative_asset_media_type",
+        ),
+        CheckConstraint(
+            "size_bytes > 0 AND ((media_type = 'image/png' AND width > 0 AND height > 0) "
+            "OR (media_type <> 'image/png' AND width IS NULL AND height IS NULL))",
+            name="ck_narrative_asset_shape",
         ),
         CheckConstraint(
             "status <> 'approved' OR approved_at IS NOT NULL",
             name="ck_narrative_asset_approval",
         ),
+        CheckConstraint("source IN ('generated','uploaded')", name="ck_narrative_asset_source"),
+        CheckConstraint(
+            "source <> 'uploaded' OR (rights_declared_at IS NOT NULL "
+            "AND rights_declared_by_user_id IS NOT NULL)",
+            name="ck_narrative_asset_rights",
+        ),
+        ForeignKeyConstraint(
+            ["rights_declared_by_user_id"],
+            ["users.id"],
+            name="fk_narrative_asset_rights_user",
+            ondelete="RESTRICT",
+        ),
         Index("ix_narrative_assets_project", "project_id", "created_at", "id"),
+        Index("ix_narrative_assets_project_kind", "project_id", "kind", "created_at"),
+        # One live row per file per project, so story bindings by SHA-256 are unambiguous.
+        Index(
+            "uq_narrative_asset_project_sha",
+            "tenant_id",
+            "project_id",
+            "sha256",
+            unique=True,
+            postgresql_where=text("status <> 'discarded'"),
+            sqlite_where=text("status <> 'discarded'"),
+        ),
     )
     tenant_id: Mapped[UUID]
     project_id: Mapped[UUID]
     kind: Mapped[str] = mapped_column(String(32))
     source: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(120))
     job_id: Mapped[UUID | None]
     job_index: Mapped[int | None]
     character_id: Mapped[str | None] = mapped_column(String(64))
     media_type: Mapped[str] = mapped_column(String(32), default="image/png")
     sha256: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int] = mapped_column(Integer)
-    width: Mapped[int] = mapped_column(Integer)
-    height: Mapped[int] = mapped_column(Integer)
-    thumbnail_sha256: Mapped[str] = mapped_column(String(64))
-    thumbnail_size_bytes: Mapped[int] = mapped_column(Integer)
-    thumbnail_width: Mapped[int] = mapped_column(Integer)
-    thumbnail_height: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    # Generated images carry a smaller thumbnail; uploads serve the original instead.
+    thumbnail_sha256: Mapped[str | None] = mapped_column(String(64))
+    thumbnail_size_bytes: Mapped[int | None] = mapped_column(Integer)
+    thumbnail_width: Mapped[int | None] = mapped_column(Integer)
+    thumbnail_height: Mapped[int | None] = mapped_column(Integer)
     seed: Mapped[int | None] = mapped_column(BigInteger)
     provenance: Mapped[dict[str, Any]] = mapped_column(JSON)
     license: Mapped[str] = mapped_column(String(120))
+    notice: Mapped[str | None] = mapped_column(Text)
+    rights_declared_by_user_id: Mapped[UUID | None]
+    rights_declared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), default="candidate")
     created_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     approved_by_user_id: Mapped[UUID | None] = mapped_column(

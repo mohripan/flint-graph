@@ -35,7 +35,7 @@ NEGATIVE = (
 
 
 @dataclass(frozen=True)
-class PortraitRequest:
+class ImageRequest:
     prompt: str
     negative_prompt: str
     width: int
@@ -54,7 +54,7 @@ def clean_appearance(appearance: str) -> str:
     return text
 
 
-def portrait_request(appearance: str, character_type: str, framing: str) -> PortraitRequest:
+def portrait_request(appearance: str, character_type: str, framing: str) -> ImageRequest:
     if character_type not in CHARACTER_TYPES or framing not in FRAMINGS:
         raise ValueError("Unknown character type or framing")
     if len(appearance) > MAX_APPEARANCE * 2:
@@ -64,9 +64,32 @@ def portrait_request(appearance: str, character_type: str, framing: str) -> Port
         raise ValueError("Describe the character's appearance")
     framing_tags, (width, height) = FRAMINGS[framing]
     parts = [CHARACTER_TYPES[character_type], "solo", text, framing_tags, QUALITY]
-    return PortraitRequest(
+    return ImageRequest(
         prompt=", ".join(part for part in parts if part),
         negative_prompt=NEGATIVE,
+        width=width,
+        height=height,
+        steps=STEPS,
+        guidance=GUIDANCE,
+    )
+
+
+BACKGROUND_SIZE = (1344, 768)
+BACKGROUND_QUALITY = "safe, masterpiece, high score, great score, absurdres"
+# People in a background would be fixed into every scene that uses it.
+BACKGROUND_NEGATIVE = NEGATIVE + ", 1girl, 1boy, people, person, character, crowd"
+
+
+def background_request(description: str) -> ImageRequest:
+    if len(description) > MAX_APPEARANCE * 2:
+        raise ValueError("Description is too long")
+    text = clean_appearance(description)
+    if not text:
+        raise ValueError("Describe the place")
+    width, height = BACKGROUND_SIZE
+    return ImageRequest(
+        prompt=", ".join(("no humans", "scenery", text, BACKGROUND_QUALITY)),
+        negative_prompt=BACKGROUND_NEGATIVE,
         width=width,
         height=height,
         steps=STEPS,

@@ -230,7 +230,7 @@ function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onD
   const url = useNarrativeImage(tenantId, projectId, asset.id, "thumbnail");
   return <figure className={`studio-candidate ${chosen ? "chosen" : ""}`}>
     <button type="button" className="studio-candidate-image" onClick={onView} aria-label="View full size">
-      {url ? <img src={url} alt="" width={asset.thumbnail_width} height={asset.thumbnail_height} /> : <span>Loading…</span>}
+      {url ? <img src={url} alt="" width={asset.thumbnail_width ?? undefined} height={asset.thumbnail_height ?? undefined} /> : <span>Loading…</span>}
     </button>
     <figcaption>
       {chosen ? <strong>Current portrait</strong> : !readOnly && <button type="button" className="studio-secondary" onClick={onChoose}>Use as portrait</button>}
@@ -240,7 +240,7 @@ function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onD
   </figure>;
 }
 
-function Viewer({ tenantId, projectId, asset, onClose }: {
+export function Viewer({ tenantId, projectId, asset, onClose }: {
   tenantId: string; projectId: string; asset: NarrativeImage; onClose: () => void;
 }) {
   const url = useNarrativeImage(tenantId, projectId, asset.id, "image");
@@ -250,7 +250,7 @@ function Viewer({ tenantId, projectId, asset, onClose }: {
     return () => window.removeEventListener("keydown", close);
   }, [onClose]);
   return <div className="studio-viewer" role="dialog" aria-modal="true" aria-label="Portrait" onClick={onClose}>
-    {url ? <img src={url} alt="" width={asset.width} height={asset.height} /> : <span>Loading…</span>}
+    {url ? <img src={url} alt="" width={asset.width ?? undefined} height={asset.height ?? undefined} /> : <span>Loading…</span>}
     <button type="button" className="studio-secondary" onClick={onClose}>Close</button>
   </div>;
 }

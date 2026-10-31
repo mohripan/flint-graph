@@ -41,7 +41,7 @@ from flint_graph.worker.activities.narrative_image import NarrativeImageActiviti
 MODEL = ModelIdentity("cagliostrolab/animagine-xl-4.0", "c" * 40, "openrail++")
 
 
-def png(width, height, shade=10):
+def png(width, height, shade=10, seed=0):
     def chunk(kind, payload):
         return (
             struct.pack(">I", len(payload))
@@ -51,10 +51,12 @@ def png(width, height, shade=10):
         )
 
     row = b"\x00" + bytes([shade, 20, 30]) * width
+    # The first row carries the seed, so separately generated images differ.
+    first = b"\x00" + bytes([seed & 255, (seed >> 8) & 255, (seed >> 16) & 255]) * width
     return (
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-        + chunk(b"IDAT", zlib.compress(row * height))
+        + chunk(b"IDAT", zlib.compress(first + row * (height - 1)))
         + chunk(b"IEND", b"")
     )
 
@@ -64,7 +66,7 @@ class MemoryStore:
         self.objects = {}
 
     async def put_once(self, key, data, *, expected_sha256, content_type, max_bytes):
-        assert content_type == "image/png" and len(data) <= max_bytes
+        assert content_type in ("image/png", "font/ttf", "font/otf") and len(data) <= max_bytes
         assert hashlib.sha256(data).hexdigest() == expected_sha256
         self.objects[key] = data
 
@@ -88,7 +90,8 @@ class FakeGenerator:
             raise ImageGenerationError(self.failures.pop(0))
         images = []
         for index, seed in enumerate(request.seeds):
-            data, thumb = png(request.width, request.height, index), png(16, 24, index)
+            data = png(request.width, request.height, index, seed)
+            thumb = png(16, 24, index, seed)
             images.append(
                 GeneratedImage(
                     index=index,

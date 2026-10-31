@@ -6,8 +6,22 @@ from flint_graph.narrative.imagegen import (
     CHARACTER_TYPES,
     FRAMINGS,
     MAX_APPEARANCE,
+    background_request,
     portrait_request,
 )
+
+
+def test_background_prompt_is_landscape_scenery_without_people():
+    request = background_request(" harbor at dusk,\n fog ")
+    assert request.prompt == (
+        "no humans, scenery, harbor at dusk, fog, safe, masterpiece, high score, "
+        "great score, absurdres"
+    )
+    assert (request.width, request.height) == (1344, 768)
+    assert request.negative_prompt.endswith("1girl, 1boy, people, person, character, crowd")
+    for bad in ("", "  ", "x" * (MAX_APPEARANCE + 1)):
+        with pytest.raises(ValueError):
+            background_request(bad)
 
 
 def test_portrait_prompt_puts_subject_and_appearance_before_quality_tags():

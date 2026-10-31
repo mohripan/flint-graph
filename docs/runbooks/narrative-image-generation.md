@@ -38,6 +38,15 @@ it with `python -m flint_graph.processes.narrative_image_worker`. At startup it
 hashes every model file against the pinned manifest (about 20 s) and refuses to run
 on a mismatch, an extra file or a missing runtime.
 
+## What it generates
+
+- Character portraits: 832×1216, from the Characters tab.
+- Backgrounds: 1344×768 scenery with `no humans`, from the Assets tab
+  (`POST /v1/narrative/projects/{id}/assets/background-jobs`).
+
+Both use the same worker, queue and limits. Candidates wait in the library until a
+member approves them. Uploads (PNG images, static TTF/OTF fonts) need no worker.
+
 ## Operation
 
 - One generation runs at a time. A job of four 832×1216 portraits takes about 80 s

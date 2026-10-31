@@ -45,19 +45,43 @@ class AssetResponse(BaseModel):
     id: UUID
     character_id: str | None
     kind: str
+    source: str
+    name: str
     status: str
-    width: int
-    height: int
+    media_type: str
+    width: int | None
+    height: int | None
     sha256: str
     size_bytes: int
-    thumbnail_width: int
-    thumbnail_height: int
+    thumbnail_width: int | None
+    thumbnail_height: int | None
     seed: int | None
     job_id: UUID | None
     license: str
+    notice: str | None
     provenance: dict[str, Any]
     created_at: datetime
     approved_at: datetime | None
+    rights_declared_at: datetime | None
+
+
+class AssetListResponse(BaseModel):
+    assets: list[AssetResponse]
+    next_before: UUID | None
+
+
+class AssetRename(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(max_length=120)
+
+
+class BackgroundJobCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(min_length=1, max_length=MAX_APPEARANCE)
+    count: int = Field(default=4, ge=1, le=4)
+    idempotency_key: UUID
 
 
 class ProfileResponse(BaseModel):
@@ -76,7 +100,8 @@ class ProfileListResponse(BaseModel):
 
 class ImageJobResponse(BaseModel):
     id: UUID
-    character_id: str
+    purpose: str
+    character_id: str | None
     status: str
     progress: int
     count: int

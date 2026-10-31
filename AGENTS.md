@@ -59,7 +59,14 @@ through the opt-in `narrative_image_worker` and an isolated child in
 `docs/reports/2026-10-31-character-creation.md` and
 `docs/runbooks/narrative-image-generation.md`. Portraits are editor metadata until
 the #128 export binding puts them in playtests and releases. The owned image worker
-receipt is `notes/narrative-image-owned.json`.
+receipt is `notes/narrative-image-owned.json`. ADR 0040 plans the visual novel stage,
+theme and story package v2 in four slices. Read the design's "Review changes"
+section before starting slices 2–4. Slice 1, the asset library (uploads with rights
+declarations and generated backgrounds, migration 0024), is delivered; read
+`docs/reports/2026-10-31-asset-library.md`. The owned PostgreSQL, MinIO and Temporal
+fixtures now use Docker volumes with fixed ports
+(`notes/persist-narrative-fixtures.py`). The earlier tmpfs fixtures lost all data on
+a Docker restart.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

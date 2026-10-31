@@ -5,6 +5,46 @@ import zlib
 
 from flint_graph.narrative.values import PackageError
 
+_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+# Chunks the strict validator understands; every other ancillary chunk is metadata
+# (text, time, ICC profiles, background hints) that editors add by default.
+_KEPT = {b"IHDR", b"PLTE", b"tRNS", b"sRGB", b"gAMA", b"cHRM", b"pHYs", b"IDAT", b"IEND"}
+
+
+def normalize_png(data: bytes, location: str) -> bytes:
+    """Drop ancillary metadata chunks losslessly; pixel data is never touched.
+
+    Unknown critical chunks, bad CRCs and trailing bytes are rejected. The result
+    still has to pass ``validate_png``.
+    """
+
+    def reject() -> None:
+        raise PackageError("invalid_png", location)
+
+    if not data.startswith(_SIGNATURE):
+        reject()
+    kept = [_SIGNATURE]
+    offset, ended = 8, False
+    while offset < len(data):
+        if ended or offset + 12 > len(data):
+            reject()
+        length, kind = struct.unpack_from(">I4s", data, offset)
+        end = offset + 12 + length
+        if (
+            end > len(data)
+            or zlib.crc32(data[offset + 4 : end - 4]) != struct.unpack_from(">I", data, end - 4)[0]
+        ):
+            reject()
+        if kind in _KEPT:
+            kept.append(data[offset:end])
+        elif not kind[0] & 0x20:
+            reject()  # An uppercase first letter marks a chunk the decoder must understand.
+        ended = kind == b"IEND"
+        offset = end
+    if not ended:
+        reject()
+    return b"".join(kept)
+
 
 def validate_png(data: bytes, location: str) -> None:
     def reject() -> None:
