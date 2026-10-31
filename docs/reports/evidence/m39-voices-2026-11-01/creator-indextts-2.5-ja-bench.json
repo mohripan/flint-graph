@@ -1,0 +1,30 @@
+{
+  "model": "indextts-2.5",
+  "repo": "IndexTeam/IndexTTS-2.5@c39ce5ba981572cb187443877ff559dfb246ce63",
+  "language": "ja",
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "engine": "indextts 2.5",
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "peak_vram_mib": "5706"
+  },
+  "devices": [
+    "cuda"
+  ],
+  "lines": 1,
+  "first_clip_seconds": 86.52,
+  "seconds_per_later_line": null,
+  "total_seconds": 89.2,
+  "audio_seconds": 6.7,
+  "real_time_factor": null,
+  "child_peak_reserved_mib": 5706,
+  "gpu_baseline_mib": 0,
+  "gpu_peak_above_baseline_mib": 5904,
+  "clips": [
+    {
+      "file": "indextts-2.5-ja.wav",
+      "delivery": "ja",
+      "seconds": 6.699
+    }
+  ]
+}

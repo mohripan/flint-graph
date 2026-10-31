@@ -43,6 +43,7 @@ Measured through the real parent and child on the shared card, one job per run
 | Qwen3-TTS 1.7B Base | 4.3–4.7 GiB | 62–64 s | 1.6–2.1 s | cloning; no instructions |
 | IndexTTS-2.5 | 5.7–5.8 GiB | 114 s | 3.6 s | cloning plus emotion vectors |
 | Qwen3-TTS 1.7B CustomVoice | 4.2–4.3 GiB | 31–43 s | 9.1 s | stock voices, instructions |
+| Chatterbox Multilingual V3 | 3.6 GiB | 51–83 s | 2.6 s | cloning in 23 languages incl. Japanese |
 
 Creator ratings of the same fixed lines in the creator's own voice are in the
 report. Japanese: Qwen3-TTS, Chatterbox Multilingual V3 and IndexTTS-2.5 speak it;

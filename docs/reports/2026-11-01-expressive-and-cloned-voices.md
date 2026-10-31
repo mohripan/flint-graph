@@ -60,6 +60,8 @@ reported by the child (other processes excluded).
 | Chatterbox (English) | synthetic / creator | 3.5–3.6 GiB | 48.2 / 48.6 s | 2.35 / 3.06 s |
 | Qwen3-TTS 1.7B Base | synthetic / creator | 4.7 / 4.3 GiB | 62.4 / 63.6 s | 1.56 / 2.09 s |
 | IndexTTS-2.5 | creator | 5.8 GiB | 114.4 s | 3.64 s |
+| Chatterbox Multilingual V3 | creator (English / Japanese) | 3.6 GiB | 82.7 / 51.3 s | 2.55 s |
+| IndexTTS-2.5 (Japanese) | creator | 5.7 GiB | 86.5 s | — |
 | Qwen3-TTS 1.7B CustomVoice | stock Ryan (10 deliveries) / Ono Anna (Japanese) | 4.3 / 4.2 GiB | 43.1 / 31.1 s | 9.14 s |
 
 GPU contention with a background-image job (Animagine XL, 2 images,
@@ -115,7 +117,32 @@ not touched.
 
 ## Checks
 
-To be completed with the final command list.
+On the branch rebased onto `origin/master` 133a551 (migrations renumbered to 0031/0032):
+
+```powershell
+uv run pytest -q                      # 1877 passed, 116 skipped
+$env:FLINT_GRAPH_NARRATIVE_PG_URL=<owned flint_m39_qa>   # schema per test, real alembic chain
+uv run pytest tests/integration/test_narrative_voice_references_api.py `
+  tests/integration/test_narrative_voice_models_api.py tests/integration/test_narrative_voices_api.py `
+  tests/integration/test_narrative_characters_api.py tests/integration/test_narrative_package_v2_api.py -k postgres
+                                      # 37 passed
+$env:FLINT_GRAPH_NARRATIVE_GODOT_BIN=...; $env:FLINT_GRAPH_NARRATIVE_GODOT_TEMPLATES=...
+uv run pytest tests/integration/test_narrative_godot_live.py tests/integration/test_narrative_preview_live.py `
+  tests/integration/test_narrative_event_cgs_live.py tests/integration/test_narrative_line_voices_live.py `
+  tests/integration/test_narrative_player_terms_live.py   # 43 passed, 1 skipped
+uv run ruff check .                   # passed
+uv run mypy                           # no issues in 255 files
+$env:FLINT_GRAPH_ENV='test'; uv run alembic upgrade head --sql   # one head: 0032_narrative_voice_models
+uv lock --check                       # root and runtimes/voicegen, -chatterbox, -qwen3, -indextts
+npm --prefix frontend test; npm --prefix frontend run typecheck; npm --prefix frontend run build
+                                      # 116 passed; typecheck and build passed
+uv run flint-graph-eval run ... --config-name deterministic   # passed (recall@5 1.0, no unsupported claims)
+docker compose config --quiet         # passed
+```
+
+`ruff format` was applied to the changed Python files only; the repository has older
+files that `ruff format --check .` would still reformat. Every commit passed
+`git diff --cached --check`.
 
 ## Limits and follow-ups
 

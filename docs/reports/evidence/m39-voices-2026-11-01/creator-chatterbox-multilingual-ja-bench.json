@@ -1,0 +1,30 @@
+{
+  "model": "chatterbox-multilingual",
+  "repo": "ResembleAI/chatterbox@5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+  "language": "ja",
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "engine": "chatterbox-tts 0.1.7",
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "peak_vram_mib": "3620"
+  },
+  "devices": [
+    "cuda"
+  ],
+  "lines": 1,
+  "first_clip_seconds": 51.26,
+  "seconds_per_later_line": null,
+  "total_seconds": 53.8,
+  "audio_seconds": 4.32,
+  "real_time_factor": null,
+  "child_peak_reserved_mib": 3620,
+  "gpu_baseline_mib": 0,
+  "gpu_peak_above_baseline_mib": 3816,
+  "clips": [
+    {
+      "file": "chatterbox-multilingual-ja.wav",
+      "delivery": "ja",
+      "seconds": 4.32
+    }
+  ]
+}
