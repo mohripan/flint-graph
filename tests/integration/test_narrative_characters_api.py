@@ -4,6 +4,7 @@ import hashlib
 import struct
 import zlib
 from dataclasses import replace
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -30,6 +31,7 @@ from flint_graph.domain.enums import OutboxMessageStatus
 from flint_graph.infrastructure.db.models import NarrativeAsset, NarrativeImageJob, OutboxMessage
 from flint_graph.infrastructure.narrative_artifact_store import ArtifactStoreError
 from flint_graph.infrastructure.narrative_imagegen import (
+    CutoutModel,
     GeneratedImage,
     GenerationResult,
     ImageGenerationError,
@@ -39,9 +41,16 @@ from flint_graph.main import app
 from flint_graph.worker.activities.narrative_image import NarrativeImageActivities
 
 MODEL = ModelIdentity("cagliostrolab/animagine-xl-4.0", "c" * 40, "openrail++")
+SEGMENTER = CutoutModel(
+    path=Path("isnetis.onnx"),
+    sha256="f" * 64,
+    identity=ModelIdentity("skytnt/anime-seg", "4" * 40, "apache-2.0"),
+)
+# Where the fake segmenter finds the figure inside an 832x1216 render.
+BOX = (160, 30, 672, 1200)
 
 
-def png(width, height, shade=10, seed=0):
+def png(width, height, shade=10, seed=0, alpha=False):
     def chunk(kind, payload):
         return (
             struct.pack(">I", len(payload))
@@ -50,12 +59,13 @@ def png(width, height, shade=10, seed=0):
             + struct.pack(">I", zlib.crc32(kind + payload))
         )
 
-    row = b"\x00" + bytes([shade, 20, 30]) * width
+    opacity = [255] if alpha else []
+    row = b"\x00" + bytes([shade, 20, 30, *opacity]) * width
     # The first row carries the seed, so separately generated images differ.
-    first = b"\x00" + bytes([seed & 255, (seed >> 8) & 255, (seed >> 16) & 255]) * width
+    first = b"\x00" + bytes([seed & 255, (seed >> 8) & 255, (seed >> 16) & 255, *opacity]) * width
     return (
         b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6 if alpha else 2, 0, 0, 0))
         + chunk(b"IDAT", zlib.compress(first + row * (height - 1)))
         + chunk(b"IEND", b"")
     )
@@ -81,29 +91,34 @@ class MemoryStore:
 class FakeGenerator:
     model = MODEL
 
-    def __init__(self, *failures):
-        self.failures, self.requests = list(failures), []
+    def __init__(self, *failures, skip_cutout=False):
+        self.failures, self.requests, self.skip_cutout = list(failures), [], skip_cutout
 
     async def generate(self, request, *, on_progress):
         self.requests.append(request)
         if self.failures:
             raise ImageGenerationError(self.failures.pop(0))
+        cut = request.cutout and not self.skip_cutout
+        width, height = (
+            (BOX[2] - BOX[0], BOX[3] - BOX[1]) if cut else (request.width, request.height)
+        )
         images = []
         for index, seed in enumerate(request.seeds):
-            data = png(request.width, request.height, index, seed)
-            thumb = png(16, 24, index, seed)
+            data = png(width, height, index, seed, alpha=cut)
+            thumb = png(16, 24, index, seed, alpha=cut)
             images.append(
                 GeneratedImage(
                     index=index,
                     seed=seed,
                     data=data,
                     sha256=hashlib.sha256(data).hexdigest(),
-                    width=request.width,
-                    height=request.height,
+                    width=width,
+                    height=height,
                     thumbnail=thumb,
                     thumbnail_sha256=hashlib.sha256(thumb).hexdigest(),
                     thumbnail_width=16,
                     thumbnail_height=24,
+                    box=BOX if cut else None,
                 )
             )
             await on_progress(index + 1)
@@ -112,6 +127,7 @@ class FakeGenerator:
             runtime={"torch": "fake", "diffusers": "fake", "cuda": "0", "device": "Fake"},
             prompt_tokens=20,
             truncated=False,
+            cutout=SEGMENTER if cut else None,
         )
 
 
@@ -375,7 +391,10 @@ async def test_relay_runs_the_job_and_stores_verified_candidates(studio):
     done = (await client.get(f"{base}/image-jobs/{job['id']}", headers=headers)).json()
     assert done["status"] == "completed" and done["progress"] == 2
     assert done["model"] == f"{MODEL.repo}@{MODEL.revision}"
+    assert done["transparent"] is False and done["cutout"] is None
     assert [asset["status"] for asset in done["assets"]] == ["candidate", "candidate"]
+    assert {asset["kind"] for asset in done["assets"]} == {"character_portrait"}
+    assert "cutout" not in done["assets"][0]["provenance"]
     asset = done["assets"][0]
     assert asset["seed"] == job["seeds"][0] and asset["license"] == "openrail++"
     assert asset["provenance"]["prompt"] == job["prompt"]
@@ -394,6 +413,82 @@ async def test_relay_runs_the_job_and_stores_verified_candidates(studio):
     store.objects.clear()
     missing = await client.get(f"{base}/assets/{asset['id']}/content", headers=headers)
     assert missing.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_transparent_jobs_cut_out_full_body_sprites_for_the_library(studio):
+    client, factory, store, headers, base, *_ = studio
+    for bad in (job_body(transparent=True), job_body(framing="full_body", transparent="yes")):
+        refused = await client.post(
+            f"{base}/characters/mira/portrait-jobs", headers=headers, json=bad
+        )
+        assert refused.status_code == 422, "Sprites need full-body framing"
+    body = job_body(framing="full_body", transparent=True)
+    created = await client.post(f"{base}/characters/mira/portrait-jobs", headers=headers, json=body)
+    assert created.status_code == 202, created.text
+    job = created.json()
+    assert job["transparent"] is True and job["cutout"] is None
+    assert "full body, standing, white background, " in job["prompt"]
+    assert "detailed background" in job["negative_prompt"]
+    changed = await client.post(
+        f"{base}/characters/mira/portrait-jobs",
+        headers=headers,
+        json={**body, "transparent": False},
+    )
+    assert changed.status_code == 409, "The flag is part of the request identity"
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=job["id"]
+    )
+    generator = FakeGenerator()
+    outcome = await run_job(factory, store, payload, generator)
+    assert outcome["status"] == "completed"
+    assert [request.cutout for request in generator.requests] == [True]
+    done = (await client.get(f"{base}/image-jobs/{job['id']}", headers=headers)).json()
+    assert done["cutout"] == {"model": "skytnt/anime-seg@" + "4" * 40, "sha256": SEGMENTER.sha256}
+    assert [asset["kind"] for asset in done["assets"]] == ["sprite", "sprite"]
+    assert [asset["name"] for asset in done["assets"]] == ["mira sprite 1", "mira sprite 2"]
+    sprite = done["assets"][0]
+    assert sprite["status"] == "candidate" and sprite["character_id"] == "mira"
+    assert (sprite["width"], sprite["height"]) == (BOX[2] - BOX[0], BOX[3] - BOX[1])
+    assert sprite["license"] == "openrail++", "The image model's licence governs the output"
+    assert sprite["provenance"]["width"] == 832, "Provenance keeps the generation size"
+    assert sprite["provenance"]["cutout"] == {
+        "model_repo": "skytnt/anime-seg",
+        "model_revision": "4" * 40,
+        "sha256": SEGMENTER.sha256,
+        "license": "apache-2.0",
+        "box": list(BOX),
+    }
+    content = await client.get(f"{base}/assets/{sprite['id']}/content", headers=headers)
+    assert content.content[24:26] == bytes([8, 6]), "Stored as 8-bit RGBA"
+    listed = (await client.get(f"{base}/characters/mira/portrait-jobs", headers=headers)).json()
+    assert listed["jobs"][0]["id"] == job["id"] and listed["jobs"][0]["transparent"] is True
+    chosen = await client.put(
+        f"{base}/characters/mira/portrait",
+        headers=headers,
+        json={"base_version": 0, "asset_id": sprite["id"]},
+    )
+    assert chosen.status_code == 409, "A sprite is not a portrait"
+    approved = await client.post(f"{base}/assets/{sprite['id']}/approve", headers=headers)
+    assert approved.status_code == 200 and approved.json()["status"] == "approved"
+    library = (await client.get(f"{base}/assets?kind=sprite", headers=headers)).json()
+    assert sprite["id"] in [asset["id"] for asset in library["assets"]]
+    async with factory() as session:
+        row = await session.get(NarrativeImageJob, UUID(job["id"]))
+        assert row is not None and row.cutout_sha256 == SEGMENTER.sha256
+
+
+@pytest.mark.anyio
+async def test_a_transparent_job_without_a_cutout_fails_instead_of_storing_opaque_sprites(studio):
+    client, factory, store, headers, base, *_ = studio
+    job, payload = await queue_job(client, headers, base, framing="full_body", transparent=True)
+    outcome = await run_job(factory, store, payload, FakeGenerator(skip_cutout=True))
+    assert outcome["status"] == "failed"
+    done = (await client.get(f"{base}/image-jobs/{job['id']}", headers=headers)).json()
+    assert done["error_code"] == "invalid_output" and done["assets"] == []
+    assert done["cutout"] is None
+    async with factory() as session:
+        assert list(await session.scalars(select(NarrativeAsset))) == []
 
 
 @pytest.mark.anyio

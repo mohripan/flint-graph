@@ -4,8 +4,10 @@ import pytest
 
 from flint_graph.narrative.imagegen import (
     CHARACTER_TYPES,
+    CUTOUT_TAGS,
     FRAMINGS,
     MAX_APPEARANCE,
+    NEGATIVE,
     background_request,
     portrait_request,
 )
@@ -42,6 +44,24 @@ def test_types_and_framings_map_to_fixed_tags_and_sizes():
     other = portrait_request("a lantern spirit", "other", "full_body")
     assert other.prompt.startswith("solo, a lantern spirit, full body, standing, ")
     assert portrait_request("x", "boy", "portrait").prompt.startswith("1boy, solo, x, ")
+
+
+def test_transparent_sprites_are_full_body_on_a_plain_white_background():
+    opaque = portrait_request("silver hair", "girl", "full_body")
+    sprite = portrait_request("silver hair", "girl", "full_body", transparent=True)
+    framing = FRAMINGS["full_body"][0]
+    assert CUTOUT_TAGS == "white background"
+    assert sprite.prompt == opaque.prompt.replace(f"{framing}, ", f"{framing}, {CUTOUT_TAGS}, ", 1)
+    assert sprite.negative_prompt.startswith(NEGATIVE + ", ")
+    for tag in ("feet out of frame", "scenery", "detailed background", "gradient background"):
+        assert tag in sprite.negative_prompt and tag not in opaque.negative_prompt
+    assert (sprite.width, sprite.height, sprite.steps) == (
+        opaque.width,
+        opaque.height,
+        opaque.steps,
+    )
+    with pytest.raises(ValueError, match="full-body"):
+        portrait_request("silver hair", "girl", "portrait", transparent=True)
 
 
 @pytest.mark.parametrize(

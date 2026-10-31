@@ -40,6 +40,8 @@ export interface ImageJob {
   width: number; height: number; steps: number; guidance: number; seeds: number[]; model: string | null;
   prompt_tokens: number | null; truncated: boolean | null; created_at: string; started_at: string | null;
   finished_at: string | null; assets: NarrativeImage[];
+  // Transparent stage sprites: the segmenter and its ONNX SHA-256 once the cutout ran.
+  transparent: boolean; cutout: { model: string; sha256: string } | null;
 }
 import type {
   AnswerProvenance,
@@ -355,7 +357,7 @@ export const api = {
 
   createPortraitJob(tenantId: string, projectId: string, characterId: string, body: {
     appearance: string; character_type: CharacterType; framing: CharacterFraming; count: number;
-    idempotency_key: string;
+    idempotency_key: string; transparent?: boolean;
   }, signal?: AbortSignal): Promise<ImageJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait-jobs`, {
       method: "POST", headers: tenantHeaders(tenantId), signal, json: body,

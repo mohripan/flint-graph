@@ -32,6 +32,10 @@ NEGATIVE = (
     "extra digits, fewer digits, cropped, worst quality, low quality, low score, "
     "bad score, average score, signature, watermark, username, blurry"
 )
+# Stage sprites are cut out of a plain white background, which the segmenter
+# separates most cleanly; the whole figure has to stay inside the frame.
+CUTOUT_TAGS = "white background"
+CUTOUT_NEGATIVE = ", feet out of frame, scenery, detailed background, gradient background"
 
 
 @dataclass(frozen=True)
@@ -54,9 +58,13 @@ def clean_appearance(appearance: str) -> str:
     return text
 
 
-def portrait_request(appearance: str, character_type: str, framing: str) -> ImageRequest:
+def portrait_request(
+    appearance: str, character_type: str, framing: str, *, transparent: bool = False
+) -> ImageRequest:
     if character_type not in CHARACTER_TYPES or framing not in FRAMINGS:
         raise ValueError("Unknown character type or framing")
+    if transparent and framing != "full_body":
+        raise ValueError("Transparent sprites need full-body framing")
     if len(appearance) > MAX_APPEARANCE * 2:
         raise ValueError("Appearance is too long")
     text = clean_appearance(appearance)
@@ -64,9 +72,11 @@ def portrait_request(appearance: str, character_type: str, framing: str) -> Imag
         raise ValueError("Describe the character's appearance")
     framing_tags, (width, height) = FRAMINGS[framing]
     parts = [CHARACTER_TYPES[character_type], "solo", text, framing_tags, QUALITY]
+    if transparent:
+        parts.insert(parts.index(framing_tags) + 1, CUTOUT_TAGS)
     return ImageRequest(
         prompt=", ".join(part for part in parts if part),
-        negative_prompt=NEGATIVE,
+        negative_prompt=NEGATIVE + CUTOUT_NEGATIVE if transparent else NEGATIVE,
         width=width,
         height=height,
         steps=STEPS,

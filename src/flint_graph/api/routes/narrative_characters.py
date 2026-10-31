@@ -23,6 +23,7 @@ from flint_graph.api.dependencies import (
 from flint_graph.api.narrative_character_schemas import (
     CHARACTER_ID,
     AssetResponse,
+    CutoutResponse,
     ImageJobListResponse,
     ImageJobResponse,
     PortraitChoice,
@@ -79,6 +80,7 @@ def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJ
         id=job.id,
         purpose=job.purpose,
         character_id=job.character_id,
+        transparent=job.transparent,
         status=job.status,
         progress=job.progress,
         count=job.count,
@@ -95,6 +97,11 @@ def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJ
         guidance=job.guidance,
         seeds=list(job.seeds),
         model=job.model,
+        cutout=(
+            CutoutResponse(model=job.cutout_model, sha256=job.cutout_sha256)
+            if job.cutout_model is not None and job.cutout_sha256 is not None
+            else None
+        ),
         prompt_tokens=job.prompt_tokens,
         truncated=job.truncated,
         created_at=job.created_at,
@@ -195,6 +202,7 @@ async def create_character_portrait_job(
             actor=actor,
             available=settings.narrative_image_generation_enabled,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
+            transparent=payload.transparent,
         ),
     )
     return job_response(job, [])

@@ -76,7 +76,9 @@ async def create_portrait_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
+    transparent: bool = False,
 ) -> NarrativeImageJob:
+    """Queue candidate portraits, or cut-out stage sprites when ``transparent``."""
     return await _queue_job(
         session,
         tenant_id=tenant_id,
@@ -87,7 +89,10 @@ async def create_portrait_job(
         appearance=appearance,
         character_type=character_type,
         framing=framing,
-        build=lambda: portrait_request(appearance, character_type, framing),
+        transparent=transparent,
+        build=lambda: portrait_request(
+            appearance, character_type, framing, transparent=transparent
+        ),
         count=count,
         idempotency_key=idempotency_key,
         actor=actor,
@@ -119,6 +124,7 @@ async def create_background_job(
         appearance=description,
         character_type="other",
         framing="scenery",
+        transparent=False,
         build=lambda: background_request(description),
         count=count,
         idempotency_key=idempotency_key,
@@ -139,6 +145,7 @@ async def _queue_job(
     appearance: str,
     character_type: str,
     framing: str,
+    transparent: bool,
     build: Callable[[], ImageRequest],
     count: int,
     idempotency_key: UUID,
@@ -155,18 +162,18 @@ async def _queue_job(
     project = await get_project(
         session, tenant_id=tenant_id, project_id=project_id, for_update=True
     )
-    request_hash = sha256(
-        canonical_json(
-            {
-                "purpose": purpose,
-                "character_id": character_id,
-                "appearance": appearance,
-                "character_type": character_type,
-                "framing": framing,
-                "count": count,
-            }
-        )
-    ).hexdigest()
+    identity: dict[str, Any] = {
+        "purpose": purpose,
+        "character_id": character_id,
+        "appearance": appearance,
+        "character_type": character_type,
+        "framing": framing,
+        "count": count,
+    }
+    # Only sprite requests carry the flag, so earlier requests keep their hashes.
+    if transparent:
+        identity["transparent"] = True
+    request_hash = sha256(canonical_json(identity)).hexdigest()
     existing = await session.scalar(
         select(NarrativeImageJob).where(
             NarrativeImageJob.project_id == project_id,
@@ -220,6 +227,7 @@ async def _queue_job(
         guidance=built.guidance,
         seeds=[secrets.randbelow(2**32) for _ in range(count)],
         count=count,
+        transparent=transparent,
         status="queued",
         progress=0,
         cancel_requested=False,
@@ -448,6 +456,7 @@ async def claim_image_job(
             steps=job.steps,
             guidance=job.guidance,
             seeds=tuple(job.seeds),
+            cutout=job.transparent,
         ),
     )
 
@@ -483,6 +492,15 @@ async def complete_image_job(
         _finish(job, "cancelled")
         await session.flush()
         return job
+    cutout = result.cutout
+    if (cutout is not None) != job.transparent or any(
+        (image.box is not None) != job.transparent for _, image in stored
+    ):
+        # A sprite with its scenery still around it, or an opaque portrait that was cropped.
+        job.error_code = "invalid_output"
+        _finish(job, "failed")
+        await session.flush()
+        return job
     # Lists are newest first; earlier candidates of one job get slightly later times so
     # they read 1, 2, 3, 4 even where the clock does not advance between rows.
     finished = _now()
@@ -514,12 +532,20 @@ async def complete_image_job(
             "seed": image.seed,
             "runtime": result.runtime,
         }
+        if cutout is not None and image.box is not None:
+            provenance["cutout"] = {
+                "model_repo": cutout.identity.repo,
+                "model_revision": cutout.identity.revision,
+                "sha256": cutout.sha256,
+                "license": cutout.identity.license,
+                "box": list(image.box),
+            }
         session.add(
             NarrativeAsset(
                 id=asset_id,
                 tenant_id=job.tenant_id,
                 project_id=job.project_id,
-                kind="background" if job.purpose == "background" else "character_portrait",
+                kind=_asset_kind(job),
                 source="generated",
                 name=_asset_name(job, image.index),
                 created_at=finished - timedelta(microseconds=image.index),
@@ -543,6 +569,9 @@ async def complete_image_job(
             )
         )
     job.model = f"{model.repo}@{model.revision}"[:200]
+    if cutout is not None:
+        job.cutout_model = f"{cutout.identity.repo}@{cutout.identity.revision}"[:200]
+        job.cutout_sha256 = cutout.sha256
     job.runtime = result.runtime
     job.prompt_tokens = result.prompt_tokens
     job.truncated = result.truncated
@@ -552,12 +581,19 @@ async def complete_image_job(
     return job
 
 
+def _asset_kind(job: NarrativeImageJob) -> str:
+    """Cut-out sprites wait in the library for a character's expression slots."""
+    if job.purpose == "background":
+        return "background"
+    return "sprite" if job.transparent else "character_portrait"
+
+
 def _asset_name(job: NarrativeImageJob, index: int) -> str:
     """A readable default the creator can rename: what was asked for, numbered."""
     if job.purpose == "background":
         base = textwrap.shorten(clean_appearance(job.appearance), width=60, placeholder="…")
     else:
-        base = f"{job.character_id} portrait"
+        base = f"{job.character_id} {'sprite' if job.transparent else 'portrait'}"
     return f"{base} {index + 1}"
 
 

@@ -4,6 +4,7 @@ The behaviour is chosen by the first word of the prompt, so tests exercise the
 real parent: process start, stdin/stdout protocol, watchdog and file checks.
 """
 
+import hashlib
 import json
 import struct
 import sys
@@ -12,19 +13,20 @@ import zlib
 from pathlib import Path
 
 
-def png(width: int, height: int, shade: int) -> bytes:
-    def chunk(kind: bytes, payload: bytes) -> bytes:
-        return (
-            struct.pack(">I", len(payload))
-            + kind
-            + payload
-            + struct.pack(">I", zlib.crc32(kind + payload))
-        )
+def chunk(kind: bytes, payload: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(payload))
+        + kind
+        + payload
+        + struct.pack(">I", zlib.crc32(kind + payload))
+    )
 
-    row = b"\x00" + bytes([shade, 64, 128]) * width
+
+def png(width: int, height: int, shade: int, alpha: bool = False) -> bytes:
+    row = b"\x00" + bytes([shade, 64, 128, 255][: 4 if alpha else 3]) * width
     return (
         b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6 if alpha else 2, 0, 0, 0))
         + chunk(b"IDAT", zlib.compress(row * height, 9))
         + chunk(b"IEND", b"")
     )
@@ -38,6 +40,11 @@ request = json.loads(sys.stdin.read())
 mode = request["prompt"].split(",")[0]
 output = Path(request["output_dir"])
 width, height = request["width"], request["height"]
+cutout = request.get("cutout")
+# The real child hashes the segmenter bytes it loads; so does this stand-in.
+if cutout and hashlib.sha256(Path(cutout["model"]).read_bytes()).hexdigest() != cutout["sha256"]:
+    emit("error", code="model_invalid")
+    raise SystemExit(2)
 if mode == "busy":
     emit("busy", free_bytes=1, required_bytes=2)
     emit("error", code="gpu_busy")
@@ -54,14 +61,32 @@ emit(
     seconds=0.1,
     prompt_tokens=81 if mode == "long" else 12,
     truncated=mode == "long",
-    runtime={"torch": "fake", "diffusers": "fake", "cuda": "0", "device": "Fake GPU"},
+    runtime={"torch": "fake", "diffusers": "fake", "cuda": "0", "device": "Fake GPU"}
+    | ({"onnxruntime": "fake"} if cutout and mode != "nocutruntime" else {}),
 )
 for index, seed in enumerate(request["seeds"]):
-    image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40)
+    extra: dict[str, object] = {}
+    if cutout:
+        if mode == "cutfail":
+            emit("error", code="cutout_failed")
+            raise SystemExit(2)
+        box = [100, 40, 612, 1176]
+        image = png(512 + (1 if mode == "badbox" else 0), 1136, index * 40, mode != "opaquecut")
+        thumbnail = png(256, round(1136 * 256 / 512), index * 40, True)
+        if mode == "outsidebox":
+            box = [400, 40, 912, 1176]
+        if mode != "nobox":
+            extra["box"] = box
+    else:
+        image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40)
+        thumbnail = png(256, round(height * 256 / width), index * 40)
     if mode == "badpng":
         image = image[:-5]
+    if mode == "metadata":
+        # Editors and encoders may add text; the parent drops it like an upload's.
+        image = image[:33] + chunk(b"tEXt", b"Software\x00fake") + image[33:]
     (output / f"{index}.png").write_bytes(image)
-    (output / f"{index}.thumb.png").write_bytes(png(256, round(height * 256 / width), index * 40))
+    (output / f"{index}.thumb.png").write_bytes(thumbnail)
     emit(
         "image",
         index=index,
@@ -69,6 +94,7 @@ for index, seed in enumerate(request["seeds"]):
         thumbnail=f"{index}.thumb.png",
         seed=seed + (1 if mode == "wrongseed" else 0),
         seconds=0.1,
+        **extra,
     )
 if mode == "extra":
     (output / "notes.txt").write_text("unexpected")
