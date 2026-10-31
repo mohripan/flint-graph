@@ -81,26 +81,41 @@ CLIP reads 77 tokens. Animagine's two tokenizers give these counts for the new s
   MinIO and checked against their recorded SHA-256. They are saved under ignored
   `notes/portrait-prompt-fidelity/before/` (named by seed), with a contact sheet
   `before-sheet.png`. All four show a girl with very long white hair in long robes.
-- **After: not run.** The request is prepared in
-  `notes/portrait-prompt-fidelity/after-request.json`: the new prompt and negative,
-  the original seeds `313188645, 1275247027, 2309587623, 2089298423`, and the same
-  model and settings (832×1216, 28 steps, guidance 5). A Docker container from the
-  user's other project (`ai-chatbot-playground-vllm-1`, a vLLM server) held about
-  10 GB of the 12 GB GPU. The child therefore refused with `gpu_busy`: 8.54 GB free
-  against the 8.59 GB floor on the first try, and about 2 GB free after that. The
-  user chose to keep that container running, so the batch was deferred. Because the
-  seeds match, only the prompt and negative differ from the original job.
+- **After.** The same job was rerun through the real child on the RTX 5070 Ti.
+  It used the original seeds `313188645, 1275247027, 2309587623, 2089298423`, the
+  same model and the same settings (832×1216, 28 steps, guidance 5). Only the prompt
+  and negative differed. The request, the child's events and the images are under
+  `notes/portrait-prompt-fidelity/` (`after-request.json`, `after-events.jsonl`,
+  `after/`, `after-sheet.png`).
 
-To run the after batch when at least 8 GiB of the GPU is free, use Git Bash from the
-main checkout. The output directory must be empty; it is.
+| Seed | Before | After |
+| --- | --- | --- |
+| 313188645 | Girl, waist-length hair, long robe | Boy, chin-to-neck bob, black coat and trousers |
+| 1275247027 | Girl, waist-length hair, long open coat | Boy, neck-to-shoulder hair, open coat and trousers |
+| 2309587623 | Girl, very long hair, short robe and tights | Boy, shoulder-length hair, layered coat and trousers |
+| 2089298423 | Girl, very long hair, long white dress-robe | Boy, shoulder-length hair, white robe over a long red hakama |
+
+All four keep the white hair and red eyes. The faces are soft and girlish, as the
+creator asked, but the bodies are flat-chested and male. None has long hair.
+
+Two remaining gaps:
+
+- Seed 313188645's bob sits nearer chin length than shoulder length.
+- Seed 2089298423's long hakama is the closest to the old dress-like look. Clothing
+  was not described, so the model chose it.
+
+The child reported 47 prompt tokens, not truncated. Load took 10.8 s, the first image
+27.7 s and later images about 10.8 s. Peak device memory was 7.7 GB.
+
+The first try was refused with `gpu_busy`: a vLLM container from the user's other
+project held about 10 GB of the GPU. The batch ran after the user stopped it.
+
+To reproduce, use Git Bash from the main checkout with an empty
+`notes/portrait-prompt-fidelity/after/`:
 
 ```bash
 cd /c/Projects/flint-graph/runtimes/imagegen && ./.venv/Scripts/python.exe -I generate.py < ../../notes/portrait-prompt-fidelity/after-request.json
 ```
-
-It writes `0.png`–`3.png` into `notes/portrait-prompt-fidelity/after/`, in about 80 s.
-Success means a boy with medium-length white hair, red eyes and an androgynous face.
-Hair past the shoulders or a female body would mean the map needs more work.
 
 ## Verification
 
@@ -111,9 +126,13 @@ Hair past the shoulders or a female body would mean the map needs more work.
   passed.
 - Full `pytest`: 1665 passed, 77 skipped.
 - Frontend: `npm run typecheck`, `npm test` (71 passed) and `npm run build` passed.
-- Not run: the GPU after batch (above). The eval gate, `alembic upgrade head --sql`
-  and `docker compose config` were also skipped, because no retrieval, migration or
-  compose files changed.
+- Live: one batch of four through the real child, with the same seeds as the failing
+  job (above).
+- Skipped: the eval gate, `alembic upgrade head --sql` and `docker compose config`,
+  because no retrieval, migration or compose files changed.
+- Not exercised: a job through the owned API and worker. They run the main checkout's
+  code, so they still build the old prompt until this branch is merged and they
+  restart.
 
 ## Follow-ups
 
