@@ -44,5 +44,8 @@ func _receive(arguments: Array) -> void:
 	var game: Control = PreviewStage.new() if checked["story"]["schema_version"] == "2" else PreviewView.new()
 	game.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(game)
-	game.configure(checked["story"], envelope["content_hash"], assets)
+	if checked["story"]["schema_version"] == "2":
+		game.configure(checked["story"], envelope["content_hash"], assets, envelope["notices"])
+	else:
+		game.configure(checked["story"], envelope["content_hash"], assets)
 	_bridge.loaded(envelope["revision_id"], envelope["content_hash"])

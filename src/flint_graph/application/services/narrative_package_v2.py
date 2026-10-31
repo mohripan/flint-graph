@@ -160,13 +160,11 @@ def compose_notices(text: str, bound: list[Bound]) -> str:
         blocks.append("\n".join(lines))
     licenses = _obligating_licenses(bound)
     for carried in licenses:
-        if carried.obligations == "attribution":
-            blocks.append(
-                f"=== License: {carried.name} (sha256 {carried.sha256}) ===\n{carried.text}"
-            )
+        # The whole agreement, every language, as the license asks games to keep it.
+        blocks.append(f"=== License: {carried.name} (sha256 {carried.sha256}) ===\n{carried.text}")
     terms = [carried for carried in licenses if carried.obligations == "player_terms"]
     if terms:
-        body = "\n\n".join(f"{item.player_terms}\n\n{item.text}" for item in terms)
+        body = "\n\n".join(f"{item.player_terms}\n\n{item.in_game_text}" for item in terms)
         blocks.append(f"{TERMS_BEGIN}\n{body.strip()}\n{TERMS_END}")
     section = NOTICE_MARKER + "\n" + "\n\n".join(blocks) + "\n"
     return f"{own}\n\n{section}" if own else section

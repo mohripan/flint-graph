@@ -6,6 +6,7 @@ extends Control
 
 const PlayerScript = preload("res://runtime/player.gd")
 const SaveStore = preload("res://runtime/save_store.gd")
+const PlayerTerms = preload("res://runtime/player_terms.gd")
 const DisplayFont = preload("res://fonts/Lora.ttf")
 const INK := Color("182635")
 const PAPER := Color("f0f4f6")
@@ -56,9 +57,17 @@ var _volume_slider: HSlider
 # Browsers keep sound off until the first click or key press. Where a page may not
 # start sound yet, that input opens a start screen instead of skipping the first line.
 var _sound_gate: Control
+# Terms a voice model license puts on players (ADR 0044): shown once before play and
+# again from the menu. Until they are accepted the story does not start or speak.
+var _terms: Variant = null
+var _terms_panel: PanelContainer
+var _terms_button: Button
+var _terms_required := false
+var _terms_disabled: Dictionary = {}
 
 
-func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> void:
+func configure(source: Dictionary, package_hash: String, assets: Dictionary, notices: String = "") -> void:
+	_terms = PlayerTerms.parse(notices).get("terms")
 	_source = source
 	_hash = package_hash
 	_assets = assets.duplicate()
@@ -68,6 +77,10 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> 
 	_voice_volume = _read_volume()
 	_player = PlayerScript.new(source, package_hash, _gallery_saved)
 	_build()
+	if _terms != null:
+		_build_terms()
+		if _read_terms() != _digest(_terms):
+			_open_terms(true)
 	if _has_voice_clips():
 		# Deferred: playtests configure inside the browser callback that delivers the
 		# story, where the probe cannot run. It still runs before the first clip starts.
@@ -205,7 +218,7 @@ func _build() -> void:
 	_menu.offset_right = -12
 	_menu.offset_top = 12
 	add_child(_menu)
-	for item: String in ["Save", "Load", "Restart", "Gallery"]:
+	for item: String in ["Save", "Load", "Restart", "Gallery"] + (["License"] if _terms != null else []):
 		var button := _small_button(item)
 		button.pressed.connect(_toolbar.bind(item))
 		_menu.add_child(button)
@@ -241,6 +254,93 @@ func _build() -> void:
 	_notice.add_theme_font_size_override("font_size", 14)
 	add_child(_notice)
 	_build_gallery()
+
+
+func _build_terms() -> void:
+	_terms_panel = PanelContainer.new()
+	_terms_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_terms_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_terms_panel.add_theme_stylebox_override("panel", _style(INK, LAMP, 0))
+	_terms_panel.hide()
+	add_child(_terms_panel)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	_terms_panel.add_child(column)
+	var title := Label.new()
+	title.text = "License terms for this game"
+	title.add_theme_font_override("font", _font)
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", PAPER)
+	column.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
+	var text := Label.new()
+	text.text = _terms
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.add_theme_font_size_override("font_size", 15)
+	text.add_theme_color_override("font_color", PAPER)
+	scroll.add_child(text)
+	_terms_button = _small_button("I agree")
+	_terms_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_terms_button.pressed.connect(_close_terms)
+	column.add_child(_terms_button)
+
+
+func _terms_open() -> bool:
+	return _terms_panel != null and _terms_panel.visible
+
+
+func _open_terms(required: bool) -> void:
+	if _terms_panel == null or _terms_panel.visible:
+		return
+	_terms_required = required
+	_terms_button.text = "I agree" if required else "Close license"
+	for button: Node in _menu.get_children() + _buttons:
+		if button is Button:
+			_terms_disabled[button] = button.disabled
+			button.disabled = true
+	_terms_panel.show()
+	_terms_button.grab_focus()
+	_publish_qa.call_deferred()
+
+
+func _close_terms() -> void:
+	if not _terms_open():
+		return
+	var accepted := _terms_required
+	if accepted:
+		_persist_terms()
+	_terms_required = false
+	_terms_panel.hide()
+	for button: Button in _terms_disabled:
+		if is_instance_valid(button):
+			button.disabled = _terms_disabled[button]
+	_terms_disabled.clear()
+	if not _buttons.is_empty():
+		_buttons[0].grab_focus()
+	if accepted:
+		# The agreeing click also lets the browser play sound: start the first line's clip.
+		_start_voice.call_deferred(_voice_generation, _voice_session)
+	_publish_qa.call_deferred()
+
+
+func _digest(text: String) -> String:
+	var context := HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(text.to_utf8_buffer())
+	return context.finish().hex_encode()
+
+
+func _read_terms() -> String:
+	return SaveStore.read_terms(_source["id"])
+
+
+func _persist_terms() -> void:
+	if SaveStore.write_terms(_source["id"], _digest(_terms)) != "":
+		_notice.text = "License accepted for this session. This device could not keep it."
 
 
 func _build_gallery() -> void:
@@ -409,6 +509,8 @@ func _play_voice(current: Dictionary) -> void:
 func _start_voice(generation: int, session: RefCounted) -> void:
 	if _sound_gate != null and _sound_gate.visible:
 		return  # Played once the start screen is opened.
+	if _terms_open() and _terms_required:
+		return  # Played once the player accepts the license terms.
 	if generation == _voice_generation and session == _voice_session and _voice_player.stream != null:
 		_voice_player.play()
 
@@ -433,6 +535,8 @@ func _sound_blocked() -> bool:
 
 
 func _gate_sound() -> void:
+	if _terms_open() and _terms_required:
+		return  # Agreeing to the terms is the input that lets the page play sound.
 	if _sound_gate == null and _sound_blocked():
 		_build_sound_gate()
 		_publish_qa.call_deferred()
@@ -658,7 +762,7 @@ func _layout() -> void:
 
 
 func _action(action: String, generation: int, session: RefCounted) -> void:
-	if not _gallery_panel.visible and session == _player and _player.act(action, generation) == "":
+	if not _gallery_panel.visible and not _terms_open() and session == _player and _player.act(action, generation) == "":
 		_notice.text = ""
 		_render()
 
@@ -668,9 +772,11 @@ func _save_path() -> String:
 
 
 func _toolbar(action: String) -> void:
-	if _gallery_panel.visible:
+	if _gallery_panel.visible or _terms_open():
 		return
-	if action == "Gallery":
+	if action == "License":
+		_open_terms(false)
+	elif action == "Gallery":
 		_open_gallery()
 	elif action == "Restart":
 		_close_gallery()
@@ -703,7 +809,7 @@ func _toolbar(action: String) -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	# Clicking or tapping the stage advances a line, as in most visual novels.
-	if _gallery_panel.visible:
+	if _gallery_panel.visible or _terms_open():
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if _player.view["type"] == "line":
@@ -722,7 +828,7 @@ func _input(event: InputEvent) -> void:
 		if not event is InputEventMouseMotion:
 			get_viewport().set_input_as_handled()
 		return
-	if not event is InputEventKey or not event.keycode in [KEY_ENTER, KEY_SPACE]:
+	if not event is InputEventKey or not event.keycode in [KEY_ENTER, KEY_SPACE] or _terms_open():
 		return
 	# Claim the entire keystroke before GUI dispatch: the focused Continue button
 	# otherwise activates on release after key-down already settled the next line.
@@ -742,6 +848,11 @@ func _input(event: InputEvent) -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo or event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+		return
+	if _terms_open():
+		if event.keycode == KEY_ESCAPE and not _terms_required:
+			_close_terms()
+		get_viewport().set_input_as_handled()
 		return
 	if _gallery_panel.visible:
 		if event.keycode == KEY_ESCAPE:
@@ -797,7 +908,8 @@ func _publish_qa() -> void:
 		"textbox": _rect(_box), "name_visible": _name_box.visible, "figures": figures,
 		"background_loaded": _background.texture != null, "custom_font": _font != DisplayFont,
 		"cg_loaded": _cg.texture != null, "gallery": _player.gallery, "gallery_open": _gallery_panel.visible,
-		"toolbar": toolbar, "gallery_controls": gallery_controls, "gallery_image_loaded": _gallery_image.texture != null,
+		"toolbar": toolbar, "gallery_controls": gallery_controls,
+		"terms": _terms != null, "terms_open": _terms_open(), "terms_required": _terms_required, "gallery_image_loaded": _gallery_image.texture != null,
 		"voice_volume": _voice_volume, "voice_clip": current_voice(), "voice_playing": _voice_player.playing,
 		"volume_slider": _rect(_volume_slider), "sound_gate": _sound_gate != null and _sound_gate.visible}
 	var browser: Variant = JavaScriptBridge.get_interface("window")

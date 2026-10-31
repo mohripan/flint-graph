@@ -145,6 +145,9 @@ def probe(tmp_path: Path, cases: list[dict]) -> list[bool]:
     shutil.copyfile(
         ROOT / "runtimes/godot/preview/validate_story.gd", project / "validate_story.gd"
     )
+    shutil.copyfile(
+        ROOT / "runtimes/godot/runtime/player_terms.gd", project / "runtime/player_terms.gd"
+    )
     shutil.copyfile(ROOT / "tests/fixtures/narrative/preview_probe.gd", project / "probe.gd")
     (project / "cases.json").write_bytes(canonical_json(cases))
     assert ENGINE

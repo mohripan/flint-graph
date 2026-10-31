@@ -57,6 +57,9 @@ class VoiceLicense:
     notice: str = ""
     # What players see once before playing, when the license requires player terms.
     player_terms: str = ""
+    # The agreement as players read it in the game (the bundled font has no CJK glyphs,
+    # so a Chinese text that prevails stays in NOTICES, which every build ships).
+    in_game_text: str = ""
 
     @property
     def sha256(self) -> str:
@@ -113,7 +116,8 @@ _BILIBILI_TERMS = (
     "the audio with. Disputes about the agreement are governed by the laws of the "
     "People's Republic of China.\n"
     "\n"
-    "The full agreement follows in English and Chinese; the Chinese version prevails."
+    "The agreement follows in English. Its Chinese version, which prevails, is in the "
+    "NOTICES.txt file that comes with this game."
 )
 
 LICENSES: dict[str, VoiceLicense] = {
@@ -160,6 +164,7 @@ LICENSES: dict[str, VoiceLicense] = {
                 "License Agreement. bilibili does not endorse or guarantee this work."
             ),
             player_terms=_BILIBILI_TERMS,
+            in_game_text=_text("bilibili-model-use-license.en.txt"),
         ),
     )
 }

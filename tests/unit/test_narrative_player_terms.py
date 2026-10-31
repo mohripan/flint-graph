@@ -98,8 +98,9 @@ def test_notices_carry_license_text_and_player_terms_only_when_a_clip_requires_t
     )
     terms = player_terms(mixed)
     assert terms is not None and terms.startswith(BILIBILI.player_terms)
-    assert BILIBILI.text in terms  # The agreement itself, readable in the game.
-    assert mixed.count(BILIBILI.text) == 1
+    assert BILIBILI.in_game_text.rstrip() in terms  # The agreement, readable in the game.
+    assert "本协议" not in terms  # Chinese stays in NOTICES; the game font has no CJK glyphs.
+    assert mixed.count(BILIBILI.text) == 1  # The full bilingual agreement, once.
     assert "  " + BILIBILI.notice in mixed  # The per-clip attribution and disclaimer.
     assert mixed.startswith("Written by me.\n\n" + NOTICE_MARKER)
     assert mixed.endswith(TERMS_END + "\n")

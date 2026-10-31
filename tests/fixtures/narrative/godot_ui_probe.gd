@@ -41,6 +41,13 @@ func _body(node: Node) -> String:
 	return ""
 
 
+func _key(code: int) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.pressed = true
+	return event
+
+
 func _initialize() -> void:
 	var bootstrap: Node = load("res://runtime/bootstrap.gd").new()
 	var checked: Dictionary = bootstrap.verify_content()
@@ -67,6 +74,64 @@ func _initialize() -> void:
 		await process_frame
 		await process_frame
 		print("UI_RESULT:" + JSON.stringify({"node_id": stage._player.state["node_id"], "gallery_open": stage._gallery_panel.visible}))
+		quit(0)
+		return
+	if config["case"] == "terms_parse":
+		# The shared player-terms cases (ADR 0044), parsed by the runtime's own script.
+		var terms_script: GDScript = load("res://runtime/player_terms.gd")
+		var parsed_terms: Array = []
+		for notices: String in config["notices"]:
+			parsed_terms.append(terms_script.parse(notices))
+		print("UI_RESULT:" + JSON.stringify(parsed_terms))
+		quit(0)
+		return
+	if config["case"] in ["terms", "terms_preview"]:
+		# Player terms (ADR 0044): a screen before play that holds the story and its voice
+		# until accepted, kept on the device (never in playtests) and rereadable.
+		var view: GDScript = load("res://preview/vn_view.gd" if config["case"] == "terms_preview" else "res://runtime/vn_view.gd")
+		var notices: String = FileAccess.get_file_as_string("res://content/NOTICES.txt")
+		var launches: Array = []
+		for text: String in [notices, notices, config["changed_notices"]]:
+			var stage: Control = view.new()
+			root.add_child(stage)
+			stage.size = Vector2(1280, 720)
+			stage.configure(checked["story"], checked["package_hash"], checked["assets"], text)
+			await process_frame
+			await process_frame
+			var first: String = stage._player.state["node_id"]
+			var launch := {"open": stage._terms_open(), "required": stage._terms_required,
+				"playing": stage._voice_player.playing, "license_button": _find(stage, "License") != null}
+			if stage._terms_open():
+				var click := InputEventMouseButton.new()
+				click.button_index = MOUSE_BUTTON_LEFT
+				click.position = Vector2(640, 600)
+				for pressed: bool in [true, false]:
+					click.pressed = pressed
+					root.push_input(click.duplicate())
+				stage._unhandled_key_input(_key(KEY_ENTER))
+				stage._unhandled_key_input(_key(KEY_ESCAPE))
+				await process_frame
+				launch["still_open"] = stage._terms_open()
+				launch["same_line"] = stage._player.state["node_id"] == first
+				launch["text"] = stage._terms_panel.get_child(0).get_child(1).get_child(0).text
+				launch["button"] = stage._terms_button.text
+				stage._terms_button.pressed.emit()
+				await process_frame
+				await process_frame
+				launch["accepted"] = {"open": stage._terms_open(), "clip": stage.current_voice(),
+					"playing": stage._voice_player.playing}
+			stage._toolbar("License")
+			await process_frame
+			launch["reread"] = {"open": stage._terms_open(), "required": stage._terms_required,
+				"button": stage._terms_button.text}
+			stage._unhandled_key_input(_key(KEY_ESCAPE))
+			await process_frame
+			launch["escape_closes_reread"] = not stage._terms_open()
+			launch["stored"] = FileAccess.file_exists("user://flint_graph/terms-" + checked["story"]["id"] + ".json")
+			launches.append(launch)
+			stage.queue_free()
+			await process_frame
+		print("UI_RESULT:" + JSON.stringify(launches))
 		quit(0)
 		return
 	if config["case"] in ["voice", "voice_preview"]:

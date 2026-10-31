@@ -86,6 +86,38 @@ static func write_gallery(story_id: String, seen: Array) -> String:
 	return _write_verified(gallery_path(story_id), data, 32768)
 
 
+# Player terms accepted on this device (ADR 0044): the SHA-256 of the terms text, so
+# changed terms ask again. Kept per story outside save slots, like gallery unlocks.
+static func terms_path(story_id: String) -> String:
+	if RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}$").search(story_id) == null:
+		return ""
+	return "user://flint_graph/terms-" + story_id + ".json"
+
+
+static func read_terms(story_id: String) -> String:
+	var path := terms_path(story_id)
+	if path == "":
+		return ""
+	var saved := LocalIO.new().read(path, 4096)
+	if saved.get("error", "") != "":
+		return ""
+	var decoded: Dictionary = preload("res://runtime/strict_json.gd").decode(saved["data"], 4096)
+	if not decoded.get("ok", false) or not decoded["value"] is Dictionary:
+		return ""
+	var value: Dictionary = decoded["value"]
+	var digest: Variant = value.get("accepted_sha256")
+	if value.size() != 2 or value.get("schema_version") != "1" or not digest is String:
+		return ""
+	if RegEx.create_from_string("^[0-9a-f]{64}$").search(digest) == null:
+		return ""
+	return digest
+
+
+static func write_terms(story_id: String, digest: String) -> String:
+	var data := JSON.stringify({"schema_version": "1", "accepted_sha256": digest}).to_utf8_buffer()
+	return _write_verified(terms_path(story_id), data, 4096)
+
+
 # Player settings on this device (ADR 0043): voice volume in percent, 0 to 100.
 const SETTINGS_PATH := "user://flint_graph/settings.json"
 

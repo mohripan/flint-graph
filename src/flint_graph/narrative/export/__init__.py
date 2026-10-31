@@ -17,6 +17,7 @@ TEMPLATE_FILES = (
     "runtime/game_view.gd",
     "runtime/vn_view.gd",
     "runtime/save_store.gd",
+    "runtime/player_terms.gd",
     "fonts/Lora.ttf",
     "fonts/LICENSE-Lora.txt",
     "fonts/provenance.json",

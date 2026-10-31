@@ -10,7 +10,7 @@ func _small_button(label: String) -> Button:
 	return button
 
 func _toolbar(action: String) -> void:
-	if action in ["Restart", "Gallery"]:
+	if action in ["Restart", "Gallery", "License"]:
 		super._toolbar(action)
 		if action == "Restart":
 			_notice.text = "Playtest restarted. Progress stays in memory."
@@ -23,6 +23,12 @@ func _read_volume() -> int:
 
 func _persist_volume() -> void:
 	pass  # The voice volume lasts only as long as this playtest.
+
+func _read_terms() -> String:
+	return ""  # Every playtest shows the license screen players will see.
+
+func _persist_terms() -> void:
+	pass  # Accepting in a playtest lasts only as long as the playtest.
 
 func _persist_gallery() -> void:
 	pass  # Includes gallery unlocks: never touch user:// during a Studio playtest.

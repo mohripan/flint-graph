@@ -38,7 +38,7 @@ class BuildIdentity:
     builder_image_digest: str
     toolchain_sha256: str
     compiler_version: str = "0.1.0"
-    runtime_version: str = "0.6.1"
+    runtime_version: str = "0.7.0"
     godot_version: str = "4.7.2.stable"
 
 

@@ -62,7 +62,8 @@ func verify_content() -> Dictionary:
 	var story: Dictionary = decoded["value"]
 	if not story.get("title") is String:
 		return {"error": "invalid_story"}
-	return {"ok": true, "package_hash": build["package_hash"], "story": story, "assets": assets}
+	return {"ok": true, "package_hash": build["package_hash"], "story": story, "assets": assets,
+		"notices": notices.get_string_from_utf8()}
 
 
 func _ready() -> void:
@@ -78,4 +79,8 @@ func _ready() -> void:
 	var game: Control = VnView.new() if checked["story"].get("schema_version") == "2" else GameView.new()
 	game.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(game)
-	game.configure(checked["story"], checked["package_hash"], checked["assets"])
+	if game is VnView:
+		# Story format 2 may carry player terms in NOTICES (ADR 0044).
+		game.configure(checked["story"], checked["package_hash"], checked["assets"], checked["notices"])
+	else:
+		game.configure(checked["story"], checked["package_hash"], checked["assets"])

@@ -1,4 +1,4 @@
-FlintGraph editable Godot source export, runtime 0.6.1.
+FlintGraph editable Godot source export, runtime 0.7.0.
 
 Use the qualified Godot 4.7.2 stable GDScript engine. No AI service or platform
 account is required by this project. Install matching engine export templates
@@ -8,6 +8,8 @@ The bootstrap verifies package and asset hashes, then starts the authored player
 Stories in format 2 play on a full-screen stage with a styled text box; their
 images, fonts and voice clips are under content/assets/ and are credited in
 content/NOTICES.txt. The Voice slider sets the voice volume on this device.
+When a voice model license puts terms on players, NOTICES carries them and the
+game shows them once before play (License in the menu shows them again).
 Use Continue/Enter/Space, listed choices (or digits 1-9), and Save/Load/Restart.
 Saves are local to the device/browser and package version; no cloud sync is used.
 Gameplay conformance and actual browser qualification are documented separately

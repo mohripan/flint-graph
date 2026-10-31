@@ -40,6 +40,7 @@ RUNTIME_FILES = frozenset(
         "runtime/game_view.gd",
         "runtime/vn_view.gd",
         "runtime/save_store.gd",
+        "runtime/player_terms.gd",
         "fonts/Lora.ttf",
         "fonts/LICENSE-Lora.txt",
         "fonts/provenance.json",
@@ -111,7 +112,7 @@ def _inputs(source: Path, trusted: Mapping[str, str]) -> dict[str, bytes]:
     if (
         manifest["schema_version"] != "1"
         or manifest["compiler_version"] != "0.1.0"
-        or manifest["runtime_version"] != "0.6.1"
+        or manifest["runtime_version"] != "0.7.0"
         or manifest["godot_version"] != "4.7.2.stable"
         or not isinstance(manifest["package_hash"], str)
         or not re.fullmatch(r"[0-9a-f]{64}", manifest["package_hash"])

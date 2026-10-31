@@ -5,6 +5,7 @@
 # asset bytes arrive separately and must match the story's hashes exactly.
 extends RefCounted
 const StrictJson = preload("res://runtime/strict_json.gd")
+const PlayerTerms = preload("res://runtime/player_terms.gd")
 const POSITIONS := ["left", "center", "right"]
 const RESERVED := ["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6",
 	"com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]
@@ -250,6 +251,7 @@ static func validate(source: PackedByteArray, notices: PackedByteArray, package_
 	if source.size() > 5242880 or notices.size() > 1048576: return {"error": "size_limit"}
 	var notice_text := notices.get_string_from_utf8()
 	if notice_text.to_utf8_buffer() != notices or 0 in notices: return {"error": "invalid_notices"}
+	if not PlayerTerms.parse(notice_text)["ok"]: return {"error": "invalid_notices"}
 	var decoded := StrictJson.decode(source, 5242880)
 	if not decoded.get("ok", false) or not _story(decoded.get("value")): return {"error": "invalid_story"}
 	# The package identity covers every asset: exactly the declared files, by SHA-256.
