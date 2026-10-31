@@ -182,6 +182,15 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
           {running ? "Generating…" : "Regenerate"}</button>}
         <button type="button" className="studio-link studio-danger" onClick={() => run(() => onChange(setLineClip(story, id, null), `${id}:voice-clip`))}>Remove clip</button>
       </>}
+      {candidates.filter(asset => asset.id !== bound.id).slice(0, 2).map(asset => <span key={asset.id} className="studio-voice-clip candidate">
+        <span className="studio-voice-note">New take</span>
+        <ClipPlayButton assetId={asset.id} label="Listen" />
+        {!readOnly && <>
+          <button type="button" className="studio-secondary" onClick={() => use(asset)}>Use this take</button>
+          <button type="button" className="studio-link studio-danger" onClick={() => void api.discardNarrativeImage(tenantId, projectId, asset.id)
+            .then(() => jobs?.refresh(), error => onError(message(error, "Could not discard.")))}>Discard</button>
+        </>}
+      </span>)}
     </span>
     : voice.audio ? <span className="studio-voice-note">Clip bound: {voice.audio}</span>
     : candidates.length ? candidates.slice(0, 2).map(asset => <span key={asset.id} className="studio-voice-clip candidate">
