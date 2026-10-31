@@ -3,7 +3,15 @@
 from typing import Any
 
 from flint_graph.narrative.json_format import parse_json
-from flint_graph.narrative.validation import INT_MAX, INT_MIN, fields, reference, typed_value
+from flint_graph.narrative.validation import (
+    INT_MAX,
+    INT_MIN,
+    POSITIONS,
+    asset_of,
+    fields,
+    reference,
+    typed_value,
+)
 from flint_graph.narrative.values import PackageError, StoryPackage, canonical_json
 
 # All variable literals are bounded by a 5 MiB source package; leave a full MiB
@@ -46,6 +54,9 @@ class Player:
         self._package = package
         self._package_hash = package.content_hash
         self._story = package.story
+        # v2 (ADR 0040): the stage persists across screens and is part of every save.
+        self._v2 = self._story["schema_version"] == "2"
+        self._stage: dict[str, Any] = {"background": None, "characters": []}
         self._variables = {key: value["initial"] for key, value in self._story["variables"].items()}
         self._node_id = self._story["entry"]
         self._status = "playing"
@@ -64,7 +75,7 @@ class Player:
 
     @property
     def state(self) -> dict[str, Any]:
-        return {
+        state = {
             "package_hash": self._package_hash,
             "node_id": self._node_id,
             "variables": dict(self._variables),
@@ -72,9 +83,20 @@ class Player:
             "ending": self._ending,
             "fault": self._fault,
         }
+        if self._v2:
+            state["stage"] = self._stage_copy()
+        return state
+
+    def _stage_copy(self) -> dict[str, Any]:
+        return {
+            "background": self._stage["background"],
+            "characters": [dict(item) for item in self._stage["characters"]],
+        }
 
     @property
     def view(self) -> dict[str, Any]:
+        if self._v2:
+            return self._view_v2()
         node = self._story["nodes"][self._node_id]
         if self._status == "fault":
             return {
@@ -102,9 +124,39 @@ class Player:
             ],
         }
 
+    def _view_v2(self) -> dict[str, Any]:
+        """The screen is the current text plus the persistent stage, including faults."""
+        node = self._story["nodes"][self._node_id]
+        if self._status == "fault":
+            return {
+                "type": "fault",
+                "text_id": None,
+                "text": "The game cannot continue.",
+                "speaker": None,
+                "speaker_name": None,
+                "speaker_color": None,
+                "stage": self._stage_copy(),
+                "options": [],
+            }
+        speaker = node.get("speaker") if node["type"] == "line" else None
+        character = self._story["characters"][speaker] if speaker else None
+        return {
+            "type": node["type"],
+            "text_id": node["text_id"],
+            "text": node["text"],
+            "speaker": speaker,
+            "speaker_name": character["name"] if character else None,
+            "speaker_color": character.get("color") if character else None,
+            "stage": self._stage_copy(),
+            "options": [
+                {"id": option["id"], "text_id": option["text_id"], "text": option["text"]}
+                for option in self._options()
+            ],
+        }
+
     def frame(self, action: str | None = None) -> dict[str, Any]:
         """Cross-runtime trace without rendering-specific strings or pixels."""
-        return {
+        frame = {
             "action": action,
             "node_id": self._node_id,
             "text_id": self.view["text_id"],
@@ -114,30 +166,33 @@ class Player:
             "ending": self._ending,
             "fault": self._fault,
         }
+        if self._v2:
+            frame["stage"] = self._stage_copy()
+        return frame
 
     def save(self) -> bytes:
-        return canonical_json({"schema_version": "1", **self.state})
+        return canonical_json({"schema_version": "2" if self._v2 else "1", **self.state})
 
     def load_save(self, data: bytes) -> dict[str, Any]:
         """Validate completely before replacing any running state; never replay effects."""
         try:
             saved = parse_json(data, limit=SAVE_LIMIT)
-            fields(
-                saved,
-                {
-                    "schema_version",
-                    "package_hash",
-                    "node_id",
-                    "variables",
-                    "status",
-                    "ending",
-                    "fault",
-                },
-                set(),
-                "save",
-            )
-            if saved["schema_version"] != "1" or saved["package_hash"] != self._package_hash:
+            required = {
+                "schema_version",
+                "package_hash",
+                "node_id",
+                "variables",
+                "status",
+                "ending",
+                "fault",
+            }
+            fields(saved, required | ({"stage"} if self._v2 else set()), set(), "save")
+            if (
+                saved["schema_version"] != ("2" if self._v2 else "1")
+                or saved["package_hash"] != self._package_hash
+            ):
                 raise PackageError("invalid_save")
+            stage = self._checked_stage(saved["stage"]) if self._v2 else None
             node_id = reference(saved["node_id"], self._story["nodes"], "save.node_id")
             declarations = self._story["variables"]
             variables = fields(saved["variables"], set(declarations), set(), "save.variables")
@@ -166,7 +221,7 @@ class Player:
                         for option in node["options"]
                     )
                 elif fault == "automatic_transition_limit":
-                    valid = kind in ("set", "branch")
+                    valid = kind in ("set", "branch", "stage")
                 elif fault == "integer_overflow" and kind == "set":
                     updated = dict(variables)
                     for operation in node["operations"]:
@@ -183,8 +238,37 @@ class Player:
             raise PlayerError("invalid_save") from None
         self._node_id, self._variables = node_id, dict(variables)
         self._status, self._ending, self._fault = status, saved["ending"], saved["fault"]
+        if stage is not None:
+            self._stage = stage
         self._generation += 1
         return self.state
+
+    def _checked_stage(self, value: Any) -> dict[str, Any]:
+        """A saved stage: known image background and characters in canonical slots."""
+        stage = fields(value, {"background", "characters"}, set(), "save.stage")
+        background = stage["background"]
+        if background is not None:
+            asset_of(background, self._story["assets"], "image", "save.stage")
+        characters = stage["characters"]
+        if type(characters) is not list or len(characters) > len(POSITIONS):
+            raise PackageError("invalid_save")
+        seen: set[str] = set()
+        order: list[int] = []
+        for item in characters:
+            fields(item, {"id", "sprite", "position"}, set(), "save.stage")
+            character = reference(item["id"], self._story["characters"], "save.stage")
+            reference(
+                item["sprite"],
+                self._story["characters"][character].get("sprites", {}),
+                "save.stage",
+            )
+            if item["position"] not in POSITIONS or character in seen:
+                raise PackageError("invalid_save")
+            seen.add(character)
+            order.append(POSITIONS.index(item["position"]))
+        if order != sorted(set(order)):
+            raise PackageError("invalid_save")  # Unique positions, left to right.
+        return {"background": background, "characters": [dict(item) for item in characters]}
 
     def _options(self) -> list[dict[str, Any]]:
         node = self._story["nodes"][self._node_id]
@@ -217,6 +301,35 @@ class Player:
         self._generation += 1
         return self.state
 
+    def _staged(self, node: dict[str, Any]) -> dict[str, Any]:
+        """Apply one stage node to a copy: hide, then show (a slot holds one character)."""
+        background = node["background"] if "background" in node else self._stage["background"]
+        present = {
+            item["id"]: dict(item)
+            for item in self._stage["characters"]
+            if item["id"] not in node.get("hide", [])
+        }
+        for entry in node.get("show", []):
+            for other in [
+                key for key, item in present.items() if item["position"] == entry["position"]
+            ]:
+                if other != entry["character"]:
+                    del present[other]
+            present[entry["character"]] = {
+                "id": entry["character"],
+                "sprite": entry["sprite"],
+                "position": entry["position"],
+            }
+        ordered = sorted(present.values(), key=lambda item: POSITIONS.index(item["position"]))
+        return {"background": background, "characters": ordered}
+
+    def _expressed(self, speaker: str, expression: str) -> dict[str, Any]:
+        stage = self._stage_copy()
+        for item in stage["characters"]:
+            if item["id"] == speaker:
+                item["sprite"] = expression
+        return stage
+
     def _settle(self, node_id: str) -> None:
         transitions = 0
         self._status, self._ending, self._fault = "playing", None, None
@@ -227,6 +340,9 @@ class Player:
             if kind in ("line", "choice"):
                 if kind == "choice" and not self._options():
                     self._status, self._fault = "fault", "no_available_choices"
+                if kind == "line" and "expression" in node:
+                    # Applied once when the line settles; saves store the result.
+                    self._stage = self._expressed(node["speaker"], node["expression"])
                 return
             if kind == "end":
                 self._status, self._ending = "ended", node["ending"]
@@ -241,6 +357,9 @@ class Player:
                     if evaluate_condition(node["condition"], self._variables)
                     else node["if_false"]
                 )
+            elif kind == "stage":
+                self._stage = self._staged(node)
+                node_id = node["next"]
             else:
                 updated = dict(self._variables)
                 for operation in node["operations"]:

@@ -48,6 +48,12 @@ class NarrativeRevisionCreate(BaseModel):
     notices: str = Field(default="", max_length=1024 * 1024)
 
 
+class NarrativeUpgradeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_revision_id: UUID
+    idempotency_key: UUID
+
+
 class NarrativeArchiveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     base_revision_id: UUID

@@ -110,6 +110,33 @@ test("folders can be added, renamed and removed without losing scenes", () => {
   assert.match(tree.newGroupId(items), /^folder_[a-z0-9]+$/);
 });
 
+test("stage steps belong to their scene like state changes and can be removed", () => {
+  const v2 = {
+    schema_version: "2", id: "bay", title: "Bay", language: "en", entry: "set_scene",
+    characters: { mira: { name: "Mira", sprites: { neutral: "mira_neutral" } } }, variables: {},
+    assets: { dusk: { kind: "image", path: "assets/dusk.png", sha256: "a".repeat(64) },
+      mira_neutral: { kind: "image", path: "assets/mira_neutral.png", sha256: "b".repeat(64) } },
+    nodes: {
+      set_scene: { type: "stage", background: "dusk", show: [{ character: "mira", sprite: "neutral", position: "left" }], next: "hello" },
+      hello: { type: "line", speaker: "mira", expression: "neutral", text_id: "hello", text: "Hello.", next: "fin" },
+      fin: { type: "end", text_id: "fin", text: "Fin", ending: "done" },
+    },
+  };
+  const { passages: list, owner } = passages.buildPassages(v2);
+  const scene = list.find(item => item.id === "set_scene");
+  assert.deepEqual(scene.nodes, ["set_scene", "hello", "fin"]);
+  assert.equal(scene.title, "Hello.");
+  assert.equal(owner.get("hello"), "set_scene");
+  const removed = model.removeLine(v2, "set_scene");
+  assert.equal(removed.entry, "hello", "Removing a stage step reconnects the route");
+  assert.throws(() => model.deleteCharacter(v2, "mira"), /still/);
+  assert.equal(model.describeStage(v2, v2.nodes.set_scene), "Background dusk · Mira (neutral) at left");
+  assert.equal(model.describeStage(v2, { type: "stage", background: null, hide: ["mira"], next: "fin" }),
+    "Clear background · Mira leaves");
+  const lone = { ...v2, nodes: { ...v2.nodes, set_scene: { ...v2.nodes.set_scene, next: "fin" } } };
+  assert.equal(passages.buildPassages(lone).passages.find(item => item.id === "set_scene").title, "Stage change");
+});
+
 test("touch rows are at least 44 px; mouse rows keep editor density", () => {
   assert.ok(tree.treeRowHeight(true) >= 44);
   assert.ok(tree.treeRowHeight(false) < tree.treeRowHeight(true));
@@ -125,5 +152,5 @@ test("lines can be inserted and removed inside a scene without breaking routes",
   assert.equal(removed.nodes.opening_2, undefined);
   const head = model.removeLine(story(), "opening");
   assert.equal(head.entry, "opening_2", "Removing the first line moves the start");
-  assert.throws(() => model.removeLine(story(), "first_choice"), /Only lines and state changes/);
+  assert.throws(() => model.removeLine(story(), "first_choice"), /Only lines/);
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { CharacterAvatar } from "./characterImages";
 import { TargetSelect } from "./FormFields";
-import { deletePassage, insertLineAfter, removeLine, replaceScene } from "./model";
+import { deletePassage, describeStage, insertLineAfter, removeLine, replaceScene } from "./model";
 import type { Passage } from "./passages";
 import { SceneForm } from "./SceneForm";
 import type { StoryDraft } from "./types";
@@ -36,6 +36,12 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
           <span aria-hidden="true">⚙</span>
           <span>{node.operations.map(item => `${item.variable} ${item.op === "set" ? "=" : "+"} ${String(item.value)}`).join(", ")}</span>
           <button type="button" className="studio-link" onClick={() => onOpenNode(id)}>Edit</button>
+          {!readOnly && <button type="button" className="studio-link studio-danger"
+            onClick={() => run(() => onChange(removeLine(story, id)))}>Remove</button>}
+        </li>;
+        if (node.type === "stage") return <li key={id} className="studio-script-state">
+          <span aria-hidden="true">▣</span>
+          <span>{describeStage(story, node)}</span>
           {!readOnly && <button type="button" className="studio-link studio-danger"
             onClick={() => run(() => onChange(removeLine(story, id)))}>Remove</button>}
         </li>;

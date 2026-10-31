@@ -1,4 +1,4 @@
-"""Strict, bounded v1 story semantics, independent of any execution engine."""
+"""Strict, bounded story semantics (v1 and v2), independent of any execution engine."""
 
 import re
 from collections import deque
@@ -9,6 +9,9 @@ from typing import Any, TypeVar
 from flint_graph.narrative.values import Diagnostic, PackageError
 
 ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
+COLOR = re.compile(r"#[0-9a-f]{6}(?:[0-9a-f]{2})?\Z")
+OPAQUE_COLOR = re.compile(r"#[0-9a-f]{6}\Z")
+POSITIONS = ("left", "center", "right")
 INT_MIN = -(2**31)
 INT_MAX = 2**31 - 1
 _T = TypeVar("_T")
@@ -184,7 +187,7 @@ def collect_story_diagnostics(
 
 
 def _schema(value: Any) -> None:
-    if value != "1":
+    if value not in ("1", "2"):
         raise PackageError("unsupported_schema", "schema_version")
 
 
@@ -215,33 +218,145 @@ def _assets(value: Any) -> dict[str, Any]:
     return assets
 
 
+def _assets_v2(value: Any) -> dict[str, Any]:
+    assets = mapping(value, 256, "assets")
+    for key, asset in assets.items():
+        location = f"assets.{key}"
+        if key in _RESERVED:
+            raise PackageError("unsafe_path", location)
+        fields(asset, {"kind", "path", "sha256"}, set(), location)
+        if asset["kind"] == "image":
+            paths = {f"assets/{key}.png"}
+        elif asset["kind"] == "font":
+            paths = {f"assets/{key}.ttf", f"assets/{key}.otf"}
+        else:
+            raise PackageError("invalid_value", location + ".kind")
+        if asset["path"] not in paths:
+            raise PackageError("unsafe_path", location)
+        if type(asset["sha256"]) is not str or not re.fullmatch(r"[0-9a-f]{64}", asset["sha256"]):
+            raise PackageError("invalid_hash", location)
+    return assets
+
+
+def asset_of(value: Any, assets: dict[str, Any], kind: str, location: str) -> str:
+    key = reference(value, assets, location)
+    if assets[key]["kind"] != kind:
+        raise PackageError("invalid_asset_kind", location)
+    return key
+
+
+def _color(value: Any, location: str, *, alpha: bool = True) -> None:
+    if type(value) is not str or not (COLOR if alpha else OPAQUE_COLOR).fullmatch(value):
+        raise PackageError("invalid_value", location)
+
+
+def _bounded(value: Any, low: int, high: int, location: str) -> None:
+    if type(value) is not int or not low <= value <= high:
+        raise PackageError("invalid_value", location)
+
+
+def _characters_v2(value: Any, assets: dict[str, Any]) -> dict[str, Any]:
+    characters = mapping(value, 256, "characters")
+    for key, character in characters.items():
+        location = f"characters.{key}"
+        fields(character, {"name"}, {"color", "sprites"}, location)
+        text(character["name"], location + ".name")
+        if "color" in character:
+            _color(character["color"], location + ".color", alpha=False)
+        if "sprites" in character:
+            sprites = mapping(character["sprites"], 32, location + ".sprites")
+            for expression, asset in sprites.items():
+                asset_of(asset, assets, "image", f"{location}.sprites.{expression}")
+    return characters
+
+
+def _theme(value: Any, assets: dict[str, Any]) -> None:
+    """A closed presentation theme; every part is optional (defaults: ADR 0040 design)."""
+    theme = fields(value, set(), {"textbox", "name", "choices", "font"}, "theme")
+    if "textbox" in theme:
+        location = "theme.textbox"
+        box = fields(
+            theme["textbox"],
+            set(),
+            {"position", "width", "background", "text", "border", "radius"},
+            location,
+        )
+        if "position" in box and box["position"] not in ("bottom", "middle", "top"):
+            raise PackageError("invalid_value", location + ".position")
+        if "width" in box:
+            _bounded(box["width"], 40, 100, location + ".width")
+        if "radius" in box:
+            _bounded(box["radius"], 0, 48, location + ".radius")
+        for part in ("background", "text", "border"):
+            if part in box:
+                _color(box[part], f"{location}.{part}")
+    if "name" in theme:
+        name = fields(theme["name"], set(), {"show", "background", "text"}, "theme.name")
+        if "show" in name and type(name["show"]) is not bool:
+            raise PackageError("invalid_value", "theme.name.show")
+        for part in ("background", "text"):
+            if part in name:
+                _color(name[part], f"theme.name.{part}")
+    if "choices" in theme:
+        choices = fields(theme["choices"], set(), {"background", "text", "border"}, "theme.choices")
+        for part, color in choices.items():
+            _color(color, f"theme.choices.{part}")
+    if "font" in theme:
+        font = fields(theme["font"], set(), {"asset", "size"}, "theme.font")
+        if font.get("asset") is not None:
+            asset_of(font["asset"], assets, "font", "theme.font.asset")
+        if "size" in font:
+            _bounded(font["size"], 14, 48, "theme.font.size")
+
+
 def _missing_ending() -> None:
     raise PackageError("missing_ending", "nodes")
 
 
 def _validate(story: Any, errors: _Errors) -> tuple[Diagnostic, ...]:
     # Check order defines which error a manual save reports first; keep it stable.
-    if errors.check(lambda: fields(story, _STORY_FIELDS, set(), "story")) is None:
+    # v2 (ADR 0040) adds an optional theme and checks assets before the characters
+    # whose sprites reference them; v1 order and fields are unchanged.
+    v2 = type(story) is dict and story.get("schema_version") == "2"
+    if (
+        errors.check(lambda: fields(story, _STORY_FIELDS, {"theme"} if v2 else set(), "story"))
+        is None
+    ):
         return ()
     errors.check(lambda: _schema(story["schema_version"]))
     errors.check(lambda: identifier(story["id"], "id"))
     errors.check(lambda: text(story["title"], "title"))
     errors.check(lambda: _language(story["language"]))
-    characters = errors.check(lambda: _characters(story["characters"]))
-    variables = errors.check(lambda: _variables(story["variables"]))
-    assets = errors.check(lambda: _assets(story["assets"]))
+    if v2:
+        assets = errors.check(lambda: _assets_v2(story["assets"]))
+        known: dict[str, Any] = assets or {}
+        characters = (
+            errors.check(lambda: _characters_v2(story["characters"], known))
+            if assets is not None
+            else None
+        )
+        variables = errors.check(lambda: _variables(story["variables"]))
+        if assets is not None and "theme" in story:
+            errors.check(lambda: _theme(story["theme"], known))
+    else:
+        characters = errors.check(lambda: _characters(story["characters"]))
+        variables = errors.check(lambda: _variables(story["variables"]))
+        assets = errors.check(lambda: _assets(story["assets"]))
     nodes = errors.check(lambda: mapping(story["nodes"], 10000, "nodes"))
     if characters is None or variables is None or assets is None or nodes is None:
         return ()
     errors.check(lambda: reference(story["entry"], nodes, "entry"))
-    scenes = _Nodes(characters, variables, assets, nodes)
+    scenes = _Nodes(characters, variables, assets, nodes, v2=v2)
     for key, node in nodes.items():
         errors.check(partial(scenes.check, key, node))
     if not scenes.endings:
         errors.check(_missing_ending)
     if errors.found:
         return ()
-    return _graph_warnings(scenes.graph, story["entry"])
+    warnings = _graph_warnings(scenes.graph, story["entry"])
+    if v2:
+        warnings += _stage_warnings(scenes.graph, nodes, story["entry"])
+    return warnings
 
 
 class _Nodes:
@@ -251,6 +366,8 @@ class _Nodes:
         variables: dict[str, Any],
         assets: dict[str, Any],
         nodes: dict[str, Any],
+        *,
+        v2: bool = False,
     ) -> None:
         self.characters, self.variables, self.assets, self.nodes = (
             characters,
@@ -258,6 +375,7 @@ class _Nodes:
             assets,
             nodes,
         )
+        self.v2 = v2
         self.text_ids: set[str] = set()
         self.endings: set[str] = set()
         self.graph: dict[str, list[str]] = {}
@@ -282,7 +400,18 @@ class _Nodes:
             raise PackageError("invalid_node", location)
         kind = node.get("type")
         targets: list[str] = []
-        if kind == "line":
+        if kind == "line" and self.v2:
+            fields(node, {"type", "text_id", "text", "next"}, {"speaker", "expression"}, location)
+            display(node, location)
+            if "speaker" in node:
+                speaker = reference(node["speaker"], characters, location + ".speaker")
+            if "expression" in node:
+                if "speaker" not in node:
+                    raise PackageError("invalid_expression", location + ".expression")
+                sprites = characters[speaker].get("sprites", {})
+                reference(node["expression"], sprites, location + ".expression")
+            targets.append(reference(node["next"], nodes, location + ".next"))
+        elif kind == "line":
             fields(
                 node,
                 {"type", "text_id", "text", "next"},
@@ -295,6 +424,39 @@ class _Nodes:
             for slot in ("background", "portrait"):
                 if slot in node:
                     reference(node[slot], assets, location + "." + slot)
+            targets.append(reference(node["next"], nodes, location + ".next"))
+        elif kind == "stage" and self.v2:
+            fields(node, {"type", "next"}, {"background", "show", "hide"}, location)
+            effect = False
+            if "background" in node:
+                effect = True
+                if node["background"] is not None:
+                    asset_of(node["background"], assets, "image", location + ".background")
+            hidden: set[str] = set()
+            if "hide" in node:
+                effect = True
+                for item in sequence(node["hide"], 8, location + ".hide"):
+                    character = reference(item, characters, location + ".hide")
+                    if character in hidden:
+                        raise PackageError("invalid_stage", location + ".hide")
+                    hidden.add(character)
+            if "show" in node:
+                effect = True
+                shown: set[str] = set()
+                taken: set[str] = set()
+                for entry in sequence(node["show"], 8, location + ".show"):
+                    fields(entry, {"character", "sprite", "position"}, set(), location + ".show")
+                    character = reference(entry["character"], characters, location + ".show")
+                    sprites = characters[character].get("sprites", {})
+                    reference(entry["sprite"], sprites, location + ".show")
+                    if entry["position"] not in POSITIONS:
+                        raise PackageError("invalid_value", location + ".show")
+                    if character in shown or character in hidden or entry["position"] in taken:
+                        raise PackageError("invalid_stage", location + ".show")
+                    shown.add(character)
+                    taken.add(entry["position"])
+            if not effect:
+                raise PackageError("invalid_stage", location)
             targets.append(reference(node["next"], nodes, location + ".next"))
         elif kind == "choice":
             fields(node, {"type", "text_id", "text", "options"}, set(), location)
@@ -339,6 +501,51 @@ class _Nodes:
         else:
             raise PackageError("invalid_node", location)
         self.graph[key] = targets
+
+
+def _stage_warnings(
+    graph: dict[str, list[str]], nodes: dict[str, Any], entry: str
+) -> tuple[Diagnostic, ...]:
+    """Warn where a line's expression targets a speaker who is off stage on every path.
+
+    A forward analysis tracks each character as off (absent from the map), at a
+    position, or "?" when paths disagree. Only definite absence warns.
+    """
+    states: dict[str, dict[str, str]] = {entry: {}}
+    pending = deque([entry])
+    while pending:
+        key = pending.popleft()
+        state, node = states[key], nodes[key]
+        after = _after_stage(state, node) if node["type"] == "stage" else state
+        for target in graph[key]:
+            previous = states.get(target)
+            joined = after if previous is None else _join(previous, after)
+            if joined != previous:
+                states[target] = joined
+                pending.append(target)
+    warnings = []
+    for key in sorted(states):
+        node = nodes[key]
+        if node["type"] == "line" and "expression" in node and node["speaker"] not in states[key]:
+            warnings.append(Diagnostic("expression_off_stage", f"nodes.{key}"))
+    return tuple(warnings)
+
+
+def _after_stage(state: dict[str, str], node: dict[str, Any]) -> dict[str, str]:
+    result = {key: value for key, value in state.items() if key not in node.get("hide", [])}
+    for entry in node.get("show", []):
+        for other, where in list(result.items()):
+            if where == entry["position"] and other != entry["character"]:
+                del result[other]
+        result[entry["character"]] = entry["position"]
+    return result
+
+
+def _join(left: dict[str, str], right: dict[str, str]) -> dict[str, str]:
+    return {
+        key: left.get(key, "") if left.get(key) == right.get(key) else "?"
+        for key in left.keys() | right.keys()
+    }
 
 
 def _graph_warnings(graph: dict[str, list[str]], entry: str) -> tuple[Diagnostic, ...]:

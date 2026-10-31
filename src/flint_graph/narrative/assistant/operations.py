@@ -138,7 +138,10 @@ def apply_operations(story: dict[str, Any], operations: Sequence[Operation]) -> 
             result["nodes"][operation.id] = node
             written.append((operation.id, node))
         elif isinstance(operation, UpsertCharacter):
-            result["characters"][operation.id] = {"name": operation.name}
+            # Only the name changes; v2 sprites and colour (ADR 0040) are kept.
+            existing = result["characters"].get(operation.id)
+            kept = dict(existing) if isinstance(existing, dict) else {}
+            result["characters"][operation.id] = {**kept, "name": operation.name}
         elif isinstance(operation, UpsertVariable):
             result["variables"][operation.id] = copy.deepcopy(operation.declaration)
         elif isinstance(operation, SetEntry):

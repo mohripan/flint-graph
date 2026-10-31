@@ -1,7 +1,9 @@
 """Authorized callers organize bounded immutable authored source revisions."""
 
+import json
 from datetime import UTC, datetime
 from hashlib import sha256
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_, select
@@ -9,6 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from flint_graph.application.services.audit import AuditActor, record_audit_event
+from flint_graph.application.services.narrative_package_v2 import (
+    DEFAULT_ASSET_BUDGET,
+    bind_story_assets,
+    compose_notices,
+    creator_notices,
+    unavailable,
+    upgraded_story,
+)
 from flint_graph.domain.enums import AuditAction
 from flint_graph.domain.errors import BadRequestError, ConflictError, NotFoundError
 from flint_graph.infrastructure.db.models import NarrativeProject, NarrativeRevision, Tenant
@@ -259,6 +269,15 @@ async def create_project(
     return project
 
 
+def _schema_of(story_json: str) -> Any:
+    """Peek at the declared schema; full validation happens in the package loader."""
+    try:
+        value = json.loads(story_json)
+    except ValueError:
+        return None
+    return value.get("schema_version") if isinstance(value, dict) else None
+
+
 async def create_revision(
     session: AsyncSession,
     *,
@@ -270,15 +289,37 @@ async def create_revision(
     story_json: str,
     notices: str,
     actor: AuditActor,
+    allow_v2: bool = False,
+    asset_budget_bytes: int = DEFAULT_ASSET_BUDGET,
 ) -> NarrativeRevision:
     project = await get_project(
         session, tenant_id=tenant_id, project_id=project_id, for_update=True
     )
-    await get_revision(
+    base = await get_revision(
         session, tenant_id=tenant_id, project_id=project_id, revision_id=base_revision_id
     )
     try:
-        package = load_text_package(story_json.encode("utf-8"), notices.encode("utf-8"))
+        v2 = _schema_of(story_json) == "2"
+        if v2:
+            # Entering v2 is gated; a story that is already v2 stays editable.
+            if not allow_v2 and _schema_of(base.story_json) != "2":
+                raise unavailable()
+            notices = creator_notices(notices)
+        package = load_text_package(
+            story_json.encode("utf-8"), notices.encode("utf-8"), allow_asset_refs=v2
+        )
+        if v2:
+            bound = await bind_story_assets(
+                session,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                assets=package.story["assets"],
+                budget=asset_budget_bytes,
+            )
+            notices = compose_notices(notices, bound)
+            package = load_text_package(
+                package.canonical_story, notices.encode("utf-8"), allow_asset_refs=True
+            )
     except UnicodeError:
         raise BadRequestError("Invalid source text.") from None
     except PackageError as exc:
@@ -341,3 +382,46 @@ async def create_revision(
         },
     )
     return revision
+
+
+async def upgrade_to_v2(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    author_user_id: UUID,
+    base_revision_id: UUID,
+    idempotency_key: UUID,
+    actor: AuditActor,
+    enabled: bool,
+    asset_budget_bytes: int = DEFAULT_ASSET_BUDGET,
+) -> NarrativeRevision:
+    """Create the v2 revision of a v1 story explicitly; nothing is rewritten silently."""
+    existing = await session.scalar(
+        select(NarrativeRevision).where(
+            NarrativeRevision.tenant_id == tenant_id,
+            NarrativeRevision.project_id == project_id,
+            NarrativeRevision.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None and existing.parent_revision_id == base_revision_id:
+        return existing
+    if not enabled:
+        raise unavailable()
+    base = await get_revision(
+        session, tenant_id=tenant_id, project_id=project_id, revision_id=base_revision_id
+    )
+    story = upgraded_story(json.loads(base.story_json))
+    return await create_revision(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        author_user_id=author_user_id,
+        base_revision_id=base_revision_id,
+        idempotency_key=idempotency_key,
+        story_json=json.dumps(story, ensure_ascii=False),
+        notices=base.notices,
+        actor=actor,
+        allow_v2=True,
+        asset_budget_bytes=asset_budget_bytes,
+    )

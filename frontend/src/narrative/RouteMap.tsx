@@ -78,7 +78,7 @@ export function RouteMap({ story, selected, onSelect }: {
               if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(id); }
             }}><rect width="190" height="72" rx="8" />
             <text x="14" y="22" className="studio-map-id">{id.slice(0, 21)}</text>
-            <text x="14" y="43">{"text" in node ? node.text.slice(0, 23) : node.type === "set" ? "Change story state" : "Check a condition"}</text>
+            <text x="14" y="43">{"text" in node ? node.text.slice(0, 23) : node.type === "set" ? "Change story state" : node.type === "stage" ? "Change the stage" : "Check a condition"}</text>
             <text x="14" y="61" className="studio-map-type">{node.type}{id === story.entry ? " · starts here" : ""}</text>
           </g>;
         })}

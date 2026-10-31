@@ -77,7 +77,7 @@ export function defaultCondition(story: StoryDraft, variable?: string): Conditio
 
 export function sceneTargets(node: StoryNode): string[] {
   switch (node.type) {
-    case "line": case "set": return [node.next];
+    case "line": case "set": case "stage": return [node.next];
     case "choice": return node.options.map(option => option.target);
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
@@ -139,6 +139,10 @@ export function deleteCharacter(story: StoryDraft, id: string): StoryDraft {
   if (Object.values(story.nodes).some(node => node.type === "line" && node.speaker === id)) {
     throw new Error("This character is still referenced as a speaker. Change those scenes first.");
   }
+  if (Object.values(story.nodes).some(node => node.type === "stage"
+    && (node.hide?.includes(id) || node.show?.some(entry => entry.character === id)))) {
+    throw new Error("This character is still placed on the stage. Change those stage steps first.");
+  }
   const characters = { ...story.characters }; delete characters[id];
   return { ...story, characters };
 }
@@ -167,10 +171,21 @@ export function deleteVariable(story: StoryDraft, id: string): StoryDraft {
   return { ...story, variables };
 }
 
+// One readable line for a stage step in the script (ADR 0040).
+export function describeStage(story: StoryDraft, node: Extract<StoryNode, { type: "stage" }>): string {
+  const name = (id: string) => story.characters[id]?.name || id;
+  const parts: string[] = [];
+  if (node.background === null) parts.push("Clear background");
+  else if (node.background !== undefined) parts.push(`Background ${node.background}`);
+  for (const id of node.hide ?? []) parts.push(`${name(id)} leaves`);
+  for (const entry of node.show ?? []) parts.push(`${name(entry.character)} (${entry.sprite}) at ${entry.position}`);
+  return parts.join(" · ");
+}
+
 // Inserting a line keeps it inside the same scene and with the same speaker.
 export function insertLineAfter(story: StoryDraft, id: string): { story: StoryDraft; id: string } {
   const node = getScene(story, id);
-  if (!node || (node.type !== "line" && node.type !== "set")) throw new Error("Only lines and state changes can be followed by a new line.");
+  if (!node || (node.type !== "line" && node.type !== "set" && node.type !== "stage")) throw new Error("Only lines, state changes and stage steps can be followed by a new line.");
   if (Object.keys(story.nodes).length >= 10000) throw new Error("This story already has 10,000 scenes.");
   const lineId = availableId(`${id.slice(0, 48)}_line`, Object.keys(story.nodes));
   const textId = availableId(`${lineId}_text`, textIds(story));
@@ -182,13 +197,13 @@ export function insertLineAfter(story: StoryDraft, id: string): { story: StoryDr
 // Removing a line reconnects every route that reached it to the line that followed it.
 export function removeLine(story: StoryDraft, id: string): StoryDraft {
   const node = getScene(story, id);
-  if (!node || (node.type !== "line" && node.type !== "set")) throw new Error("Only lines and state changes can be removed here.");
+  if (!node || (node.type !== "line" && node.type !== "set" && node.type !== "stage")) throw new Error("Only lines, state changes and stage steps can be removed here.");
   if (node.next === id) throw new Error("This line loops to itself; reconnect it first.");
   const follow = (target: string) => target === id ? node.next : target;
   const nodes: Record<string, StoryNode> = {};
   for (const [key, item] of Object.entries(story.nodes)) {
     if (key === id) continue;
-    nodes[key] = item.type === "line" || item.type === "set" ? { ...item, next: follow(item.next) }
+    nodes[key] = item.type === "line" || item.type === "set" || item.type === "stage" ? { ...item, next: follow(item.next) }
       : item.type === "choice" ? { ...item, options: item.options.map(option => ({ ...option, target: follow(option.target) })) }
       : item.type === "branch" ? { ...item, if_true: follow(item.if_true), if_false: follow(item.if_false) } : item;
   }

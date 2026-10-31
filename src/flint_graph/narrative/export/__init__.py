@@ -62,6 +62,9 @@ def export_godot(package: StoryPackage, target: Path) -> ExportResult:
     payloads["content/NOTICES.txt"] = package.notices
     payloads["content/package-manifest.json"] = canonical_json(package.manifest)
     for asset in package.assets:
+        if asset.data is None:
+            # A Studio reference whose verified bytes were never loaded cannot ship.
+            raise ExportError("asset_unavailable")
         payloads["content/" + asset.path] = asset.data
         # Keep exact validated PNG bytes available to FileAccess in exported PCKs.
         payloads["content/" + asset.path + ".import"] = (

@@ -5,6 +5,7 @@ import os
 import stat
 from pathlib import Path
 
+from flint_graph.narrative.font import validate_font
 from flint_graph.narrative.json_format import parse_json
 from flint_graph.narrative.png import validate_png
 from flint_graph.narrative.validation import validate_story
@@ -16,12 +17,24 @@ PACKAGE_LIMIT = 100 * 1024 * 1024
 NOTICES_LIMIT = 1024 * 1024
 
 
-def load_text_package(story_json: bytes, notices: bytes = b"") -> StoryPackage:
-    """Validate an in-memory text-only snapshot without filesystem or asset access."""
+def load_text_package(
+    story_json: bytes, notices: bytes = b"", *, allow_asset_refs: bool = False
+) -> StoryPackage:
+    """Validate an in-memory snapshot without filesystem or asset access.
+
+    v2 stories may reference assets by hash when the caller binds them itself
+    (``allow_asset_refs``); the package then carries references without bytes.
+    """
     story = parse_json(story_json, limit=STORY_LIMIT)
     warnings = validate_story(story)
+    references: tuple[Asset, ...] = ()
     if story["assets"]:
-        raise PackageError("assets_not_supported", "assets")
+        if not allow_asset_refs or story["schema_version"] != "2":
+            raise PackageError("assets_not_supported", "assets")
+        references = tuple(
+            Asset(key, item["path"], item["sha256"], None)
+            for key, item in sorted(story["assets"].items())
+        )
     if len(notices) > NOTICES_LIMIT:
         raise PackageError("size_limit", "NOTICES.txt")
     try:
@@ -33,7 +46,7 @@ def load_text_package(story_json: bytes, notices: bytes = b"") -> StoryPackage:
     canonical = canonical_json(story)
     if len(canonical) > STORY_LIMIT:
         raise PackageError("size_limit", "story.json")
-    return StoryPackage(canonical, notices, warnings=warnings)
+    return StoryPackage(canonical, notices, references, warnings=warnings)
 
 
 def _regular(path: Path, *, directory: bool = False) -> os.stat_result:
@@ -114,7 +127,12 @@ def load_package(root: Path) -> StoryPackage:
             digest = hashlib.sha256(data).hexdigest()
             if digest != item["sha256"]:
                 raise PackageError("hash_mismatch", f"assets.{key}")
-            validate_png(data, f"assets.{key}")
+            if item.get("kind") == "font":
+                flavor = validate_font(data, f"assets.{key}")
+                if not item["path"].endswith("." + flavor):
+                    raise PackageError("unsafe_path", f"assets.{key}")
+            else:
+                validate_png(data, f"assets.{key}")
             assets.append(Asset(key, item["path"], digest, data))
         return StoryPackage(canonical_json(story), notices, tuple(assets), warnings)
     except PackageError:

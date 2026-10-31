@@ -10,6 +10,7 @@ from flint_graph.api.dependencies import (
     AuditActorDep,
     CurrentUserDep,
     SessionDep,
+    SettingsDep,
     TenantAdminDep,
     TenantIdDep,
     TenantMemberDep,
@@ -21,6 +22,7 @@ from flint_graph.api.narrative_schemas import (
     NarrativeRevisionCreate,
     NarrativeRevisionResponse,
     NarrativeRevisionSummary,
+    NarrativeUpgradeRequest,
 )
 from flint_graph.application.services.narrative_projects import (
     archive_project,
@@ -30,6 +32,7 @@ from flint_graph.application.services.narrative_projects import (
     get_revision,
     list_projects,
     list_revisions,
+    upgrade_to_v2,
 )
 from flint_graph.domain.errors import DomainError
 
@@ -117,6 +120,7 @@ async def create_revision_endpoint(
     current_user: CurrentUserDep,
     session: SessionDep,
     actor: AuditActorDep,
+    settings: SettingsDep,
 ) -> NarrativeRevisionResponse | JSONResponse:
     revision = await _persist(
         session,
@@ -126,6 +130,8 @@ async def create_revision_endpoint(
             project_id=project_id,
             author_user_id=current_user.user.id,
             actor=actor,
+            allow_v2=settings.narrative_package_v2_enabled,
+            asset_budget_bytes=settings.narrative_package_v2_asset_budget_bytes,
             **payload.model_dump(),
         ),
     )
@@ -206,3 +212,31 @@ async def list_revisions_endpoint(
         include_archived=include_archived,
     )
     return [NarrativeRevisionSummary.model_validate(revision) for revision in revisions]
+
+
+@router.post("/{project_id}/upgrade", response_model=NarrativeRevisionResponse, status_code=201)
+async def upgrade_project_endpoint(
+    project_id: UUID,
+    payload: NarrativeUpgradeRequest,
+    tenant_id: TenantMemberDep,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    actor: AuditActorDep,
+    settings: SettingsDep,
+) -> NarrativeRevisionResponse:
+    """Explicitly move a project to story format v2 (stage and theme, ADR 0040)."""
+    revision = await _persist(
+        session,
+        upgrade_to_v2(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            author_user_id=current_user.user.id,
+            base_revision_id=payload.base_revision_id,
+            idempotency_key=payload.idempotency_key,
+            actor=actor,
+            enabled=settings.narrative_package_v2_enabled,
+            asset_budget_bytes=settings.narrative_package_v2_asset_budget_bytes,
+        ),
+    )
+    return NarrativeRevisionResponse.model_validate(revision)

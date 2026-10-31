@@ -63,7 +63,11 @@ receipt is `notes/narrative-image-owned.json`. ADR 0040 plans the visual novel s
 theme and story package v2 in four slices. Read the design's "Review changes"
 section before starting slices 2–4. Slice 1, the asset library (uploads with rights
 declarations and generated backgrounds, migration 0024), is delivered; read
-`docs/reports/2026-10-31-asset-library.md`. The owned PostgreSQL, MinIO and Temporal
+`docs/reports/2026-10-31-asset-library.md`. Slice 2, story package v2, is delivered
+behind `narrative_package_v2_enabled`, which is off: the format, reference player,
+saves, asset binding by SHA-256, server-built NOTICES and the explicit upgrade. Read
+`docs/reports/2026-10-31-story-package-v2.md`. Slice 3 (Godot `vn_view`, playtest
+bridge, release builds) must land before the flag is turned on. The owned PostgreSQL, MinIO and Temporal
 fixtures now use Docker volumes with fixed ports
 (`notes/persist-narrative-fixtures.py`). The earlier tmpfs fixtures lost all data on
 a Docker restart.

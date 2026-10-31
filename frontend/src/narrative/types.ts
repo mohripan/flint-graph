@@ -17,21 +17,33 @@ export interface ChoiceOption {
   condition?: Condition;
 }
 type Display = { text_id: string; text: string };
+export type StagePosition = "left" | "center" | "right";
+export interface StageShow { character: string; sprite: string; position: StagePosition }
 export type StoryNode =
-  | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string })
+  | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string })
+  | { type: "stage"; next: string; background?: string | null; show?: StageShow[]; hide?: string[] }
   | (Display & { type: "choice"; options: ChoiceOption[] })
   | { type: "set"; next: string; operations: Array<{ op: "set" | "increment"; variable: string; value: Scalar }> }
   | { type: "branch"; condition: Condition; if_true: string; if_false: string }
   | (Display & { type: "end"; ending: string });
+// Version 2 (ADR 0040) adds the stage, expressions, character sprites and a theme.
+export interface StoryTheme {
+  textbox?: { position?: "bottom" | "middle" | "top"; width?: number; background?: string; text?: string; border?: string; radius?: number };
+  name?: { show?: boolean; background?: string; text?: string };
+  choices?: { background?: string; text?: string; border?: string };
+  font?: { asset?: string | null; size?: number };
+}
+export interface StoryCharacter { name: string; color?: string; sprites?: Record<string, string> }
 export interface StoryDraft {
-  schema_version: "1";
+  schema_version: "1" | "2";
   id: string;
   title: string;
   language: string;
   entry: string;
-  characters: Record<string, { name: string }>;
+  characters: Record<string, StoryCharacter>;
   variables: Record<string, VariableDeclaration>;
-  assets: Record<string, { path: string; sha256: string }>;
+  assets: Record<string, { kind?: "image" | "font"; path: string; sha256: string }>;
+  theme?: StoryTheme;
   nodes: Record<string, StoryNode>;
 }
 export interface NarrativeProject {

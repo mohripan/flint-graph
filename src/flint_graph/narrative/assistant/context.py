@@ -99,8 +99,22 @@ def _condition(condition: Any) -> str:
 def _outline(key: str, node: dict[str, Any]) -> str:
     kind = node.get("type")
     if kind == "line":
-        speaker = f" {node['speaker']} |" if "speaker" in node else ""
+        expression = f" ({node['expression']})" if "expression" in node else ""
+        speaker = f" {node['speaker']}{expression} |" if "speaker" in node else ""
         return f"{key} | line |{speaker} {_snippet(node.get('text'))} -> {node.get('next')}"
+    if kind == "stage":
+        parts = []
+        if "background" in node:
+            parts.append(f"background {node['background'] or 'none'}")
+        if node.get("hide"):
+            parts.append("hide " + ", ".join(str(item) for item in node["hide"]))
+        if node.get("show"):
+            shown = ", ".join(
+                f"{entry.get('character')} {entry.get('sprite')} {entry.get('position')}"
+                for entry in node["show"]
+            )
+            parts.append("show " + shown)
+        return f"{key} | stage | {'; '.join(parts)} -> {node.get('next')}"
     if kind == "choice":
         options = "; ".join(
             f"{option.get('id')} -> {option.get('target')}"
@@ -140,7 +154,11 @@ def _render(story: dict[str, Any], focus: str | None, budget: int) -> tuple[str,
         f"language: {story['language']}",
         f"entry: {story['entry']}",
         "characters:",
-        *(f"  {key}: {_quote(item.get('name'))}" for key, item in story["characters"].items()),
+        *(
+            f"  {key}: {_quote(item.get('name'))}"
+            + (f" (expressions: {', '.join(item['sprites'])})" if item.get("sprites") else "")
+            for key, item in story["characters"].items()
+        ),
         "variables:",
     ]
     for key, declaration in story["variables"].items():

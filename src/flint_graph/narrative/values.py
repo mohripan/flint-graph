@@ -32,7 +32,9 @@ class Asset:
     id: str
     path: str
     sha256: str
-    data: bytes
+    # ``None`` for a reference whose bytes are resolved later (Studio saves, ADR 0040);
+    # anything that writes or ships the asset must load and verify the bytes first.
+    data: bytes | None
 
 
 @dataclass(frozen=True)

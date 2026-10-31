@@ -189,3 +189,40 @@ def test_history_is_bounded_and_request_is_capped():
     assert middle[0]["content"].startswith("turn 12 ")
     assert all(len(m["content"]) <= 2000 for m in middle)
     assert messages[-1]["content"].split("\nRequest:\n", 1)[1] == "y" * 8000
+
+
+def test_v2_stage_steps_and_expressions_are_outlined_for_the_model():
+    from flint_graph.narrative.assistant.context import render_story
+
+    story = {
+        "schema_version": "2",
+        "id": "bay",
+        "title": "Bay",
+        "language": "en",
+        "entry": "s",
+        "characters": {"mira": {"name": "Mira", "sprites": {"happy": "mira_happy"}}},
+        "variables": {},
+        "assets": {},
+        "nodes": {
+            "s": {
+                "type": "stage",
+                "background": "dusk",
+                "hide": ["oren"],
+                "show": [{"character": "mira", "sprite": "happy", "position": "left"}],
+                "next": "l",
+            },
+            "l": {
+                "type": "line",
+                "speaker": "mira",
+                "expression": "happy",
+                "text_id": "l",
+                "text": "Hi.",
+                "next": "e",
+            },
+            "e": {"type": "end", "text_id": "e", "text": "Fin", "ending": "done"},
+        },
+    }
+    text = render_story(story, None, 10_000)
+    assert "s | stage | background dusk; hide oren; show mira happy left -> l" in text
+    assert 'l | line | mira (happy) | "Hi." -> e' in text
+    assert 'mira: "Mira" (expressions: happy)' in text

@@ -233,6 +233,13 @@ class Settings(BaseSettings):
     )
     narrative_assistant_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
 
+    # Story package v2 (ADR 0040): stage, expressions and theme. Off until the Godot
+    # runtime, playtest and release builds support it; existing v2 stories stay editable.
+    narrative_package_v2_enabled: bool = False
+    narrative_package_v2_asset_budget_bytes: int = Field(
+        default=48 * 1024 * 1024, ge=1, le=100 * 1024 * 1024
+    )
+
     # Local image generation (ADR 0039). The API admits jobs only when enabled; the
     # opt-in worker needs the isolated runtime, the model and its pinned manifest.
     narrative_image_generation_enabled: bool = False

@@ -81,7 +81,7 @@ def test_invalid_json_is_a_safe_controlled_failure(tmp_path: Path, source: bytes
 @pytest.mark.parametrize(
     ("path", "value", "code"),
     [
-        (("schema_version",), "2", "unsupported_schema"),
+        (("schema_version",), "3", "unsupported_schema"),
         (("hidden_command",), "run", "unknown_field"),
         (("id",), "../escape", "invalid_id"),
         (("title",), "", "invalid_text"),

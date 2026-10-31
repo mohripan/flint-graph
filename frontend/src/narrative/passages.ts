@@ -8,12 +8,13 @@ export interface Passage {
   kind: "scene" | "choice" | "branch" | "end" | "state"; title: string; lines: number;
 }
 
+// Lines, state changes and stage steps run straight on to the next node.
 const linear = (node: StoryNode | undefined): node is Extract<StoryNode, { next: string }> =>
-  node?.type === "line" || node?.type === "set";
+  node?.type === "line" || node?.type === "set" || node?.type === "stage";
 
 function targets(node: StoryNode): string[] {
   switch (node.type) {
-    case "line": case "set": return [node.next];
+    case "line": case "set": case "stage": return [node.next];
     case "choice": return node.options.map(option => option.target);
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
@@ -26,7 +27,8 @@ function title(story: StoryDraft, ids: string[]): string {
     if (node && "text" in node && node.text.trim()) return node.text.trim().slice(0, 80);
   }
   const head = story.nodes[ids[0]];
-  return head?.type === "branch" ? "Condition" : head?.type === "set" ? "State change" : "Untitled scene";
+  return head?.type === "branch" ? "Condition" : head?.type === "set" ? "State change"
+    : head?.type === "stage" ? "Stage change" : "Untitled scene";
 }
 
 export function buildPassages(story: StoryDraft): {
@@ -58,7 +60,7 @@ export function buildPassages(story: StoryDraft): {
       if (!linear(story.nodes[next])) exit = next;
     }
     const kind: Passage["kind"] = linear(story.nodes[head])
-      ? story.nodes[head].type === "set" && nodes.length === 1 ? "state" : "scene"
+      ? story.nodes[head].type !== "line" && nodes.length === 1 ? "state" : "scene"
       : (story.nodes[head].type as "choice" | "branch" | "end");
     passages.push({ id: head, nodes, exit, kind, title: title(story, nodes),
       lines: nodes.filter(id => story.nodes[id]?.type === "line").length });

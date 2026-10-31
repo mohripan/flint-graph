@@ -37,7 +37,7 @@ function writeSelection(key: string, id: string | null): void {
 function parsedStory(source: string): StoryDraft | null {
   try {
     const value = JSON.parse(source) as StoryDraft;
-    return value && value.schema_version === "1" && value.nodes && value.characters && value.variables && value.assets
+    return value && (value.schema_version === "1" || value.schema_version === "2") && value.nodes && value.characters && value.variables && value.assets
       ? value : null;
   } catch { return null; }
 }

@@ -92,7 +92,7 @@ def mutated(change) -> dict:
 
 
 INVALID = [
-    mutated(lambda s: s.update(schema_version="2")),
+    mutated(lambda s: s.update(schema_version="3")),
     mutated(lambda s: s.update(title=" ")),
     mutated(lambda s: s.update(language="EN")),
     mutated(lambda s: s["characters"]["oren"].update(name="")),
@@ -218,6 +218,27 @@ def test_operations_add_connected_scenes_with_stable_derived_text_ids():
     assert nodes["opening"]["text_id"] == "opening_text", "Replacing a scene keeps its text ID"
     assert edit.story["characters"]["mira"] == {"name": "Mira"}
     assert edit.story["title"] == "The Harbor Bell, revised"
+    # Renaming keeps a v2 character's sprites and colour (ADR 0040).
+    dressed = copy.deepcopy(base)
+    dressed["characters"]["oren"] = {
+        "name": "Oren",
+        "color": "#d5ae68",
+        "sprites": {"neutral": "x"},
+    }
+    renamed = apply_operations(
+        dressed,
+        Proposal.model_validate(
+            {
+                "summary": "Rename",
+                "operations": [{"op": "upsert_character", "id": "oren", "name": "Old Oren"}],
+            }
+        ).operations,
+    )
+    assert renamed.story["characters"]["oren"] == {
+        "name": "Old Oren",
+        "color": "#d5ae68",
+        "sprites": {"neutral": "x"},
+    }
     assert edit.touched == (
         "characters.mira",
         "nodes.opening",
