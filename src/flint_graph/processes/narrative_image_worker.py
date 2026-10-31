@@ -27,6 +27,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     OllamaGpuReleaser,
     runtime_paths,
     verify_cutout_model,
+    verify_ip_adapter_model,
     verify_model,
 )
 from flint_graph.infrastructure.object_store import create_s3_client
@@ -81,6 +82,16 @@ def build_generator(configured: Settings) -> LocalImageGenerator:
             )
         except (OSError, ValueError):
             raise SystemExit("The cutout model does not match its pinned manifest.") from None
+    ip_adapter = None
+    if configured.narrative_image_ip_adapter_model_dir:
+        assert configured.narrative_image_ip_adapter_manifest_sha256
+        try:
+            ip_adapter = verify_ip_adapter_model(
+                Path(configured.narrative_image_ip_adapter_model_dir),
+                configured.narrative_image_ip_adapter_manifest_sha256,
+            )
+        except (OSError, ValueError):
+            raise SystemExit("The IP-Adapter does not match its pinned manifest.") from None
     return LocalImageGenerator(
         python=python,
         script=script,
@@ -88,6 +99,7 @@ def build_generator(configured: Settings) -> LocalImageGenerator:
         model=model,
         deadline_seconds=configured.narrative_image_job_deadline_seconds,
         cutout=cutout,
+        ip_adapter=ip_adapter,
     )
 
 
@@ -97,7 +109,9 @@ async def run_worker(settings: Settings | None = None) -> None:
         raise SystemExit("The image worker is disabled; explicit operator opt-in is required.")
     generator = await asyncio.to_thread(build_generator, configured)
     logger.info(
-        "image model verified; cutout %s", "ready" if generator.cutout else "not configured"
+        "image model verified; cutout %s; scene art %s",
+        "ready" if generator.cutout else "not configured",
+        "ready" if generator.ip_adapter else "not configured",
     )
     releaser = (
         OllamaGpuReleaser(

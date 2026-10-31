@@ -20,6 +20,11 @@ silhouette and everything outside the face stay exactly as they were.
 With a ``hires`` request each render is upscaled (Lanczos) and lightly repainted
 at the larger size by the same weights (img2img, same prompt and seed), so large
 stage sprites gain real detail; the cutout then runs on the final image.
+
+With a ``scene`` request (ADR 0041 slice C) it draws a 16:9 event CG of an existing
+character: the pinned IP-Adapter Plus (ViT-H) takes an approved image of them as the
+identity reference. The image encoder runs once, before the SDXL weights reach the
+GPU, and is released again, so the peak stays near a plain render's.
 """
 
 import hashlib
@@ -60,6 +65,15 @@ MIN_FACE = 16
 # The mask reaches a little past the box sideways and down (cheeks, chin) but barely
 # up, so little hair is repainted; feathering hides the seam.
 MASK_GROW, MASK_GROW_UP, MASK_FEATHER = 0.12, 0.06, 20
+# Scene art: a 16:9 render with an identity reference. Measured on a 12 GB RTX 5070 Ti:
+# 8.0 GiB peak allocated with the encoder released, about 11 s per image.
+SCENE_SIZE = (1344, 768)
+SCENE_SCALE = (0.1, 1.0)
+MAX_REFERENCES = 1
+SCENE_MIN_FREE_BYTES = int(8.5 * 1024**3)
+# The reference is the figure on white in a square; the encoder resizes it to 224.
+REFERENCE_SIZE = 448
+FIGURE_THRESHOLD = 40
 
 
 class CutoutError(Exception):
@@ -94,7 +108,9 @@ def upscale(image, scale: float):
     return image.resize(hires_size(image.width, image.height, scale), Image.LANCZOS)
 
 
-def required_free_bytes(hires: dict | None) -> int:
+def required_free_bytes(hires: dict | None, scene: dict | None = None) -> int:
+    if scene is not None:
+        return SCENE_MIN_FREE_BYTES
     return MIN_FREE_BYTES if hires is None else HIRES_MIN_FREE_BYTES[hires["scale"]]
 
 
@@ -116,7 +132,7 @@ def read_request() -> dict:
         request = json.loads(raw)
     except ValueError:
         fail("bad_request")
-    # ``cutout`` and ``hires`` are optional so a parent that predates them keeps working.
+    # The optional blocks are absent from older parents' requests, which keep working.
     expected = {
         "protocol",
         "model_dir",
@@ -131,13 +147,14 @@ def read_request() -> dict:
     }
     if (
         type(request) is not dict
-        or set(request) - {"cutout", "inpaint", "hires"} != expected
+        or set(request) - {"cutout", "inpaint", "hires", "scene"} != expected
         or request["protocol"] != PROTOCOL
     ):
         fail("bad_request")
     request.setdefault("cutout", None)
     request.setdefault("inpaint", None)
     request.setdefault("hires", None)
+    request.setdefault("scene", None)
     hires = request["hires"]
     if hires is not None and (
         type(hires) is not dict
@@ -164,6 +181,15 @@ def read_request() -> dict:
     seeds = request["seeds"]
     inpaint = request["inpaint"]
     if inpaint is not None and (cutout is not None or not valid_inpaint(inpaint, request)):
+        fail("bad_request")
+    scene = request["scene"]
+    if scene is not None and (
+        cutout is not None
+        or inpaint is not None
+        or hires is not None
+        or (request["width"], request["height"]) != SCENE_SIZE
+        or not valid_scene(scene)
+    ):
         fail("bad_request")
     if (
         not all(
@@ -243,6 +269,101 @@ def valid_inpaint(inpaint: object, request: dict) -> bool:
     )
 
 
+def _relative(root: Path, name: object) -> Path | None:
+    """A path inside ``root`` given as a plain relative name, never a way out of it."""
+    if type(name) is not str or not name or "\\" in name:
+        return None
+    relative = Path(name)
+    if relative.is_absolute() or ".." in relative.parts:
+        return None
+    return root / relative
+
+
+def _regular(path: Path | None) -> bool:
+    return path is not None and path.is_file() and not path.is_symlink()
+
+
+def valid_scene(scene: object) -> bool:
+    """The adapter files and the parent's verified reference copies, checked again."""
+    if (
+        type(scene) is not dict
+        or set(scene) != {"adapter", "weight", "encoder", "scale", "references"}
+        or type(scene["adapter"]) is not str
+        or not Path(scene["adapter"]).is_absolute()
+        or not Path(scene["adapter"]).is_dir()
+        or type(scene["scale"]) not in (int, float)
+        or not SCENE_SCALE[0] <= scene["scale"] <= SCENE_SCALE[1]
+        or type(scene["references"]) is not list
+        or not 1 <= len(scene["references"]) <= MAX_REFERENCES
+    ):
+        return False
+    root = Path(scene["adapter"])
+    weight = _relative(root, scene["weight"])
+    encoder = _relative(root, scene["encoder"])
+    if (
+        weight is None
+        or weight.suffix != ".safetensors"
+        or not _regular(weight)
+        or encoder is None
+        or not _regular(encoder / "config.json")
+        or not _regular(encoder / "model.safetensors")
+    ):
+        return False
+    for reference in scene["references"]:
+        if (
+            type(reference) is not dict
+            or set(reference) != {"image", "sha256"}
+            or type(reference["image"]) is not str
+            or type(reference["sha256"]) is not str
+            or not Path(reference["image"]).is_absolute()
+        ):
+            return False
+        path = Path(reference["image"])
+        if not _regular(path) or path.stat().st_size > BASE_LIMIT:
+            return False
+        data = path.read_bytes()
+        size = png_size(data)
+        if (
+            hashlib.sha256(data).hexdigest() != reference["sha256"]
+            or size is None
+            or not all(MIN_BASE <= side <= MAX_BASE for side in size)
+        ):
+            return False
+    return True
+
+
+def reference_image(image):
+    """The identity reference: the figure on white, centred in a square.
+
+    Transparent sprites are cut along their alpha, opaque portraits along whatever
+    differs from the backdrop colour of their corners. Busy backdrops or effects in
+    the reference carry into the scene, so a plain portrait or sprite works best.
+    """
+    import numpy as np
+    from PIL import Image
+
+    rgba = image.convert("RGBA")
+    flat = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    flat.alpha_composite(rgba)
+    rgb = flat.convert("RGB")
+    alpha = np.asarray(rgba)[..., 3]
+    if (alpha < 255).any():
+        figure = alpha > 127
+    else:
+        pixels = np.asarray(rgb, dtype=np.int16)
+        corners = np.concatenate(
+            [pixels[:8, :8], pixels[:8, -8:], pixels[-8:, :8], pixels[-8:, -8:]]
+        ).reshape(-1, 3)
+        figure = np.abs(pixels - np.median(corners, axis=0)).max(axis=2) > FIGURE_THRESHOLD
+    if figure.any():
+        rows, cols = np.flatnonzero(figure.any(axis=1)), np.flatnonzero(figure.any(axis=0))
+        rgb = rgb.crop((int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1))
+    side = max(rgb.size)
+    square = Image.new("RGB", (side, side), (255, 255, 255))
+    square.paste(rgb, ((side - rgb.width) // 2, (side - rgb.height) // 2))
+    return square.resize((REFERENCE_SIZE, REFERENCE_SIZE), Image.LANCZOS)
+
+
 def face_context(image, box):
     """The face with context around it: a white-padded square upscaled for inpainting."""
     from PIL import Image
@@ -304,6 +425,48 @@ def paste_face(base, painted, crop, mask):
     if base.mode == "RGBA":
         return Image.fromarray(np.dstack([blended, pixels[..., 3]]), "RGBA")
     return Image.fromarray(blended, "RGB")
+
+
+def encode_references(pipeline, scene: dict):
+    """Load the pinned adapter, encode the references and release the image encoder.
+
+    Runs while the SDXL weights are still on the CPU: only the encoder visits the GPU,
+    and it leaves before generation, which saves about 1.2 GiB during the render.
+    """
+    import torch
+    from PIL import Image
+
+    weight = Path(scene["weight"])
+    try:
+        pipeline.load_ip_adapter(
+            scene["adapter"],
+            subfolder=weight.parent.as_posix(),
+            weight_name=weight.name,
+            image_encoder_folder=scene["encoder"],
+            local_files_only=True,
+        )
+    except (OSError, ValueError):
+        fail("model_invalid")
+    references = []
+    for reference in scene["references"]:
+        with Image.open(reference["image"]) as image:
+            image.load()
+            references.append(reference_image(image))
+    encoder = pipeline.image_encoder
+    try:
+        encoder.to("cuda")
+        with torch.no_grad():
+            embeds = pipeline.prepare_ip_adapter_image_embeds(
+                [references[0]], None, torch.device("cuda"), 1, True
+            )
+    except torch.OutOfMemoryError:
+        fail("out_of_memory")
+    # With the embeddings computed the pipeline no longer needs the encoder at all.
+    pipeline.register_modules(image_encoder=None)
+    del encoder
+    torch.cuda.empty_cache()
+    pipeline.set_ip_adapter_scale(float(scene["scale"]))
+    return embeds
 
 
 def load_segmenter(cutout: dict) -> tuple[object, str]:
@@ -455,6 +618,7 @@ def main() -> None:
     from PIL import Image
 
     inpaint = request["inpaint"]
+    scene = request["scene"]
 
     if not torch.cuda.is_available():
         fail("gpu_unavailable")
@@ -462,7 +626,7 @@ def main() -> None:
         free = dedicated_free_bytes()
     except Exception:
         fail("gpu_unavailable")
-    required = required_free_bytes(request["hires"])
+    required = required_free_bytes(request["hires"], scene)
     if free < required:
         emit("busy", free_bytes=free, required_bytes=required)
         fail("gpu_busy")
@@ -484,6 +648,8 @@ def main() -> None:
         fail("model_invalid")
     pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config)
     pipeline.set_progress_bar_config(disable=True)
+    # Scene art: the identity reference becomes embeddings before SDXL moves to the GPU.
+    adapter = {"ip_adapter_image_embeds": encode_references(pipeline, scene)} if scene else {}
     pipeline.to("cuda")
     # Decoding 832x1216 latents in tiles keeps the peak within the free-memory floor.
     pipeline.vae.enable_tiling()
@@ -549,6 +715,7 @@ def main() -> None:
                     num_inference_steps=request["steps"],
                     guidance_scale=float(request["guidance"]),
                     generator=torch.Generator("cuda").manual_seed(seed),
+                    **adapter,
                 ).images[0]
                 if refine is not None:
                     image = refine(

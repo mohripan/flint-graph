@@ -10,7 +10,8 @@ import type { UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
 import { refreshLibrary, useAssetFont } from "./libraryAssets";
 import { isActive, jobStatus } from "./characterModel";
-import { imageJobStarted, useBackgroundJobs } from "./imageJobs";
+import { imageJobStarted, useBackgroundJobs, useLibraryJobs } from "./imageJobs";
+import { CgGenerator } from "./CgGenerator";
 import { Viewer } from "./CharacterStudio";
 import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
@@ -35,6 +36,10 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { jobs, failed: jobsFailed, put } = useBackgroundJobs(tenantId, projectId);
   const active = jobs.find(isActive) ?? null;
+  // Event CGs of a character (ADR 0041 slice C) run as their own library jobs.
+  const scenes = useLibraryJobs(tenantId, projectId, "scene_art");
+  const activeScene = scenes.jobs.find(isActive) ?? null;
+  const [generatingCgs, setGeneratingCgs] = useState(false);
 
   const reindex = useCallback(() => {
     api.getAssetIndex(tenantId, projectId).then(setIndex).catch(() => undefined);
@@ -49,7 +54,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
   useEffect(() => { setAssets(null); setSelected(new Set()); void load(); }, [load]);
   useEffect(() => { reindex(); }, [reindex]);
   // Background jobs are shared with the assistant; reload the grid when one finishes.
-  const completedJobs = jobs.filter(job => job.status === "completed").map(job => job.id).sort().join(",");
+  const completedJobs = [...jobs, ...scenes.jobs].filter(job => job.status === "completed").map(job => job.id).sort().join(",");
   useEffect(() => {
     if (completedJobs) { void load(); refreshLibrary(); reindex(); }
   }, [completedJobs, load, reindex]);
@@ -97,7 +102,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
         const next = await api.cancelImageJob(tenantId, projectId, job.id);
         put(next);
       }, "Could not cancel.")} />}
-    {jobsFailed && <p className="studio-notice" role="status">Image status could not be refreshed. Retrying…</p>}
+    {(jobsFailed || scenes.failed) && <p className="studio-notice" role="status">Image status could not be refreshed. Retrying…</p>}
     {jobs.filter(isActive).map(job => <section key={job.id} className="studio-asset-generate" aria-label="Background generation">
       <strong>Generating backgrounds</strong>
       <p role="status">{jobStatus(job)}</p>
@@ -105,6 +110,14 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
       {canWrite && !job.cancel_requested && <button type="button" className="studio-link" onClick={() => void act(async () => {
         put(await api.cancelImageJob(tenantId, projectId, job.id));
       }, "Could not cancel.")}>Cancel background generation</button>}
+    </section>)}
+    {scenes.jobs.filter(isActive).map(job => <section key={job.id} className="studio-asset-generate" aria-label="CG generation">
+      <strong>Generating CGs of {(job.character_id && characterNames[job.character_id]) || job.character_id}</strong>
+      <p role="status">{jobStatus(job)}</p>
+      <progress max={job.count} value={job.progress} aria-label="Generated CGs" />
+      {canWrite && !job.cancel_requested && <button type="button" className="studio-link" onClick={() => void act(async () => {
+        scenes.put(await api.cancelImageJob(tenantId, projectId, job.id));
+      }, "Could not cancel.")}>Cancel CG generation</button>}
     </section>)}
     <div className="studio-library">
       <LibraryRail index={index} names={characterNames} view={view} onView={setView} canWrite={canWrite} onCreate={create} />
@@ -121,9 +134,16 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
             }} />}</div>
         {cgs && <section className="studio-asset-generate" aria-label="CGs">
           <div className="studio-section-heading"><h3>Event CGs</h3>
-            {canWrite && <button type="button" className="studio-secondary" onClick={() => setUploading(true)}>Upload CG</button>}</div>
+            {canWrite && <span className="studio-actions">
+              <button type="button" className="studio-secondary" aria-expanded={generatingCgs}
+                onClick={() => setGeneratingCgs(open => !open)}>Generate CGs</button>
+              <button type="button" className="studio-secondary" onClick={() => setUploading(true)}>Upload CG</button></span>}</div>
           <p className="studio-hint">Full-scene illustrations cover the stage while dialogue continues.
             Choose an approved image in Write → Stage → Event CG. Other image uploads also appear here.</p>
+          {canWrite && generatingCgs && <CgGenerator tenantId={tenantId} projectId={projectId} characterNames={characterNames}
+            active={activeScene} latest={scenes.jobs[0] ?? null}
+            onStarted={job => imageJobStarted(tenantId, projectId, job)}
+            onCancel={job => void act(async () => { scenes.put(await api.cancelImageJob(tenantId, projectId, job.id)); }, "Could not cancel.")} />}
         </section>}
         {canWrite && selected.size > 0 && <MoveBar count={selected.size} folders={folders}
           onClear={() => setSelected(new Set())} onMove={move} />}

@@ -403,6 +403,67 @@ BACKGROUND_QUALITY = "safe, masterpiece, high score, great score, absurdres"
 BACKGROUND_PEOPLE_NEGATIVE = "1girl, 1boy, people, person, character, crowd"
 
 
+# Scene art (ADR 0041 slice C): an event CG of one existing character, identity from an
+# approved image of them through IP-Adapter. At 0.5 the character stays recognizable
+# and the scene keeps its own light; from about 0.6 the reference's pose and plain
+# backdrop start to show.
+SCENE_SIZE = BACKGROUND_SIZE
+SCENE_ADAPTER_SCALE = 0.5
+SCENE_QUALITY = BACKGROUND_QUALITY
+# One person: a second figure would take on the same face.
+SOLO_NEGATIVES = {
+    "girl": "multiple girls",
+    "woman": "multiple girls",
+    "boy": "multiple boys",
+    "man": "multiple boys",
+    "other": "multiple girls, multiple boys",
+}
+
+
+@dataclass(frozen=True)
+class SceneArtRequest:
+    prompt: str
+    negative_prompt: str
+    width: int
+    height: int
+    steps: int
+    guidance: float
+    adapter_scale: float
+
+
+def scene_art_request(
+    scene: str,
+    appearance: str,
+    character_type: str,
+    *,
+    policy: ContentPolicy = DEFAULT_POLICY,
+) -> SceneArtRequest:
+    """Subject, the scene as written, then the character's looks (the reference does the rest)."""
+    if character_type not in CHARACTER_TYPES:
+        raise ValueError("Unknown character type")
+    if len(scene) > MAX_APPEARANCE * 2 or len(appearance) > MAX_APPEARANCE * 2:
+        raise ValueError("Description is too long")
+    text = clean_appearance(scene)
+    if not text:
+        raise ValueError("Describe the scene")
+    looks = clean_appearance(appearance)
+    for checked in (text, looks):
+        policy.check(checked)
+    tags = appearance_tags(appearance, character_type) if looks else []
+    parts = [CHARACTER_TYPES[character_type], "solo", text, *tags, SCENE_QUALITY]
+    negative = _portrait_negative(tags, character_type, False, policy)
+    width, height = SCENE_SIZE
+    return SceneArtRequest(
+        prompt=", ".join(part for part in parts if part),
+        negative_prompt=f"{negative}, {SOLO_NEGATIVES[character_type]}",
+        width=width,
+        height=height,
+        steps=STEPS,
+        guidance=GUIDANCE,
+        adapter_scale=SCENE_ADAPTER_SCALE,
+    )
+
+
 def background_request(description: str, *, policy: ContentPolicy = DEFAULT_POLICY) -> ImageRequest:
     if len(description) > MAX_APPEARANCE * 2:
         raise ValueError("Description is too long")

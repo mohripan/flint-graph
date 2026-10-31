@@ -1,4 +1,4 @@
-"""Project asset library: list, upload, rename, approve and generate backgrounds (ADR 0040).
+"""Project asset library: list, upload, rename, approve and generate art (ADR 0040, 0041).
 
 Viewers read; members change. Upload bytes are validated for their kind and stored
 create-only and hash-verified before the row is written; the uploader's rights
@@ -29,6 +29,7 @@ from flint_graph.api.narrative_character_schemas import (
     BackgroundJobCreate,
     ImageJobListResponse,
     ImageJobResponse,
+    SceneArtJobCreate,
 )
 from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
@@ -45,6 +46,7 @@ from flint_graph.application.services.narrative_asset_library import (
 )
 from flint_graph.application.services.narrative_images import (
     create_background_job,
+    create_scene_art_job,
     list_image_jobs,
 )
 from flint_graph.domain.errors import DomainError, PayloadTooLargeError
@@ -279,5 +281,57 @@ async def list_background_jobs_endpoint(
         purpose="background",
         character_id=None,
         limit=limit,
+    )
+    return ImageJobListResponse(jobs=[job_response(job, assets) for job, assets in rows])
+
+
+@router.post("/scene-art-jobs", response_model=ImageJobResponse, status_code=202)
+async def create_scene_art_job_endpoint(
+    project_id: UUID,
+    payload: SceneArtJobCreate,
+    tenant_id: TenantMemberDep,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: AuditActorDep,
+) -> ImageJobResponse:
+    job = await _persist(
+        session,
+        create_scene_art_job(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            author_user_id=current_user.user.id,
+            scene=payload.scene,
+            characters=[
+                (item.character_id, item.reference_asset_id) for item in payload.characters
+            ],
+            count=payload.count,
+            idempotency_key=payload.idempotency_key,
+            actor=actor,
+            available=settings.narrative_image_generation_enabled,
+            max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
+            policy=content_policy(settings.narrative_image_content_policy),
+        ),
+    )
+    return job_response(job, [])
+
+
+@router.get("/scene-art-jobs", response_model=ImageJobListResponse)
+async def list_scene_art_jobs_endpoint(
+    project_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> ImageJobListResponse:
+    """Every CG job of the project, whichever character it draws."""
+    rows = await list_image_jobs(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        purpose="scene_art",
+        character_id=None,
+        limit=limit,
+        any_character=True,
     )
     return ImageJobListResponse(jobs=[job_response(job, assets) for job, assets in rows])

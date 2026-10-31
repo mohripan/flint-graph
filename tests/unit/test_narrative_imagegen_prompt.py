@@ -13,12 +13,16 @@ from flint_graph.narrative.imagegen import (
     HIRES_STRENGTH,
     MAX_APPEARANCE,
     NEGATIVE,
+    QUALITY_NEGATIVE,
+    SCENE_ADAPTER_SCALE,
+    SCENE_SIZE,
     ContentPolicy,
     HiresFix,
     appearance_tags,
     background_request,
     expression_request,
     portrait_request,
+    scene_art_request,
 )
 
 
@@ -325,3 +329,53 @@ def test_the_policy_is_a_versioned_file_not_code(tmp_path):
             ContentPolicy.load(custom)
     with pytest.raises(ValueError):
         ContentPolicy.load(tmp_path / "missing.toml")
+
+
+def test_scene_art_puts_the_referenced_character_into_the_described_scene():
+    request = scene_art_request(
+        " Quen sitting on the couch by the window,\n at night ",
+        "shoulder-length white hair, red eyes, androgynous, casual clothes",
+        "boy",
+    )
+    # Subject, scene, then looks; no "looking at viewer" or plain background in a scene.
+    assert request.prompt == (
+        "1boy, male focus, solo, Quen sitting on the couch by the window, at night, "
+        "white hair, medium hair, red eyes, androgynous, casual clothes, "
+        "safe, masterpiece, high score, great score, absurdres"
+    )
+    assert (request.width, request.height) == SCENE_SIZE == (1344, 768)
+    assert (request.steps, request.guidance) == (28, 5.0)
+    assert request.adapter_scale == SCENE_ADAPTER_SCALE == 0.5
+    # The character's own negatives, a shorter stated length kept, and no second person.
+    assert request.negative_prompt.startswith(NEGATIVE + ", 1girl, female focus, breasts, ")
+    assert request.negative_prompt.endswith("long hair, very long hair, multiple boys")
+
+
+def test_scene_art_works_for_any_character_type_and_without_a_description():
+    girl = scene_art_request("reading in a library", "long black hair", "woman")
+    assert girl.prompt.startswith(
+        "1girl, mature female, solo, reading in a library, black hair, long hair, safe, "
+    )
+    assert girl.negative_prompt.endswith("1boy, male focus, multiple girls")
+    other = scene_art_request("on a beach at sunset", "", "other")
+    assert other.prompt == (
+        "solo, on a beach at sunset, safe, masterpiece, high score, great score, absurdres"
+    )
+    assert other.negative_prompt.endswith(QUALITY_NEGATIVE + ", multiple girls, multiple boys")
+
+
+def test_scene_art_needs_a_bounded_scene_and_refuses_blocked_words():
+    for scene in ("", "   ", "x" * (MAX_APPEARANCE + 1)):
+        with pytest.raises(ValueError):
+            scene_art_request(scene, "white hair", "boy")
+    with pytest.raises(ValueError):
+        scene_art_request("on a couch", "white hair", "dragon")
+    # Both the scene and the referenced character's own description pass the policy.
+    for scene, appearance in (("a NUDE beach", "white hair"), ("on a couch", "hentai, white hair")):
+        with pytest.raises(ValueError, match="blocked"):
+            scene_art_request(scene, appearance, "girl")
+    policy = ContentPolicy.create(["nsfw", "sensitive"], ["rain"])
+    with pytest.raises(ValueError, match='"rain"'):
+        scene_art_request("walking in the rain", "", "girl", policy=policy)
+    allowed = scene_art_request("walking home", "", "girl", policy=policy)
+    assert allowed.negative_prompt.startswith("nsfw, sensitive, lowres, ")

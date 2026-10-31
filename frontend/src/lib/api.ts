@@ -46,7 +46,7 @@ export interface CharacterProfile {
   portrait: NarrativeImage | null; version: number; voice?: string | null;
 }
 export interface ImageJob {
-  id: string; purpose: "character_portrait" | "background" | "character_expression"; character_id: string | null;
+  id: string; purpose: "character_portrait" | "background" | "character_expression" | "scene_art"; character_id: string | null;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   progress: number; count: number; cancel_requested: boolean; error_code: string | null; appearance: string;
   character_type: CharacterType; framing: CharacterFraming; prompt: string; negative_prompt: string;
@@ -58,6 +58,9 @@ export interface ImageJob {
   // Expressions repainted from a base image (ADR 0041): one expression and prompt per image.
   base_asset_id?: string | null; face_box?: number[] | null; strength?: number | null;
   expressions?: string[] | null; prompts?: string[] | null;
+  // Event CGs (ADR 0041 slice C): the approved images and the IP-Adapter that kept the look.
+  reference_assets?: { character_id: string; asset_id: string }[] | null;
+  ip_adapter_scale?: number | null; ip_adapter_model?: string | null;
   // High resolution: width × height is the base render, upscaled to the output size.
   hires: { scale: number; strength: number } | null; output_width: number; output_height: number;
 }
@@ -597,6 +600,21 @@ export const api = {
 
   listBackgroundJobs(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ jobs: ImageJob[] }> {
     return jsonRequest(`${projectPath(projectId)}/assets/background-jobs?limit=50`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  createSceneArtJob(tenantId: string, projectId: string, body: {
+    scene: string; characters: { character_id: string; reference_asset_id: string }[]; count: number;
+  }, signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/assets/scene-art-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { ...body, idempotency_key: crypto.randomUUID() },
+    });
+  },
+
+  listSceneArtJobs(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ jobs: ImageJob[] }> {
+    return jsonRequest(`${projectPath(projectId)}/assets/scene-art-jobs?limit=50`, {
       headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
   },

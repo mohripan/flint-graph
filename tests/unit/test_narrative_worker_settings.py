@@ -64,6 +64,33 @@ def test_image_cutout_needs_an_absolute_model_directory_and_its_manifest_pin(tmp
             Settings(**base, **partial)
 
 
+def test_scene_art_needs_an_absolute_ip_adapter_directory_and_its_manifest_pin(tmp_path):
+    base = {
+        "env": "test",
+        "narrative_image_worker_enabled": True,
+        "narrative_image_runtime_dir": str(tmp_path),
+        "narrative_image_model_dir": str(tmp_path),
+        "narrative_image_model_manifest_sha256": "a" * 64,
+    }
+    assert Settings(**base).narrative_image_ip_adapter_model_dir is None, "Scene art is optional"
+    configured = Settings(
+        **base,
+        narrative_image_ip_adapter_model_dir=str(tmp_path / "ip-adapter"),
+        narrative_image_ip_adapter_manifest_sha256="c" * 64,
+    )
+    assert configured.narrative_image_ip_adapter_manifest_sha256 == "c" * 64
+    for partial in (
+        {"narrative_image_ip_adapter_model_dir": str(tmp_path)},
+        {"narrative_image_ip_adapter_manifest_sha256": "c" * 64},
+        {
+            "narrative_image_ip_adapter_model_dir": "ip-adapter",
+            "narrative_image_ip_adapter_manifest_sha256": "c" * 64,
+        },
+    ):
+        with pytest.raises(ValidationError, match="IP-Adapter"):
+            Settings(**base, **partial)
+
+
 async def test_voice_worker_is_opt_in_with_its_own_queue_runtime_and_model_pin(tmp_path):
     from flint_graph.processes.narrative_voice_worker import run_worker
 

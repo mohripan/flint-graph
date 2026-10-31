@@ -33,14 +33,22 @@ CUTOUT_RULE = (
     "OR (transparent AND cutout_model IS NOT NULL AND cutout_sha256 IS NOT NULL)) "
     "AND (status <> 'completed' OR NOT transparent OR cutout_model IS NOT NULL)"
 )
-# Expression jobs repaint the face of a base asset of the same project (migration 0026).
+# Expression jobs repaint the face of a base asset of the same project (migration 0026);
+# scene art draws a character into an event CG (migration 0030).
 PURPOSE_RULE = (
-    "(purpose IN ('character_portrait','character_expression') AND character_id IS NOT NULL) "
-    "OR (purpose = 'background' AND character_id IS NULL)"
+    "(purpose IN ('character_portrait','character_expression','scene_art') "
+    "AND character_id IS NOT NULL) OR (purpose = 'background' AND character_id IS NULL)"
 )
 EXPRESSION_RULE = (
     "(purpose = 'character_expression') = (base_asset_id IS NOT NULL AND face_box IS NOT NULL "
     "AND strength IS NOT NULL AND expressions IS NOT NULL AND prompts IS NOT NULL)"
+)
+# Scene art names its reference images and adapter scale, and a completed job the
+# IP-Adapter that kept the character's identity (migration 0030).
+SCENE_RULE = (
+    "(purpose = 'scene_art') = (reference_assets IS NOT NULL AND ip_adapter_scale IS NOT NULL) "
+    "AND (ip_adapter_model IS NULL OR purpose = 'scene_art') "
+    "AND (status <> 'completed' OR purpose <> 'scene_art' OR ip_adapter_model IS NOT NULL)"
 )
 # High-resolution character renders are upscaled by one of two scales and repainted
 # lightly (migration 0027); expression and background jobs never are.
@@ -97,6 +105,7 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(TRANSPARENT_RULE, name="ck_narrative_image_job_transparent"),
         CheckConstraint(CUTOUT_RULE, name="ck_narrative_image_job_cutout"),
         CheckConstraint(HIRES_RULE, name="ck_narrative_image_job_hires"),
+        CheckConstraint(SCENE_RULE, name="ck_narrative_image_job_scene"),
         Index("ix_narrative_image_job_purpose", "project_id", "purpose", "created_at", "id"),
         Index(
             "ix_narrative_image_job_active",
@@ -134,6 +143,11 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     prompts: Mapped[list[str] | None] = mapped_column(JSON)
     hires_scale: Mapped[float | None] = mapped_column(Float)
     hires_strength: Mapped[float | None] = mapped_column(Float)
+    # Scene art (ADR 0041 slice C): [{"character_id", "asset_id"}], approved and checked
+    # when queued; assets are discarded, never deleted.
+    reference_assets: Mapped[list[dict[str, str]] | None] = mapped_column(JSON)
+    ip_adapter_scale: Mapped[float | None] = mapped_column(Float)
+    ip_adapter_model: Mapped[str | None] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(16), default="queued")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)

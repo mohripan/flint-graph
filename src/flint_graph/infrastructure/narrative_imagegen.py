@@ -7,6 +7,7 @@ exactly the expected files, and every PNG is normalized and passes the strict
 validator with exact dimensions before the bytes leave this module. Cutout sprites
 must be 8-bit RGBA crops that match the box the child reports. High-resolution
 images are checked at their upscaled size, and sprite boxes must lie inside it.
+Scene art must come back as opaque 8-bit RGB at the 16:9 size it asked for.
 """
 
 import asyncio
@@ -44,6 +45,12 @@ CHILD_CODES = {
     "out_of_memory",
     "cutout_failed",
 }
+# Scene art: one approved image of one character per CG, at the 16:9 bucket.
+SCENE_SIZE = (1344, 768)
+SCENE_SCALES = (0.1, 1.0)
+MAX_REFERENCES = 1
+IP_ADAPTER_WEIGHTS = "sdxl_models/"
+IP_ADAPTER_ENCODER = "models/image_encoder"
 RUNTIME_KEYS = {"torch", "diffusers", "cuda", "device"}
 # Variables the interpreter and the CUDA runtime need; nothing that carries secrets.
 # PyTorch names its caches with getpass.getuser(), which on Windows reads USERNAME
@@ -83,6 +90,24 @@ class CutoutModel:
 
 
 @dataclass(frozen=True)
+class IpAdapterModel:
+    """The verified IP-Adapter: one SDXL weight file and its ViT-H image encoder."""
+
+    root: Path
+    weight: str
+    encoder: str
+    identity: ModelIdentity
+
+
+@dataclass(frozen=True)
+class SceneRequest:
+    """Draw a scene around a character (ADR 0041 slice C); reference bytes already verified."""
+
+    references: tuple[bytes, ...]
+    scale: float
+
+
+@dataclass(frozen=True)
 class InpaintRequest:
     """Repaint the face of a base image (ADR 0041); bytes already hash-verified."""
 
@@ -107,6 +132,8 @@ class GenerationRequest:
     inpaint: InpaintRequest | None = None
     # Upscale the base render and repaint it lightly at the larger size.
     hires: HiresFix | None = None
+    # Keep a character's identity from approved images of them through the IP-Adapter.
+    scene: SceneRequest | None = None
 
     @property
     def output_size(self) -> tuple[int, int]:
@@ -139,6 +166,8 @@ class GenerationResult:
     truncated: bool
     # The segmenter that cut these images out, when the request asked for it.
     cutout: CutoutModel | None = None
+    # The adapter that carried a character's identity into a scene.
+    ip_adapter: IpAdapterModel | None = None
 
 
 Progress = Callable[[int], Awaitable[None]]
@@ -181,6 +210,25 @@ def verify_cutout_model(model_dir: Path, manifest_sha256: str) -> CutoutModel:
         raise ValueError("The cutout manifest must list exactly one ONNX model")
     return CutoutModel(
         path=root / models[0], sha256=str(files[models[0]]["sha256"]), identity=identity
+    )
+
+
+def verify_ip_adapter_model(model_dir: Path, manifest_sha256: str) -> IpAdapterModel:
+    """The IP-Adapter directory under its pin: one SDXL weight beside its image encoder."""
+    identity, root, files = _verify_manifest(model_dir, manifest_sha256)
+    weights = [
+        name
+        for name in files
+        if name.startswith(IP_ADAPTER_WEIGHTS) and name.endswith(".safetensors")
+    ]
+    if len(weights) != 1:
+        raise ValueError("The IP-Adapter manifest must list exactly one SDXL weight file")
+    if not {f"{IP_ADAPTER_ENCODER}/config.json", f"{IP_ADAPTER_ENCODER}/model.safetensors"} <= set(
+        files
+    ):
+        raise ValueError("The IP-Adapter manifest must list its image encoder")
+    return IpAdapterModel(
+        root=root, weight=weights[0], encoder=IP_ADAPTER_ENCODER, identity=identity
     )
 
 
@@ -244,6 +292,10 @@ def _rgba(data: bytes) -> bool:
     return data[24:26] == bytes([8, 6])
 
 
+def _rgb(data: bytes) -> bool:
+    return data[24:26] == bytes([8, 2])
+
+
 def _box(value: object, request: GenerationRequest) -> tuple[int, int, int, int]:
     if (
         not isinstance(value, list)
@@ -268,9 +320,11 @@ class LocalImageGenerator:
         model: ModelIdentity,
         deadline_seconds: int,
         cutout: CutoutModel | None = None,
+        ip_adapter: IpAdapterModel | None = None,
     ) -> None:
         self.python, self.script, self.model_dir = python, script, model_dir
         self.model, self.deadline, self.cutout = model, deadline_seconds, cutout
+        self.ip_adapter = ip_adapter
 
     def _environment(self, work: Path) -> dict[str, str]:
         environment = {key: os.environ[key] for key in _PASSTHROUGH if key in os.environ}
@@ -305,8 +359,20 @@ class LocalImageGenerator:
             or len(inpaint.prompts) != len(request.seeds)
         ):
             raise ImageGenerationError("bad_request")
+        scene = request.scene
+        if scene is not None and (
+            request.cutout
+            or inpaint is not None
+            or request.hires is not None
+            or (request.width, request.height) != SCENE_SIZE
+            or not 1 <= len(scene.references) <= MAX_REFERENCES
+            or not SCENE_SCALES[0] <= scene.scale <= SCENE_SCALES[1]
+        ):
+            raise ImageGenerationError("bad_request")
         if request.cutout and self.cutout is None:
             raise ImageGenerationError("cutout_unavailable")
+        if scene is not None and self.ip_adapter is None:
+            raise ImageGenerationError("ip_adapter_unavailable")
         cutout = (
             {"model": str(self.cutout.path), "sha256": self.cutout.sha256}
             if request.cutout and self.cutout is not None
@@ -339,6 +405,21 @@ class LocalImageGenerator:
                     "box": list(inpaint.box),
                     "strength": inpaint.strength,
                     "prompts": list(inpaint.prompts),
+                }
+            if scene is not None and self.ip_adapter is not None:
+                references = []
+                for index, data in enumerate(scene.references):
+                    path = work / f"reference-{index}.png"
+                    path.write_bytes(data)
+                    references.append(
+                        {"image": str(path), "sha256": hashlib.sha256(data).hexdigest()}
+                    )
+                fields["scene"] = {
+                    "adapter": str(self.ip_adapter.root),
+                    "weight": self.ip_adapter.weight,
+                    "encoder": self.ip_adapter.encoder,
+                    "scale": scene.scale,
+                    "references": references,
                 }
             # Only sent when asked for, so a standard job also runs on an older child.
             if request.hires is not None:
@@ -472,6 +553,7 @@ class LocalImageGenerator:
                     request.inpaint is not None
                     and not (_rgba(data) == _rgba(thumbnail) == base_alpha)
                 )
+                or (request.scene is not None and not (_rgb(data) and _rgb(thumbnail)))
             ):
                 raise ImageGenerationError("invalid_output")
             images.append(
@@ -505,6 +587,7 @@ class LocalImageGenerator:
             prompt_tokens=tokens,
             truncated=bool(loaded["truncated"]),
             cutout=self.cutout if request.cutout else None,
+            ip_adapter=self.ip_adapter if request.scene is not None else None,
         )
 
 

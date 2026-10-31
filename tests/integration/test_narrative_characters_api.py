@@ -35,6 +35,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     GeneratedImage,
     GenerationResult,
     ImageGenerationError,
+    IpAdapterModel,
     ModelIdentity,
 )
 from flint_graph.main import app
@@ -46,6 +47,13 @@ SEGMENTER = CutoutModel(
     path=Path("isnetis.onnx"),
     sha256="f" * 64,
     identity=ModelIdentity("skytnt/anime-seg", "4" * 40, "apache-2.0"),
+)
+ADAPTER = ModelIdentity("h94/IP-Adapter", "1" * 40, "apache-2.0")
+IP_ADAPTER = IpAdapterModel(
+    root=Path("ip-adapter"),
+    weight="sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors",
+    encoder="models/image_encoder",
+    identity=ADAPTER,
 )
 # Where the fake segmenter finds the figure inside an 832x1216 render.
 BOX = (160, 30, 672, 1200)
@@ -93,8 +101,9 @@ class MemoryStore:
 class FakeGenerator:
     model = MODEL
 
-    def __init__(self, *failures, skip_cutout=False):
+    def __init__(self, *failures, skip_cutout=False, skip_adapter=False):
         self.failures, self.requests, self.skip_cutout = list(failures), [], skip_cutout
+        self.skip_adapter = skip_adapter
 
     async def generate(self, request, *, on_progress):
         self.requests.append(request)
@@ -136,6 +145,7 @@ class FakeGenerator:
             prompt_tokens=20,
             truncated=False,
             cutout=SEGMENTER if cut else None,
+            ip_adapter=IP_ADAPTER if request.scene and not self.skip_adapter else None,
         )
 
 

@@ -12,9 +12,12 @@ from flint_graph.infrastructure.narrative_imagegen import (
     GenerationRequest,
     ImageGenerationError,
     InpaintRequest,
+    IpAdapterModel,
     LocalImageGenerator,
     ModelIdentity,
+    SceneRequest,
     verify_cutout_model,
+    verify_ip_adapter_model,
     verify_model,
 )
 from flint_graph.narrative.imagegen import HiresFix
@@ -26,7 +29,7 @@ MODEL = ModelIdentity(repo="fixture/model", revision="a" * 40, license="openrail
 SEGMENTER = ModelIdentity(repo="fixture/segmenter", revision="d" * 40, license="apache-2.0")
 
 
-def generator(deadline=30, cutout=None):
+def generator(deadline=30, cutout=None, ip_adapter=None):
     return LocalImageGenerator(
         python=Path(sys.executable),
         script=FAKE,
@@ -34,6 +37,7 @@ def generator(deadline=30, cutout=None):
         model=MODEL,
         deadline_seconds=deadline,
         cutout=cutout,
+        ip_adapter=ip_adapter,
     )
 
 
@@ -378,3 +382,130 @@ async def test_inpainting_needs_one_prompt_per_seed_and_no_cutout(tmp_path):
         with pytest.raises(ImageGenerationError) as raised:
             await generator(cutout=segmenter(tmp_path)).generate(bad, on_progress=ignore)
         assert raised.value.code == "bad_request"
+
+
+ADAPTER = ModelIdentity(repo="h94/IP-Adapter", revision="1" * 40, license="apache-2.0")
+WEIGHT = "sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors"
+ENCODER = "models/image_encoder"
+
+
+def adapter(root: Path) -> IpAdapterModel:
+    return IpAdapterModel(root=root, weight=WEIGHT, encoder=ENCODER, identity=ADAPTER)
+
+
+def scene_request(mode="ok", seeds=(5, 6), references=None):
+    return GenerationRequest(
+        prompt=f"{mode}, solo, sitting on a couch",
+        negative_prompt="lowres",
+        width=1344,
+        height=768,
+        steps=28,
+        guidance=5.0,
+        seeds=tuple(seeds),
+        scene=SceneRequest(
+            references=references if references is not None else (base_png(),), scale=0.5
+        ),
+    )
+
+
+@pytest.mark.anyio
+async def test_scene_art_sends_its_reference_and_returns_opaque_landscape_scenes(tmp_path):
+    result = await generator(ip_adapter=adapter(tmp_path)).generate(
+        scene_request(), on_progress=ignore
+    )
+    assert [(image.width, image.height) for image in result.images] == [(1344, 768)] * 2
+    # Opaque RGB scenes, even from a transparent reference sprite.
+    assert all(image.data[25] == 2 and image.box is None for image in result.images)
+    assert result.ip_adapter == adapter(tmp_path) and result.cutout is None
+
+
+@pytest.mark.anyio
+async def test_scene_art_needs_a_configured_ip_adapter():
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator().generate(scene_request(), on_progress=ignore)
+    assert raised.value.code == "ip_adapter_unavailable"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("mode", "code"),
+    [
+        ("rgbascene", "invalid_output"),
+        ("refhash", "model_invalid"),
+        ("wrongsize", "invalid_output"),
+    ],
+)
+async def test_scene_art_output_and_reference_are_checked(tmp_path, mode, code):
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator(ip_adapter=adapter(tmp_path)).generate(
+            scene_request(mode), on_progress=ignore
+        )
+    assert raised.value.code == code
+
+
+@pytest.mark.anyio
+async def test_scene_art_takes_one_reference_and_no_other_mode(tmp_path):
+    from dataclasses import replace
+
+    request = scene_request()
+    for bad in (
+        scene_request(references=()),
+        scene_request(references=(base_png(), base_png(alpha=False))),
+        replace(request, width=832, height=1216),
+        replace(request, cutout=True),
+        replace(request, hires=HIRES),
+        replace(request, inpaint=inpaint_request().inpaint),
+        replace(request, scene=replace(request.scene, scale=1.5)),
+    ):
+        with pytest.raises(ImageGenerationError) as raised:
+            await generator(cutout=segmenter(tmp_path), ip_adapter=adapter(tmp_path)).generate(
+                bad, on_progress=ignore
+            )
+        assert raised.value.code == "bad_request", bad
+
+
+def ip_adapter_fixture(root: Path, files: dict[str, bytes]) -> str:
+    for name, data in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(data)
+    manifest = {
+        "repo": "h94/IP-Adapter",
+        "revision": "1" * 40,
+        "license": "apache-2.0",
+        "files": {
+            name: {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+            for name, data in files.items()
+        },
+    }
+    data = json.dumps(manifest).encode()
+    (root / "flintgraph-download.json").write_bytes(data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def test_ip_adapter_is_one_sdxl_weight_and_its_image_encoder_under_one_pin(tmp_path):
+    files = {
+        "README.md": b"readme",
+        WEIGHT: b"adapter" * 10,
+        f"{ENCODER}/config.json": b"{}",
+        f"{ENCODER}/model.safetensors": b"encoder" * 10,
+    }
+    pin = ip_adapter_fixture(tmp_path, files)
+    model = verify_ip_adapter_model(tmp_path, pin)
+    assert model == IpAdapterModel(
+        root=tmp_path.resolve(), weight=WEIGHT, encoder=ENCODER, identity=ADAPTER
+    )
+    with pytest.raises(ValueError):
+        verify_ip_adapter_model(tmp_path, "0" * 64)
+    (tmp_path / WEIGHT).write_bytes(b"tampered")
+    with pytest.raises(ValueError):
+        verify_ip_adapter_model(tmp_path, pin)
+    for broken in (
+        # No SDXL weight, two of them, or no image encoder beside it.
+        {name: data for name, data in files.items() if name != WEIGHT},
+        {**files, "sdxl_models/ip-adapter_sdxl.safetensors": b"other"},
+        {name: data for name, data in files.items() if not name.startswith(ENCODER)},
+    ):
+        root = tmp_path / f"case-{len(broken)}-{hash(tuple(broken)) & 0xFFFF}"
+        root.mkdir()
+        with pytest.raises(ValueError, match="IP-Adapter"):
+            verify_ip_adapter_model(root, ip_adapter_fixture(root, broken))

@@ -73,8 +73,9 @@ export function railGroups(index: LibraryIndex, names: Record<string, string>): 
       { view: { type: "review" }, label: "To review", count: index.to_review },
       { view: { type: "unfiled" }, label: "Unsorted", count: index.unfiled },
     ],
-    kinds: KIND_ORDER.filter(([kind]) => index.kinds[kind])
-      .map(([kind, label]) => ({ view: { type: "kind", kind }, label, count: index.kinds[kind] })),
+    // CGs stay listed while empty: that view is where they are generated and uploaded.
+    kinds: KIND_ORDER.filter(([kind]) => index.kinds[kind] || kind === "image")
+      .map(([kind, label]) => ({ view: { type: "kind", kind }, label, count: index.kinds[kind] ?? 0 })),
     characters: Object.entries(index.characters)
       .map(([id, count]): RailItem => ({ view: { type: "character", id }, label: names[id] ?? id, count }))
       .sort((a, b) => byName(a.label, b.label)),

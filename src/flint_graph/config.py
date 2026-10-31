@@ -260,6 +260,14 @@ class Settings(BaseSettings):
     narrative_image_cutout_manifest_sha256: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
     )
+    # Optional scene art (event CGs of a character): IP-Adapter Plus with its ViT-H
+    # image encoder, one directory under one manifest pin.
+    narrative_image_ip_adapter_model_dir: str | None = Field(
+        default=None, min_length=1, max_length=2048
+    )
+    narrative_image_ip_adapter_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     narrative_image_max_active_jobs_per_workspace: int = Field(default=2, ge=1, le=20)
     narrative_image_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
     narrative_image_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
@@ -365,6 +373,14 @@ class Settings(BaseSettings):
             ):
                 raise ValueError(
                     "The image cutout requires an absolute model directory together "
+                    "with its pinned manifest"
+                )
+            adapter_dir = self.narrative_image_ip_adapter_model_dir
+            if (adapter_dir is None) != (
+                self.narrative_image_ip_adapter_manifest_sha256 is None
+            ) or (adapter_dir is not None and not Path(adapter_dir).is_absolute()):
+                raise ValueError(
+                    "Scene art requires an absolute IP-Adapter directory together "
                     "with its pinned manifest"
                 )
         if self.narrative_voice_worker_enabled:

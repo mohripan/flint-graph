@@ -1,4 +1,4 @@
-"""Local portrait generation jobs (ADR 0039).
+"""Local portrait, background, expression and scene-art jobs (ADR 0039, ADR 0041).
 
 API requests only record intent: a job is queued with an ID-only outbox message and
 the GPU work runs later in a fenced activity of the registered workflow run (ADR
@@ -39,6 +39,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     GeneratedImage,
     GenerationRequest,
     GenerationResult,
+    IpAdapterModel,
     ModelIdentity,
 )
 from flint_graph.narrative.imagegen import (
@@ -47,11 +48,13 @@ from flint_graph.narrative.imagegen import (
     ExpressionRequest,
     HiresFix,
     ImageRequest,
+    SceneArtRequest,
     background_request,
     clean_appearance,
     expression_names,
     expression_request,
     portrait_request,
+    scene_art_request,
 )
 from flint_graph.narrative.values import canonical_json
 
@@ -75,6 +78,23 @@ class InpaintPlan:
 
 
 @dataclass(frozen=True)
+class StoredImage:
+    """A library image whose bytes are fetched, hash-verified, after the claim."""
+
+    asset_id: UUID
+    sha256: str
+    size_bytes: int
+
+
+@dataclass(frozen=True)
+class ScenePlan:
+    """The approved images that carry a character's identity into a scene."""
+
+    references: tuple[StoredImage, ...]
+    scale: float
+
+
+@dataclass(frozen=True)
 class ImageWork:
     """Everything an execution needs, loaded inside the claim transaction."""
 
@@ -83,6 +103,7 @@ class ImageWork:
     job_id: UUID
     request: GenerationRequest
     inpaint: InpaintPlan | None = None
+    scene: ScenePlan | None = None
 
 
 # Expression bases: what the child accepts, and images a character can be drawn from.
@@ -92,6 +113,80 @@ MIN_BASE, MAX_BASE, MIN_FACE = 64, 2560, 16  # up to 2x high-resolution sprites
 
 def _invalid(detail: str) -> DomainError:
     return DomainError(422, "Invalid expression request", detail, "invalid-expression-request")
+
+
+# One referenced character per CG: with two, the IP-Adapter regions swapped their looks
+# in most renders (docs/reports/2026-10-31-scene-art-cgs.md).
+MAX_SCENE_CHARACTERS = 1
+
+
+def _invalid_scene(detail: str) -> DomainError:
+    return DomainError(422, "Invalid scene art request", detail, "invalid-scene-art-request")
+
+
+async def create_scene_art_job(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    author_user_id: UUID,
+    scene: str,
+    characters: list[tuple[str, UUID]],
+    count: int,
+    idempotency_key: UUID,
+    actor: AuditActor,
+    available: bool,
+    max_active_jobs: int,
+    policy: ContentPolicy = DEFAULT_POLICY,
+) -> NarrativeImageJob:
+    """Queue event CGs of a character drawn from an approved image of them (ADR 0041 C)."""
+    if not 1 <= len(characters) <= MAX_SCENE_CHARACTERS:
+        raise _invalid_scene("Choose one character for this CG.")
+    [(character_id, reference_id)] = characters
+    reference = await session.scalar(
+        select(NarrativeAsset).where(
+            NarrativeAsset.tenant_id == tenant_id,
+            NarrativeAsset.project_id == project_id,
+            NarrativeAsset.id == reference_id,
+            NarrativeAsset.status != "discarded",
+        )
+    )
+    if reference is None or reference.media_type != "image/png" or reference.kind not in BASE_KINDS:
+        raise NotFoundError("Choose an approved sprite, image or portrait of this project.")
+    if reference.status != "approved":
+        raise _invalid_scene("Approve this image before drawing CGs from it.")
+    width, height = reference.width or 0, reference.height or 0
+    if not (MIN_BASE <= width <= MAX_BASE and MIN_BASE <= height <= MAX_BASE):
+        raise _invalid_scene(f"Use an image between {MIN_BASE} and {MAX_BASE} pixels.")
+    profile = await session.scalar(
+        select(NarrativeCharacterProfile).where(
+            NarrativeCharacterProfile.tenant_id == tenant_id,
+            NarrativeCharacterProfile.project_id == project_id,
+            NarrativeCharacterProfile.character_id == character_id,
+        )
+    )
+    appearance = profile.appearance if profile else ""
+    character_type = profile.character_type if profile else "other"
+    return await _queue_job(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        author_user_id=author_user_id,
+        purpose="scene_art",
+        character_id=character_id,
+        appearance=scene,
+        character_type=character_type,
+        framing="scene",
+        transparent=False,
+        hires=False,
+        build=lambda: scene_art_request(scene, appearance, character_type, policy=policy),
+        count=count,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        available=available,
+        max_active_jobs=max_active_jobs,
+        references=[(character_id, reference)],
+    )
 
 
 async def create_expression_job(
@@ -268,7 +363,7 @@ async def _queue_job(
     framing: str,
     transparent: bool,
     hires: bool,
-    build: Callable[[], ImageRequest | ExpressionRequest],
+    build: Callable[[], ImageRequest | ExpressionRequest | SceneArtRequest],
     count: int,
     idempotency_key: UUID,
     actor: AuditActor,
@@ -276,6 +371,7 @@ async def _queue_job(
     max_active_jobs: int,
     base: tuple[NarrativeAsset, tuple[int, int, int, int]] | None = None,
     expressions: list[str] | None = None,
+    references: list[tuple[str, NarrativeAsset]] | None = None,
 ) -> NarrativeImageJob:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -303,6 +399,12 @@ async def _queue_job(
                      "expressions": expressions}
     if hires:
         identity["hires"] = True
+    reference_assets = [
+        {"character_id": character, "asset_id": str(asset.id)}
+        for character, asset in references or []
+    ]
+    if references is not None:
+        identity["references"] = reference_assets
     request_hash = sha256(canonical_json(identity)).hexdigest()
     existing = await session.scalar(
         select(NarrativeImageJob).where(
@@ -339,6 +441,14 @@ async def _queue_job(
             "strength": built.strength,
             "expressions": list(built.ids),
             "prompts": list(built.prompts),
+        }
+    elif isinstance(built, SceneArtRequest):
+        built_fields = {
+            "prompt": built.prompt,
+            "width": built.width,
+            "height": built.height,
+            "reference_assets": reference_assets,
+            "ip_adapter_scale": built.adapter_scale,
         }
     else:
         built_fields = {
@@ -428,19 +538,24 @@ async def list_image_jobs(
     purpose: str,
     character_id: str | None,
     limit: int,
+    any_character: bool = False,
 ) -> list[tuple[NarrativeImageJob, list[NarrativeAsset]]]:
     await get_project(session, tenant_id=tenant_id, project_id=project_id)
+    scope = [
+        NarrativeImageJob.tenant_id == tenant_id,
+        NarrativeImageJob.project_id == project_id,
+        NarrativeImageJob.purpose == purpose,
+    ]
+    if not any_character:
+        scope.append(
+            NarrativeImageJob.character_id.is_(None)
+            if character_id is None
+            else NarrativeImageJob.character_id == character_id
+        )
     jobs = list(
         await session.scalars(
             select(NarrativeImageJob)
-            .where(
-                NarrativeImageJob.tenant_id == tenant_id,
-                NarrativeImageJob.project_id == project_id,
-                NarrativeImageJob.purpose == purpose,
-                NarrativeImageJob.character_id.is_(None)
-                if character_id is None
-                else NarrativeImageJob.character_id == character_id,
-            )
+            .where(*scope)
             .order_by(NarrativeImageJob.created_at.desc(), NarrativeImageJob.id.desc())
             .limit(limit)
         )
@@ -607,8 +722,19 @@ async def claim_image_job(
             strength=job.strength,
             prompts=tuple(job.prompts),
         )
+    scene = None
+    if job.purpose == "scene_art":
+        assert job.reference_assets and job.ip_adapter_scale is not None
+        scene = ScenePlan(
+            references=tuple(
+                StoredImage(asset.id, asset.sha256, asset.size_bytes)
+                for asset in await _references(session, job)
+            ),
+            scale=job.ip_adapter_scale,
+        )
     return ImageWork(
         inpaint=plan,
+        scene=scene,
         tenant_id=job.tenant_id,
         project_id=job.project_id,
         job_id=job.id,
@@ -624,6 +750,22 @@ async def claim_image_job(
             hires=job_hires(job),
         ),
     )
+
+
+async def _references(session: AsyncSession, job: NarrativeImageJob) -> list[NarrativeAsset]:
+    """A scene job's reference images in request order, scoped to its project."""
+    ids = [UUID(item["asset_id"]) for item in job.reference_assets or []]
+    rows = await session.scalars(
+        select(NarrativeAsset).where(
+            NarrativeAsset.tenant_id == job.tenant_id,
+            NarrativeAsset.project_id == job.project_id,
+            NarrativeAsset.id.in_(ids),
+        )
+    )
+    found = {asset.id: asset for asset in rows}
+    # Library assets are discarded, never deleted, so every reference still exists.
+    assert set(found) == set(ids)
+    return [found[asset_id] for asset_id in ids]
 
 
 def job_hires(job: NarrativeImageJob) -> HiresFix | None:
@@ -663,11 +805,14 @@ async def complete_image_job(
         _finish(job, "cancelled")
         await session.flush()
         return job
-    cutout = result.cutout
-    if (cutout is not None) != job.transparent or any(
-        (image.box is not None) != job.transparent for _, image in stored
+    cutout, adapter = result.cutout, result.ip_adapter
+    if (
+        (cutout is not None) != job.transparent
+        or any((image.box is not None) != job.transparent for _, image in stored)
+        or (adapter is not None) != (job.purpose == "scene_art")
     ):
-        # A sprite with its scenery still around it, or an opaque portrait that was cropped.
+        # A sprite with its scenery still around it, an opaque portrait that was cropped,
+        # or a scene drawn without the character's identity reference.
         job.error_code = "invalid_output"
         _finish(job, "failed")
         await session.flush()
@@ -680,6 +825,7 @@ async def complete_image_job(
         # A repainted face is the same kind of image as its base.
         base = await session.get(NarrativeAsset, job.base_asset_id)
         kind = base.kind if base is not None else "sprite"
+    references = await _references(session, job) if adapter is not None else []
     # Identical bytes are one asset per project; a repeated image adds nothing new.
     known = set(
         await session.scalars(
@@ -719,6 +865,8 @@ async def complete_image_job(
                 "license": cutout.identity.license,
                 "box": list(image.box),
             }
+        if adapter is not None:
+            provenance |= _scene_provenance(job, references, adapter)
         if job.purpose == "character_expression" and job.expressions and job.prompts:
             provenance |= {
                 "prompt": job.prompts[image.index],
@@ -759,6 +907,8 @@ async def complete_image_job(
     if cutout is not None:
         job.cutout_model = f"{cutout.identity.repo}@{cutout.identity.revision}"[:200]
         job.cutout_sha256 = cutout.sha256
+    if adapter is not None:
+        job.ip_adapter_model = f"{adapter.identity.repo}@{adapter.identity.revision}"[:200]
     job.runtime = result.runtime
     job.prompt_tokens = result.prompt_tokens
     job.truncated = result.truncated
@@ -768,10 +918,35 @@ async def complete_image_job(
     return job
 
 
+def _scene_provenance(
+    job: NarrativeImageJob, references: list[NarrativeAsset], adapter: IpAdapterModel
+) -> dict[str, Any]:
+    by_id = {str(asset.id): asset for asset in references}
+    return {
+        "scene": job.appearance,
+        "references": [
+            {
+                "character_id": item["character_id"],
+                "asset_id": item["asset_id"],
+                "sha256": by_id[item["asset_id"]].sha256,
+            }
+            for item in job.reference_assets or []
+        ],
+        "ip_adapter": {
+            "model_repo": adapter.identity.repo,
+            "model_revision": adapter.identity.revision,
+            "license": adapter.identity.license,
+            "scale": job.ip_adapter_scale,
+        },
+    }
+
+
 def _asset_kind(job: NarrativeImageJob) -> str:
-    """Cut-out sprites wait in the library for a character's expression slots."""
+    """Cut-out sprites wait for a character's expression slots, scene art among the CGs."""
     if job.purpose == "background":
         return "background"
+    if job.purpose == "scene_art":
+        return "image"
     return "sprite" if job.transparent else "character_portrait"
 
 
@@ -781,6 +956,8 @@ def _asset_name(job: NarrativeImageJob, index: int) -> str:
         base = textwrap.shorten(clean_appearance(job.appearance), width=60, placeholder="…")
     elif job.purpose == "character_expression" and job.expressions:
         return f"{job.character_id} {job.expressions[index]}"
+    elif job.purpose == "scene_art":
+        base = f"{job.character_id} CG"
     else:
         base = f"{job.character_id} {'sprite' if job.transparent else 'portrait'}"
     return f"{base} {index + 1}"

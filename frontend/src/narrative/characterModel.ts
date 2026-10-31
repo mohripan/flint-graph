@@ -22,6 +22,7 @@ const ERRORS: Record<string, string> = {
   model_invalid: "The image model failed its integrity check.",
   cutout_failed: "The character could not be separated from the background. Try again or adjust the description.",
   cutout_unavailable: "Transparent sprites need the cutout model; this image worker has none configured.",
+  ip_adapter_unavailable: "Event CGs need the IP-Adapter model; this image worker has none configured.",
   cancelled: "Cancelled.",
 };
 
@@ -71,7 +72,7 @@ export function jobStatus(job: ImageJob): string {
     return job.progress === 0 ? "Loading the model…" : `Generated ${job.progress} of ${job.count}…`;
   }
   if (job.status === "completed") {
-    const noun = job.transparent ? "sprite" : "portrait";
+    const noun = job.purpose === "scene_art" ? "CG" : job.transparent ? "sprite" : "portrait";
     return `${job.assets.length} ${noun}${job.assets.length === 1 ? "" : "s"} ready`;
   }
   if (job.status === "cancelled") return "Cancelled.";

@@ -27,6 +27,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     OllamaGpuReleaser,
     runtime_paths,
     verify_cutout_model,
+    verify_ip_adapter_model,
     verify_model,
 )
 from flint_graph.main import app
@@ -403,4 +404,107 @@ async def test_real_gpu_expressions_repaint_only_the_face(live_case, tmp_path):
             await asyncio.to_thread((target / f"{name}.png").write_bytes, data)
         await asyncio.to_thread(
             (target / "job.json").write_text, json.dumps({"job": done, "checks": results}, indent=2)
+        )
+
+
+SCENE_PROBE = """
+import json, sys
+from PIL import Image
+image = Image.open(sys.argv[1])
+pixels = image.convert("RGB").resize((64, 36)).getdata()
+print(json.dumps({"mode": image.mode, "size": list(image.size),
+                  "distinct": len(set(pixels))}))
+"""
+
+
+@pytest.mark.skipif(
+    not (
+        os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MANIFEST_SHA256")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_SCENE_REFERENCE")
+    ),
+    reason="requires the isolated runtime, the local model, the IP-Adapter and a reference image",
+)
+async def test_real_gpu_scene_art_draws_the_referenced_character(live_case, tmp_path):
+    case = live_case
+    python, script = runtime_paths(Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR"]))
+    model_dir = Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR"])
+    model = await asyncio.to_thread(
+        verify_model, model_dir, os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256"]
+    )
+    adapter = await asyncio.to_thread(
+        verify_ip_adapter_model,
+        Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MODEL_DIR"]),
+        os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MANIFEST_SHA256"],
+    )
+    generator = LocalImageGenerator(
+        python=python,
+        script=script,
+        model_dir=model_dir,
+        model=model,
+        deadline_seconds=900,
+        ip_adapter=adapter,
+    )
+    reference = await asyncio.to_thread(
+        Path(os.environ["FLINT_GRAPH_NARRATIVE_SCENE_REFERENCE"]).read_bytes
+    )
+    client, headers, base = case["client"], case["headers"], case["base"]
+    uploaded = await client.post(
+        f"{base}/assets",
+        headers=headers,
+        data={"kind": "sprite", "name": "Quen", "license": "openrail++", "notice": "",
+              "rights_declared": "true"},
+        files={"file": ("quen.png", reference, "image/png")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    profile = {"base_version": 0, "character_type": "boy", "framing": "full_body",
+               "appearance": "shoulder-length white hair, red eyes, androgynous, casual clothes"}
+    saved = await client.put(f"{base}/characters/quen", headers=headers, json=profile)
+    assert saved.status_code == 200, saved.text
+    scene = os.getenv(
+        "FLINT_GRAPH_NARRATIVE_SCENE_TEXT", "Quen sitting on the couch by the window at night"
+    )
+    created = await client.post(
+        f"{base}/assets/scene-art-jobs",
+        headers=headers,
+        json={"scene": scene, "count": 2, "idempotency_key": str(uuid4()),
+              "characters": [{"character_id": "quen",
+                              "reference_asset_id": uploaded.json()["id"]}]},
+    )
+    assert created.status_code == 202, created.text
+    loaded = os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL")
+    releaser = OllamaGpuReleaser("http://127.0.0.1:11434", loaded) if loaded else None
+    async with worker(case, generator, releaser):
+        done = await case["until"](created.json()["id"], {"completed", "failed"}, 1200)
+    assert done["status"] == "completed", done["error_code"]
+    assert done["ip_adapter_model"] == f"{adapter.identity.repo}@{adapter.identity.revision}"
+    checks = {}
+    for asset in done["assets"]:
+        assert (asset["kind"], asset["status"], asset["character_id"]) == (
+            "image", "candidate", "quen"
+        )
+        assert asset["provenance"]["references"][0]["asset_id"] == uploaded.json()["id"]
+        content = await client.get(f"{base}/assets/{asset['id']}/content", headers=headers)
+        assert hashlib.sha256(content.content).hexdigest() == asset["sha256"]
+        path = tmp_path / f"{asset['name']}.png"
+        await asyncio.to_thread(path.write_bytes, content.content)
+        probe = await asyncio.create_subprocess_exec(
+            str(python), "-I", "-c", SCENE_PROBE, str(path), stdout=asyncio.subprocess.PIPE
+        )
+        stdout, _ = await probe.communicate()
+        checks[asset["name"]] = result = json.loads(stdout)
+        # An opaque, detailed 16:9 scene, not a flat or blank render.
+        assert result["mode"] == "RGB" and result["size"] == [1344, 768], result
+        assert result["distinct"] > 500, result
+    if save := os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_SAVE_DIR"):
+        target = Path(save)
+        await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
+        for name in checks:
+            data = await asyncio.to_thread((tmp_path / f"{name}.png").read_bytes)
+            await asyncio.to_thread((target / f"{name}.png").write_bytes, data)
+        await asyncio.to_thread(
+            (target / "job.json").write_text, json.dumps({"job": done, "checks": checks}, indent=2)
         )

@@ -42,6 +42,7 @@ output = Path(request["output_dir"])
 width, height = request["width"], request["height"]
 cutout = request.get("cutout")
 inpaint = request.get("inpaint")
+scene = request.get("scene")
 # A high-resolution request is upscaled after the base render; boxes scale with it.
 hires = request.get("hires")
 factor = hires["scale"] if hires else 1
@@ -61,6 +62,12 @@ if inpaint:
         emit("error", code="model_invalid")
         raise SystemExit(2)
     base_alpha = base[25] == 6
+# Scene art reads its reference images from the private work folder, hash-checked.
+for reference in (scene or {}).get("references", []):
+    data = Path(reference["image"]).read_bytes()
+    if mode == "refhash" or hashlib.sha256(data).hexdigest() != reference["sha256"]:
+        emit("error", code="model_invalid")
+        raise SystemExit(2)
 if mode == "busy":
     emit("busy", free_bytes=1, required_bytes=2)
     emit("error", code="gpu_busy")
@@ -109,8 +116,10 @@ for index, seed in enumerate(request["seeds"]):
         image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40, alpha)
         thumbnail = png(256, round(height * 256 / width), index * 40, alpha)
     else:
-        image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40)
-        thumbnail = png(256, round(height * 256 / width), index * 40)
+        # Scenes are opaque; "rgbascene" breaks that rule.
+        alpha = mode == "rgbascene"
+        image = png(width + (1 if mode == "wrongsize" else 0), height, index * 40, alpha)
+        thumbnail = png(256, round(height * 256 / width), index * 40, alpha)
     if mode == "badpng":
         image = image[:-5]
     if mode == "metadata":

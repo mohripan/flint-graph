@@ -142,6 +142,25 @@ class AssetMoveResponse(BaseModel):
     assets: list[AssetResponse]
 
 
+class SceneCharacter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    character_id: str = Field(pattern=CHARACTER_ID)
+    reference_asset_id: UUID
+
+
+class SceneArtJobCreate(BaseModel):
+    """Event CGs of a character drawn from an approved image of them (ADR 0041 slice C)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scene: str = Field(min_length=1, max_length=MAX_APPEARANCE)
+    # One character per CG for now; a list so a second can follow without a new shape.
+    characters: list[SceneCharacter] = Field(min_length=1, max_length=1)
+    count: int = Field(default=4, ge=1, le=4)
+    idempotency_key: UUID
+
+
 class BackgroundJobCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -174,6 +193,11 @@ class CutoutResponse(BaseModel):
 class HiresResponse(BaseModel):
     scale: float
     strength: float
+
+
+class SceneReferenceResponse(BaseModel):
+    character_id: str
+    asset_id: UUID
 
 
 class ImageJobResponse(BaseModel):
@@ -211,6 +235,10 @@ class ImageJobResponse(BaseModel):
     strength: float | None = None
     expressions: list[str] | None = None
     prompts: list[str] | None = None
+    # Scene art (ADR 0041 slice C): the approved images and the adapter that drew from them.
+    reference_assets: list[SceneReferenceResponse] | None = None
+    ip_adapter_scale: float | None = None
+    ip_adapter_model: str | None = None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

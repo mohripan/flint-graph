@@ -357,6 +357,129 @@ class InpaintRequestTest(ChildRequestCase):
             self.assertEqual(completed.returncode, 2)
 
 
+class ReferenceImageTest(unittest.TestCase):
+    def test_a_transparent_sprite_becomes_a_white_square_centred_on_the_figure(self):
+        reference = generate.reference_image(sprite())
+        side = generate.REFERENCE_SIZE
+        self.assertEqual((reference.size, reference.mode), ((side, side), "RGB"))
+        # The figure (80 x 270) fills the height; the sides are white padding.
+        self.assertEqual(reference.getpixel((side // 2, side - 4)), (30, 60, 160))
+        self.assertEqual(reference.getpixel((side // 2, 4)), (240, 200, 180))
+        self.assertEqual(reference.getpixel((4, side // 2)), (255, 255, 255))
+        self.assertEqual(reference.getpixel((side - 4, side // 2)), (255, 255, 255))
+
+    def test_an_opaque_image_is_cropped_to_what_differs_from_its_backdrop(self):
+        pixels = np.full((400, 300, 3), (205, 205, 215), dtype=np.uint8)
+        pixels[100:300, 120:180] = (200, 30, 40)
+        reference = generate.reference_image(Image.fromarray(pixels, "RGB"))
+        side = generate.REFERENCE_SIZE
+        self.assertEqual(reference.getpixel((side // 2, side // 2)), (200, 30, 40))
+        self.assertEqual(reference.getpixel((side // 2, 2)), (200, 30, 40))
+        self.assertEqual(reference.getpixel((2, side // 2)), (255, 255, 255))
+
+    def test_an_image_without_a_distinct_figure_is_used_whole(self):
+        reference = generate.reference_image(Image.new("RGB", (300, 200), (90, 90, 90)))
+        side = generate.REFERENCE_SIZE
+        self.assertEqual(reference.size, (side, side))
+        self.assertEqual(reference.getpixel((side // 2, side // 2)), (90, 90, 90))
+        self.assertEqual(reference.getpixel((side // 2, 2)), (255, 255, 255))
+
+
+class SceneRequestTest(ChildRequestCase):
+    def setUp(self):
+        super().setUp()
+        root = Path(self.work.name)
+        adapter = root / "ip-adapter"
+        (adapter / "sdxl_models").mkdir(parents=True)
+        (adapter / "sdxl_models" / "ip-adapter-plus_sdxl_vit-h.safetensors").write_bytes(b"w")
+        (adapter / "models" / "image_encoder").mkdir(parents=True)
+        (adapter / "models" / "image_encoder" / "config.json").write_text("{}")
+        (adapter / "models" / "image_encoder" / "model.safetensors").write_bytes(b"e")
+        self.reference = root / "reference-0.png"
+        sprite().save(self.reference, format="PNG")
+        self.scene = {
+            "adapter": str(adapter),
+            "weight": "sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors",
+            "encoder": "models/image_encoder",
+            "scale": 0.5,
+            "references": [
+                {
+                    "image": str(self.reference),
+                    "sha256": hashlib.sha256(self.reference.read_bytes()).hexdigest(),
+                }
+            ],
+        }
+        self.request = {**self.request, "width": 1344, "height": 768, "scene": self.scene}
+
+    def read(self, request):
+        stdin = sys.stdin
+        try:
+            sys.stdin = io.TextIOWrapper(io.BytesIO(json.dumps(request).encode()))
+            return generate.read_request()
+        finally:
+            sys.stdin = stdin
+
+    def test_valid_scene_requests_pass_validation(self):
+        self.assertEqual(self.read(self.request)["scene"]["scale"], 0.5)
+        self.assertIsNone(self.read({**self.request, "scene": None})["scene"])
+
+    def test_scenes_need_more_free_memory_than_a_portrait(self):
+        self.assertGreater(generate.SCENE_MIN_FREE_BYTES, generate.MIN_FREE_BYTES)
+        self.assertEqual(
+            generate.required_free_bytes(None, self.scene), generate.SCENE_MIN_FREE_BYTES
+        )
+
+    def test_bad_scene_fields_are_rejected_before_any_model_loads(self):
+        reference = self.scene["references"][0]
+        cases = [
+            {"adapter": "ip-adapter"},
+            {"adapter": str(Path(self.work.name) / "missing")},
+            {"weight": "../ip-adapter-plus_sdxl_vit-h.safetensors"},
+            {"weight": "sdxl_models/missing.safetensors"},
+            {"weight": "sdxl_models/ip-adapter-plus_sdxl_vit-h.bin"},
+            {"encoder": "models"},
+            {"scale": 0.0},
+            {"scale": 1.5},
+            {"scale": True},
+            {"references": []},
+            {"references": [reference, reference]},
+            {"references": [{**reference, "sha256": "0" * 64}]},
+            {"references": [{**reference, "image": "reference-0.png"}]},
+            {"references": [{**reference, "extra": 1}]},
+            {"extra": 1},
+        ]
+        for change in cases:
+            completed = self.run_child({**self.request, "scene": {**self.scene, **change}})
+            self.assertEqual(completed.returncode, 2, change)
+            self.assertEqual(json.loads(completed.stdout.decode().splitlines()[-1])["code"],
+                             "bad_request", change)
+        sha = hashlib.sha256(b"weights").hexdigest()
+        for request in (
+            # Scenes are landscape event art at the 16:9 bucket only.
+            {**self.request, "width": 832, "height": 1216},
+            {**self.request, "cutout": {"model": str(self.segmenter), "sha256": sha}},
+            {**self.request, "hires": {"scale": 2.0, "strength": 0.35}},
+            {**self.request, "inpaint": {"image": str(self.reference), "sha256": sha,
+                                         "box": [75, 20, 125, 70], "strength": 0.9,
+                                         "prompts": ["x"]}},
+        ):
+            completed = self.run_child(request)
+            self.assertEqual(completed.returncode, 2)
+
+    def test_a_reference_too_small_or_not_a_png_is_rejected(self):
+        for write in (
+            lambda path: Image.new("RGB", (40, 40)).save(path, format="PNG"),
+            lambda path: path.write_bytes(b"not a png"),
+        ):
+            write(self.reference)
+            reference = {"image": str(self.reference),
+                         "sha256": hashlib.sha256(self.reference.read_bytes()).hexdigest()}
+            completed = self.run_child(
+                {**self.request, "scene": {**self.scene, "references": [reference]}}
+            )
+            self.assertEqual(completed.returncode, 2)
+
+
 @unittest.skipUnless(os.getenv("FLINT_IMAGEGEN_CUTOUT_MODEL"), "set the anime-seg ONNX path")
 class RealSegmenterTest(unittest.TestCase):
     def test_the_pinned_model_accepts_a_letterboxed_image_and_returns_a_mask(self):

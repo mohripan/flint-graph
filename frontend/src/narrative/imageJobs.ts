@@ -10,12 +10,23 @@ export function imageJobStarted(tenantId: string, projectId: string, job: ImageJ
   for (const listener of listeners) listener(tenantId, projectId, job);
 }
 
+// The asset library's own jobs: backgrounds, and event CGs of a character (ADR 0041 C).
+type LibraryPurpose = "background" | "scene_art";
+const LISTS = {
+  background: api.listBackgroundJobs,
+  scene_art: api.listSceneArtJobs,
+};
+
 export function useBackgroundJobs(tenantId: string, projectId: string) {
+  return useLibraryJobs(tenantId, projectId, "background");
+}
+
+export function useLibraryJobs(tenantId: string, projectId: string, purpose: LibraryPurpose) {
   const [jobs, setJobs] = useState<ImageJob[]>([]);
   const [failed, setFailed] = useState(false);
   const put = useCallback((job: ImageJob) => {
-    if (job.purpose === "background") setJobs(current => mergeImageJobs(current, [job]));
-  }, []);
+    if (job.purpose === purpose) setJobs(current => mergeImageJobs(current, [job]));
+  }, [purpose]);
   useEffect(() => {
     const controller = new AbortController();
     let pending = false;
@@ -28,7 +39,7 @@ export function useBackgroundJobs(tenantId: string, projectId: string) {
       if (pending) return;
       pending = true;
       try {
-        const listed = await api.listBackgroundJobs(tenantId, projectId, controller.signal);
+        const listed = await LISTS[purpose].call(api, tenantId, projectId, controller.signal);
         if (!controller.signal.aborted) { setJobs(current => mergeImageJobs(current, listed.jobs)); setFailed(false); }
       } catch { if (!controller.signal.aborted) setFailed(true); }
       finally { pending = false; }
@@ -38,6 +49,6 @@ export function useBackgroundJobs(tenantId: string, projectId: string) {
     // active job was known at mount. Never start work as a side effect of a read.
     const timer = window.setInterval(() => void load(), 1500);
     return () => { controller.abort(); window.clearInterval(timer); listeners.delete(listener); };
-  }, [tenantId, projectId, put]);
+  }, [tenantId, projectId, purpose, put]);
   return { jobs, failed, put };
 }

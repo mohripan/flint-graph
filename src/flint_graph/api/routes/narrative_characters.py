@@ -34,6 +34,7 @@ from flint_graph.api.narrative_character_schemas import (
     ProfileListResponse,
     ProfileResponse,
     ProfileWrite,
+    SceneReferenceResponse,
 )
 from flint_graph.api.routes.narrative import _persist
 from flint_graph.application.services.narrative_characters import (
@@ -128,6 +129,13 @@ def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJ
         strength=job.strength,
         expressions=job.expressions,
         prompts=job.prompts,
+        reference_assets=(
+            [SceneReferenceResponse.model_validate(item) for item in job.reference_assets]
+            if job.reference_assets is not None
+            else None
+        ),
+        ip_adapter_scale=job.ip_adapter_scale,
+        ip_adapter_model=job.ip_adapter_model,
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,

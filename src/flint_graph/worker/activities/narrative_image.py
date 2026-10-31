@@ -44,6 +44,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     ImageGenerationError,
     ImageGenerator,
     InpaintRequest,
+    SceneRequest,
 )
 
 # A busy or exhausted GPU may free up; other failures would repeat identically.
@@ -147,22 +148,34 @@ class NarrativeImageActivities:
                 raise error from None
             return await generator.generate(request, on_progress=progress)
 
-    async def _request(self, work: ImageWork) -> GenerationRequest:
-        """Expression jobs carry their base image's verified bytes to the child."""
-        plan = work.inpaint
-        if plan is None:
-            return work.request
-        image = await self.store.get_verified(
+    async def _image(self, work: ImageWork, asset_id: UUID, size: int, sha256: str) -> bytes:
+        return await self.store.get_verified(
             asset_object_key(
                 tenant_id=work.tenant_id,
                 project_id=work.project_id,
-                asset_id=plan.asset_id,
+                asset_id=asset_id,
                 variant="image",
             ),
-            expected_size=plan.size_bytes,
-            expected_sha256=plan.sha256,
+            expected_size=size,
+            expected_sha256=sha256,
             max_bytes=IMAGE_LIMIT,
         )
+
+    async def _request(self, work: ImageWork) -> GenerationRequest:
+        """Expression and scene jobs carry their images' verified bytes to the child."""
+        if work.scene is not None:
+            references = [
+                await self._image(work, item.asset_id, item.size_bytes, item.sha256)
+                for item in work.scene.references
+            ]
+            return replace(
+                work.request,
+                scene=SceneRequest(references=tuple(references), scale=work.scene.scale),
+            )
+        plan = work.inpaint
+        if plan is None:
+            return work.request
+        image = await self._image(work, plan.asset_id, plan.size_bytes, plan.sha256)
         return replace(
             work.request,
             inpaint=InpaintRequest(
