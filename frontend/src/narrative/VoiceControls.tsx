@@ -224,7 +224,7 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
       {DELIVERIES.map(name => <option key={name} value={name}>
         {DELIVERY_LABELS[name]}{model && !model.deliveries[name] ? ` (not with ${model.name})` : ""}</option>)}
     </select>
-    {chosen.delivery.emotion !== "neutral" && <input type="range" aria-label="Intensity" min={0} max={1} step={0.25}
+    {chosen.delivery.emotion !== "neutral" && <input type="range" aria-label="Intensity" min={0} max={1} step={0.1}
       disabled={readOnly} value={chosen.delivery.intensity}
       onChange={event => deliver({ ...chosen.delivery, intensity: Number(event.target.value) })} />}
     {model && model.tags.length > 0 && <select aria-label="Sound before the line" disabled={readOnly} value={chosen.delivery.tag ?? ""}

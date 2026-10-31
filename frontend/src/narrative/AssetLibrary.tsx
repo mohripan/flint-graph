@@ -37,7 +37,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
   const [viewing, setViewing] = useState<NarrativeImage | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { jobs, failed: jobsFailed, put } = useBackgroundJobs(tenantId, projectId);
-  const { references } = useVoiceReferences(tenantId, projectId, canWrite);
+  const { references, reload: reloadReferences } = useVoiceReferences(tenantId, projectId, canWrite);
   const private_ = view.type === "references";
   const active = jobs.find(isActive) ?? null;
   // Event CGs of a character (ADR 0041 slice C) run as their own library jobs.
@@ -153,7 +153,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
             onStarted={job => imageJobStarted(tenantId, projectId, job)}
             onCancel={job => void act(async () => { scenes.put(await api.cancelImageJob(tenantId, projectId, job.id)); }, "Could not cancel.")} />}
         </section>}
-        {private_ && <VoiceReferences tenantId={tenantId} projectId={projectId} canWrite={canWrite} />}
+        {private_ && <VoiceReferences tenantId={tenantId} projectId={projectId} canWrite={canWrite} onChange={reloadReferences} />}
         {!private_ && canWrite && selected.size > 0 && <MoveBar count={selected.size} folders={folders}
           onClear={() => setSelected(new Set())} onMove={move} />}
         {notice && <p className="studio-notice" role="status">{notice}</p>}

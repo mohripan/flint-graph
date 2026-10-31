@@ -87,8 +87,11 @@ function Recorder({ onDone, onError }: { onDone: (pending: Pending) => void; onE
     : <button type="button" className="studio-secondary" onClick={() => void start()}>Record with microphone</button>;
 }
 
-export function VoiceReferences({ tenantId, projectId, canWrite }: { tenantId: string; projectId: string; canWrite: boolean }) {
-  const { references, reload } = useVoiceReferences(tenantId, projectId, canWrite);
+export function VoiceReferences({ tenantId, projectId, canWrite, onChange }: {
+  tenantId: string; projectId: string; canWrite: boolean; onChange?: () => void;
+}) {
+  const { references, reload: reloadList } = useVoiceReferences(tenantId, projectId, canWrite);
+  const reload = () => { reloadList(); onChange?.(); };
   const [pending, setPending] = useState<Pending | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [consent, setConsent] = useState<"self" | "permission">("self");
