@@ -12,12 +12,28 @@ service.
 - The Animagine XL 4.0 diffusers download (`cagliostrolab/animagine-xl-4.0`,
   revision `2b7c1b397761bf5bd3cc42e5b39ec99314a75a96`, CreativeML Open RAIL++-M) with
   its `flintgraph-download.json` manifest in one directory and no other files.
+- Optional, for transparent sprites: the anime segmentation download
+  (`skytnt/anime-seg`, revision `493cb60893f47441b26ec4fb9a306bce9e342982`,
+  Apache-2.0): `isnetis.onnx` plus its `README.md` and `flintgraph-download.json`
+  manifest in one directory and no other files. It runs on the CPU (about 1 s per
+  image).
 - The isolated runtime, installed once (PyTorch with CUDA is several gigabytes):
 
   ```powershell
   cd runtimes/imagegen
   uv sync --frozen
   ```
+
+  Re-run it after pulling changes to `runtimes/imagegen/uv.lock`; the cutout needs
+  `onnxruntime` from that lock. The child's own checks need no GPU or model:
+
+  ```powershell
+  cd runtimes/imagegen
+  uv run --frozen python -I -m unittest discover -s . -p "test_*.py"
+  ```
+
+  Set `FLINT_IMAGEGEN_CUTOUT_MODEL` to the `isnetis.onnx` path to also check the
+  real segmenter's input and output contract.
 
 ## Configuration
 
@@ -29,6 +45,8 @@ service.
 | `FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR` | Absolute path to `runtimes/imagegen`. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR` | Absolute path to the model directory. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256` | SHA-256 of `flintgraph-download.json`; the pin. |
+| `FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MODEL_DIR` | Optional: absolute path to the anime-seg directory. |
+| `FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MANIFEST_SHA256` | SHA-256 of that directory's manifest; required with the directory. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL` | Optional: Ollama model to unload when the GPU is busy. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_MAX_ACTIVE_JOBS_PER_WORKSPACE` | Queued plus running jobs per workspace (default 2). |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_JOB_DEADLINE_SECONDS` | Child watchdog (default 600). |
@@ -36,11 +54,20 @@ service.
 The worker also needs the usual database, Temporal and object-store settings. Start
 it with `python -m flint_graph.processes.narrative_image_worker`. At startup it
 hashes every model file against the pinned manifest (about 20 s) and refuses to run
-on a mismatch, an extra file or a missing runtime.
+on a mismatch, an extra file or a missing runtime. The same applies to the cutout
+directory when it is configured; the log says whether the cutout is ready. Without
+it, transparent jobs fail with `cutout_unavailable` and everything else works.
 
 ## What it generates
 
 - Character portraits: 832×1216, from the Characters tab.
+- Transparent stage sprites: the "Transparent background" box on a full-body
+  character (`"transparent": true` on a portrait job). The render uses
+  `white background` tags, then the child cuts the figure out and stores a cropped
+  8-bit RGBA PNG as a library asset of kind `sprite`. A candidate is approved with
+  "Approve sprite" or in the library. The job records the segmenter as
+  `cutout_model` (`repo@revision`) and `cutout_sha256` (the ONNX file). Each sprite's
+  provenance has the crop box inside the 832×1216 render.
 - Backgrounds: 1344×768 scenery with `no humans`, from the Assets tab
   (`POST /v1/narrative/projects/{id}/assets/background-jobs`).
 
@@ -77,7 +104,12 @@ were made" in the character sheet).
   to unload that model and retries once. Otherwise the job retries with backoff and
   then fails with a clear message. The assistant reloads its model on its next turn.
 - Child failures map to safe codes (`gpu_busy`, `out_of_memory`,
-  `generation_timeout`, `invalid_output`, `model_invalid`, `storage_unavailable`).
+  `generation_timeout`, `invalid_output`, `model_invalid`, `storage_unavailable`,
+  and for sprites `cutout_failed` when no plausible figure was found and
+  `cutout_unavailable` when the worker has no segmenter).
+- Other GPU programs count too. The child needs 8 GB free, so a local vLLM or
+  similar container holding most of a 12 GB GPU makes every job fail with
+  `gpu_busy`; the Ollama release setting cannot free that memory.
   The child's stderr is discarded. To diagnose, run `runtimes/imagegen/generate.py`
   by hand with a JSON request on stdin.
 - Images are stored create-only under

@@ -8,10 +8,12 @@ from pathlib import Path
 import pytest
 
 from flint_graph.infrastructure.narrative_imagegen import (
+    CutoutModel,
     GenerationRequest,
     ImageGenerationError,
     LocalImageGenerator,
     ModelIdentity,
+    verify_cutout_model,
     verify_model,
 )
 
@@ -19,17 +21,21 @@ FAKE = Path(__file__).parents[1] / "fixtures" / "narrative" / "fake_imagegen.py"
 MODEL = ModelIdentity(repo="fixture/model", revision="a" * 40, license="openrail++")
 
 
-def generator(deadline=30):
+SEGMENTER = ModelIdentity(repo="fixture/segmenter", revision="d" * 40, license="apache-2.0")
+
+
+def generator(deadline=30, cutout=None):
     return LocalImageGenerator(
         python=Path(sys.executable),
         script=FAKE,
         model_dir=Path(__file__).parent,
         model=MODEL,
         deadline_seconds=deadline,
+        cutout=cutout,
     )
 
 
-def request(mode="ok", seeds=(11, 22)):
+def request(mode="ok", seeds=(11, 22), cutout=False):
     return GenerationRequest(
         prompt=f"{mode}, solo",
         negative_prompt="lowres",
@@ -38,7 +44,22 @@ def request(mode="ok", seeds=(11, 22)):
         steps=28,
         guidance=5.0,
         seeds=tuple(seeds),
+        cutout=cutout,
     )
+
+
+def segmenter(root: Path, sha256: str | None = None) -> CutoutModel:
+    data = b"onnx-weights" * 50
+    (root / "isnetis.onnx").write_bytes(data)
+    return CutoutModel(
+        path=root / "isnetis.onnx",
+        sha256=sha256 or hashlib.sha256(data).hexdigest(),
+        identity=SEGMENTER,
+    )
+
+
+async def ignore(done):
+    return None
 
 
 @pytest.mark.anyio
@@ -80,6 +101,61 @@ async def test_child_failures_map_to_safe_codes(mode, code):
 
     with pytest.raises(ImageGenerationError) as raised:
         await generator().generate(request(mode), on_progress=ignore)
+    assert raised.value.code == code
+
+
+@pytest.mark.anyio
+async def test_cutout_returns_cropped_rgba_sprites_with_their_box(tmp_path):
+    model = segmenter(tmp_path)
+    result = await generator(cutout=model).generate(
+        request(seeds=(7, 8), cutout=True), on_progress=ignore
+    )
+    assert result.cutout == model and result.runtime["onnxruntime"] == "fake"
+    first = result.images[0]
+    assert first.box == (100, 40, 612, 1176)
+    assert (first.width, first.height) == (512, 1136)
+    assert first.data[24:26] == bytes([8, 6]), "8-bit RGBA"
+    assert (first.thumbnail_width, first.thumbnail_height) == (256, 568)
+    noisy = await generator(cutout=model).generate(
+        request("metadata", seeds=(7,), cutout=True), on_progress=ignore
+    )
+    assert b"tEXt" not in noisy.images[0].data, "Normalized like an upload"
+    assert noisy.images[0].data[24:26] == bytes([8, 6]), "Normalizing keeps the alpha"
+    assert noisy.images[0].sha256 == hashlib.sha256(noisy.images[0].data).hexdigest()
+    plain = await generator(cutout=model).generate(request(seeds=(7,)), on_progress=ignore)
+    assert plain.cutout is None and plain.images[0].box is None
+    assert (plain.images[0].width, plain.images[0].height) == (832, 1216)
+    assert "onnxruntime" not in plain.runtime
+
+
+@pytest.mark.anyio
+async def test_cutout_needs_a_configured_and_matching_segmenter(tmp_path):
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator().generate(request(cutout=True), on_progress=ignore)
+    assert raised.value.code == "cutout_unavailable"
+    wrong = segmenter(tmp_path, sha256="0" * 64)
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator(cutout=wrong).generate(request(cutout=True), on_progress=ignore)
+    assert raised.value.code == "model_invalid", "The child hashes the bytes it loads"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("mode", "code"),
+    [
+        ("opaquecut", "invalid_output"),
+        ("badbox", "invalid_output"),
+        ("outsidebox", "invalid_output"),
+        ("nobox", "invalid_output"),
+        ("nocutruntime", "invalid_output"),
+        ("cutfail", "cutout_failed"),
+    ],
+)
+async def test_cutout_output_is_checked(tmp_path, mode, code):
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator(cutout=segmenter(tmp_path)).generate(
+            request(mode, seeds=(3,), cutout=True), on_progress=ignore
+        )
     assert raised.value.code == code
 
 
@@ -128,3 +204,38 @@ def test_model_directory_must_match_the_pinned_manifest(tmp_path):
     (tmp_path / "unet" / "model.safetensors").write_bytes(b"tampered")
     with pytest.raises(ValueError):
         verify_model(tmp_path, pin)
+
+
+def test_cutout_model_is_the_single_onnx_file_of_its_pinned_manifest(tmp_path):
+    weights = b"onnx" * 100
+    (tmp_path / "isnetis.onnx").write_bytes(weights)
+    (tmp_path / "README.md").write_bytes(b"readme")
+
+    def pin(files):
+        manifest = {
+            "repo": "skytnt/anime-seg",
+            "revision": "e" * 40,
+            "license": "apache-2.0",
+            "files": {
+                name: {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+                for name, data in files.items()
+            },
+        }
+        data = json.dumps(manifest).encode()
+        (tmp_path / "flintgraph-download.json").write_bytes(data)
+        return hashlib.sha256(data).hexdigest()
+
+    model = verify_cutout_model(tmp_path, pin({"isnetis.onnx": weights, "README.md": b"readme"}))
+    assert model.path == (tmp_path / "isnetis.onnx").resolve()
+    assert model.sha256 == hashlib.sha256(weights).hexdigest()
+    assert model.identity == ModelIdentity("skytnt/anime-seg", "e" * 40, "apache-2.0")
+    (tmp_path / "isnetis.onnx").unlink()
+    (tmp_path / "README.md").write_bytes(weights)
+    with pytest.raises(ValueError, match="one ONNX"):
+        verify_cutout_model(tmp_path, pin({"README.md": weights}))
+    (tmp_path / "a.onnx").write_bytes(weights)
+    (tmp_path / "b.onnx").write_bytes(weights)
+    with pytest.raises(ValueError, match="one ONNX"):
+        verify_cutout_model(
+            tmp_path, pin({"README.md": weights, "a.onnx": weights, "b.onnx": weights})
+        )

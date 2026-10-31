@@ -18,8 +18,19 @@ const ERRORS: Record<string, string> = {
   image_generation_unavailable: "Image generation is not configured on this server.",
   worker_interrupted: "The image worker stopped before finishing. Try again.",
   model_invalid: "The image model failed its integrity check.",
+  cutout_failed: "The character could not be separated from the background. Try again or adjust the description.",
+  cutout_unavailable: "Transparent sprites need the cutout model; this image worker has none configured.",
   cancelled: "Cancelled.",
 };
+
+// Transparent stage sprites are cut out of full-body renders only (the server checks too).
+export function canCutOut(framing: CharacterFraming): boolean {
+  return framing === "full_body";
+}
+
+export function generateLabel(transparent: boolean): string {
+  return `Generate ${PORTRAITS_PER_JOB} ${transparent ? "sprites" : "portraits"}`;
+}
 
 export function jobError(code: string | null): string {
   return (code && ERRORS[code]) || "Generation failed. Try again.";
@@ -36,7 +47,10 @@ export function jobStatus(job: ImageJob): string {
     if (job.cancel_requested) return "Cancelling…";
     return job.progress === 0 ? "Loading the model…" : `Generated ${job.progress} of ${job.count}…`;
   }
-  if (job.status === "completed") return `${job.assets.length} portrait${job.assets.length === 1 ? "" : "s"} ready`;
+  if (job.status === "completed") {
+    const noun = job.transparent ? "sprite" : "portrait";
+    return `${job.assets.length} ${noun}${job.assets.length === 1 ? "" : "s"} ready`;
+  }
   if (job.status === "cancelled") return "Cancelled.";
   return jobError(job.error_code);
 }

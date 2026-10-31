@@ -3,8 +3,9 @@
 The child runs from its own locked environment with ``python -I``, a minimal
 environment and no credentials. Nothing it returns is trusted: output lines are
 bounded, events must follow the protocol exactly, the output directory must hold
-exactly the expected files, and every PNG passes the strict validator with exact
-dimensions before the bytes leave this module.
+exactly the expected files, and every PNG is normalized and passes the strict
+validator with exact dimensions before the bytes leave this module. Cutout sprites
+must be 8-bit RGBA crops that match the box the child reports.
 """
 
 import asyncio
@@ -22,7 +23,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from flint_graph.narrative.png import validate_png
+from flint_graph.narrative.png import normalize_png, validate_png
 from flint_graph.narrative.values import PackageError
 
 PROTOCOL = 1
@@ -33,7 +34,15 @@ THUMBNAIL_WIDTH = 256
 LINE_LIMIT = 16 * 1024
 MAX_LINES = 32
 MAX_IMAGES = 4
-CHILD_CODES = {"bad_request", "model_invalid", "gpu_unavailable", "gpu_busy", "out_of_memory"}
+CHILD_CODES = {
+    "bad_request",
+    "model_invalid",
+    "gpu_unavailable",
+    "gpu_busy",
+    "out_of_memory",
+    "cutout_failed",
+}
+RUNTIME_KEYS = {"torch", "diffusers", "cuda", "device"}
 # Variables the interpreter and the CUDA runtime need; nothing that carries secrets.
 # PyTorch names its caches with getpass.getuser(), which on Windows reads USERNAME
 # and otherwise fails importing diffusers with an unrelated-looking error.
@@ -63,6 +72,15 @@ class ModelIdentity:
 
 
 @dataclass(frozen=True)
+class CutoutModel:
+    """The verified segmenter: one ONNX file listed in its pinned manifest."""
+
+    path: Path
+    sha256: str
+    identity: ModelIdentity
+
+
+@dataclass(frozen=True)
 class GenerationRequest:
     prompt: str
     negative_prompt: str
@@ -71,6 +89,8 @@ class GenerationRequest:
     steps: int
     guidance: float
     seeds: tuple[int, ...]
+    # Cut the figure out of its background into a cropped RGBA sprite.
+    cutout: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,6 +105,8 @@ class GeneratedImage:
     thumbnail_sha256: str
     thumbnail_width: int
     thumbnail_height: int
+    # Where a cutout sprite was cropped from the full render: left, top, right, bottom.
+    box: tuple[int, int, int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +115,8 @@ class GenerationResult:
     runtime: dict[str, str]
     prompt_tokens: int
     truncated: bool
+    # The segmenter that cut these images out, when the request asked for it.
+    cutout: CutoutModel | None = None
 
 
 Progress = Callable[[int], Awaitable[None]]
@@ -124,6 +148,23 @@ def verify_model(model_dir: Path, manifest_sha256: str) -> ModelIdentity:
     The manifest's own SHA-256 is the operator pin; every listed file must match
     size and hash and nothing else may be present (no extra weights or code).
     """
+    return _verify_manifest(model_dir, manifest_sha256)[0]
+
+
+def verify_cutout_model(model_dir: Path, manifest_sha256: str) -> CutoutModel:
+    """The segmenter directory under the same pin, holding exactly one ONNX model."""
+    identity, root, files = _verify_manifest(model_dir, manifest_sha256)
+    models = [name for name in files if name.endswith(".onnx")]
+    if len(models) != 1:
+        raise ValueError("The cutout manifest must list exactly one ONNX model")
+    return CutoutModel(
+        path=root / models[0], sha256=str(files[models[0]]["sha256"]), identity=identity
+    )
+
+
+def _verify_manifest(
+    model_dir: Path, manifest_sha256: str
+) -> tuple[ModelIdentity, Path, dict[str, Any]]:
     root = model_dir.resolve(strict=True)
     manifest_path = root / MANIFEST
     data = manifest_path.read_bytes()
@@ -153,7 +194,7 @@ def verify_model(model_dir: Path, manifest_sha256: str) -> ModelIdentity:
     )
     if not identity.repo or len(identity.revision) != 40:
         raise ValueError("Model manifest identity is incomplete")
-    return identity
+    return identity, root, files
 
 
 def _dimensions(data: bytes) -> tuple[int, int]:
@@ -168,10 +209,30 @@ def _read_png(path: Path, limit: int) -> bytes:
     if len(data) > limit:
         raise ImageGenerationError("invalid_output")
     try:
+        # The same lossless path as uploads: metadata chunks go, pixels and alpha stay.
+        data = normalize_png(data, path.name)
         validate_png(data, path.name)
     except PackageError:
         raise ImageGenerationError("invalid_output") from None
     return data
+
+
+def _rgba(data: bytes) -> bool:
+    # IHDR bit depth and colour type: 8-bit truecolour with alpha.
+    return data[24:26] == bytes([8, 6])
+
+
+def _box(value: object, request: GenerationRequest) -> tuple[int, int, int, int]:
+    if (
+        not isinstance(value, list)
+        or len(value) != 4
+        or any(type(item) is not int for item in value)
+    ):
+        raise ImageGenerationError("invalid_output")
+    left, top, right, bottom = value
+    if not (0 <= left < right <= request.width and 0 <= top < bottom <= request.height):
+        raise ImageGenerationError("invalid_output")
+    return left, top, right, bottom
 
 
 class LocalImageGenerator:
@@ -183,9 +244,10 @@ class LocalImageGenerator:
         model_dir: Path,
         model: ModelIdentity,
         deadline_seconds: int,
+        cutout: CutoutModel | None = None,
     ) -> None:
         self.python, self.script, self.model_dir = python, script, model_dir
-        self.model, self.deadline = model, deadline_seconds
+        self.model, self.deadline, self.cutout = model, deadline_seconds, cutout
 
     def _environment(self, work: Path) -> dict[str, str]:
         environment = {key: os.environ[key] for key in _PASSTHROUGH if key in os.environ}
@@ -211,6 +273,13 @@ class LocalImageGenerator:
     ) -> GenerationResult:
         if not 1 <= len(request.seeds) <= MAX_IMAGES:
             raise ImageGenerationError("bad_request")
+        if request.cutout and self.cutout is None:
+            raise ImageGenerationError("cutout_unavailable")
+        cutout = (
+            {"model": str(self.cutout.path), "sha256": self.cutout.sha256}
+            if request.cutout and self.cutout is not None
+            else None
+        )
         with tempfile.TemporaryDirectory(prefix="flint-imagegen-") as directory:
             work = Path(directory)
             output = work / "out"
@@ -227,6 +296,7 @@ class LocalImageGenerator:
                     "steps": request.steps,
                     "guidance": request.guidance,
                     "seeds": list(request.seeds),
+                    "cutout": cutout,
                 }
             ).encode()
             process = await asyncio.create_subprocess_exec(
@@ -241,7 +311,7 @@ class LocalImageGenerator:
                 limit=LINE_LIMIT,
             )
             try:
-                events = await asyncio.wait_for(
+                loaded, boxes = await asyncio.wait_for(
                     self._converse(process, body, request, on_progress), self.deadline
                 )
             except TimeoutError:
@@ -254,7 +324,7 @@ class LocalImageGenerator:
                 # reader never does; drain what the killed child left in the pipe.
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(process.communicate(), 30)
-            return self._collect(output, request, events)
+            return self._collect(output, request, loaded, boxes)
 
     async def _converse(
         self,
@@ -262,7 +332,7 @@ class LocalImageGenerator:
         body: bytes,
         request: GenerationRequest,
         on_progress: Progress,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], list[tuple[int, int, int, int] | None]]:
         assert process.stdin is not None and process.stdout is not None
         process.stdin.write(body)
         with contextlib.suppress(ConnectionError):
@@ -271,6 +341,7 @@ class LocalImageGenerator:
         loaded: dict[str, Any] | None = None
         done = False
         images = 0
+        boxes: list[tuple[int, int, int, int] | None] = []
         for _ in range(MAX_LINES):
             try:
                 raw = await process.stdout.readline()
@@ -298,8 +369,10 @@ class LocalImageGenerator:
                     or event.get("seed") != request.seeds[images]
                     or event.get("file") != f"{images}.png"
                     or event.get("thumbnail") != f"{images}.thumb.png"
+                    or ("box" in event) != request.cutout
                 ):
                     raise ImageGenerationError("invalid_output")
+                boxes.append(_box(event["box"], request) if request.cutout else None)
                 images += 1
                 await on_progress(images)
             elif kind == "done" and images == len(request.seeds):
@@ -311,10 +384,14 @@ class LocalImageGenerator:
         code = await process.wait()
         if not done or code != 0 or loaded is None:
             raise ImageGenerationError("generation_failed")
-        return loaded
+        return loaded, boxes
 
     def _collect(
-        self, output: Path, request: GenerationRequest, loaded: dict[str, Any]
+        self,
+        output: Path,
+        request: GenerationRequest,
+        loaded: dict[str, Any],
+        boxes: list[tuple[int, int, int, int] | None],
     ) -> GenerationResult:
         count = len(request.seeds)
         expected = {f"{i}.png" for i in range(count)} | {f"{i}.thumb.png" for i in range(count)}
@@ -326,10 +403,17 @@ class LocalImageGenerator:
             thumbnail = _read_png(output / f"{index}.thumb.png", THUMBNAIL_LIMIT)
             width, height = _dimensions(data)
             thumb_width, thumb_height = _dimensions(thumbnail)
+            box = boxes[index]
+            expected_size = (
+                (request.width, request.height)
+                if box is None
+                else (box[2] - box[0], box[3] - box[1])
+            )
             if (
-                (width, height) != (request.width, request.height)
+                (width, height) != expected_size
                 or thumb_width != THUMBNAIL_WIDTH
-                or thumb_height != round(request.height * THUMBNAIL_WIDTH / request.width)
+                or thumb_height != round(height * THUMBNAIL_WIDTH / width)
+                or (box is not None and not (_rgba(data) and _rgba(thumbnail)))
             ):
                 raise ImageGenerationError("invalid_output")
             images.append(
@@ -344,13 +428,14 @@ class LocalImageGenerator:
                     thumbnail_sha256=hashlib.sha256(thumbnail).hexdigest(),
                     thumbnail_width=thumb_width,
                     thumbnail_height=thumb_height,
+                    box=box,
                 )
             )
         runtime = loaded.get("runtime")
         tokens = loaded.get("prompt_tokens")
         if (
             not isinstance(runtime, dict)
-            or set(runtime) != {"torch", "diffusers", "cuda", "device"}
+            or set(runtime) != RUNTIME_KEYS | ({"onnxruntime"} if request.cutout else set())
             or not all(isinstance(value, str) and len(value) <= 120 for value in runtime.values())
             or type(tokens) is not int
             or type(loaded.get("truncated")) is not bool
@@ -361,6 +446,7 @@ class LocalImageGenerator:
             runtime={key: str(value) for key, value in runtime.items()},
             prompt_tokens=tokens,
             truncated=bool(loaded["truncated"]),
+            cutout=self.cutout if request.cutout else None,
         )
 
 

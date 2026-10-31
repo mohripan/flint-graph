@@ -1,10 +1,10 @@
 """Character profile, portrait job and image contracts (ADR 0039)."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from flint_graph.narrative.imagegen import MAX_APPEARANCE
 
@@ -37,6 +37,14 @@ class PortraitJobCreate(BaseModel):
     framing: Framing
     count: int = Field(default=4, ge=1, le=4)
     idempotency_key: UUID
+    # Cut the figure out into a transparent stage sprite (full-body framing only).
+    transparent: StrictBool = False
+
+    @model_validator(mode="after")
+    def _sprites_are_full_body(self) -> Self:
+        if self.transparent and self.framing != "full_body":
+            raise ValueError("Transparent sprites need full-body framing")
+        return self
 
 
 class AssetResponse(BaseModel):
@@ -98,10 +106,16 @@ class ProfileListResponse(BaseModel):
     profiles: list[ProfileResponse]
 
 
+class CutoutResponse(BaseModel):
+    model: str
+    sha256: str
+
+
 class ImageJobResponse(BaseModel):
     id: UUID
     purpose: str
     character_id: str | None
+    transparent: bool
     status: str
     progress: int
     count: int
@@ -118,6 +132,8 @@ class ImageJobResponse(BaseModel):
     guidance: float
     seeds: list[int]
     model: str | None
+    # The segmenter that cut out a completed sprite job, with the ONNX file's SHA-256.
+    cutout: CutoutResponse | None
     prompt_tokens: int | None
     truncated: bool | None
     created_at: datetime

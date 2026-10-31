@@ -3,7 +3,8 @@ import { ApiError, api } from "../lib/api";
 import type { CharacterFraming, CharacterProfile, CharacterType, ImageJob, NarrativeImage } from "../lib/api";
 import { CharacterAvatar, CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import {
-  CHARACTER_TYPES, FRAMINGS, MAX_APPEARANCE, PORTRAITS_PER_JOB, cleanAppearance, isActive, jobStatus,
+  CHARACTER_TYPES, FRAMINGS, MAX_APPEARANCE, PORTRAITS_PER_JOB, canCutOut, cleanAppearance, generateLabel, isActive,
+  jobStatus,
 } from "./characterModel";
 import { Field } from "./FormFields";
 import { addCharacter, deleteCharacter } from "./model";
@@ -49,6 +50,9 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
   const [appearance, setAppearance] = useState(profile.appearance);
   const [type, setType] = useState<CharacterType>(profile.character_type);
   const [framing, setFraming] = useState<CharacterFraming>(profile.framing);
+  // Cut-out stage sprites instead of portraits; a per-request choice, not profile data.
+  const [transparent, setTransparent] = useState(false);
+  const sprite = transparent && canCutOut(framing);
   const [jobs, setJobs] = useState<ImageJob[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [viewing, setViewing] = useState<NarrativeImage | null>(null);
@@ -121,7 +125,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
       if (dirty && !(await persist())) return;
       const job = await api.createPortraitJob(tenantId, projectId, id, {
         appearance: cleanAppearance(appearance), character_type: type, framing, count: PORTRAITS_PER_JOB,
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: crypto.randomUUID(), transparent: sprite,
       });
       setJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
     } catch (error) { setNotice(message(error, "Could not start generating portraits.")); }
@@ -138,6 +142,17 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
       if (error instanceof ApiError && error.status === 409) await context.reload();
       setNotice(message(error, "Could not choose this portrait."));
     }
+  }
+
+  // Sprites are library assets: approving keeps one for the character's expression sprites.
+  async function approve(asset: NarrativeImage) {
+    try {
+      const next = await api.approveNarrativeAsset(tenantId, projectId, asset.id);
+      setJobs(current => current.map(job => ({
+        ...job, assets: job.assets.map(item => item.id === next.id ? next : item),
+      })));
+      setNotice("Sprite approved. It is in the asset library.");
+    } catch (error) { setNotice(message(error, "Could not approve this sprite.")); }
   }
 
   async function discard(asset: NarrativeImage) {
@@ -177,9 +192,13 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
             {FRAMINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select></Field>
         </div>
+        <label className="studio-check"><input type="checkbox" checked={sprite} disabled={!canCutOut(framing)}
+          onChange={event => setTransparent(event.target.checked)} />
+          <span>Transparent background: cut the character out as a stage sprite
+            {canCutOut(framing) ? "." : " (needs full-body framing)."}</span></label>
         {!readOnly && <div className="studio-actions">
           <button type="button" className="studio-primary" disabled={busy || Boolean(active) || !cleanAppearance(appearance)}
-            onClick={() => void generate()}>{active ? "Generating…" : `Generate ${PORTRAITS_PER_JOB} portraits`}</button>
+            onClick={() => void generate()}>{active ? "Generating…" : generateLabel(sprite)}</button>
           {profile.portrait && <button type="button" className="studio-link" onClick={() => void choose(null)}>Remove portrait</button>}
           <button type="button" className="studio-link studio-danger" onClick={() => {
             try { onChange(deleteCharacter(story, id)); }
@@ -201,12 +220,14 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
     <div className="studio-candidates">
       {candidates.map(({ asset }) => <Candidate key={asset.id} tenantId={tenantId} projectId={projectId} asset={asset}
         chosen={profile.portrait?.id === asset.id} readOnly={readOnly} onChoose={() => void choose(asset)}
-        onDiscard={() => void discard(asset)} onView={() => setViewing(asset)} />)}
+        onApprove={() => void approve(asset)} onDiscard={() => void discard(asset)} onView={() => setViewing(asset)} />)}
     </div>
-    {latest && <details className="studio-character-details"><summary>How the latest portraits were made</summary>
+    {latest && <details className="studio-character-details"><summary>How the latest images were made</summary>
       <dl>
         <dt>Prompt</dt><dd>{latest.prompt}</dd>
         <dt>Model</dt><dd>{latest.model ?? "Not run yet"}</dd>
+        {latest.transparent && <><dt>Cutout</dt><dd>{latest.cutout
+          ? `${latest.cutout.model}, SHA-256 ${latest.cutout.sha256.slice(0, 12)}…` : "Not run yet"}</dd></>}
         <dt>Settings</dt><dd>{latest.width}×{latest.height}, {latest.steps} steps, guidance {latest.guidance}</dd>
       </dl></details>}
     {viewing && <Viewer tenantId={tenantId} projectId={projectId} asset={viewing} onClose={() => setViewing(null)} />}
@@ -223,19 +244,25 @@ function Portrait({ tenantId, projectId, asset, name, onView }: {
   </button>;
 }
 
-function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onDiscard, onView }: {
+function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onApprove, onDiscard, onView }: {
   tenantId: string; projectId: string; asset: NarrativeImage; chosen: boolean; readOnly: boolean;
-  onChoose: () => void; onDiscard: () => void; onView: () => void;
+  onChoose: () => void; onApprove: () => void; onDiscard: () => void; onView: () => void;
 }) {
   const url = useNarrativeImage(tenantId, projectId, asset.id, "thumbnail");
-  return <figure className={`studio-candidate ${chosen ? "chosen" : ""}`}>
+  const sprite = asset.kind === "sprite";
+  const approved = asset.status === "approved";
+  return <figure className={`studio-candidate ${chosen ? "chosen" : ""} ${sprite ? "sprite" : ""}`}>
     <button type="button" className="studio-candidate-image" onClick={onView} aria-label="View full size">
       {url ? <img src={url} alt="" width={asset.thumbnail_width ?? undefined} height={asset.thumbnail_height ?? undefined} /> : <span>Loading…</span>}
     </button>
     <figcaption>
-      {chosen ? <strong>Current portrait</strong> : !readOnly && <button type="button" className="studio-secondary" onClick={onChoose}>Use as portrait</button>}
+      {sprite
+        ? approved ? <strong>Approved sprite</strong>
+          : !readOnly && <button type="button" className="studio-secondary" onClick={onApprove}>Approve sprite</button>
+        : chosen ? <strong>Current portrait</strong>
+          : !readOnly && <button type="button" className="studio-secondary" onClick={onChoose}>Use as portrait</button>}
       {!chosen && !readOnly && <button type="button" className="studio-link studio-danger" onClick={onDiscard}>Discard</button>}
-      <small>Seed {asset.seed}</small>
+      <small>{sprite ? "Transparent sprite · " : ""}Seed {asset.seed}</small>
     </figcaption>
   </figure>;
 }
@@ -250,7 +277,8 @@ export function Viewer({ tenantId, projectId, asset, onClose }: {
     return () => window.removeEventListener("keydown", close);
   }, [onClose]);
   return <div className="studio-viewer" role="dialog" aria-modal="true" aria-label="Portrait" onClick={onClose}>
-    {url ? <img src={url} alt="" width={asset.width ?? undefined} height={asset.height ?? undefined} /> : <span>Loading…</span>}
+    {url ? <img src={url} alt="" width={asset.width ?? undefined} height={asset.height ?? undefined}
+      className={asset.kind === "sprite" ? "studio-transparent" : undefined} /> : <span>Loading…</span>}
     <button type="button" className="studio-secondary" onClick={onClose}>Close</button>
   </div>;
 }

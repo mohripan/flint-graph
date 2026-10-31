@@ -26,6 +26,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     LocalImageGenerator,
     OllamaGpuReleaser,
     runtime_paths,
+    verify_cutout_model,
     verify_model,
 )
 from flint_graph.main import app
@@ -82,7 +83,7 @@ async def live_case(narrative_env):
         base = f"/v1/narrative/projects/{project['id']}"
         dispatcher = TemporalImageDispatcher(temporal, task_queue=queue)
 
-        async def generate(appearance, count=2):
+        async def generate(appearance, count=2, **changes):
             response = await client.post(
                 f"{base}/characters/mira/portrait-jobs",
                 headers=headers,
@@ -92,6 +93,7 @@ async def live_case(narrative_env):
                     "framing": "portrait",
                     "count": count,
                     "idempotency_key": str(uuid4()),
+                    **changes,
                 },
             )
             assert response.status_code == 202, response.text
@@ -197,3 +199,97 @@ async def test_real_gpu_job_stores_verified_portraits(live_case):
     )
     assert hashlib.sha256(content.content).hexdigest() == asset["sha256"]
     assert (asset["width"], asset["height"]) == (832, 1216)
+
+
+# Alpha statistics read with the isolated runtime's own Pillow and NumPy.
+ALPHA_PROBE = """
+import json, sys
+import numpy as np
+from PIL import Image
+image = Image.open(sys.argv[1])
+alpha = np.asarray(image)[..., 3]
+h, w = alpha.shape
+print(json.dumps({
+    "mode": image.mode,
+    "corners": [int(alpha[y, x]) for y in (0, h - 1) for x in (0, w - 1)],
+    "border_max": int(max(alpha[0].max(), alpha[-1].max(), alpha[:, 0].max(), alpha[:, -1].max())),
+    "opaque": round(float((alpha == 255).mean()), 3),
+    "clear": round(float((alpha == 0).mean()), 3),
+    "centre_column_opaque": int((alpha[:, w // 2] == 255).sum()),
+}))
+"""
+
+
+@pytest.mark.skipif(
+    not (
+        os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MANIFEST_SHA256")
+    ),
+    reason="requires the isolated runtime, both local models and their pinned manifests",
+)
+async def test_real_gpu_transparent_job_stores_a_cut_out_sprite(live_case, tmp_path):
+    case = live_case
+    runtime = Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR"])
+    python, script = runtime_paths(runtime)
+    model_dir = Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR"])
+    model = await asyncio.to_thread(
+        verify_model, model_dir, os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256"]
+    )
+    cutout = await asyncio.to_thread(
+        verify_cutout_model,
+        Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MODEL_DIR"]),
+        os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MANIFEST_SHA256"],
+    )
+    generator = LocalImageGenerator(
+        python=python,
+        script=script,
+        model_dir=model_dir,
+        model=model,
+        deadline_seconds=900,
+        cutout=cutout,
+    )
+    loaded = os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL")
+    releaser = OllamaGpuReleaser("http://127.0.0.1:11434", loaded) if loaded else None
+    job = await case["generate"](
+        "silver hair in a low ponytail, amber eyes, weathered navy coat, calm smile",
+        count=1,
+        framing="full_body",
+        transparent=True,
+    )
+    async with worker(case, generator, releaser):
+        done = await case["until"](job["id"], {"completed", "failed"}, 1200)
+    assert done["status"] == "completed", done["error_code"]
+    assert done["cutout"] == {
+        "model": f"{cutout.identity.repo}@{cutout.identity.revision}",
+        "sha256": cutout.sha256,
+    }
+    [asset] = done["assets"]
+    assert asset["kind"] == "sprite" and asset["status"] == "candidate"
+    content = await case["client"].get(
+        f"{case['base']}/assets/{asset['id']}/content", headers=case["headers"]
+    )
+    assert hashlib.sha256(content.content).hexdigest() == asset["sha256"]
+    left, top, right, bottom = asset["provenance"]["cutout"]["box"]
+    assert (asset["width"], asset["height"]) == (right - left, bottom - top)
+    sprite = tmp_path / "sprite.png"
+    await asyncio.to_thread(sprite.write_bytes, content.content)
+    probe = await asyncio.create_subprocess_exec(
+        str(python), "-I", "-c", ALPHA_PROBE, str(sprite), stdout=asyncio.subprocess.PIPE
+    )
+    stdout, _ = await probe.communicate()
+    alpha = json.loads(stdout)
+    assert alpha["mode"] == "RGBA" and alpha["corners"] == [0, 0, 0, 0]
+    assert alpha["opaque"] > 0.1 and alpha["clear"] > 0.2 and alpha["centre_column_opaque"] > 100
+    if save := os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_SAVE_DIR"):
+        await asyncio.to_thread(_save_evidence, Path(save), content.content, done, alpha)
+
+
+def _save_evidence(target: Path, data: bytes, job: dict, alpha: dict) -> None:
+    """Keep the qualified sprite and its job record (operator-chosen, ignored path)."""
+    name = hashlib.sha256(data).hexdigest()[:16]
+    target.mkdir(parents=True, exist_ok=True)
+    (target / f"{name}.png").write_bytes(data)
+    (target / f"{name}.json").write_text(json.dumps({"job": job, "alpha": alpha}, indent=2))

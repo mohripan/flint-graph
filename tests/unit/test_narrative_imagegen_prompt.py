@@ -4,6 +4,7 @@ import pytest
 
 from flint_graph.narrative.imagegen import (
     CHARACTER_TYPES,
+    CUTOUT_TAGS,
     FRAMINGS,
     MAX_APPEARANCE,
     NEGATIVE,
@@ -147,6 +148,33 @@ def test_longest_negative_is_fixed():
     assert request.negative_prompt == NEGATIVE + (
         ", 1girl, female focus, breasts, long hair, very long hair"
     )
+
+
+def test_longest_sprite_negative_is_fixed():
+    # Measured at 76 of CLIP's 77 tokens with Animagine's tokenizers; longer is truncated.
+    request = portrait_request("short hair", "boy", "full_body", transparent=True)
+    assert request.negative_prompt == NEGATIVE + (
+        ", 1girl, female focus, breasts, long hair, very long hair"
+        ", feet out of frame, gradient background"
+    )
+
+
+def test_transparent_sprites_are_full_body_on_a_plain_white_background():
+    opaque = portrait_request("silver hair", "girl", "full_body")
+    sprite = portrait_request("silver hair", "girl", "full_body", transparent=True)
+    framing = FRAMINGS["full_body"][0]
+    assert CUTOUT_TAGS == "white background"
+    assert sprite.prompt == opaque.prompt.replace(f"{framing}, ", f"{framing}, {CUTOUT_TAGS}, ", 1)
+    assert sprite.negative_prompt.startswith(NEGATIVE + ", ")
+    for tag in ("feet out of frame", "gradient background"):
+        assert tag in sprite.negative_prompt and tag not in opaque.negative_prompt
+    assert (sprite.width, sprite.height, sprite.steps) == (
+        opaque.width,
+        opaque.height,
+        opaque.steps,
+    )
+    with pytest.raises(ValueError, match="full-body"):
+        portrait_request("silver hair", "girl", "portrait", transparent=True)
 
 
 @pytest.mark.parametrize(

@@ -30,3 +30,14 @@ test("failures explain what to do without exposing internals", () => {
   assert.equal(model.cleanAppearance("  silver\n hair,   amber eyes "), "silver hair, amber eyes");
   assert.deepEqual(model.CHARACTER_TYPES.map(([id]) => id), ["girl", "boy", "woman", "man", "other"]);
 });
+
+test("transparent sprites are a full-body option that reads as sprites", () => {
+  assert.ok(model.canCutOut("full_body") && !model.canCutOut("portrait"));
+  assert.equal(model.generateLabel(false), "Generate 4 portraits");
+  assert.equal(model.generateLabel(true), "Generate 4 sprites");
+  assert.equal(model.jobStatus(job({ status: "completed", transparent: true, assets: [{}, {}] })), "2 sprites ready");
+  assert.equal(model.jobStatus(job({ status: "completed", transparent: true, assets: [{}] })), "1 sprite ready");
+  assert.equal(model.jobStatus(job({ transparent: true, progress: 1 })), "Generated 1 of 4…");
+  assert.match(model.jobError("cutout_failed"), /could not be separated/);
+  assert.match(model.jobError("cutout_unavailable"), /cutout model/);
+});

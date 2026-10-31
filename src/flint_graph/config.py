@@ -252,6 +252,13 @@ class Settings(BaseSettings):
     narrative_image_model_manifest_sha256: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
     )
+    # Optional transparent sprites: the anime segmentation model and its manifest pin.
+    narrative_image_cutout_model_dir: str | None = Field(
+        default=None, min_length=1, max_length=2048
+    )
+    narrative_image_cutout_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     narrative_image_max_active_jobs_per_workspace: int = Field(default=2, ge=1, le=20)
     narrative_image_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
     narrative_image_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
@@ -326,6 +333,14 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "The narrative image worker requires absolute runtime and model "
                     "directories and a pinned model manifest"
+                )
+            cutout_dir = self.narrative_image_cutout_model_dir
+            if (cutout_dir is None) != (self.narrative_image_cutout_manifest_sha256 is None) or (
+                cutout_dir is not None and not Path(cutout_dir).is_absolute()
+            ):
+                raise ValueError(
+                    "The image cutout requires an absolute model directory together "
+                    "with its pinned manifest"
                 )
         return self
 

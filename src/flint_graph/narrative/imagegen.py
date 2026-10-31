@@ -95,6 +95,12 @@ def _looks_like(nouns: str, adjectives: str) -> re.Pattern[str]:
 _FEMININE = _looks_like("girl|woman|lady", "girlish|girly|feminine|effeminate|womanly")
 _MASCULINE = _looks_like("boy|man|guy", "boyish|masculine|manly")
 _ANDROGYNY = {"boy": _FEMININE, "man": _FEMININE, "girl": _MASCULINE, "woman": _MASCULINE}
+# Stage sprites are cut out of a plain white background, which the segmenter
+# separates most cleanly; the whole figure has to stay inside the frame. The
+# positive "simple background, white background" already rules out scenery; these
+# two keep the longest sprite negative (boy or man, short hair) at 76 of 77 tokens.
+CUTOUT_TAGS = "white background"
+CUTOUT_NEGATIVE = "feet out of frame, gradient background"
 
 
 @dataclass(frozen=True)
@@ -148,17 +154,23 @@ def appearance_tags(appearance: str, character_type: str) -> list[str]:
     return tags
 
 
-def _portrait_negative(tags: list[str], character_type: str) -> str:
+def _portrait_negative(tags: list[str], character_type: str, transparent: bool) -> str:
     parts = [NEGATIVE, TYPE_NEGATIVES[character_type]]
     lengths = {tag.lower() for tag in tags}
     if lengths.intersection(SHORT_LENGTHS) and not lengths.intersection(LONG_LENGTHS):
         parts.append(LONG_HAIR_NEGATIVE)
+    if transparent:
+        parts.append(CUTOUT_NEGATIVE)
     return ", ".join(part for part in parts if part)
 
 
-def portrait_request(appearance: str, character_type: str, framing: str) -> ImageRequest:
+def portrait_request(
+    appearance: str, character_type: str, framing: str, *, transparent: bool = False
+) -> ImageRequest:
     if character_type not in CHARACTER_TYPES or framing not in FRAMINGS:
         raise ValueError("Unknown character type or framing")
+    if transparent and framing != "full_body":
+        raise ValueError("Transparent sprites need full-body framing")
     if len(appearance) > MAX_APPEARANCE * 2:
         raise ValueError("Appearance is too long")
     text = clean_appearance(appearance)
@@ -168,9 +180,11 @@ def portrait_request(appearance: str, character_type: str, framing: str) -> Imag
     # Tags come from the raw text so line breaks still separate them.
     tags = appearance_tags(appearance, character_type)
     parts = [CHARACTER_TYPES[character_type], "solo", *tags, framing_tags, QUALITY]
+    if transparent:
+        parts.insert(parts.index(framing_tags) + 1, CUTOUT_TAGS)
     return ImageRequest(
         prompt=", ".join(part for part in parts if part),
-        negative_prompt=_portrait_negative(tags, character_type),
+        negative_prompt=_portrait_negative(tags, character_type, transparent),
         width=width,
         height=height,
         steps=STEPS,

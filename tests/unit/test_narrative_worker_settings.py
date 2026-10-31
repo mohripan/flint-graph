@@ -35,3 +35,30 @@ async def test_disabled_operator_entry_points_reject_before_connecting():
         await run_worker(Settings(env="test"))
     with pytest.raises(SystemExit, match="narrative relay is disabled"):
         await run_forever(Settings(env="test"))
+
+
+def test_image_cutout_needs_an_absolute_model_directory_and_its_manifest_pin(tmp_path):
+    base = {
+        "env": "test",
+        "narrative_image_worker_enabled": True,
+        "narrative_image_runtime_dir": str(tmp_path),
+        "narrative_image_model_dir": str(tmp_path),
+        "narrative_image_model_manifest_sha256": "a" * 64,
+    }
+    assert Settings(**base).narrative_image_cutout_model_dir is None, "Cutout is optional"
+    configured = Settings(
+        **base,
+        narrative_image_cutout_model_dir=str(tmp_path / "anime-seg"),
+        narrative_image_cutout_manifest_sha256="b" * 64,
+    )
+    assert configured.narrative_image_cutout_manifest_sha256 == "b" * 64
+    for partial in (
+        {"narrative_image_cutout_model_dir": str(tmp_path)},
+        {"narrative_image_cutout_manifest_sha256": "b" * 64},
+        {
+            "narrative_image_cutout_model_dir": "anime-seg",
+            "narrative_image_cutout_manifest_sha256": "b" * 64,
+        },
+    ):
+        with pytest.raises(ValidationError, match="cutout"):
+            Settings(**base, **partial)

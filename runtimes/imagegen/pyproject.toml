@@ -11,6 +11,7 @@ dependencies = [
     "safetensors==0.8.0",
     "pillow==13.0.0",
     "nvidia-ml-py==13.615.71",
+    "onnxruntime==1.31.1",
 ]
 
 [tool.uv]

@@ -25,6 +25,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
+# Transparent sprites are full-body character renders; a completed one names the
+# segmenter that cut it out (migration 0025).
+TRANSPARENT_RULE = "NOT transparent OR (purpose = 'character_portrait' AND framing = 'full_body')"
+CUTOUT_RULE = (
+    "((cutout_model IS NULL AND cutout_sha256 IS NULL) "
+    "OR (transparent AND cutout_model IS NOT NULL AND cutout_sha256 IS NOT NULL)) "
+    "AND (status <> 'completed' OR NOT transparent OR cutout_model IS NOT NULL)"
+)
+
 
 class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """One fenced local generation of up to four candidate images."""
@@ -65,6 +74,8 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "OR (purpose = 'background' AND character_id IS NULL)",
             name="ck_narrative_image_job_purpose",
         ),
+        CheckConstraint(TRANSPARENT_RULE, name="ck_narrative_image_job_transparent"),
+        CheckConstraint(CUTOUT_RULE, name="ck_narrative_image_job_cutout"),
         Index("ix_narrative_image_job_purpose", "project_id", "purpose", "created_at", "id"),
         Index(
             "ix_narrative_image_job_active",
@@ -93,6 +104,7 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     guidance: Mapped[float] = mapped_column(Float)
     seeds: Mapped[list[int]] = mapped_column(JSON)
     count: Mapped[int] = mapped_column(Integer)
+    transparent: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), default="queued")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -101,6 +113,8 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     activity_attempt: Mapped[int | None]
     error_code: Mapped[str | None] = mapped_column(String(80))
     model: Mapped[str | None] = mapped_column(String(200))
+    cutout_model: Mapped[str | None] = mapped_column(String(200))
+    cutout_sha256: Mapped[str | None] = mapped_column(String(64))
     runtime: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     prompt_tokens: Mapped[int | None]
     truncated: Mapped[bool | None] = mapped_column(Boolean)
