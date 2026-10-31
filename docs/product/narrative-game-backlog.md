@@ -3,7 +3,7 @@
 Created: 2026-10-27; dependency review updated 2026-10-30. The original five
 milestones contained 21 issues. The user added #133–#167 across four further
 milestones and shared conversation work. On 2026-10-31 the user added M39
-(#173–#177) for voice references and expressive delivery. These additions are
+(#173–#178) for voice references and expressive delivery. These additions are
 planned, not delivered.
 
 The [product brief](narrative-game-studio.md) explains the direction. Review the
@@ -173,16 +173,20 @@ for consistent v2 art; it does not bypass asset review or model-call budgets.
 
 | Issue | Deliverable | Dependency/order |
 | --- | --- | --- |
-| [#174](https://github.com/mohripan/flint-graph/issues/174) | Choose, pin and isolate a local cloning/expressive voice model; ADR | ADR 0043; first |
+| [#174](https://github.com/mohripan/flint-graph/issues/174) | Evaluate, pin and isolate local cloning/expressive voice models; ADR | ADR 0043; first |
 | [#175](https://github.com/mohripan/flint-graph/issues/175) | Private voice references with a consent declaration | ADR 0043; parallel with #174 |
 | [#176](https://github.com/mohripan/flint-graph/issues/176) | Character voices cloned from an approved reference | #174, #175 |
 | [#177](https://github.com/mohripan/flint-graph/issues/177) | Per-line delivery (emotion and intensity), defaulting from the line's expression | #174; coordinate with #176 |
+| [#178](https://github.com/mohripan/flint-graph/issues/178) | Per-character model choice, license acceptance, release notices and a player license screen | #174 |
 
 [ADR 0043](../adr/0043-asset-folders-and-line-voices.md) delivered line voices with
 Kokoro-82M, which has fixed English voices and no emotion control. Kokoro stays the
-default; the new model is opt-in per character. Cloning needs a recorded consent
+default; other models are opt-in per character. Cloning needs a recorded consent
 declaration, references are private project data that never ship, and weights must
-allow use in released games. No paid or remote voice service is required.
+allow use in released games. A model whose license puts duties on generated audio
+(IndexTTS2 treats its output as a derivative work) is offered only after the creator
+accepts its license; releases then carry its notices and a player license screen.
+No paid or remote voice service is required.
 
 ## Current sequencing
 

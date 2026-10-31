@@ -12,8 +12,8 @@ Read [the product direction](product/narrative-game-studio.md),
 [the first focused implementation design](superpowers/specs/2026-10-27-portable-story-runtime-design.md).
 The written M30 design was approved for implementation on 2026-10-27.
 The [GitHub delivery queue](product/narrative-game-backlog.md) links milestones
-30–39 and issues #112–#167 and #173–#177, including shared conversation additions,
-focused acceptance and live verification. The new #133–#167 and #173–#177 work is
+30–39 and issues #112–#167 and #173–#178, including shared conversation additions,
+focused acceptance and live verification. The new #133–#167 and #173–#178 work is
 planned, not delivered.
 
 | Planned milestone | Outcome | Dependency |
