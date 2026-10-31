@@ -94,17 +94,41 @@ figure colours (mean RGB about 130–180), not the background. Seen at full size
 hair strands fade into the dark background with no outline. A few red petals drawn
 as part of the art stay, because they are separate small regions of the figure.
 
-**GPU end to end: not run.** At qualification time, a `vllm/vllm-openai` container
-from another local project (`ai-chatbot-playground-vllm-1`) held 9,962 of 12,227 MiB
-of dedicated GPU memory. The child requires 8 GB free and would refuse with
-`gpu_busy`. That container is not part of this stack, so I left it running. The
-opt-in live test that does this step is ready:
+**GPU end to end: not done.** No transparent character has been generated on the
+GPU yet. At qualification time, a `vllm/vllm-openai` container from another local
+project (`ai-chatbot-playground-vllm-1`) held 9,962 of 12,227 MiB of dedicated GPU
+memory. The child needs 8 GB free, so a job would have been refused with
+`gpu_busy`. The user chose to keep that container running, so the run was skipped.
+
+The opt-in live test that does this step is
 `test_real_gpu_transparent_job_stores_a_cut_out_sprite` in
-`tests/integration/test_narrative_image_workflow_live.py`. It runs owned Temporal
-and PostgreSQL, the real child and both pinned models, and checks the stored
-sprite's alpha with the runtime's Pillow (all four corners 0, more than 10 % opaque
-and more than 20 % clear). With `FLINT_GRAPH_NARRATIVE_IMAGE_SAVE_DIR`, it saves the
-sprite and its job record under `notes/`.
+`tests/integration/test_narrative_image_workflow_live.py`. It uses the owned
+Temporal, the real child and both pinned models, and generates one full-body
+transparent character. It then checks the stored sprite's alpha with the runtime's
+Pillow: all four corners 0, more than 10 % opaque and more than 20 % clear. It saves
+the sprite and its job record under the ignored `notes/`.
+
+To run it later:
+
+1. Free at least 8 GB of dedicated GPU memory (`nvidia-smi`).
+2. Run `uv sync --frozen` in `runtimes/imagegen`.
+3. From the repository root, run:
+
+```powershell
+$notes = (Resolve-Path notes).Path
+$env:FLINT_GRAPH_NARRATIVE_TEMPORAL_FIXTURE = "$notes\narrative-temporal-owned.json"
+$env:FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR = (Resolve-Path runtimes\imagegen).Path
+$env:FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR = "$notes\models\animagine-xl-4.0"
+$env:FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256 = (Get-FileHash "$notes\models\animagine-xl-4.0\flintgraph-download.json" -Algorithm SHA256).Hash.ToLower()
+$env:FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MODEL_DIR = "$notes\models\anime-seg"
+$env:FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MANIFEST_SHA256 = (Get-FileHash "$notes\models\anime-seg\flintgraph-download.json" -Algorithm SHA256).Hash.ToLower()
+$env:FLINT_GRAPH_NARRATIVE_IMAGE_SAVE_DIR = "$notes\sprite-cutout-qualification\gpu"
+uv run pytest tests/integration/test_narrative_image_workflow_live.py -k transparent -v
+```
+
+Leave `FLINT_GRAPH_NARRATIVE_PG_URL` unset, or the test also runs on PostgreSQL and
+renders twice. If Ollama's assistant model holds the GPU, also set
+`FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL` so the worker unloads it once.
 
 ## Verification
 
