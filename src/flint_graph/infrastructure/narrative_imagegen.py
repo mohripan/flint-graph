@@ -338,7 +338,7 @@ class LocalImageGenerator:
                 limit=LINE_LIMIT,
             )
             try:
-                loaded, boxes = await asyncio.wait_for(
+                loaded, kept = await asyncio.wait_for(
                     self._converse(process, body, request, on_progress), self.deadline
                 )
             except TimeoutError:
@@ -351,7 +351,7 @@ class LocalImageGenerator:
                 # reader never does; drain what the killed child left in the pipe.
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(process.communicate(), 30)
-            return self._collect(output, request, loaded, boxes)
+            return self._collect(output, request, loaded, kept)
 
     async def _converse(
         self,
@@ -359,7 +359,7 @@ class LocalImageGenerator:
         body: bytes,
         request: GenerationRequest,
         on_progress: Progress,
-    ) -> tuple[dict[str, Any], list[tuple[int, int, int, int] | None]]:
+    ) -> tuple[dict[str, Any], list[tuple[int, tuple[int, int, int, int] | None]]]:
         assert process.stdin is not None and process.stdout is not None
         process.stdin.write(body)
         with contextlib.suppress(ConnectionError):
@@ -367,8 +367,9 @@ class LocalImageGenerator:
         process.stdin.close()
         loaded: dict[str, Any] | None = None
         done = False
-        images = 0
-        boxes: list[tuple[int, int, int, int] | None] = []
+        # Seeds answered in order, by an image or a skipped cutout, and the images kept.
+        answered = 0
+        kept: list[tuple[int, tuple[int, int, int, int] | None]] = []
         for _ in range(MAX_LINES):
             try:
                 raw = await process.stdout.readline()
@@ -390,19 +391,28 @@ class LocalImageGenerator:
                 continue
             if kind == "loaded" and loaded is None:
                 loaded = event
-            elif kind == "image" and loaded is not None and images < len(request.seeds):
-                if (
-                    event.get("index") != images
-                    or event.get("seed") != request.seeds[images]
-                    or event.get("file") != f"{images}.png"
-                    or event.get("thumbnail") != f"{images}.thumb.png"
-                    or ("box" in event) != request.cutout
-                ):
+            elif (
+                kind in ("image", "skipped")
+                and loaded is not None
+                and answered < len(request.seeds)
+            ):
+                if event.get("index") != answered or event.get("seed") != request.seeds[answered]:
                     raise ImageGenerationError("invalid_output")
-                boxes.append(_box(event["box"], request) if request.cutout else None)
-                images += 1
-                await on_progress(images)
-            elif kind == "done" and images == len(request.seeds):
+                if kind == "skipped":
+                    # One render had no usable figure; the job keeps the others.
+                    if not request.cutout or event.get("code") != "cutout_failed":
+                        raise ImageGenerationError("invalid_output")
+                else:
+                    if (
+                        event.get("file") != f"{answered}.png"
+                        or event.get("thumbnail") != f"{answered}.thumb.png"
+                        or ("box" in event) != request.cutout
+                    ):
+                        raise ImageGenerationError("invalid_output")
+                    kept.append((answered, _box(event["box"], request) if request.cutout else None))
+                answered += 1
+                await on_progress(answered)
+            elif kind == "done" and answered == len(request.seeds) and kept:
                 done = True
             else:
                 raise ImageGenerationError("invalid_output")
@@ -411,28 +421,27 @@ class LocalImageGenerator:
         code = await process.wait()
         if not done or code != 0 or loaded is None:
             raise ImageGenerationError("generation_failed")
-        return loaded, boxes
+        return loaded, kept
 
     def _collect(
         self,
         output: Path,
         request: GenerationRequest,
         loaded: dict[str, Any],
-        boxes: list[tuple[int, int, int, int] | None],
+        kept: list[tuple[int, tuple[int, int, int, int] | None]],
     ) -> GenerationResult:
-        count = len(request.seeds)
-        expected = {f"{i}.png" for i in range(count)} | {f"{i}.thumb.png" for i in range(count)}
+        expected = {f"{i}.png" for i, _ in kept} | {f"{i}.thumb.png" for i, _ in kept}
         if {path.name for path in output.iterdir()} != expected:
             raise ImageGenerationError("invalid_output")
         images = []
         # A repainted face keeps the base's transparency exactly: a sprite stays a sprite.
         base_alpha = request.inpaint is not None and _rgba(request.inpaint.image)
-        for index, seed in enumerate(request.seeds):
+        for index, box in kept:
+            seed = request.seeds[index]
             data = _read_png(output / f"{index}.png", IMAGE_LIMIT)
             thumbnail = _read_png(output / f"{index}.thumb.png", THUMBNAIL_LIMIT)
             width, height = _dimensions(data)
             thumb_width, thumb_height = _dimensions(thumbnail)
-            box = boxes[index]
             expected_size = (
                 (request.width, request.height)
                 if box is None

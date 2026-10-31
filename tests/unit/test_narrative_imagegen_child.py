@@ -130,6 +130,31 @@ async def test_cutout_returns_cropped_rgba_sprites_with_their_box(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_a_render_without_a_figure_is_skipped_and_the_others_are_kept(tmp_path):
+    progress = []
+
+    async def on_progress(done):
+        progress.append(done)
+
+    result = await generator(cutout=segmenter(tmp_path)).generate(
+        request("cutskip", seeds=(7, 8, 9), cutout=True), on_progress=on_progress
+    )
+    assert [(image.index, image.seed) for image in result.images] == [(0, 7), (2, 9)]
+    assert all(image.box == (100, 40, 612, 1176) for image in result.images)
+    assert progress == [1, 2, 3], "A skipped render still counts as done"
+    for mode, cutout, code in (
+        ("cutskipall", True, "cutout_failed"),
+        ("skipwrong", True, "invalid_output"),
+        ("skipplain", False, "invalid_output"),
+    ):
+        with pytest.raises(ImageGenerationError) as raised:
+            await generator(cutout=segmenter(tmp_path)).generate(
+                request(mode, seeds=(7, 8, 9), cutout=cutout), on_progress=ignore
+            )
+        assert raised.value.code == code, mode
+
+
+@pytest.mark.anyio
 async def test_cutout_needs_a_configured_and_matching_segmenter(tmp_path):
     with pytest.raises(ImageGenerationError) as raised:
         await generator().generate(request(cutout=True), on_progress=ignore)

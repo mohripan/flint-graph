@@ -114,8 +114,9 @@ were made" in the character sheet).
   then fails with a clear message. The assistant reloads its model on its next turn.
 - Child failures map to safe codes (`gpu_busy`, `out_of_memory`,
   `generation_timeout`, `invalid_output`, `model_invalid`, `storage_unavailable`,
-  and for sprites `cutout_failed` when no plausible figure was found and
-  `cutout_unavailable` when the worker has no segmenter).
+  and for sprites `cutout_failed` when no render had a plausible figure and
+  `cutout_unavailable` when the worker has no segmenter). A sprite render without
+  a usable figure is skipped, so a job can finish with fewer candidates than asked.
 - Other GPU programs count too. The child needs 8 GB free, so a local vLLM or
   similar container holding most of a 12 GB GPU makes every job fail with
   `gpu_busy`; the Ollama release setting cannot free that memory.

@@ -74,6 +74,11 @@ emit(
 )
 for index, seed in enumerate(request["seeds"]):
     extra: dict[str, object] = {}
+    # A render with no usable figure is skipped; the others are kept.
+    skip = {"cutskip": index == 1, "skipwrong": index == 1, "skipplain": index == 1}
+    if skip.get(mode) or mode == "cutskipall":
+        emit("skipped", index=index + (mode == "skipwrong"), seed=seed, code="cutout_failed")
+        continue
     if cutout:
         if mode == "cutfail":
             emit("error", code="cutout_failed")
@@ -110,4 +115,7 @@ for index, seed in enumerate(request["seeds"]):
     )
 if mode == "extra":
     (output / "notes.txt").write_text("unexpected")
+if mode == "cutskipall":
+    emit("error", code="cutout_failed")
+    raise SystemExit(2)
 emit("done", peak_bytes=1)

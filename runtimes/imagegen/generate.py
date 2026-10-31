@@ -8,7 +8,9 @@ output directory and exits, which releases all GPU memory.
 
 With a ``cutout`` request it also separates the figure from its plain background
 with a pinned anime segmentation model (ONNX, run on the CPU from bytes it hashed
-itself) and writes cropped RGBA sprites instead of opaque images.
+itself) and writes cropped RGBA sprites instead of opaque images. A render with
+no usable figure is reported as ``skipped`` and the others are kept; the job fails
+with ``cutout_failed`` only when no render survives.
 
 With an ``inpaint`` request (ADR 0041) it repaints only the face of a base image,
 one prompt per seed: a square around the face box is upscaled, inpainted under a
@@ -472,6 +474,7 @@ def main() -> None:
         box = tuple(inpaint["box"])
         context, crop = face_context(base, box)
         mask = face_mask(box, crop)
+    kept = 0
     for index, seed in enumerate(request["seeds"]):
         began = time.monotonic()
         try:
@@ -508,8 +511,11 @@ def main() -> None:
             try:
                 sprite, box = cut_out(np.asarray(image.convert("RGB")), segment(segmenter, image))
             except CutoutError:
-                fail("cutout_failed")
+                # One render with no usable figure is skipped; the job keeps the others.
+                emit("skipped", index=index, seed=seed, code="cutout_failed")
+                continue
             image, extra["box"] = Image.fromarray(sprite), list(box)
+        kept += 1
         name, thumbnail = f"{index}.png", f"{index}.thumb.png"
         with (output / name).open("xb") as stream:
             image.save(stream, format="PNG")
@@ -527,6 +533,8 @@ def main() -> None:
             seconds=round(time.monotonic() - began, 2),
             **extra,
         )
+    if not kept:
+        fail("cutout_failed")
     emit("done", peak_bytes=torch.cuda.max_memory_allocated())
 
 
