@@ -110,4 +110,3 @@
 /* The conversation's ID, also in the link (?thread=), copyable for reports. */
 .assistant-thread-id { min-height:28px!important; padding:2px 8px; border:1px solid #c2d0d8; border-radius:999px; background:#fff; color:#36576f; cursor:copy; flex:none; }
 .assistant-thread-id code { font-size:12px; }
-
