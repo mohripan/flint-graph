@@ -73,6 +73,7 @@ def main() -> None:
         "GODOT-NOTICE.txt",
         "runtime/player.gd",
         "runtime/game_view.gd",
+        "runtime/vn_view.gd",
         "runtime/save_store.gd",
         "runtime/strict_json.gd",
         "fonts/Lora.ttf",
@@ -80,6 +81,7 @@ def main() -> None:
         "fonts/provenance.json",
         "preview/bootstrap.gd",
         "preview/game_view.gd",
+        "preview/vn_view.gd",
         "preview/validate_story.gd",
         "preview/shell.html",
     ]

@@ -18,15 +18,21 @@ from flint_graph.application.narrative_release_state import (
     claim_execution,
     finish_execution,
 )
+from flint_graph.application.services.narrative_package_v2 import (
+    bind_story_assets,
+    bound_object_key,
+    compose_notices,
+)
 from flint_graph.application.services.narrative_projects import get_revision
 from flint_graph.application.services.narrative_releases import BuildIdentity, latest_job
-from flint_graph.domain.errors import NotFoundError
+from flint_graph.domain.errors import DomainError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     NarrativeRelease,
     NarrativeReleaseEvent,
     NarrativeReleaseJob,
 )
-from flint_graph.narrative.package import load_text_package
+from flint_graph.narrative.font import FONT_LIMIT
+from flint_graph.narrative.package import ASSET_LIMIT, PACKAGE_LIMIT, load_text_package
 from flint_graph.narrative.values import PackageError, StoryPackage
 
 FAILURE_CODES = frozenset(
@@ -201,6 +207,23 @@ async def finish_release_failure(
     return True
 
 
+@dataclass(frozen=True)
+class AssetSource:
+    """Where a story asset's verified bytes live; fetched after the locks are released."""
+
+    id: str
+    object_key: str
+    size: int
+    sha256: str
+    max_bytes: int
+
+
+@dataclass(frozen=True)
+class ReleaseInput:
+    package: StoryPackage  # v2 packages carry asset references without bytes.
+    assets: tuple[AssetSource, ...] = ()
+
+
 async def load_release_input(
     session: AsyncSession,
     *,
@@ -209,7 +232,7 @@ async def load_release_input(
     job_id: UUID,
     token: UUID,
     build: BuildIdentity | None,
-) -> StoryPackage:
+) -> ReleaseInput:
     """Activity-local source, never a Temporal input/result/heartbeat or public DTO.
 
     Caller commits/releases locks before engine work. A later execution replacement
@@ -236,7 +259,9 @@ async def load_release_input(
     )
     try:
         package = load_text_package(
-            revision.story_json.encode("utf-8"), revision.notices.encode("utf-8")
+            revision.story_json.encode("utf-8"),
+            revision.notices.encode("utf-8"),
+            allow_asset_refs=True,
         )
     except (PackageError, UnicodeError):
         raise ReleaseInputError("input_integrity") from None
@@ -245,7 +270,33 @@ async def load_release_input(
         or revision.content_hash != release.package_hash
     ):
         raise ReleaseInputError("package_integrity")
-    return package
+    if not package.assets:
+        return ReleaseInput(package)
+    # The saved binding and its server-built notices must still hold (ADR 0040).
+    try:
+        bound = await bind_story_assets(
+            session,
+            tenant_id=tenant_id,
+            project_id=release.project_id,
+            assets=package.story["assets"],
+            budget=PACKAGE_LIMIT,
+            lock=False,
+        )
+    except DomainError:
+        raise ReleaseInputError("input_integrity") from None
+    if compose_notices(revision.notices, bound) != revision.notices:
+        raise ReleaseInputError("input_integrity")
+    sources = tuple(
+        AssetSource(
+            item.key,
+            bound_object_key(tenant_id, release.project_id, item),
+            item.asset.size_bytes,
+            item.sha256,
+            FONT_LIMIT if item.kind == "font" else ASSET_LIMIT,
+        )
+        for item in bound
+    )
+    return ReleaseInput(package, sources)
 
 
 async def register_release_workflow(

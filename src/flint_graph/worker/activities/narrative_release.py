@@ -24,6 +24,7 @@ from flint_graph.application.narrative_workflow import (
 )
 from flint_graph.application.services.narrative_release_execution import (
     FAILURE_CODES,
+    ReleaseInput,
     ReleaseInputError,
     claim_release_execution,
     finalize_release_workflow,
@@ -45,6 +46,8 @@ from flint_graph.infrastructure.narrative_artifact_store import (
     release_artifact_key,
 )
 from flint_graph.infrastructure.narrative_builder import BuildError, DockerNarrativeBuilder
+from flint_graph.narrative.package import attach_assets
+from flint_graph.narrative.values import PackageError, StoryPackage
 
 
 class ReleaseScope(TypedDict):
@@ -148,6 +151,26 @@ class NarrativeReleaseActivities:
             await session.commit()
         return await self._status(data)
 
+    async def _attached(self, loaded: ReleaseInput) -> StoryPackage:
+        """Fetch each bound asset's verified bytes; the checks run again on attach."""
+        fetched: dict[str, bytes] = {}
+        data: dict[str, bytes] = {}
+        for source in loaded.assets:
+            if source.object_key not in fetched:
+                fetched[source.object_key] = await self.store.get_verified(
+                    source.object_key,
+                    expected_size=source.size,
+                    expected_sha256=source.sha256,
+                    max_bytes=source.max_bytes,
+                )
+            data[source.id] = fetched[source.object_key]
+        if not data:
+            return loaded.package
+        try:
+            return await asyncio.to_thread(attach_assets, loaded.package, data)
+        except PackageError:
+            raise ReleaseInputError("input_integrity") from None
+
     async def _execute(
         self, data: ReleasePayload, run_id: UUID, token: UUID, ready: asyncio.Event
     ) -> ReleaseResult:
@@ -166,8 +189,9 @@ class NarrativeReleaseActivities:
         ready.set()
         await self._check(data, token)
         async with self.factory() as session:
-            package = await load_release_input(session, **scope, token=token, build=self.identity)
+            loaded = await load_release_input(session, **scope, token=token, build=self.identity)
             await session.commit()
+        package = await self._attached(loaded)
         built = await self.builder.build(
             package, execution_id=token, check=lambda: self._check(data, token)
         )

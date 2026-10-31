@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import shutil
+import struct
 import subprocess
+import zlib
 from pathlib import Path
 
 import pytest
@@ -127,6 +129,10 @@ def test_dynamic_preview_validates_text_semantics_and_package_identity(tmp_path:
                 "if_false": source["entry"],
             }
             add(changed, field == "value" and bad is True)
+    assert probe(tmp_path, cases) == [item["valid"] for item in cases]
+
+
+def probe(tmp_path: Path, cases: list[dict]) -> list[bool]:
     project = tmp_path / "project"
     (project / "runtime").mkdir(parents=True)
     (project / "project.godot").write_text(
@@ -166,4 +172,149 @@ def test_dynamic_preview_validates_text_semantics_and_package_identity(tmp_path:
         for line in result.stdout.splitlines()
         if line.startswith("PREVIEW_PROBE:")
     )
-    assert json.loads(line) == [item["valid"] for item in cases]
+    results: list[bool] = json.loads(line)
+    return results
+
+
+def stage_png(red: int) -> bytes:
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload))
+        )
+
+    row = b"\x00" + bytes([red, 80, 40, 255]) * 2
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(row * 2))
+        + chunk(b"IEND", b"")
+    )
+
+
+def test_dynamic_preview_validates_v2_stage_rules_and_asset_identity(tmp_path: Path) -> None:
+    files = {"dusk": stage_png(10), "mira": stage_png(50), "type": b"font bytes for hashing"}
+    story = {
+        "schema_version": "2",
+        "id": "harbor",
+        "title": "Harbor",
+        "language": "en",
+        "entry": "s0",
+        "characters": {
+            "mira": {"name": "Mira", "color": "#d5ae68", "sprites": {"neutral": "mira"}},
+            "oren": {"name": "Oren"},
+        },
+        "variables": {},
+        "assets": {
+            "dusk": {
+                "kind": "image",
+                "path": "assets/dusk.png",
+                "sha256": hashlib.sha256(files["dusk"]).hexdigest(),
+            },
+            "mira": {
+                "kind": "image",
+                "path": "assets/mira.png",
+                "sha256": hashlib.sha256(files["mira"]).hexdigest(),
+            },
+            "type": {
+                "kind": "font",
+                "path": "assets/type.otf",
+                "sha256": hashlib.sha256(files["type"]).hexdigest(),
+            },
+        },
+        "theme": {
+            "textbox": {"position": "top", "width": 80, "background": "#182635e6", "radius": 0},
+            "name": {"show": False, "text": "#000000"},
+            "choices": {"border": "#d5ae68"},
+            "font": {"asset": "type", "size": 14},
+        },
+        "nodes": {
+            "s0": {
+                "type": "stage",
+                "background": "dusk",
+                "show": [{"character": "mira", "sprite": "neutral", "position": "left"}],
+                "next": "l1",
+            },
+            "l1": {
+                "type": "line",
+                "speaker": "mira",
+                "expression": "neutral",
+                "text_id": "l1",
+                "text": "Hi.",
+                "next": "s1",
+            },
+            "s1": {"type": "stage", "background": None, "hide": ["mira"], "next": "e"},
+            "e": {"type": "end", "text_id": "e", "text": "Fin", "ending": "quiet"},
+        },
+    }
+    notices = b"Original stage fixture.\n"
+    cases: list[dict] = []
+
+    def add(value: dict, valid: bool, supplied: dict[str, bytes] | None = None) -> None:
+        raw = canonical_json(value)
+        if valid:
+            package = load_text_package(raw, notices, allow_asset_refs=True)
+            content_hash = package.content_hash
+        else:
+            with pytest.raises(PackageError):
+                load_text_package(raw, notices, allow_asset_refs=True)
+            content_hash = load_text_package(
+                canonical_json(story), notices, allow_asset_refs=True
+            ).content_hash
+        cases.append(
+            {
+                "source": base64.b64encode(raw).decode(),
+                "notices": base64.b64encode(notices).decode(),
+                "hash": content_hash,
+                "assets": {
+                    key: base64.b64encode(data).decode()
+                    for key, data in (files if supplied is None else supplied).items()
+                },
+                "valid": valid and supplied is None,
+            }
+        )
+
+    add(story, True)
+    add(story, True, {key: data for key, data in files.items() if key != "type"})
+    add(story, True, {**files, "extra": files["dusk"]})
+    add(story, True, {**files, "dusk": files["mira"]})
+    add(story, True, {})
+
+    def node(name: str, value: dict):
+        return lambda s: s["nodes"].__setitem__(name, value)
+
+    show = {"character": "mira", "sprite": "neutral", "position": "left"}
+    for change in [
+        node("s1", {"type": "stage", "next": "e"}),
+        node("s1", {"type": "stage", "hide": [], "next": "e"}),
+        node("s1", {"type": "stage", "hide": ["mira", "mira"], "next": "e"}),
+        node("s1", {"type": "stage", "hide": ["mira"], "show": [show], "next": "e"}),
+        node("s1", {"type": "stage", "show": [show, {**show, "character": "oren"}], "next": "e"}),
+        node("s1", {"type": "stage", "show": [{**show, "position": "middle"}], "next": "e"}),
+        node("s1", {"type": "stage", "show": [{**show, "sprite": "happy"}], "next": "e"}),
+        node("s1", {"type": "stage", "background": "type", "next": "e"}),
+        node("s1", {"type": "stage", "background": "dusk", "next": "e", "extra": 1}),
+        node("l1", {"type": "line", "expression": "neutral", "text_id": "l1", "text": "Hi.", "next": "s1"}),  # noqa: E501
+        node("l1", {"type": "line", "speaker": "oren", "expression": "neutral", "text_id": "l1", "text": "Hi.", "next": "s1"}),  # noqa: E501
+        node("l1", {"type": "line", "speaker": "mira", "background": "dusk", "text_id": "l1", "text": "Hi.", "next": "s1"}),  # noqa: E501
+        lambda s: s["characters"]["mira"].update(color="#D5AE68"),
+        lambda s: s["characters"]["mira"].update(color="#d5ae68ff"),
+        lambda s: s["characters"]["mira"]["sprites"].update(neutral="type"),
+        lambda s: s["theme"].update(extra={}),
+        lambda s: s["theme"]["textbox"].update(position="left"),
+        lambda s: s["theme"]["textbox"].update(width=101),
+        lambda s: s["theme"]["textbox"].update(radius=True),
+        lambda s: s["theme"]["name"].update(show=1),
+        lambda s: s["theme"]["font"].update(asset="dusk"),
+        lambda s: s["theme"]["font"].update(size=13),
+        lambda s: s["assets"]["type"].update(path="assets/type.woff"),
+        lambda s: s["assets"]["dusk"].update(kind="audio"),
+        lambda s: s.update(schema_version="1"),
+    ]:
+        changed = copy.deepcopy(story)
+        change(changed)
+        add(changed, False)
+
+    assert probe(tmp_path, cases) == [item["valid"] for item in cases]

@@ -4,13 +4,16 @@ import base64
 import hashlib
 import json
 import os
+import struct
 import subprocess
+import zlib
 from pathlib import Path
 
 import pytest
 
 from flint_graph.narrative import Player, StoryPackage, load_package
 from flint_graph.narrative.export import export_godot
+from flint_graph.narrative.player import PlayerError
 
 ENGINE = os.environ.get("FLINT_GRAPH_NARRATIVE_GODOT_BIN")
 pytestmark = pytest.mark.skipif(
@@ -313,9 +316,243 @@ def test_native_large_valid_save_roundtrips_beyond_one_megabyte(tmp_path: Path) 
     assert restored.state == actual["state"]
 
 
-def native_ui_probe(tmp_path: Path, case: str) -> dict:
+def stage_png(red: int, width: int = 6, height: int = 4) -> bytes:
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload))
+        )
+
+    row = b"\x00" + bytes([red, 80, 40, 255]) * width
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(row * height))
+        + chunk(b"IEND", b"")
+    )
+
+
+def static_font() -> bytes:
+    tables = {tag: b"x" * 8 for tag in (b"cmap", b"glyf", b"head", b"loca", b"name")}
+    tables[b"OS/2"] = b"\x00" * 16
+    header = b"\x00\x01\x00\x00" + struct.pack(">HHHH", len(tables), 16, 4, 0)
+    offset, directory, body = 12 + 16 * len(tables), b"", b""
+    for tag in sorted(tables):
+        directory += tag + struct.pack(">III", 0, offset + len(body), len(tables[tag]))
+        body += tables[tag]
+    return header + directory + body
+
+
+def stage_package(tmp_path: Path, nodes: dict | None = None, entry: str = "s0") -> StoryPackage:
+    """Story format 2 with every stage rule: set, clear, move, replace, hide, expressions."""
+    files = {
+        "dusk": stage_png(10),
+        "pier": stage_png(30, 8, 4),
+        "mira_neutral": stage_png(50, 3, 6),
+        "mira_happy": stage_png(70, 3, 6),
+        "oren_neutral": stage_png(90, 3, 6),
+    }
+    assets = {
+        key: {
+            "kind": "image",
+            "path": f"assets/{key}.png",
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+        for key, data in files.items()
+    }
+    font = static_font()
+    assets["type"] = {
+        "kind": "font",
+        "path": "assets/type.ttf",
+        "sha256": hashlib.sha256(font).hexdigest(),
+    }
+
+    def line(key, text, target, **extra):
+        return {"type": "line", "text_id": key, "text": text, "next": target, **extra}
+
+    story = {
+        "schema_version": "2",
+        "id": "harbor_stage",
+        "title": "Original stage fixture",
+        "language": "en",
+        "entry": entry,
+        "characters": {
+            "mira": {
+                "name": "Mira",
+                "color": "#d5ae68",
+                "sprites": {"neutral": "mira_neutral", "happy": "mira_happy"},
+            },
+            "oren": {"name": "Oren", "sprites": {"neutral": "oren_neutral"}},
+        },
+        "variables": {"stayed": {"type": "bool", "initial": False}},
+        "assets": assets,
+        "theme": {"textbox": {"position": "bottom"}, "font": {"asset": "type", "size": 24}},
+        "nodes": nodes
+        or {
+            "s0": {
+                "type": "stage",
+                "background": "dusk",
+                "show": [{"character": "mira", "sprite": "neutral", "position": "left"}],
+                "next": "l1",
+            },
+            "l1": line("l1", "The bell!", "s1", speaker="mira", expression="happy"),
+            "s1": {
+                "type": "stage",
+                "show": [{"character": "oren", "sprite": "neutral", "position": "center"}],
+                "next": "c1",
+            },
+            "c1": {
+                "type": "choice",
+                "text_id": "c1",
+                "text": "Now?",
+                "options": [
+                    {"id": "go", "text_id": "go", "text": "Go", "target": "s2"},
+                    {"id": "stay", "text_id": "stay", "text": "Stay", "target": "st"},
+                ],
+            },
+            "s2": {
+                "type": "stage",
+                "background": "pier",
+                "hide": ["oren"],
+                "show": [{"character": "mira", "sprite": "neutral", "position": "right"}],
+                "next": "l2",
+            },
+            "l2": line("l2", "Wait!", "s3", speaker="oren", expression="neutral"),
+            "s3": {
+                "type": "stage",
+                "show": [{"character": "oren", "sprite": "neutral", "position": "right"}],
+                "next": "e1",
+            },
+            "e1": {"type": "end", "text_id": "e1", "text": "Gone.", "ending": "quiet"},
+            "st": {
+                "type": "set",
+                "operations": [{"op": "set", "variable": "stayed", "value": True}],
+                "next": "b1",
+            },
+            "b1": {
+                "type": "branch",
+                "condition": {"op": "eq", "variable": "stayed", "value": True},
+                "if_true": "s4",
+                "if_false": "e1",
+            },
+            "s4": {"type": "stage", "background": None, "next": "l3"},
+            "l3": line("l3", "Dark now.", "e2", speaker="mira"),
+            "e2": {"type": "end", "text_id": "e2", "text": "Stayed.", "ending": "dark"},
+        },
+    }
+    source = tmp_path / "source"
+    (source / "assets").mkdir(parents=True)
+    (source / "story.json").write_text(json.dumps(story), encoding="utf-8")
+    (source / "NOTICES.txt").write_text("Original stage fixture. CC0.\n", encoding="utf-8")
+    for key, data in files.items():
+        (source / f"assets/{key}.png").write_bytes(data)
+    (source / "assets/type.ttf").write_bytes(font)
+    return load_package(source)
+
+
+@pytest.mark.parametrize(
+    "actions",
+    [["advance", "choose:go", "advance"], ["advance", "choose:stay", "advance"]],
+    ids=["moves_and_replaces", "clears_background"],
+)
+def test_real_godot_player_matches_reference_stage_routes_and_saves(
+    tmp_path: Path, actions: list[str]
+) -> None:
+    package = stage_package(tmp_path)
+    actual = native_probe(package, tmp_path, {"actions": actions, "save_after": 1})
+    reference = Player(package)
+    frames = [reference.frame()]
+    for action in actions:
+        reference.act(action)
+        frames.append(reference.frame(action))
+
+    assert actual["frames"] == frames
+    assert actual["state"] == reference.state
+    assert actual["restore_error"] == ""
+    restored = Player(package)
+    restored.load_save(actual["save"].encode())
+    assert restored.state["node_id"] == "c1"
+    assert restored.state["stage"]["characters"] == [
+        {"id": "mira", "sprite": "happy", "position": "left"},
+        {"id": "oren", "sprite": "neutral", "position": "center"},
+    ]
+
+
+def test_native_stage_saves_are_validated_like_the_reference(tmp_path: Path) -> None:
+    package = stage_package(tmp_path)
+    player = Player(package)
+    player.act("advance")
+    original = player.save()
+
+    def changed(edit) -> bytes:
+        value = json.loads(original)
+        edit(value)
+        return json.dumps(value).encode()
+
+    stage = "stage"
+    invalid = [
+        changed(lambda s: s.pop(stage)),
+        changed(lambda s: s.update(schema_version="1")),
+        changed(lambda s: s[stage]["characters"][0].update(sprite="angry")),
+        changed(lambda s: s[stage]["characters"][0].update(position="center")),
+        changed(lambda s: s[stage]["characters"].reverse()),
+        changed(lambda s: s[stage]["characters"].append(dict(s[stage]["characters"][0]))),
+        changed(lambda s: s[stage].update(background="type")),
+        changed(lambda s: s[stage].update(background="missing")),
+        changed(lambda s: s[stage].update(extra=1)),
+    ]
+    for data in invalid:
+        with pytest.raises(PlayerError):
+            Player(package).load_save(data)
+    encoded = [base64.b64encode(value).decode() for value in [original, *invalid]]
+
+    actual = native_probe(package, tmp_path, {"restore_cases": encoded})["restored"]
+
+    # The valid save is from a later screen, so loading it changes the state.
+    assert actual[0] == {"error": "", "preserved": False, "generation_change": 1}
+    assert actual[1:] == [
+        {"error": "invalid_save", "preserved": True, "generation_change": 0}
+    ] * len(invalid)
+
+
+def test_native_stage_loop_faults_and_saves_like_the_reference(tmp_path: Path) -> None:
+    nodes = {
+        "s0": {"type": "stage", "background": "dusk", "next": "s0"},
+        "e1": {"type": "end", "text_id": "e1", "text": "Never.", "ending": "never"},
+    }
+    package = stage_package(tmp_path, nodes)
+
+    actual = native_probe(package, tmp_path, {"save_initial": True})
+
+    reference = Player(package)
+    assert reference.state["fault"] == "automatic_transition_limit"
+    assert actual["state"] == reference.state
+    assert actual["restore_error"] == ""
+    restored = Player(package)
+    restored.load_save(actual["save"].encode())
+    assert restored.state == actual["state"]
+
+
+def test_native_bootstrap_verifies_font_assets(tmp_path: Path) -> None:
     project = tmp_path / "game"
-    export_godot(load_package(FIXTURE), project)
+    package = stage_package(tmp_path)
+    export_godot(package, project)
+    environment = native_environment(tmp_path)
+    assert run_engine(project, environment, "--editor", "--import").returncode == 0
+    checked = run_engine(project, environment, "--", "--verify-content")
+    assert checked.returncode == 0, checked.stderr
+    assert f"CONTENT_OK:{package.content_hash}" in checked.stdout
+    (project / "content/assets/type.ttf").write_bytes(b"tampered font")
+    rejected = run_engine(project, environment, "--", "--verify-content")
+    assert rejected.returncode != 0
+    assert "asset_hash_mismatch" in rejected.stderr
+
+
+def native_ui_probe(tmp_path: Path, case: str, package: StoryPackage | None = None) -> dict:
+    project = tmp_path / "game"
+    export_godot(package or load_package(FIXTURE), project)
     (project / "qualification.gd").write_bytes((FIXTURE.parent / "godot_ui_probe.gd").read_bytes())
     (project / "qualification.json").write_text(json.dumps({"case": case}), encoding="utf-8")
     environment = native_environment(tmp_path)
@@ -333,6 +570,30 @@ def native_ui_probe(tmp_path: Path, case: str) -> dict:
             if line.startswith("UI_RESULT:")
         )
     )
+
+
+def test_native_stage_view_lays_out_the_stage_text_box_and_choices(tmp_path: Path) -> None:
+    screens = native_ui_probe(tmp_path, "stage_layout", stage_package(tmp_path))["screens"]
+
+    opening, choice, moved, ending = screens
+    # The text box sits at the bottom, 92% wide and centred, with the speaker's name.
+    assert opening["text"] == "The bell!" and opening["name"] == "Mira"
+    box = opening["box"]
+    assert box["bottom"] == pytest.approx(720 - 24, abs=1)
+    assert box["left"] == pytest.approx(1280 * 0.04, abs=1)
+    assert box["right"] == pytest.approx(1280 * 0.96, abs=1)
+    assert opening["background"] and opening["buttons"] == ["Continue"]
+    # Sprites keep their 1:2 aspect and stand on the bottom edge in their slot.
+    (mira,) = opening["figures"]
+    assert mira["position"] == "left" and mira["bottom"] == pytest.approx(720, abs=1)
+    assert mira["height"] == pytest.approx(mira["width"] * 2, abs=1)
+    assert mira["x"] + mira["width"] / 2 == pytest.approx(1280 * 0.2, abs=1)
+    assert choice["buttons"] == ["Go", "Stay"] and choice["name"] is None
+    assert {item["position"] for item in choice["figures"]} == {"left", "center"}
+    assert [item["position"] for item in moved["figures"]] == ["right"]
+    assert moved["text"] == "Wait!" and moved["name"] == "Oren"
+    assert ending["buttons"] == ["Play again"] and ending["text"] == "Gone."
+    assert [item["position"] for item in ending["figures"]] == ["right"]
 
 
 def test_native_ui_rejects_queued_callbacks_from_before_restart(tmp_path: Path) -> None:

@@ -1,9 +1,17 @@
 # SPDX-License-Identifier: MIT
-# Dynamic text previews have the same bounded v1 semantics as the Python loader.
+# Dynamic previews have the same bounded v1 and v2 semantics as the Python loader.
+# v2 (ADR 0040) adds typed assets, sprites, a closed theme, stage nodes and expressions;
+# asset bytes arrive separately and must match the story's hashes exactly.
 extends RefCounted
 const StrictJson = preload("res://runtime/strict_json.gd")
+const POSITIONS := ["left", "center", "right"]
+const RESERVED := ["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6",
+	"com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]
 static var _ids := RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}\\z")
 static var _languages := RegEx.create_from_string("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*\\z")
+static var _hashes := RegEx.create_from_string("^[0-9a-f]{64}\\z")
+static var _colors := RegEx.create_from_string("^#[0-9a-f]{6}([0-9a-f]{2})?\\z")
+static var _opaque := RegEx.create_from_string("^#[0-9a-f]{6}\\z")
 
 static func _fields(value: Variant, required: Array, optional: Array = []) -> bool:
 	if not value is Dictionary: return false
@@ -65,18 +73,102 @@ static func _display(item: Dictionary, ids: Dictionary) -> bool:
 	ids[item["text_id"]] = true
 	return true
 
+static func _asset(value: Variant, assets: Dictionary, kind: String) -> bool:
+	return _ref(value, assets) and assets[value]["kind"] == kind
+
+static func _color(value: Variant, regex: RegEx) -> bool:
+	return value is String and regex.search(value) != null
+
+static func _within(value: Variant, low: int, high: int) -> bool:
+	return value is int and value >= low and value <= high
+
+static func _assets_v2(assets: Variant) -> bool:
+	if not _map(assets, 256): return false
+	for key: String in assets:
+		var asset: Variant = assets[key]
+		if key in RESERVED or not _fields(asset, ["kind", "path", "sha256"]): return false
+		if not asset["path"] is String or not asset["sha256"] is String or _hashes.search(asset["sha256"]) == null: return false
+		match asset["kind"]:
+			"image":
+				if asset["path"] != "assets/" + key + ".png": return false
+			"font":
+				if not asset["path"] in ["assets/" + key + ".ttf", "assets/" + key + ".otf"]: return false
+			_: return false
+	return true
+
+static func _theme(theme: Variant, assets: Dictionary) -> bool:
+	if not _fields(theme, [], ["textbox", "name", "choices", "font"]): return false
+	if theme.has("textbox"):
+		var box: Variant = theme["textbox"]
+		if not _fields(box, [], ["position", "width", "background", "text", "border", "radius"]): return false
+		if box.has("position") and not box["position"] in ["bottom", "middle", "top"]: return false
+		if box.has("width") and not _within(box["width"], 40, 100): return false
+		if box.has("radius") and not _within(box["radius"], 0, 48): return false
+		for part: String in ["background", "text", "border"]:
+			if box.has(part) and not _color(box[part], _colors): return false
+	if theme.has("name"):
+		var named: Variant = theme["name"]
+		if not _fields(named, [], ["show", "background", "text"]): return false
+		if named.has("show") and not named["show"] is bool: return false
+		for part: String in ["background", "text"]:
+			if named.has(part) and not _color(named[part], _colors): return false
+	if theme.has("choices"):
+		var choices: Variant = theme["choices"]
+		if not _fields(choices, [], ["background", "text", "border"]): return false
+		for part: String in choices:
+			if not _color(choices[part], _colors): return false
+	if theme.has("font"):
+		var font: Variant = theme["font"]
+		if not _fields(font, [], ["asset", "size"]): return false
+		if font.get("asset") != null and not _asset(font["asset"], assets, "font"): return false
+		if font.has("size") and not _within(font["size"], 14, 48): return false
+	return true
+
+static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary, nodes: Dictionary) -> bool:
+	if not _fields(node, ["type", "next"], ["background", "show", "hide"]): return false
+	if not node.has("background") and not node.has("show") and not node.has("hide"): return false
+	if node.has("background") and node["background"] != null and not _asset(node["background"], assets, "image"): return false
+	var hidden := {}
+	if node.has("hide"):
+		if not _list(node["hide"], 8): return false
+		for character: Variant in node["hide"]:
+			if not _ref(character, characters) or hidden.has(character): return false
+			hidden[character] = true
+	if node.has("show"):
+		if not _list(node["show"], 8): return false
+		var shown := {}
+		var taken := {}
+		for entry: Variant in node["show"]:
+			if not _fields(entry, ["character", "sprite", "position"]) or not _ref(entry["character"], characters): return false
+			if not _ref(entry["sprite"], characters[entry["character"]].get("sprites", {})): return false
+			if not entry["position"] is String or not entry["position"] in POSITIONS: return false
+			if shown.has(entry["character"]) or hidden.has(entry["character"]) or taken.has(entry["position"]): return false
+			shown[entry["character"]] = true
+			taken[entry["position"]] = true
+	return _ref(node["next"], nodes)
+
 static func _story(story: Variant) -> bool:
-	if not _fields(story, ["schema_version", "id", "title", "language", "entry", "characters", "variables", "nodes", "assets"]): return false
-	if not story["schema_version"] is String or story["schema_version"] != "1" or not _id(story["id"]) or not _text(story["title"]): return false
+	var v2: bool = story is Dictionary and story.get("schema_version") is String and story["schema_version"] == "2"
+	if not _fields(story, ["schema_version", "id", "title", "language", "entry", "characters", "variables", "nodes", "assets"], ["theme"] if v2 else []): return false
+	if not story["schema_version"] is String or not story["schema_version"] in ["1", "2"] or not _id(story["id"]) or not _text(story["title"]): return false
 	if not story["language"] is String or _languages.search(story["language"]) == null: return false
 	if not _map(story["characters"], 256) or not _map(story["variables"], 256) or not _map(story["nodes"], 10000): return false
-	if not story["assets"] is Dictionary or not story["assets"].is_empty(): return false
+	if v2:
+		if not _assets_v2(story["assets"]): return false
+	elif not story["assets"] is Dictionary or not story["assets"].is_empty(): return false
+	var assets: Dictionary = story["assets"]
 	var characters: Dictionary = story["characters"]
 	var variables: Dictionary = story["variables"]
 	var nodes: Dictionary = story["nodes"]
 	if not _ref(story["entry"], nodes): return false
 	for character: Variant in characters.values():
-		if not _fields(character, ["name"]) or not _text(character["name"]): return false
+		if not _fields(character, ["name"], ["color", "sprites"] if v2 else []) or not _text(character["name"]): return false
+		if character.has("color") and not _color(character["color"], _opaque): return false
+		if character.has("sprites"):
+			if not _map(character["sprites"], 32): return false
+			for sprite: Variant in character["sprites"].values():
+				if not _asset(sprite, assets, "image"): return false
+	if story.has("theme") and not _theme(story["theme"], assets): return false
 	for declaration: Variant in variables.values():
 		if not _fields(declaration, ["type", "initial"], ["values"]): return false
 		if not declaration["type"] is String: return false
@@ -94,10 +186,13 @@ static func _story(story: Variant) -> bool:
 		if not node is Dictionary: return false
 		match node.get("type"):
 			"line":
-				if not _fields(node, ["type", "text_id", "text", "next"], ["speaker", "background", "portrait"]): return false
+				if not _fields(node, ["type", "text_id", "text", "next"], ["speaker", "expression"] if v2 else ["speaker", "background", "portrait"]): return false
 				if not _display(node, text_ids) or not _ref(node["next"], nodes): return false
 				if node.has("speaker") and not _ref(node["speaker"], characters): return false
 				if node.has("background") or node.has("portrait"): return false
+				if node.has("expression") and (not node.has("speaker") or not _ref(node["expression"], characters[node["speaker"]].get("sprites", {}))): return false
+			"stage":
+				if not v2 or not _stage(node, characters, assets, nodes): return false
 			"end":
 				if not _fields(node, ["type", "text_id", "text", "ending"]): return false
 				if not _display(node, text_ids) or not _id(node["ending"]) or endings.has(node["ending"]): return false
@@ -132,12 +227,26 @@ static func _digest(bytes: PackedByteArray) -> String:
 	context.update(bytes)
 	return context.finish().hex_encode()
 
-static func validate(source: PackedByteArray, notices: PackedByteArray, package_hash: String) -> Dictionary:
+static func validate(source: PackedByteArray, notices: PackedByteArray, package_hash: String, assets: Dictionary = {}) -> Dictionary:
 	if source.size() > 5242880 or notices.size() > 1048576: return {"error": "size_limit"}
 	var notice_text := notices.get_string_from_utf8()
 	if notice_text.to_utf8_buffer() != notices or 0 in notices: return {"error": "invalid_notices"}
 	var decoded := StrictJson.decode(source, 5242880)
 	if not decoded.get("ok", false) or not _story(decoded.get("value")): return {"error": "invalid_story"}
-	var manifest := '{"assets":[],"notices_sha256":"%s","schema_version":"1","story_sha256":"%s"}' % [_digest(notices), _digest(source)]
+	# The package identity covers every asset: exactly the declared files, by SHA-256.
+	var declared: Dictionary = decoded["value"]["assets"]
+	if declared.size() != assets.size(): return {"error": "asset_mismatch"}
+	var keys: Array = declared.keys()
+	keys.sort()
+	var entries: PackedStringArray = []
+	var total := source.size() + notices.size()
+	for key: String in keys:
+		if not assets.has(key) or not assets[key] is PackedByteArray: return {"error": "asset_mismatch"}
+		var data: PackedByteArray = assets[key]
+		total += data.size()
+		if data.size() > (8388608 if declared[key]["kind"] == "font" else 10485760) or total > 104857600: return {"error": "size_limit"}
+		if _digest(data) != declared[key]["sha256"]: return {"error": "asset_hash_mismatch"}
+		entries.append('{"id":"%s","path":"%s","sha256":"%s"}' % [key, declared[key]["path"], declared[key]["sha256"]])
+	var manifest := '{"assets":[%s],"notices_sha256":"%s","schema_version":"1","story_sha256":"%s"}' % [",".join(entries), _digest(notices), _digest(source)]
 	if _digest(manifest.to_utf8_buffer()) != package_hash: return {"error": "content_hash_mismatch"}
 	return {"ok": true, "story": decoded["value"]}

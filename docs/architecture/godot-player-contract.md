@@ -1,6 +1,6 @@
 # Godot authored player
 
-M30 / #120, trusted runtime **0.2.0**, qualified with Godot
+M30 / #120, trusted runtime **0.3.0** (0.2.0 plus story format 2, ADR 0040), qualified with Godot
 `4.7.2.stable.official.ed1daf0bf` on Windows x86-64. The exported source runs
 without the backend, a model, credentials or an account. The compiler supplies a
 strictly validated immutable package; arbitrary creator scripts are not inputs.
@@ -31,6 +31,25 @@ Controls have at least 46px height and a visible focus outline. The Lora font is
 vendored with OFL license and content-addressed provenance under `fonts/`; source
 and compiled exports preserve those notices. This is a starter player, not the
 M31 authoring editor, a screen-reader-qualified UI or a localization guarantee.
+
+## Story format 2: the stage view
+
+Runtime 0.3.0 plays `schema_version: "2"` stories with `runtime/vn_view.gd`; format 1
+keeps `game_view.gd` and its exact behavior. `player.gd` adds the persistent stage
+(background plus characters at left, center or right), stage nodes applied atomically
+within the transition bound, line expressions applied once when a line settles,
+`speaker_color` and `stage` in views and frames, and save schema 2 with full stage
+validation. Native conformance compares frames, states and saves with the Python
+reference on stage routes.
+
+The view draws the background to cover the screen, each character's sprite at its
+slot standing on the bottom edge with its aspect kept, and the themed text box:
+position (bottom, middle or top), width, colours, corner radius and a name box that
+takes the speaker's colour when set. Choices are centred buttons in the theme's
+colours; Save, Load and Restart sit at the top right; end and fault screens offer
+Play again. Clicking the stage or text box, Enter or Space advance a line. A
+creator font loads as a `FontFile` from its verified package bytes, with Lora as
+fallback; text stays plain (BBCode off). Only on-screen images stay decoded.
 
 ## Local saves and stale input
 

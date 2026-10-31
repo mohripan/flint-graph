@@ -24,10 +24,11 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from flint_graph.narrative.build_child import WEB_FILES
+from flint_graph.narrative.build_child import OUTPUT_FILE_LIMIT, OUTPUT_LIMIT, WEB_FILES
 from flint_graph.narrative.export import TEMPLATE_FILES, export_godot
-from flint_graph.narrative.package import load_text_package
+from flint_graph.narrative.package import attach_assets, load_text_package
 from flint_graph.narrative.release_artifacts import (
+    SOURCE_LIMITS,
     ArtifactError,
     make_artifact_zip,
     read_child_files,
@@ -36,9 +37,10 @@ from flint_graph.narrative.release_artifacts import (
 from flint_graph.narrative.values import PackageError, StoryPackage
 
 Check = Callable[[], Awaitable[None]]
-# The only writable child paths. Godot's Linux export stages project.binary under
-# the fixed /tmp regardless of TMPDIR, so a read-only /tmp yields an unbootable pack.
-_TMPFS = {"/scratch": "rw,size=268435456,mode=1777", "/tmp": "rw,size=16777216,mode=1777"}
+# The only writable child paths. Godot's Linux export stages project.binary and the
+# pack's file data under the fixed /tmp regardless of TMPDIR: a read-only /tmp yields
+# an unbootable pack, and /tmp must hold a story's assets (ADR 0040).
+_TMPFS = {"/scratch": "rw,size=268435456,mode=1777", "/tmp": "rw,size=100663296,mode=1777"}
 _SAFE_FAILURES = {
     "input_integrity",
     "engine_failed",
@@ -354,13 +356,13 @@ class DockerNarrativeBuilder:
                         not isinstance(entry, dict)
                         or set(entry) != {"bytes", "sha256"}
                         or type(entry["bytes"]) is not int
-                        or not 1 <= entry["bytes"] <= 52428800
+                        or not 1 <= entry["bytes"] <= OUTPUT_FILE_LIMIT
                         or not isinstance(entry["sha256"], str)
                         or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
                     ):
                         raise ValueError
                     total += entry["bytes"]
-                if total > 67108864:
+                if total > OUTPUT_LIMIT:
                     raise ValueError
                 return inventory
             except BuildError:
@@ -592,11 +594,20 @@ class DockerNarrativeBuilder:
     ) -> BuiltArtifacts:
         await check()
         try:
-            if package.assets:
-                raise BuildError("input_integrity")
-            validated = load_text_package(package.canonical_story, package.notices)
+            # Revalidate everything, including each asset's bytes (ADR 0040).
+            validated = load_text_package(
+                package.canonical_story, package.notices, allow_asset_refs=True
+            )
             if validated.content_hash != package.content_hash:
                 raise BuildError("package_integrity")
+            supplied = {asset.id: asset.data for asset in package.assets}
+            if any(data is None for data in supplied.values()):
+                raise BuildError("input_integrity")
+            validated = await asyncio.to_thread(
+                attach_assets,
+                validated,
+                {key: data for key, data in supplied.items() if data is not None},
+            )
         except PackageError:
             raise BuildError("input_integrity") from None
         folder: Path | None = None
@@ -627,11 +638,14 @@ class DockerNarrativeBuilder:
                 )
                 source = folder / "input"
                 export_godot(validated, source)
+                assets = {"content/" + asset.path: asset.data for asset in validated.assets}
                 names = (
                     *TEMPLATE_FILES,
                     "content/story.json",
                     "content/NOTICES.txt",
                     "content/package-manifest.json",
+                    *assets,
+                    *(name + ".import" for name in assets),
                     "build-manifest.json",
                 )
                 source_files = {relative: (source / relative).read_bytes() for relative in names}
@@ -642,6 +656,7 @@ class DockerNarrativeBuilder:
                         or set(manifest["files"]) != set(names) - {"build-manifest.json"}
                         or source_files["content/story.json"] != validated.canonical_story
                         or source_files["content/NOTICES.txt"] != validated.notices
+                        or any(source_files[name] != data for name, data in assets.items())
                         or hashlib.sha256(source_files["content/package-manifest.json"]).hexdigest()
                         != validated.content_hash
                         or any(
@@ -711,7 +726,9 @@ class DockerNarrativeBuilder:
                     "NOTICES.txt": "content/NOTICES.txt",
                 }.items():
                     files[target] = source_files[original]
-                source_zip = await asyncio.to_thread(make_artifact_zip, source_files)
+                source_zip = await asyncio.to_thread(
+                    make_artifact_zip, source_files, limits=SOURCE_LIMITS
+                )
                 web_zip = await asyncio.to_thread(make_artifact_zip, files)
                 await check()
                 return BuiltArtifacts(validated.content_hash, source_zip, web_zip)

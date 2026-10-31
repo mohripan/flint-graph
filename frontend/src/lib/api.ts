@@ -411,6 +411,16 @@ export const api = {
     return response.arrayBuffer();
   },
 
+  // A saved revision's asset bytes as bound when it was saved (playtests, ADR 0040).
+  async getRevisionAsset(tenantId: string, projectId: string, revisionId: string, key: string,
+    signal?: AbortSignal): Promise<ArrayBuffer> {
+    const response = await fetch(`${BASE}${projectPath(projectId)}/revisions/${encodeURIComponent(revisionId)}`
+      + `/assets/${encodeURIComponent(key)}`,
+      { headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error" });
+    if (!response.ok) throw await parseError(response);
+    return response.arrayBuffer();
+  },
+
   // Asset library (ADR 0040): uploads with a rights declaration, generated backgrounds.
   listNarrativeAssets(tenantId: string, projectId: string, query: {
     kind?: string; status?: string; limit?: number; before?: string;

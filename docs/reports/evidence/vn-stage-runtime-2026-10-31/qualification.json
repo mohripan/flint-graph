@@ -1,0 +1,345 @@
+{
+  "schema_version": "1",
+  "date": "2026-10-31",
+  "revision": {
+    "number": 3,
+    "content_hash": "38d20ff3ce3527138b9155811d5d8880b0188c7865c02d1871f27d371a47aa1f",
+    "schema_version": "2",
+    "assets": 6
+  },
+  "release": {
+    "status": "completed",
+    "build_identity": {
+      "compiler_version": "0.1.0",
+      "runtime_version": "0.3.0",
+      "godot_version": "4.7.2.stable",
+      "toolchain_sha256": "95e0e4f812d7f21b859d4116bb90eaed2d5607ce764f8e19ef4b994279f62f7c",
+      "builder_image_digest": "sha256:67535d20a38144dc9c526c4bf0657af7dc919c8117f2108aa48ca5bed0d916b7"
+    },
+    "artifacts": {
+      "source": {
+        "bytes": 5277679,
+        "sha256": "f0596a4c78623a73f4bca7cd4305f412d8ab07aeb41006b867b13a4d09d3a15f"
+      },
+      "web": {
+        "bytes": 15530317,
+        "sha256": "99097750652d067f3e6a36a383ad5aed40a194f9fdeaeabef305a688a528060b"
+      },
+      "manifest": {
+        "bytes": 935,
+        "sha256": "701fa16a2e748824ab5b6b41ac7206286e117fcb285385649ab7a5079ba67169"
+      }
+    }
+  },
+  "release_inspection": {
+    "asset_bytes_inside_index_pck": 6,
+    "source_assets_with_keep_remaps": 6,
+    "notices_have_asset_section": true
+  },
+  "builder": {
+    "image": "sha256:67535d20a38144dc9c526c4bf0657af7dc919c8117f2108aa48ca5bed0d916b7",
+    "toolchain_sha256": "95e0e4f812d7f21b859d4116bb90eaed2d5607ce764f8e19ef4b994279f62f7c",
+    "runtime_files": {
+      "runtime/bootstrap.gd": "19b264eb8183034cbfdc6ad4ef99ec6299da017db38298223a04d6ced83d7ae9",
+      "runtime/game_view.gd": "02e9558b0009b14e8e7e2bff4884092fbc4ec0d911cb01776601024dec51cb07",
+      "runtime/player.gd": "0f7d054ad24e796aeb7f02444573402a6b1632ca9577a7c9f550338a147de71c",
+      "runtime/save_store.gd": "aa5ddcfe1ef12b9269fff7e8b613169d1d5d1b9e324ad247a51bbf6e1e778fa5",
+      "runtime/strict_json.gd": "408a81436eda2bc6ec0dc49be34fb394dc63299e35a29c30518befe0015b7587",
+      "runtime/vn_view.gd": "0182acc68e41d0c6e0b342ede08823ef5560c8afcaa331786bdc32abc2656e87"
+    }
+  },
+  "preview_build": {
+    "runtime": "0.3.0",
+    "files": {
+      "bridge.js": "e9cdd3fd80d04134a2d9d858d7dfb21598076ded07064c9803a54ca4f5ddc114",
+      "index.pck": "14ebe0b6842dce167e5d6453d1ec37f6f4b9193f902f1751b37e236e36f65308"
+    },
+    "source_files": {
+      "runtime/vn_view.gd": "0182acc68e41d0c6e0b342ede08823ef5560c8afcaa331786bdc32abc2656e87",
+      "preview/bootstrap.gd": "09e339e5d4cd1678cff5edd0ac6ba6e8c586eddec049ec6d1e487a3f1da7588b",
+      "preview/vn_view.gd": "ca0b6c1ed810a9e26e57da076372b202bbbbccfadac45f3d8c01c05b4b741435",
+      "preview/validate_story.gd": "4547fc9eae3782c3210342e1f2f60695fd9bcafcb0dcf857b8b7636515d8e69b"
+    }
+  },
+  "released_build_route_headless_edge": {
+    "browser": "Edg/156.0.4314.50",
+    "steps": [
+      {
+        "step": "opening",
+        "node": "l1",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "expression",
+        "node": "l2",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "smile"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "entrance",
+        "node": "l3",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "smile"
+            },
+            {
+              "id": "mira",
+              "position": "right",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "choice",
+        "node": "ask",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "smile"
+            },
+            {
+              "id": "mira",
+              "position": "right",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Walk to the end of the pier",
+          "Wait for the bell"
+        ]
+      },
+      {
+        "step": "fog",
+        "node": "l4",
+        "stage": {
+          "background": "harbor_fog",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "center",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "saved",
+        "node": "l4",
+        "stage": {
+          "background": "harbor_fog",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "center",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "restarted",
+        "node": "l1",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "loaded",
+        "node": "l4",
+        "stage": {
+          "background": "harbor_fog",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "center",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "ending",
+        "node": "end_walk",
+        "stage": {
+          "background": "harbor_fog",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "center",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Play again"
+        ]
+      }
+    ]
+  },
+  "studio_playtest_route_headless_edge": {
+    "browser": "Edg/156.0.4314.50",
+    "steps": [
+      {
+        "step": "opening",
+        "node": "l1",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "expression",
+        "node": "l2",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "smile"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "entrance",
+        "node": "l3",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "smile"
+            },
+            {
+              "id": "mira",
+              "position": "right",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Continue"
+        ]
+      },
+      {
+        "step": "choice",
+        "node": "ask",
+        "stage": {
+          "background": "harbor_dusk",
+          "characters": [
+            {
+              "id": "quen",
+              "position": "left",
+              "sprite": "smile"
+            },
+            {
+              "id": "mira",
+              "position": "right",
+              "sprite": "neutral"
+            }
+          ]
+        },
+        "custom_font": true,
+        "controls": [
+          "Walk to the end of the pier",
+          "Wait for the bell"
+        ]
+      }
+    ],
+    "asset_requests": [
+      "harbor_dusk",
+      "harbor_fog",
+      "lora",
+      "mira_neutral",
+      "quen_neutral",
+      "quen_smile"
+    ]
+  },
+  "studio_playtest_v1_regression": {
+    "node": "opening",
+    "layout": "reader",
+    "stage": null,
+    "background": null,
+    "status": "Playing saved revision"
+  }
+}

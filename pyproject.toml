@@ -63,6 +63,7 @@ packages = ["src/flint_graph"]
 "runtimes/godot/runtime/strict_json.gd" = "flint_graph/narrative/export/template/runtime/strict_json.gd"
 "runtimes/godot/runtime/player.gd" = "flint_graph/narrative/export/template/runtime/player.gd"
 "runtimes/godot/runtime/game_view.gd" = "flint_graph/narrative/export/template/runtime/game_view.gd"
+"runtimes/godot/runtime/vn_view.gd" = "flint_graph/narrative/export/template/runtime/vn_view.gd"
 "runtimes/godot/runtime/save_store.gd" = "flint_graph/narrative/export/template/runtime/save_store.gd"
 "runtimes/godot/fonts/Lora.ttf" = "flint_graph/narrative/export/template/fonts/Lora.ttf"
 "runtimes/godot/fonts/LICENSE-Lora.txt" = "flint_graph/narrative/export/template/fonts/LICENSE-Lora.txt"

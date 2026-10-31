@@ -4,6 +4,9 @@ extends Control
 
 const StrictJson = preload("res://runtime/strict_json.gd")
 const GameView = preload("res://runtime/game_view.gd")
+const VnView = preload("res://runtime/vn_view.gd")
+# Images up to 10 MiB and fonts up to 8 MiB; story format 2 adds fonts (ADR 0040).
+const ASSET_CAPS := {"png": 10485760, "ttf": 8388608, "otf": 8388608}
 
 
 func _digest(data: PackedByteArray) -> String:
@@ -40,9 +43,11 @@ func verify_content() -> Dictionary:
 	for asset: Variant in manifest["assets"]:
 		if not asset is Dictionary or not asset.get("id") is String or ids.search(asset["id"]) == null:
 			return {"error": "invalid_asset_manifest"}
-		if asset.get("path") != "assets/" + asset["id"] + ".png":
+		var path: Variant = asset.get("path")
+		var extension: String = path.get_extension() if path is String else ""
+		if not ASSET_CAPS.has(extension) or path != "assets/" + asset["id"] + "." + extension:
 			return {"error": "invalid_asset_path"}
-		var data := _bytes("res://content/" + asset["path"], 10485760)
+		var data := _bytes("res://content/" + path, ASSET_CAPS[extension])
 		total += data.size()
 		if total > 104857600:
 			return {"error": "content_size_limit"}
@@ -68,7 +73,7 @@ func _ready() -> void:
 	if "--verify-content" in OS.get_cmdline_user_args():
 		get_tree().quit(0)
 		return
-	var game := GameView.new()
+	var game: Control = VnView.new() if checked["story"].get("schema_version") == "2" else GameView.new()
 	game.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(game)
 	game.configure(checked["story"], checked["package_hash"], checked["assets"])

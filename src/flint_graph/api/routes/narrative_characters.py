@@ -5,6 +5,7 @@ a durable job and never runs inside a request. Image bytes are served only after
 their stored SHA-256 and size verify.
 """
 
+import json
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -45,7 +46,11 @@ from flint_graph.application.services.narrative_images import (
     get_image_job,
     list_image_jobs,
 )
-from flint_graph.application.services.narrative_projects import get_project
+from flint_graph.application.services.narrative_package_v2 import (
+    bind_story_assets,
+    bound_object_key,
+)
+from flint_graph.application.services.narrative_projects import get_project, get_revision
 from flint_graph.domain.errors import DomainError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     NarrativeAsset,
@@ -58,6 +63,7 @@ from flint_graph.infrastructure.narrative_artifact_store import (
 )
 from flint_graph.infrastructure.narrative_imagegen import IMAGE_LIMIT, THUMBNAIL_LIMIT
 from flint_graph.narrative.font import FONT_LIMIT
+from flint_graph.narrative.package import PACKAGE_LIMIT
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}", tags=["narrative"])
 CharacterId = Annotated[str, Path(pattern=CHARACTER_ID)]
@@ -264,6 +270,61 @@ async def discard_asset_endpoint(
         ),
     )
     return AssetResponse.model_validate(asset)
+
+
+@router.get("/revisions/{revision_id}/assets/{asset_key}")
+async def revision_asset_content(
+    project_id: UUID,
+    revision_id: UUID,
+    asset_key: Annotated[str, Path(pattern=r"^[a-z][a-z0-9_-]{0,63}$")],
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    store: NarrativeArtifactStoreDep,
+) -> Response:
+    """A saved revision's asset bytes, as bound when it was saved (playtests, ADR 0040).
+
+    Revisions are immutable and bindings survive discarding, so the bytes never change.
+    """
+    revision = await get_revision(
+        session, tenant_id=tenant_id, project_id=project_id, revision_id=revision_id
+    )
+    story = json.loads(revision.story_json)
+    item = story["assets"].get(asset_key) if story["schema_version"] == "2" else None
+    if item is None:
+        raise NotFoundError("Asset was not found.")
+    try:
+        (bound,) = await bind_story_assets(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            assets={asset_key: item},
+            budget=PACKAGE_LIMIT,
+            lock=False,
+        )
+    except DomainError:
+        raise NotFoundError("Asset was not found.") from None
+    font = bound.kind == "font"
+    try:
+        data = await store.get_verified(
+            bound_object_key(tenant_id, project_id, bound),
+            expected_size=bound.asset.size_bytes,
+            expected_sha256=bound.sha256,
+            max_bytes=FONT_LIMIT if font else IMAGE_LIMIT,
+        )
+    except (ArtifactStoreError, ValueError):
+        raise DomainError(
+            503, "Service unavailable", "This asset is unavailable.", "asset-unavailable"
+        ) from None
+    return Response(
+        content=data,
+        media_type=bound.asset.media_type,
+        headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "ETag": f'"{bound.sha256}"',
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'inline; filename="{item["path"].removeprefix("assets/")}"',
+        },
+    )
 
 
 @router.get("/assets/{asset_id}/content")

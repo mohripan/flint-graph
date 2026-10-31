@@ -18,14 +18,16 @@ new-project/
   runtime/bootstrap.gd, strict_json.gd, player.gd, game_view.gd, save_store.gd
   fonts/Lora.ttf, LICENSE-Lora.txt, provenance.json
   content/story.json, package-manifest.json, NOTICES.txt
-  content/assets/<id>.png, <id>.png.import
+  content/assets/<id>.png|.ttf|.otf, <id>.<ext>.import
   toolchain.json, build-manifest.json
   README.txt, LICENSE.runtime.txt, GODOT-NOTICE.txt
 ```
 
 The bootstrap verifies source/notices/PNG hashes, captures those bytes and starts
-the authored player. Runtime 0.2.0 adds narration, choices and local saves; see the
-[player contract](godot-player-contract.md). The original #119 report records the
+the authored player. Runtime 0.2.0 adds narration, choices and local saves; 0.3.0 adds
+story format 2 with fonts and the stage view (`runtime/vn_view.gd`); see the
+[player contract](godot-player-contract.md). Every asset, including fonts, ships with
+a fixed `keep` import remap so the runtime reads its exact verified bytes. The original #119 report records the
 earlier 0.1.0 verification-only bootstrap. Browser qualification is recorded
 separately in #121.
 

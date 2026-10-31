@@ -420,12 +420,12 @@ async def test_private_input_requires_current_fence_and_exact_pinned_builder(exe
         await claim_release_execution(session, **scope, token=token)
         await session.commit()
     async with factory() as session:
-        package = await load_release_input(session, **scope, token=token, build=build)
+        package = (await load_release_input(session, **scope, token=token, build=build)).package
         for field, wrong in {
             "builder_image_digest": "sha256:" + "c" * 64,
             "toolchain_sha256": "c" * 64,
             "compiler_version": "0.2.0",
-            "runtime_version": "0.3.0",
+            "runtime_version": "0.2.0",
             "godot_version": "4.8.0.stable",
         }.items():
             with pytest.raises(ReleaseInputError, match=r"^runtime_unavailable$"):

@@ -46,6 +46,35 @@ func _initialize() -> void:
 	var checked: Dictionary = bootstrap.verify_content()
 	bootstrap.free()
 	var config: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://qualification.json"))
+	if config["case"] == "stage_layout":
+		# The headless window keeps its own size, so the view is sized explicitly.
+		var stage: Control = load("res://runtime/vn_view.gd").new()
+		root.add_child(stage)
+		stage.size = Vector2(1280, 720)
+		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		var screens: Array = []
+		for step: String in ["", "Continue", "Go", "Continue"]:
+			if step != "":
+				_find(stage, step).pressed.emit()
+			await process_frame
+			await process_frame
+			var figures: Array = []
+			for figure: Node in stage._figures.get_children():
+				if figure is TextureRect and not figure.is_queued_for_deletion():
+					var rect: Rect2 = figure.get_global_rect()
+					figures.append({"position": figure.get_meta("position"), "x": rect.position.x,
+						"bottom": rect.end.y, "width": rect.size.x, "height": rect.size.y})
+			var box: Rect2 = stage._box.get_global_rect()
+			var labels: Array = []
+			for button: Button in stage._buttons:
+				labels.append(button.text)
+			screens.append({"text": _body(stage), "buttons": labels, "figures": figures,
+				"background": stage._background.texture != null,
+				"name": stage._name.text if stage._name_box.visible else null,
+				"box": {"left": box.position.x, "right": box.end.x, "bottom": box.end.y, "top": box.position.y}})
+		print("UI_RESULT:" + JSON.stringify({"screens": screens}))
+		quit(0)
+		return
 	if config["case"] == "stale_restart":
 		root.size = Vector2i(1280, 900)
 		var view: Control = load("res://runtime/game_view.gd").new()

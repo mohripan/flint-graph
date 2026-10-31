@@ -38,6 +38,7 @@ RUNTIME_FILES = frozenset(
         "runtime/strict_json.gd",
         "runtime/player.gd",
         "runtime/game_view.gd",
+        "runtime/vn_view.gd",
         "runtime/save_store.gd",
         "fonts/Lora.ttf",
         "fonts/LICENSE-Lora.txt",
@@ -52,6 +53,19 @@ RUNTIME_FILES = frozenset(
 CONTENT_FILES = frozenset(
     {"content/story.json", "content/NOTICES.txt", "content/package-manifest.json"}
 )
+# Story assets (ADR 0040): exactly the package manifest's files, each with the fixed
+# "keep" remap that lets the runtime read its verified bytes from the pack.
+ASSET_FILE = re.compile(r"content/assets/[a-z][a-z0-9_-]{0,63}\.(png|ttf|otf)\Z")
+ASSET_CAPS = {"png": 10 * 1024 * 1024, "ttf": 8 * 1024 * 1024, "otf": 8 * 1024 * 1024}
+INPUT_LIMIT = 112 * 1024 * 1024
+OUTPUT_FILE_LIMIT = 64 * 1024 * 1024
+OUTPUT_LIMIT = 96 * 1024 * 1024
+
+
+def _import_remap(name: str) -> bytes:
+    return (
+        '[remap]\nimporter="keep"\n\n[deps]\nsource_file="res://' + name + '"\n\n[params]\n'
+    ).encode()
 
 
 def _read(path: Path, cap: int) -> bytes:
@@ -92,21 +106,41 @@ def _inputs(source: Path, trusted: Mapping[str, str]) -> dict[str, bytes]:
     if (
         manifest["schema_version"] != "1"
         or manifest["compiler_version"] != "0.1.0"
-        or manifest["runtime_version"] != "0.2.0"
+        or manifest["runtime_version"] != "0.3.0"
         or manifest["godot_version"] != "4.7.2.stable"
         or not isinstance(manifest["package_hash"], str)
         or not re.fullmatch(r"[0-9a-f]{64}", manifest["package_hash"])
     ):
         raise ValueError("input_integrity")
     hashes = manifest["files"]
-    if set(hashes) != RUNTIME_FILES | CONTENT_FILES:
+    if not isinstance(hashes, dict):
         raise ValueError("input_integrity")
-    result = {}
+    assets = sorted(name for name in hashes if ASSET_FILE.fullmatch(name))
+    if len(assets) > 256 or set(hashes) != RUNTIME_FILES | CONTENT_FILES | set(assets) | {
+        name + ".import" for name in assets
+    }:
+        raise ValueError("input_integrity")
+    result, total = {}, 0
     for name in sorted(hashes):
-        cap = 5 * 1024 * 1024 if name == "content/story.json" else 1024 * 1024
+        match = ASSET_FILE.fullmatch(name)
+        cap = (
+            ASSET_CAPS[match.group(1)]
+            if match
+            else 4096
+            if name.endswith(".import")
+            else 5 * 1024 * 1024
+            if name == "content/story.json"
+            else 1024 * 1024
+        )
         data = _read(source / name, cap)
+        total += len(data)
         actual = hashlib.sha256(data).hexdigest()
-        if actual != hashes[name] or (name in trusted and actual != trusted[name]):
+        if (
+            total > INPUT_LIMIT
+            or actual != hashes[name]
+            or (name in trusted and actual != trusted[name])
+            or (name.endswith(".import") and data != _import_remap(name.removesuffix(".import")))
+        ):
             raise ValueError("input_integrity")
         result[name] = data
     result["build-manifest.json"] = manifest_bytes
@@ -114,6 +148,11 @@ def _inputs(source: Path, trusted: Mapping[str, str]) -> dict[str, bytes]:
         hashlib.sha256(result["content/package-manifest.json"]).hexdigest()
         != manifest["package_hash"]
     ):
+        raise ValueError("input_integrity")
+    # The pack carries exactly the package's assets; nothing else rides along.
+    package = json.loads(result["content/package-manifest.json"], object_pairs_hook=unique)
+    listed = {"content/" + item["path"]: item["sha256"] for item in package["assets"]}
+    if len(listed) != len(package["assets"]) or listed != {name: hashes[name] for name in assets}:
         raise ValueError("input_integrity")
     return result
 
@@ -208,9 +247,9 @@ def run_build(
         inventory = {}
         total = 0
         for name in sorted(WEB_FILES):
-            data = _read(web / name, 50 * 1024 * 1024)
+            data = _read(web / name, OUTPUT_FILE_LIMIT)
             total += len(data)
-            if total > 64 * 1024 * 1024:
+            if total > OUTPUT_LIMIT:
                 return failed("output_size_limit")
             inventory[name] = {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
         return {"schema_version": "1", "status": "ready", "files": inventory}
@@ -227,7 +266,7 @@ def main() -> None:
             for name in sorted(WEB_FILES):
                 path = root / name
                 info = path.lstat()
-                if not stat.S_ISREG(info.st_mode) or info.st_size > 50 * 1024 * 1024:
+                if not stat.S_ISREG(info.st_mode) or info.st_size > OUTPUT_FILE_LIMIT:
                     raise ValueError("output_inventory")
                 entry = tarfile.TarInfo("web/" + name)
                 entry.size = info.st_size

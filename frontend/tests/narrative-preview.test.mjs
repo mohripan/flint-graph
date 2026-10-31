@@ -26,3 +26,31 @@ test("the preview channel rejects wrong-window, wrong-origin, wrong-nonce and un
   assert.equal(protocol.acceptPreviewMessage({ ...event, data: { ...loaded, content_hash: "0".repeat(64) } }, context, "loading"), null);
   assert.equal(protocol.acceptPreviewMessage({ ...event, data: loaded }, context, "waiting"), null);
 });
+test("v2 playtests check every declared asset's size and hash before loading", async () => {
+  const bytes = text => new TextEncoder().encode(text).buffer;
+  const hex = async data => protocol.sha256Hex(data);
+  const dusk = bytes("dusk image"), type = bytes("font");
+  const declared = {
+    dusk: { kind: "image", path: "assets/dusk.png", sha256: await hex(dusk) },
+    type: { kind: "font", path: "assets/type.ttf", sha256: await hex(type) },
+  };
+  assert.deepEqual(Object.keys(await protocol.checkedAssets(declared, { type, dusk })), ["dusk", "type"]);
+  for (const fetched of [{ dusk }, { dusk, type, extra: dusk }, { dusk: type, type }, { dusk, type: new ArrayBuffer(8388609) }])
+    await assert.rejects(protocol.checkedAssets(declared, fetched));
+  await assert.rejects(protocol.checkedAssets({ ...declared, dusk: { ...declared.dusk, kind: "audio" } }, { dusk, type }));
+  assert.equal(protocol.storyAssets('{"schema_version":"1","assets":{}}'), null);
+  assert.deepEqual(protocol.storyAssets(JSON.stringify({ schema_version: "2", assets: declared })), declared);
+});
+test("v1 revisions keep message version 1; v2 transfers its asset buffers", () => {
+  const revision = { id: revision_id(), content_hash: hash, story_json: "{}", notices: "" };
+  const v1 = protocol.snapshotMessage(nonce, revision, null);
+  assert.equal(v1.message.version, 1);
+  assert.equal("assets" in v1.message, false);
+  assert.deepEqual(v1.transfer, []);
+  const buffer = new ArrayBuffer(4);
+  const v2 = protocol.snapshotMessage(nonce, revision, { dusk: buffer });
+  assert.equal(v2.message.version, 2);
+  assert.equal(v2.message.assets.dusk, buffer);
+  assert.deepEqual(v2.transfer, [buffer]);
+});
+function revision_id() { return revision; }

@@ -62,8 +62,14 @@ Playtest labels the revision number; Save & playtest first saves and then plays 
 the acknowledged revision. History can play a specific older/conflict revision.
 The parent sends only canonical source/notices, revision ID and content hash through
 an exact origin/window/nonce-bound channel. The nonce stays in the iframe fragment.
-The Godot adapter strictly validates the text-only story and exact package identity
-before creating the shared player. It receives no application token, workspace ID
+The Godot adapter strictly validates the story and exact package identity before
+creating the shared player. For story format 2 the Studio first fetches each image and
+font from `GET .../revisions/{id}/assets/{key}` (the bytes bound at save), checks
+every SHA-256, and sends them as transferred `ArrayBuffer`s (message version 2); the
+player pulls them one at a time into its in-memory file system and checks the hashes
+again. Format 1 keeps message version 1. Playtest needs
+`VITE_FLINT_GRAPH_PREVIEW_ORIGIN` (for example `http://127.0.0.1:5192`) set for the
+frontend dev server. It receives no application token, workspace ID
 or API URL. The iframe cannot open popups, navigate the top page, submit forms or
 download. Local preview CSP permits trusted WASM compilation, without general eval.
 

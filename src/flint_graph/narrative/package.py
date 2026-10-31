@@ -3,6 +3,7 @@
 import hashlib
 import os
 import stat
+from collections.abc import Mapping
 from pathlib import Path
 
 from flint_graph.narrative.font import validate_font
@@ -47,6 +48,40 @@ def load_text_package(
     if len(canonical) > STORY_LIMIT:
         raise PackageError("size_limit", "story.json")
     return StoryPackage(canonical, notices, references, warnings=warnings)
+
+
+def _checked_asset(kind: str, path: str, data: bytes, location: str) -> None:
+    if kind == "font":
+        flavor = validate_font(data, location)
+        if not path.endswith("." + flavor):
+            raise PackageError("unsafe_path", location)
+    else:
+        validate_png(data, location)
+
+
+def attach_assets(package: StoryPackage, data: Mapping[str, bytes]) -> StoryPackage:
+    """Give a referencing v2 package its bytes (ADR 0040).
+
+    Each reference needs exactly its bytes. Hashes, limits and the PNG and font
+    checks run again, so whatever ships never trusts a stored copy.
+    """
+    if set(data) != {asset.id for asset in package.assets}:
+        raise PackageError("missing_file", "assets")
+    declared = package.story["assets"]
+    total = len(package.canonical_story) + len(package.notices)
+    attached = []
+    for asset in package.assets:
+        content, location = data[asset.id], f"assets.{asset.id}"
+        if type(content) is not bytes or len(content) > ASSET_LIMIT:
+            raise PackageError("size_limit", location)
+        total += len(content)
+        if total > PACKAGE_LIMIT:
+            raise PackageError("size_limit")
+        if hashlib.sha256(content).hexdigest() != asset.sha256:
+            raise PackageError("hash_mismatch", location)
+        _checked_asset(declared[asset.id].get("kind", "image"), asset.path, content, location)
+        attached.append(Asset(asset.id, asset.path, asset.sha256, content))
+    return StoryPackage(package.canonical_story, package.notices, tuple(attached), package.warnings)
 
 
 def _regular(path: Path, *, directory: bool = False) -> os.stat_result:
@@ -127,12 +162,7 @@ def load_package(root: Path) -> StoryPackage:
             digest = hashlib.sha256(data).hexdigest()
             if digest != item["sha256"]:
                 raise PackageError("hash_mismatch", f"assets.{key}")
-            if item.get("kind") == "font":
-                flavor = validate_font(data, f"assets.{key}")
-                if not item["path"].endswith("." + flavor):
-                    raise PackageError("unsafe_path", f"assets.{key}")
-            else:
-                validate_png(data, f"assets.{key}")
+            _checked_asset(item.get("kind", "image"), item["path"], data, f"assets.{key}")
             assets.append(Asset(key, item["path"], digest, data))
         return StoryPackage(canonical_json(story), notices, tuple(assets), warnings)
     except PackageError:

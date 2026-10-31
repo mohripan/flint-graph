@@ -108,7 +108,7 @@ async def test_child_gets_bounded_writable_tmp_and_publishable_web_pack(tmp_path
         assert web.read("index.pck").startswith(b"GDPC")
     assert json.loads((tmp_path / "created-tmpfs.json").read_text()) == {
         "/scratch": "rw,size=268435456,mode=1777",
-        "/tmp": "rw,size=16777216,mode=1777",
+        "/tmp": "rw,size=100663296,mode=1777",
     }
     assert list(scratch.iterdir()) == []
     assert not (tmp_path / "state.json").exists()

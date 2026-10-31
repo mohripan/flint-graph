@@ -15,6 +15,7 @@ TEMPLATE_FILES = (
     "runtime/strict_json.gd",
     "runtime/player.gd",
     "runtime/game_view.gd",
+    "runtime/vn_view.gd",
     "runtime/save_store.gd",
     "fonts/Lora.ttf",
     "fonts/LICENSE-Lora.txt",
@@ -66,7 +67,7 @@ def export_godot(package: StoryPackage, target: Path) -> ExportResult:
             # A Studio reference whose verified bytes were never loaded cannot ship.
             raise ExportError("asset_unavailable")
         payloads["content/" + asset.path] = asset.data
-        # Keep exact validated PNG bytes available to FileAccess in exported PCKs.
+        # Keep exact validated PNG and font bytes available to FileAccess in exported PCKs.
         payloads["content/" + asset.path + ".import"] = (
             '[remap]\nimporter="keep"\n\n[deps]\nsource_file="res://content/'
             + asset.path

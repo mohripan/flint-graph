@@ -33,23 +33,27 @@ class ArtifactError(ValueError):
 
 @dataclass(frozen=True)
 class ArtifactLimits:
-    wire_bytes: int = 72 * _MIB
-    file_bytes: int = 50 * _MIB
-    total_bytes: int = 64 * _MIB
+    # Uncompressed bounds. A story's assets (at most 48 MiB, ADR 0040) sit in the
+    # pack next to the ~38 MiB engine; the compressed ZIPs stay within 64 MiB.
+    wire_bytes: int = 100 * _MIB
+    file_bytes: int = 64 * _MIB
+    total_bytes: int = 96 * _MIB
     max_files: int = 32
 
     def __post_init__(self) -> None:
         for value, ceiling in [
-            (self.wire_bytes, 72 * _MIB),
-            (self.file_bytes, 50 * _MIB),
-            (self.total_bytes, 64 * _MIB),
-            (self.max_files, 32),
+            (self.wire_bytes, 100 * _MIB),
+            (self.file_bytes, 64 * _MIB),
+            (self.total_bytes, 96 * _MIB),
+            (self.max_files, 1024),
         ]:
             if type(value) is not int or not 1 <= value <= ceiling:
                 raise ValueError("Invalid artifact limits")
 
 
 _DEFAULT_LIMITS = ArtifactLimits()
+# Editable source: runtime and content files plus two files per story asset.
+SOURCE_LIMITS = ArtifactLimits(max_files=600)
 
 
 class BinaryReader(Protocol):

@@ -66,8 +66,12 @@ declarations and generated backgrounds, migration 0024), is delivered; read
 `docs/reports/2026-10-31-asset-library.md`. Slice 2, story package v2, is delivered
 behind `narrative_package_v2_enabled`, which is off: the format, reference player,
 saves, asset binding by SHA-256, server-built NOTICES and the explicit upgrade. Read
-`docs/reports/2026-10-31-story-package-v2.md`. Slice 3 (Godot `vn_view`, playtest
-bridge, release builds) must land before the flag is turned on. The owned PostgreSQL, MinIO and Temporal
+`docs/reports/2026-10-31-story-package-v2.md`. Slice 3 (runtime 0.3.0) plays v2
+everywhere: Godot `vn_view.gd`, playtests with transferred asset bytes and a revision
+asset endpoint, and release builds with assets; read
+`docs/reports/2026-10-31-vn-stage-runtime.md`. The flag default stays off until slice 4
+(Studio editors); the owned API turns it on. Owned playtests need
+`VITE_FLINT_GRAPH_PREVIEW_ORIGIN` on the frontend dev server. The owned PostgreSQL, MinIO and Temporal
 fixtures now use Docker volumes with fixed ports
 (`notes/persist-narrative-fixtures.py`). The earlier tmpfs fixtures lost all data on
 a Docker restart.

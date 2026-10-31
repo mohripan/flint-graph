@@ -5,7 +5,10 @@ func _initialize() -> void:
 	var cases: Array = JSON.parse_string(FileAccess.get_file_as_string("res://cases.json"))
 	var results := []
 	for item: Dictionary in cases:
-		var checked: Dictionary = validator.validate(Marshalls.base64_to_raw(item["source"]), Marshalls.base64_to_raw(item["notices"]), item["hash"])
+		var assets := {}
+		for key: String in item.get("assets", {}):
+			assets[key] = Marshalls.base64_to_raw(item["assets"][key])
+		var checked: Dictionary = validator.validate(Marshalls.base64_to_raw(item["source"]), Marshalls.base64_to_raw(item["notices"]), item["hash"], assets)
 		results.append(checked.get("ok", false))
 	print("PREVIEW_PROBE:" + JSON.stringify(results))
 	quit(0)

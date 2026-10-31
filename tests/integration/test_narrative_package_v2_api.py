@@ -1,18 +1,26 @@
 """Saving story package v2 revisions: gate, upgrade, asset binding and NOTICES (ADR 0040)."""
 
 import json
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import update
 from test_narrative_asset_library_api import rgba_png, static_font, upload
 from test_narrative_characters_api import MemoryStore, run_job
 
 from flint_graph.api.dependencies import get_narrative_artifact_store
 from flint_graph.application.narrative_image_workflow import ImageJobPayload
 from flint_graph.application.services.narrative_package_v2 import NOTICE_MARKER
+from flint_graph.application.services.narrative_release_execution import (
+    ReleaseInputError,
+    claim_release_execution,
+    load_release_input,
+)
+from flint_graph.application.services.narrative_releases import BuildIdentity
 from flint_graph.config import Settings, get_settings
+from flint_graph.infrastructure.db.models import NarrativeAsset
 from flint_graph.main import app
-from flint_graph.narrative.package import load_text_package
+from flint_graph.narrative.package import attach_assets, load_text_package
 
 
 def configure(**changes):
@@ -244,3 +252,134 @@ async def test_v2_is_gated_from_v1_bases_but_editing_v2_continues(v2):
     story = json.loads((await head(client, headers, base))["story_json"])
     story["title"] = "Harbor, revised"
     assert (await save(client, headers, base, story)).status_code == 201
+
+
+async def bound_story(client, headers, base):
+    """Upload a background and a font, upgrade, and save a v2 story that uses both."""
+    background = (
+        await upload(
+            client,
+            headers,
+            base,
+            kind="background",
+            name="Dusk",
+            data=rgba_png(),
+            filename="d.png",
+            media="image/png",
+            form={
+                "license": "CC BY 4.0",
+                "notice": "Photo by A. Painter.",
+                "rights_declared": "true",
+            },
+        )
+    ).json()
+    font = (
+        await upload(
+            client,
+            headers,
+            base,
+            kind="font",
+            name="Type",
+            data=static_font(),
+            filename="t.ttf",
+            media="font/ttf",
+            form={"license": "OFL-1.1", "notice": "", "rights_declared": "true"},
+        )
+    ).json()
+    v1 = await head(client, headers, base)
+    assert (await upgrade(client, headers, base)).status_code == 201
+    story = json.loads((await head(client, headers, base))["story_json"])
+    story["assets"] = {
+        "dusk": {"kind": "image", "path": "assets/dusk.png", "sha256": background["sha256"]},
+        "type": {"kind": "font", "path": "assets/type.ttf", "sha256": font["sha256"]},
+    }
+    story["theme"] = {"font": {"asset": "type"}}
+    story["nodes"]["stage0"] = {"type": "stage", "background": "dusk", "next": story["entry"]}
+    story["entry"] = "stage0"
+    saved = await save(client, headers, base, story, "Story by me.")
+    assert saved.status_code == 201, saved.text
+    return saved.json(), v1, background, font
+
+
+@pytest.mark.anyio
+async def test_revision_assets_are_served_as_bound_even_after_discard(v2):
+    client, _, _, headers, project = v2
+    base, _ = await project()
+    revision, v1, background, _ = await bound_story(client, headers, base)
+    path = f"{base}/revisions/{revision['id']}/assets"
+    image = await client.get(f"{path}/dusk", headers=headers)
+    assert image.status_code == 200 and image.content == rgba_png()
+    assert image.headers["content-type"] == "image/png"
+    assert "immutable" in image.headers["cache-control"]
+    assert image.headers["x-content-type-options"] == "nosniff"
+    typed = await client.get(f"{path}/type", headers=headers)
+    assert typed.status_code == 200 and typed.content == static_font()
+    assert typed.headers["content-type"] == "font/ttf"
+    await client.post(f"{base}/assets/{background['id']}/discard", headers=headers)
+    assert (await client.get(f"{path}/dusk", headers=headers)).content == rgba_png()
+    assert (await client.get(f"{path}/missing", headers=headers)).status_code == 404
+    assert (await client.get(f"{path}/BAD", headers=headers)).status_code == 422
+    old = f"{base}/revisions/{v1['id']}/assets/dusk"
+    assert (await client.get(old, headers=headers)).status_code == 404
+    other_base, _ = await project("Other")
+    foreign = f"{other_base}/revisions/{revision['id']}/assets/dusk"
+    assert (await client.get(foreign, headers=headers)).status_code == 404
+
+
+@pytest.mark.anyio
+async def test_v2_release_input_resolves_bound_assets_and_rechecks_notices(v2):
+    client, factory, store, headers, project = v2
+    base, _ = await project()
+    revision, _, background, _ = await bound_story(client, headers, base)
+    build = BuildIdentity("sha256:" + "a" * 64, "b" * 64)
+    configure(
+        narrative_package_v2_enabled=True,
+        narrative_releases_enabled=True,
+        narrative_release_builder_image_digest=build.builder_image_digest,
+        narrative_release_toolchain_sha256=build.toolchain_sha256,
+    )
+    release = (
+        await client.post(
+            f"{base}/releases",
+            headers=headers,
+            json={"revision_id": revision["id"], "idempotency_key": str(uuid4())},
+        )
+    ).json()
+    assert release["build_identity"]["runtime_version"] == "0.3.0"
+    scope = {
+        "tenant_id": UUID(headers["X-Tenant-ID"]),
+        "release_id": UUID(release["id"]),
+        "job_id": UUID(release["job"]["id"]),
+    }
+    token = uuid4()
+    async with factory() as session:
+        await claim_release_execution(session, **scope, token=token)
+        await session.commit()
+    async with factory() as session:
+        loaded = await load_release_input(session, **scope, token=token, build=build)
+        await session.commit()
+    assert [source.id for source in loaded.assets] == ["dusk", "type"]
+    assert all(source.object_key.endswith((".png", ".bin")) for source in loaded.assets)
+    data = {
+        source.id: await store.get_verified(
+            source.object_key,
+            expected_size=source.size,
+            expected_sha256=source.sha256,
+            max_bytes=source.max_bytes,
+        )
+        for source in loaded.assets
+    }
+    attached = attach_assets(loaded.package, data)
+    assert attached.content_hash == release["package_hash"]
+    # Asset rights are immutable; if a row ever drifted, the saved notices no longer
+    # match what the server would build and the release refuses to ship.
+    async with factory() as session:
+        await session.execute(
+            update(NarrativeAsset)
+            .where(NarrativeAsset.id == UUID(background["id"]))
+            .values(license="Changed")
+        )
+        await session.commit()
+    async with factory() as session:
+        with pytest.raises(ReleaseInputError, match=r"^input_integrity$"):
+            await load_release_input(session, **scope, token=token, build=build)
