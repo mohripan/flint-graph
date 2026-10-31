@@ -21,10 +21,11 @@ With a ``hires`` request each render is upscaled (Lanczos) and lightly repainted
 at the larger size by the same weights (img2img, same prompt and seed), so large
 stage sprites gain real detail; the cutout then runs on the final image.
 
-With a ``scene`` request (ADR 0041 slice C) it draws a 16:9 event CG of an existing
-character: the pinned IP-Adapter Plus (ViT-H) takes an approved image of them as the
-identity reference. The image encoder runs once, before the SDXL weights reach the
-GPU, and is released again, so the peak stays near a plain render's.
+With a ``scene`` request (ADR 0041 slice C) it draws a 16:9 event CG of one or two
+existing characters: the pinned IP-Adapter Plus (ViT-H) takes an approved image of each
+as the identity reference. The image encoder runs once, before the SDXL weights reach
+the GPU, and is released again, so the peak stays near a plain render's. With two
+characters each reference conditions only its half of the image, the first on the left.
 """
 
 import hashlib
@@ -69,7 +70,7 @@ MASK_GROW, MASK_GROW_UP, MASK_FEATHER = 0.12, 0.06, 20
 # 8.0 GiB peak allocated with the encoder released, about 11 s per image.
 SCENE_SIZE = (1344, 768)
 SCENE_SCALE = (0.1, 1.0)
-MAX_REFERENCES = 1
+MAX_REFERENCES = 2
 SCENE_MIN_FREE_BYTES = int(8.5 * 1024**3)
 # The reference is the figure on white in a square; the encoder resizes it to 224.
 REFERENCE_SIZE = 448
@@ -432,6 +433,7 @@ def encode_references(pipeline, scene: dict):
 
     Runs while the SDXL weights are still on the CPU: only the encoder visits the GPU,
     and it leaves before generation, which saves about 1.2 GiB during the render.
+    Returns the embeddings of one reference, or of two to be masked to their halves.
     """
     import torch
     from PIL import Image
@@ -453,20 +455,51 @@ def encode_references(pipeline, scene: dict):
             image.load()
             references.append(reference_image(image))
     encoder = pipeline.image_encoder
+    device = torch.device("cuda")
     try:
         encoder.to("cuda")
         with torch.no_grad():
-            embeds = pipeline.prepare_ip_adapter_image_embeds(
-                [references[0]], None, torch.device("cuda"), 1, True
-            )
+            # One adapter: a single image, or both images to be masked to their halves.
+            images = references[0] if len(references) == 1 else references
+            embeds = pipeline.prepare_ip_adapter_image_embeds([images], None, device, 1, True)
     except torch.OutOfMemoryError:
         fail("out_of_memory")
     # With the embeddings computed the pipeline no longer needs the encoder at all.
     pipeline.register_modules(image_encoder=None)
     del encoder
     torch.cuda.empty_cache()
-    pipeline.set_ip_adapter_scale(float(scene["scale"]))
     return embeds
+
+
+def render_scene(pipeline, request: dict, embeds, seed: int):
+    """One CG. With two references each conditions only its half: first left, second right."""
+    import torch
+
+    scene = request["scene"]
+    width, height = request["width"], request["height"]
+    scale = float(scene["scale"])
+    masks = None
+    if len(scene["references"]) == 2:
+        from diffusers.image_processor import IPAdapterMaskProcessor
+        from PIL import Image
+
+        halves = [Image.new("L", (width, height), 0) for _ in range(2)]
+        halves[0].paste(255, (0, 0, width // 2, height))
+        halves[1].paste(255, (width // 2, 0, width, height))
+        processed = IPAdapterMaskProcessor().preprocess(halves, height=height, width=width)
+        masks = {"ip_adapter_masks": [processed.reshape(1, 2, height, width)]}
+    pipeline.set_ip_adapter_scale([[scale, scale]] if masks else scale)
+    return pipeline(
+        prompt=request["prompt"],
+        negative_prompt=request["negative_prompt"],
+        width=width,
+        height=height,
+        num_inference_steps=request["steps"],
+        guidance_scale=float(request["guidance"]),
+        ip_adapter_image_embeds=embeds,
+        cross_attention_kwargs=masks,
+        generator=torch.Generator("cuda").manual_seed(seed),
+    ).images[0]
 
 
 def load_segmenter(cutout: dict) -> tuple[object, str]:
@@ -648,8 +681,8 @@ def main() -> None:
         fail("model_invalid")
     pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config)
     pipeline.set_progress_bar_config(disable=True)
-    # Scene art: the identity reference becomes embeddings before SDXL moves to the GPU.
-    adapter = {"ip_adapter_image_embeds": encode_references(pipeline, scene)} if scene else {}
+    # Scene art: the identity references become embeddings before SDXL moves to the GPU.
+    embeds = encode_references(pipeline, scene) if scene else None
     pipeline.to("cuda")
     # Decoding 832x1216 latents in tiles keeps the peak within the free-memory floor.
     pipeline.vae.enable_tiling()
@@ -706,6 +739,8 @@ def main() -> None:
                     generator=torch.Generator("cuda").manual_seed(seed),
                 ).images[0]
                 image = paste_face(base, painted, crop, mask)
+            elif scene:
+                image = render_scene(pipeline, request, embeds, seed)
             else:
                 image = pipeline(
                     prompt=request["prompt"],
@@ -715,7 +750,6 @@ def main() -> None:
                     num_inference_steps=request["steps"],
                     guidance_scale=float(request["guidance"]),
                     generator=torch.Generator("cuda").manual_seed(seed),
-                    **adapter,
                 ).images[0]
                 if refine is not None:
                     image = refine(

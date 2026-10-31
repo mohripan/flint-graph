@@ -44,7 +44,7 @@ EXPRESSION_RULE = (
     "AND strength IS NOT NULL AND expressions IS NOT NULL AND prompts IS NOT NULL)"
 )
 # Scene art names its reference images and adapter scale, and a completed job the
-# IP-Adapter that kept the character's identity (migration 0030).
+# IP-Adapter that kept the characters' identities (migration 0030).
 SCENE_RULE = (
     "(purpose = 'scene_art') = (reference_assets IS NOT NULL AND ip_adapter_scale IS NOT NULL) "
     "AND (ip_adapter_model IS NULL OR purpose = 'scene_art') "

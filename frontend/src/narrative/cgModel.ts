@@ -1,10 +1,14 @@
-import type { NarrativeImage } from "../lib/api";
+import type { ImageJob, NarrativeImage } from "../lib/api";
 
-// Event CGs drawn from an approved image of a character (ADR 0041 slice C). The server
-// builds the prompt; the Studio only picks the character, its reference and the scene.
+// Event CGs drawn from approved images of one or two characters (ADR 0041 slice C).
+// The server builds the prompts; the Studio picks the characters, their references and
+// the scene. A second character stands on the right.
 export const CG_COUNT = 4;
 export const CG_SCENE_LIMIT = 600;
+export const CG_MAX_CHARACTERS = 2;
 const REFERENCE_KINDS = ["character_portrait", "sprite", "image"];
+
+export interface CgPick { character: string; reference: string | null }
 
 /** Approved images that can stand for a character: its chosen portrait first, then
  *  portraits, sprites and other images. Generated CGs never do: they carry a scene. */
@@ -22,23 +26,34 @@ export function defaultReference(choices: NarrativeImage[], current: string | nu
   return choices[0]?.id ?? null;
 }
 
+/** Characters the second picker offers: everyone but the first pick. */
+export function otherCharacters(ids: string[], taken: string): string[] {
+  return ids.filter(id => id !== taken);
+}
+
 const cleanScene = (scene: string) => scene.replace(/\s+/g, " ").trim();
 
-export function cgProblem({ character, reference, scene }: {
-  character: string; reference: string | null; scene: string;
-}): string | null {
-  if (!character) return "Choose a character.";
-  if (!reference) return "Approve a portrait or sprite of this character first.";
+export function cgProblem({ picks, scene }: { picks: CgPick[]; scene: string }): string | null {
+  if (!picks.length || picks.some(pick => !pick.character)) return "Choose a character.";
+  if (picks.length > CG_MAX_CHARACTERS) return "A CG shows at most two characters.";
+  if (new Set(picks.map(pick => pick.character)).size !== picks.length) return "Choose two different characters.";
+  if (picks.some(pick => !pick.reference)) return "Approve a portrait or sprite of each character first.";
   const text = cleanScene(scene);
   if (!text) return "Describe the scene.";
   if (text.length > CG_SCENE_LIMIT) return `Keep the scene shorter than ${CG_SCENE_LIMIT} characters.`;
   return null;
 }
 
-export function cgRequest({ character, reference, scene }: { character: string; reference: string | null; scene: string }) {
+export function cgRequest({ picks, scene }: { picks: CgPick[]; scene: string }) {
   return {
     scene: cleanScene(scene),
-    characters: [{ character_id: character, reference_asset_id: reference ?? "" }],
+    characters: picks.map(pick => ({ character_id: pick.character, reference_asset_id: pick.reference ?? "" })),
     count: CG_COUNT,
   };
+}
+
+/** Who a CG job draws, by display name: "Quen and Lina". */
+export function cgSubject(job: Pick<ImageJob, "character_id" | "reference_assets">, names: Record<string, string>): string {
+  const ids = job.reference_assets?.map(item => item.character_id) ?? [job.character_id ?? ""];
+  return ids.map(id => names[id] || id).join(" and ");
 }

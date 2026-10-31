@@ -144,8 +144,10 @@ async def test_scene_art_requests_are_checked_before_any_job_is_queued(studio): 
         ({"scene": "a nude beach"}, 422),
         ({"count": 5}, 422),
         ({"characters": []}, 422),
-        # One referenced character per CG; two would swap their looks (see the report).
-        ({"characters": [{"character_id": "quen", "reference_asset_id": sprite_id}, second]}, 422),
+        # At most two characters, each once.
+        ({"characters": [{"character_id": "quen", "reference_asset_id": sprite_id}, second,
+                         {"character_id": "lina", "reference_asset_id": sprite_id}]}, 422),
+        ({"characters": [second, second]}, 422),
         ({"characters": [{"character_id": "Not an id!", "reference_asset_id": sprite_id}]}, 422),
         ({"characters": [{"character_id": "quen", "reference_asset_id": str(uuid4())}]}, 404),
         ({"characters": [{"character_id": "quen",
@@ -202,3 +204,59 @@ async def test_a_scene_without_the_identity_adapter_fails_instead_of_storing_str
         assert job is not None and job.error_code == "invalid_output"
     listed = (await client.get(f"{base}/image-jobs/{created.json()['id']}", headers=headers)).json()
     assert listed["assets"] == [] and listed["ip_adapter_model"] is None
+
+
+LINA = {
+    "base_version": 0,
+    "appearance": "long black hair, blue eyes, hair ribbon, school uniform",
+    "character_type": "girl",
+    "framing": "full_body",
+}
+
+
+async def test_two_characters_each_keep_their_own_reference_and_side(studio):  # noqa: F811
+    client, factory, store, headers, base, *_ = studio
+    for character, profile in (("quen", QUEN), ("lina", LINA)):
+        saved = await client.put(f"{base}/characters/{character}", headers=headers, json=profile)
+        assert saved.status_code == 200, saved.text
+    quen = await approved_portrait(client, factory, store, headers, base)
+    await client.post(f"{base}/assets/{quen['id']}/approve", headers=headers)
+    lina_bytes = png(320, 600, 60, 9, alpha=True)
+    lina = (
+        await client.post(
+            f"{base}/assets",
+            headers=headers,
+            data={"kind": "sprite", "name": "Lina", "license": "Own work", "notice": "",
+                  "rights_declared": "true", "character_id": "lina"},
+            files={"file": ("lina.png", lina_bytes, "image/png")},
+        )
+    ).json()
+    body = scene_body(
+        quen["id"],
+        scene="sitting on the couch together at night",
+        characters=[{"character_id": "quen", "reference_asset_id": quen["id"]},
+                    {"character_id": "lina", "reference_asset_id": lina["id"]}],
+    )
+    created = await client.post(f"{base}/assets/scene-art-jobs", headers=headers, json=body)
+    assert created.status_code == 202, created.text
+    job = created.json()
+    assert job["character_id"] == "quen"
+    assert job["prompt"].startswith("1boy, 1girl, sitting on the couch together at night, ")
+    assert [item["character_id"] for item in job["reference_assets"]] == ["quen", "lina"]
+    assert "white hair" in job["prompt"] and "black hair" in job["prompt"]
+    generator = FakeGenerator()
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=job["id"]
+    )
+    assert (await run_job(factory, store, payload, generator))["status"] == "completed"
+    sent = generator.requests[0].scene
+    quen_bytes = (await client.get(f"{base}/assets/{quen['id']}/content", headers=headers)).content
+    # The first reference conditions the left half, the second the right.
+    assert sent.references == (quen_bytes, lina_bytes)
+    [listed] = (await client.get(f"{base}/assets/scene-art-jobs", headers=headers)).json()["jobs"]
+    cgs = listed["assets"]
+    assert [item["name"] for item in cgs] == ["quen and lina CG 1", "quen and lina CG 2"]
+    provenance = cgs[0]["provenance"]
+    assert [item["character_id"] for item in provenance["references"]] == ["quen", "lina"]
+    # The first character names the CG's group in the library.
+    assert {item["character_id"] for item in cgs} == {"quen"}

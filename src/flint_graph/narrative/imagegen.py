@@ -18,7 +18,7 @@ import tomllib
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 
 MAX_APPEARANCE = 600
@@ -403,13 +403,14 @@ BACKGROUND_QUALITY = "safe, masterpiece, high score, great score, absurdres"
 BACKGROUND_PEOPLE_NEGATIVE = "1girl, 1boy, people, person, character, crowd"
 
 
-# Scene art (ADR 0041 slice C): an event CG of one existing character, identity from an
-# approved image of them through IP-Adapter. At 0.5 the character stays recognizable
-# and the scene keeps its own light; from about 0.6 the reference's pose and plain
-# backdrop start to show.
+# Scene art (ADR 0041 slice C): an event CG of one or two existing characters, identity
+# from an approved image of each through IP-Adapter. At 0.5 a character stays
+# recognizable and the scene keeps its own light; from about 0.6 the reference's pose
+# and plain backdrop start to show.
 SCENE_SIZE = BACKGROUND_SIZE
 SCENE_ADAPTER_SCALE = 0.5
 SCENE_QUALITY = BACKGROUND_QUALITY
+MAX_SCENE_CHARACTERS = 2
 # One person: a second figure would take on the same face.
 SOLO_NEGATIVES = {
     "girl": "multiple girls",
@@ -418,6 +419,10 @@ SOLO_NEGATIVES = {
     "man": "multiple boys",
     "other": "multiple girls, multiple boys",
 }
+# Two characters: each reference conditions its half of the image (first left), and the
+# prompt counts them and lists both looks. Looks still swap in about 5 renders of 12
+# (docs/reports/2026-10-31-scene-art-cgs.md); a repaint of each half did not help.
+_KINDS = {"girl": "girl", "woman": "girl", "boy": "boy", "man": "boy", "other": "other"}
 
 
 @dataclass(frozen=True)
@@ -431,36 +436,82 @@ class SceneArtRequest:
     adapter_scale: float
 
 
+def _count_tag(count: int, kind: str) -> str:
+    return f"{count}{kind}" if count == 1 else f"{count}{kind}s"
+
+
+def _pair_negative(kinds: list[str], policy: ContentPolicy) -> str:
+    """Nobody of a kind that is not there, and no third person of one that is."""
+    parts = [_negative(policy)]
+    if "boy" not in kinds:
+        parts.append("1boy, male focus")
+    if "girl" not in kinds:
+        parts.append("1girl, female focus")
+    for kind, plural in (("boy", "boys"), ("girl", "girls")):
+        count = kinds.count(kind)
+        if count:
+            parts.append(f"multiple {plural}" if count == 1 else f"3{plural}")
+    return ", ".join(part for part in parts if part)
+
+
+def _solo_scene(
+    text: str, appearance: str, character_type: str, policy: ContentPolicy
+) -> tuple[str, str, list[str]]:
+    looks = clean_appearance(appearance)
+    policy.check(looks)
+    tags = appearance_tags(appearance, character_type) if looks else []
+    parts = [CHARACTER_TYPES[character_type], "solo", text, *tags, SCENE_QUALITY]
+    negative = _portrait_negative(tags, character_type, False, policy)
+    prompt = ", ".join(part for part in parts if part)
+    return prompt, f"{negative}, {SOLO_NEGATIVES[character_type]}", tags
+
+
 def scene_art_request(
     scene: str,
-    appearance: str,
-    character_type: str,
+    characters: Sequence[tuple[str, str]],
     *,
     policy: ContentPolicy = DEFAULT_POLICY,
 ) -> SceneArtRequest:
-    """Subject, the scene as written, then the character's looks (the reference does the rest)."""
-    if character_type not in CHARACTER_TYPES:
+    """Prompts for a CG of one or two characters, given as (appearance, character type).
+
+    One character: subject, the scene as written, then its looks (the reference does
+    the rest). Two: count both people, the scene, then both looks.
+    """
+    if not 1 <= len(characters) <= MAX_SCENE_CHARACTERS:
+        raise ValueError(f"A CG shows one to {MAX_SCENE_CHARACTERS} characters")
+    if any(kind not in CHARACTER_TYPES for _, kind in characters):
         raise ValueError("Unknown character type")
-    if len(scene) > MAX_APPEARANCE * 2 or len(appearance) > MAX_APPEARANCE * 2:
+    if len(scene) > MAX_APPEARANCE * 2 or any(
+        len(appearance) > MAX_APPEARANCE * 2 for appearance, _ in characters
+    ):
         raise ValueError("Description is too long")
     text = clean_appearance(scene)
     if not text:
         raise ValueError("Describe the scene")
-    looks = clean_appearance(appearance)
-    for checked in (text, looks):
-        policy.check(checked)
-    tags = appearance_tags(appearance, character_type) if looks else []
-    parts = [CHARACTER_TYPES[character_type], "solo", text, *tags, SCENE_QUALITY]
-    negative = _portrait_negative(tags, character_type, False, policy)
+    policy.check(text)
+    solos = [_solo_scene(text, appearance, kind, policy) for appearance, kind in characters]
     width, height = SCENE_SIZE
-    return SceneArtRequest(
-        prompt=", ".join(part for part in parts if part),
-        negative_prompt=f"{negative}, {SOLO_NEGATIVES[character_type]}",
+    scene_art = partial(
+        SceneArtRequest,
         width=width,
         height=height,
         steps=STEPS,
         guidance=GUIDANCE,
         adapter_scale=SCENE_ADAPTER_SCALE,
+    )
+    if len(solos) == 1:
+        [(prompt, negative, _)] = solos
+        return scene_art(prompt=prompt, negative_prompt=negative)
+    kinds = [_KINDS[kind] for _, kind in characters]
+    counts = ", ".join(
+        _count_tag(kinds.count(kind), kind) for kind in dict.fromkeys(kinds)
+    )
+    looks: list[str] = []
+    for _, _, tags in solos:
+        looks.extend(tag for tag in tags if tag.lower() not in {seen.lower() for seen in looks})
+    return scene_art(
+        prompt=", ".join((counts, text, *looks, SCENE_QUALITY)),
+        negative_prompt=_pair_negative(kinds, policy),
     )
 
 

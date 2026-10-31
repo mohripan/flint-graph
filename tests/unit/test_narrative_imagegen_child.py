@@ -444,13 +444,21 @@ async def test_scene_art_output_and_reference_are_checked(tmp_path, mode, code):
 
 
 @pytest.mark.anyio
-async def test_scene_art_takes_one_reference_and_no_other_mode(tmp_path):
+async def test_two_characters_send_both_references(tmp_path):
+    request = scene_request(references=(base_png(), base_png(alpha=False)))
+    result = await generator(ip_adapter=adapter(tmp_path)).generate(request, on_progress=ignore)
+    assert [(image.width, image.height) for image in result.images] == [(1344, 768)] * 2
+    assert all(image.data[25] == 2 for image in result.images)
+
+
+@pytest.mark.anyio
+async def test_scene_art_takes_one_or_two_references_and_no_other_mode(tmp_path):
     from dataclasses import replace
 
     request = scene_request()
     for bad in (
         scene_request(references=()),
-        scene_request(references=(base_png(), base_png(alpha=False))),
+        scene_request(references=(base_png(),) * 3),
         replace(request, width=832, height=1216),
         replace(request, cutout=True),
         replace(request, hires=HIRES),

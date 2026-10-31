@@ -508,3 +508,94 @@ async def test_real_gpu_scene_art_draws_the_referenced_character(live_case, tmp_
         await asyncio.to_thread(
             (target / "job.json").write_text, json.dumps({"job": done, "checks": checks}, indent=2)
         )
+
+
+@pytest.mark.skipif(
+    not (
+        os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MODEL_DIR")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MANIFEST_SHA256")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_SCENE_REFERENCE")
+        and os.getenv("FLINT_GRAPH_NARRATIVE_SCENE_SECOND_REFERENCE")
+    ),
+    reason="requires the isolated runtime, both models and two reference images",
+)
+async def test_real_gpu_scene_art_draws_two_characters(live_case, tmp_path):
+    case = live_case
+    python, script = runtime_paths(Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR"]))
+    model_dir = Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_DIR"])
+    model = await asyncio.to_thread(
+        verify_model, model_dir, os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256"]
+    )
+    adapter = await asyncio.to_thread(
+        verify_ip_adapter_model,
+        Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MODEL_DIR"]),
+        os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MANIFEST_SHA256"],
+    )
+    generator = LocalImageGenerator(
+        python=python, script=script, model_dir=model_dir, model=model,
+        deadline_seconds=900, ip_adapter=adapter,
+    )
+    client, headers, base = case["client"], case["headers"], case["base"]
+    characters = []
+    for character, variable, profile in (
+        ("quen", "FLINT_GRAPH_NARRATIVE_SCENE_REFERENCE",
+         {"character_type": "boy",
+          "appearance": "shoulder-length white hair, red eyes, androgynous, casual clothes"}),
+        ("lina", "FLINT_GRAPH_NARRATIVE_SCENE_SECOND_REFERENCE",
+         {"character_type": "girl",
+          "appearance": "long black hair, blue eyes, hair ribbon, school uniform"}),
+    ):
+        data = await asyncio.to_thread(Path(os.environ[variable]).read_bytes)
+        uploaded = await client.post(
+            f"{base}/assets",
+            headers=headers,
+            data={"kind": "sprite", "name": character, "license": "openrail++", "notice": "",
+                  "rights_declared": "true", "character_id": character},
+            files={"file": (f"{character}.png", data, "image/png")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        saved = await client.put(
+            f"{base}/characters/{character}",
+            headers=headers,
+            json={"base_version": 0, "framing": "full_body", **profile},
+        )
+        assert saved.status_code == 200, saved.text
+        characters.append({"character_id": character, "reference_asset_id": uploaded.json()["id"]})
+    created = await client.post(
+        f"{base}/assets/scene-art-jobs",
+        headers=headers,
+        json={"scene": "sitting on the couch together by the window at night, city lights",
+              "count": 2, "idempotency_key": str(uuid4()), "characters": characters},
+    )
+    assert created.status_code == 202, created.text
+    loaded = os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL")
+    releaser = OllamaGpuReleaser("http://127.0.0.1:11434", loaded) if loaded else None
+    async with worker(case, generator, releaser):
+        done = await case["until"](created.json()["id"], {"completed", "failed"}, 1500)
+    assert done["status"] == "completed", done["error_code"]
+    checks = {}
+    for asset in done["assets"]:
+        assert asset["name"].startswith("quen and lina CG ")
+        content = await client.get(f"{base}/assets/{asset['id']}/content", headers=headers)
+        assert hashlib.sha256(content.content).hexdigest() == asset["sha256"]
+        path = tmp_path / f"{asset['name']}.png"
+        await asyncio.to_thread(path.write_bytes, content.content)
+        probe = await asyncio.create_subprocess_exec(
+            str(python), "-I", "-c", SCENE_PROBE, str(path), stdout=asyncio.subprocess.PIPE
+        )
+        stdout, _ = await probe.communicate()
+        checks[asset["name"]] = result = json.loads(stdout)
+        assert result["mode"] == "RGB" and result["size"] == [1344, 768], result
+        assert result["distinct"] > 500, result
+    if save := os.getenv("FLINT_GRAPH_NARRATIVE_IMAGE_SAVE_DIR"):
+        target = Path(save)
+        await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
+        for name in checks:
+            data = await asyncio.to_thread((tmp_path / f"{name}.png").read_bytes)
+            await asyncio.to_thread((target / f"{name}.png").write_bytes, data)
+        await asyncio.to_thread(
+            (target / "job.json").write_text, json.dumps({"job": done, "checks": checks}, indent=2)
+        )

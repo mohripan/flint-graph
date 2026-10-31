@@ -155,8 +155,8 @@ class SceneArtJobCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scene: str = Field(min_length=1, max_length=MAX_APPEARANCE)
-    # One character per CG for now; a list so a second can follow without a new shape.
-    characters: list[SceneCharacter] = Field(min_length=1, max_length=1)
+    # One or two characters; the first stands on the left.
+    characters: list[SceneCharacter] = Field(min_length=1, max_length=2)
     count: int = Field(default=4, ge=1, le=4)
     idempotency_key: UUID
 

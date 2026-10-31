@@ -442,7 +442,7 @@ class SceneRequestTest(ChildRequestCase):
             {"scale": 1.5},
             {"scale": True},
             {"references": []},
-            {"references": [reference, reference]},
+            {"references": [reference, reference, reference]},
             {"references": [{**reference, "sha256": "0" * 64}]},
             {"references": [{**reference, "image": "reference-0.png"}]},
             {"references": [{**reference, "extra": 1}]},
@@ -464,6 +464,22 @@ class SceneRequestTest(ChildRequestCase):
                                          "prompts": ["x"]}},
         ):
             completed = self.run_child(request)
+            self.assertEqual(completed.returncode, 2)
+
+    def test_two_characters_each_bring_a_reference(self):
+        second = Path(self.work.name) / "reference-1.png"
+        sprite(240, 320).save(second, format="PNG")
+        references = [
+            *self.scene["references"],
+            {"image": str(second), "sha256": hashlib.sha256(second.read_bytes()).hexdigest()},
+        ]
+        request = {**self.request, "scene": {**self.scene, "references": references}}
+        self.assertEqual(len(self.read(request)["scene"]["references"]), 2)
+        for bad in (
+            {**self.scene, "references": references + references[:1]},
+            {**self.scene, "references": references, "regions": {}},
+        ):
+            completed = self.run_child({**self.request, "scene": bad})
             self.assertEqual(completed.returncode, 2)
 
     def test_a_reference_too_small_or_not_a_png_is_rejected(self):

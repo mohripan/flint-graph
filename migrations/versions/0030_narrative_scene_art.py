@@ -1,4 +1,4 @@
-"""Event CGs drawn around an approved image of a character (ADR 0041 slice C).
+"""Event CGs drawn from approved images of one or two characters (ADR 0041 slice C).
 
 Revision ID: 0030_narrative_scene_art
 Revises: 0029_narrative_voice

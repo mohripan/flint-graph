@@ -422,3 +422,7 @@
   background:linear-gradient(160deg,#2a3f52,#0f1a24) center / cover no-repeat; color:#dce5ea; font-size:12px; text-align:center; padding:0; }
 .studio-framing-preview img { position:absolute; max-width:none; }
 @container characters (max-width:560px) { .studio-framing { grid-template-columns:1fr; } }
+.studio-cg-pick { padding:10px 0; border-bottom:1px solid #e3eaef; }
+.studio-cg-pick-head { display:flex; gap:12px; align-items:end; flex-wrap:wrap; }
+.studio-cg-pick-head .studio-field { flex:1 1 220px; }
+.studio-cg-two { margin:8px 0; }

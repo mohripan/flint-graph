@@ -331,12 +331,12 @@ def test_the_policy_is_a_versioned_file_not_code(tmp_path):
         ContentPolicy.load(tmp_path / "missing.toml")
 
 
+QUEN = ("shoulder-length white hair, red eyes, androgynous, casual clothes", "boy")
+LINA = ("long black hair, blue eyes, hair ribbon, school uniform", "girl")
+
+
 def test_scene_art_puts_the_referenced_character_into_the_described_scene():
-    request = scene_art_request(
-        " Quen sitting on the couch by the window,\n at night ",
-        "shoulder-length white hair, red eyes, androgynous, casual clothes",
-        "boy",
-    )
+    request = scene_art_request(" Quen sitting on the couch by the window,\n at night ", [QUEN])
     # Subject, scene, then looks; no "looking at viewer" or plain background in a scene.
     assert request.prompt == (
         "1boy, male focus, solo, Quen sitting on the couch by the window, at night, "
@@ -352,12 +352,12 @@ def test_scene_art_puts_the_referenced_character_into_the_described_scene():
 
 
 def test_scene_art_works_for_any_character_type_and_without_a_description():
-    girl = scene_art_request("reading in a library", "long black hair", "woman")
+    girl = scene_art_request("reading in a library", [("long black hair", "woman")])
     assert girl.prompt.startswith(
         "1girl, mature female, solo, reading in a library, black hair, long hair, safe, "
     )
     assert girl.negative_prompt.endswith("1boy, male focus, multiple girls")
-    other = scene_art_request("on a beach at sunset", "", "other")
+    other = scene_art_request("on a beach at sunset", [("", "other")])
     assert other.prompt == (
         "solo, on a beach at sunset, safe, masterpiece, high score, great score, absurdres"
     )
@@ -367,15 +367,41 @@ def test_scene_art_works_for_any_character_type_and_without_a_description():
 def test_scene_art_needs_a_bounded_scene_and_refuses_blocked_words():
     for scene in ("", "   ", "x" * (MAX_APPEARANCE + 1)):
         with pytest.raises(ValueError):
-            scene_art_request(scene, "white hair", "boy")
-    with pytest.raises(ValueError):
-        scene_art_request("on a couch", "white hair", "dragon")
-    # Both the scene and the referenced character's own description pass the policy.
+            scene_art_request(scene, [QUEN])
+    for characters in ([], [QUEN, LINA, QUEN], [("white hair", "dragon")]):
+        with pytest.raises(ValueError):
+            scene_art_request("on a couch", characters)
+    # The scene and every referenced character's own description pass the policy.
     for scene, appearance in (("a NUDE beach", "white hair"), ("on a couch", "hentai, white hair")):
         with pytest.raises(ValueError, match="blocked"):
-            scene_art_request(scene, appearance, "girl")
+            scene_art_request(scene, [(appearance, "girl")])
+        with pytest.raises(ValueError, match="blocked"):
+            scene_art_request(scene, [QUEN, (appearance, "girl")])
     policy = ContentPolicy.create(["nsfw", "sensitive"], ["rain"])
     with pytest.raises(ValueError, match='"rain"'):
-        scene_art_request("walking in the rain", "", "girl", policy=policy)
-    allowed = scene_art_request("walking home", "", "girl", policy=policy)
+        scene_art_request("walking in the rain", [("", "girl")], policy=policy)
+    allowed = scene_art_request("walking home", [("", "girl"), QUEN], policy=policy)
     assert allowed.negative_prompt.startswith("nsfw, sensitive, lowres, ")
+
+
+def test_two_characters_are_counted_and_both_looks_listed():
+    request = scene_art_request("sitting on the couch together at night", [QUEN, LINA])
+    # Each reference conditions its half; the prompt counts both people and both looks.
+    assert request.prompt == (
+        "1boy, 1girl, sitting on the couch together at night, white hair, medium hair, "
+        "red eyes, androgynous, casual clothes, black hair, long hair, blue eyes, hair ribbon, "
+        "school uniform, safe, masterpiece, high score, great score, absurdres"
+    )
+    assert request.negative_prompt.endswith(QUALITY_NEGATIVE + ", multiple boys, multiple girls")
+    assert request.adapter_scale == SCENE_ADAPTER_SCALE
+
+
+def test_two_characters_of_one_kind_are_counted_together():
+    girls = scene_art_request("at the beach", [LINA, ("short red hair", "woman")])
+    assert girls.prompt.startswith("2girls, at the beach, ")
+    assert girls.negative_prompt.endswith("1boy, male focus, 3girls")
+    boys = scene_art_request("at the beach", [QUEN, ("black hair", "man")])
+    assert boys.prompt.startswith("2boys, at the beach, ")
+    assert boys.negative_prompt.endswith("1girl, female focus, 3boys")
+    mixed = scene_art_request("at the beach", [("", "other"), LINA])
+    assert mixed.prompt.startswith("1other, 1girl, at the beach, ")

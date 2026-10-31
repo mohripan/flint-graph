@@ -45,10 +45,10 @@ CHILD_CODES = {
     "out_of_memory",
     "cutout_failed",
 }
-# Scene art: one approved image of one character per CG, at the 16:9 bucket.
+# Scene art: one approved image per character, one or two characters, at the 16:9 bucket.
 SCENE_SIZE = (1344, 768)
 SCENE_SCALES = (0.1, 1.0)
-MAX_REFERENCES = 1
+MAX_REFERENCES = 2
 IP_ADAPTER_WEIGHTS = "sdxl_models/"
 IP_ADAPTER_ENCODER = "models/image_encoder"
 RUNTIME_KEYS = {"torch", "diffusers", "cuda", "device"}
@@ -101,7 +101,10 @@ class IpAdapterModel:
 
 @dataclass(frozen=True)
 class SceneRequest:
-    """Draw a scene around a character (ADR 0041 slice C); reference bytes already verified."""
+    """Draw a scene around characters (ADR 0041 slice C); reference bytes already verified.
+
+    With two references the first conditions the left half and the second the right.
+    """
 
     references: tuple[bytes, ...]
     scale: float

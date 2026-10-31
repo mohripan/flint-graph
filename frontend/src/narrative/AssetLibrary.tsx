@@ -12,6 +12,7 @@ import { refreshLibrary, useAssetFont } from "./libraryAssets";
 import { isActive, jobStatus } from "./characterModel";
 import { imageJobStarted, useBackgroundJobs, useLibraryJobs } from "./imageJobs";
 import { CgGenerator } from "./CgGenerator";
+import { cgSubject } from "./cgModel";
 import { Viewer } from "./CharacterStudio";
 import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
@@ -112,7 +113,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
       }, "Could not cancel.")}>Cancel background generation</button>}
     </section>)}
     {scenes.jobs.filter(isActive).map(job => <section key={job.id} className="studio-asset-generate" aria-label="CG generation">
-      <strong>Generating CGs of {(job.character_id && characterNames[job.character_id]) || job.character_id}</strong>
+      <strong>Generating CGs of {cgSubject(job, characterNames)}</strong>
       <p role="status">{jobStatus(job)}</p>
       <progress max={job.count} value={job.progress} aria-label="Generated CGs" />
       {canWrite && !job.cancel_requested && <button type="button" className="studio-link" onClick={() => void act(async () => {

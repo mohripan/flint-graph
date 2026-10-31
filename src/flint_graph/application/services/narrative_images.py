@@ -44,6 +44,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
 )
 from flint_graph.narrative.imagegen import (
     DEFAULT_POLICY,
+    MAX_SCENE_CHARACTERS,
     ContentPolicy,
     ExpressionRequest,
     HiresFix,
@@ -115,11 +116,6 @@ def _invalid(detail: str) -> DomainError:
     return DomainError(422, "Invalid expression request", detail, "invalid-expression-request")
 
 
-# One referenced character per CG: with two, the IP-Adapter regions swapped their looks
-# in most renders (docs/reports/2026-10-31-scene-art-cgs.md).
-MAX_SCENE_CHARACTERS = 1
-
-
 def _invalid_scene(detail: str) -> DomainError:
     return DomainError(422, "Invalid scene art request", detail, "invalid-scene-art-request")
 
@@ -139,34 +135,44 @@ async def create_scene_art_job(
     max_active_jobs: int,
     policy: ContentPolicy = DEFAULT_POLICY,
 ) -> NarrativeImageJob:
-    """Queue event CGs of a character drawn from an approved image of them (ADR 0041 C)."""
+    """Queue event CGs of one or two characters, each drawn from an approved image of them
+    (ADR 0041 slice C). The first character stands on the left."""
     if not 1 <= len(characters) <= MAX_SCENE_CHARACTERS:
-        raise _invalid_scene("Choose one character for this CG.")
-    [(character_id, reference_id)] = characters
-    reference = await session.scalar(
-        select(NarrativeAsset).where(
-            NarrativeAsset.tenant_id == tenant_id,
-            NarrativeAsset.project_id == project_id,
-            NarrativeAsset.id == reference_id,
-            NarrativeAsset.status != "discarded",
+        raise _invalid_scene(f"Choose one to {MAX_SCENE_CHARACTERS} characters for this CG.")
+    if len({character for character, _ in characters}) != len(characters):
+        raise _invalid_scene("Choose two different characters.")
+    references: list[tuple[str, NarrativeAsset]] = []
+    looks: list[tuple[str, str]] = []
+    for character_id, reference_id in characters:
+        reference = await session.scalar(
+            select(NarrativeAsset).where(
+                NarrativeAsset.tenant_id == tenant_id,
+                NarrativeAsset.project_id == project_id,
+                NarrativeAsset.id == reference_id,
+                NarrativeAsset.status != "discarded",
+            )
         )
-    )
-    if reference is None or reference.media_type != "image/png" or reference.kind not in BASE_KINDS:
-        raise NotFoundError("Choose an approved sprite, image or portrait of this project.")
-    if reference.status != "approved":
-        raise _invalid_scene("Approve this image before drawing CGs from it.")
-    width, height = reference.width or 0, reference.height or 0
-    if not (MIN_BASE <= width <= MAX_BASE and MIN_BASE <= height <= MAX_BASE):
-        raise _invalid_scene(f"Use an image between {MIN_BASE} and {MAX_BASE} pixels.")
-    profile = await session.scalar(
-        select(NarrativeCharacterProfile).where(
-            NarrativeCharacterProfile.tenant_id == tenant_id,
-            NarrativeCharacterProfile.project_id == project_id,
-            NarrativeCharacterProfile.character_id == character_id,
+        if (
+            reference is None
+            or reference.media_type != "image/png"
+            or reference.kind not in BASE_KINDS
+        ):
+            raise NotFoundError("Choose an approved sprite, image or portrait of this project.")
+        if reference.status != "approved":
+            raise _invalid_scene("Approve this image before drawing CGs from it.")
+        width, height = reference.width or 0, reference.height or 0
+        if not (MIN_BASE <= width <= MAX_BASE and MIN_BASE <= height <= MAX_BASE):
+            raise _invalid_scene(f"Use an image between {MIN_BASE} and {MAX_BASE} pixels.")
+        profile = await session.scalar(
+            select(NarrativeCharacterProfile).where(
+                NarrativeCharacterProfile.tenant_id == tenant_id,
+                NarrativeCharacterProfile.project_id == project_id,
+                NarrativeCharacterProfile.character_id == character_id,
+            )
         )
-    )
-    appearance = profile.appearance if profile else ""
-    character_type = profile.character_type if profile else "other"
+        references.append((character_id, reference))
+        looks.append((profile.appearance, profile.character_type) if profile else ("", "other"))
+    character_id, character_type = characters[0][0], looks[0][1]
     return await _queue_job(
         session,
         tenant_id=tenant_id,
@@ -179,13 +185,13 @@ async def create_scene_art_job(
         framing="scene",
         transparent=False,
         hires=False,
-        build=lambda: scene_art_request(scene, appearance, character_type, policy=policy),
+        build=lambda: scene_art_request(scene, looks, policy=policy),
         count=count,
         idempotency_key=idempotency_key,
         actor=actor,
         available=available,
         max_active_jobs=max_active_jobs,
-        references=[(character_id, reference)],
+        references=references,
     )
 
 
@@ -957,7 +963,8 @@ def _asset_name(job: NarrativeImageJob, index: int) -> str:
     elif job.purpose == "character_expression" and job.expressions:
         return f"{job.character_id} {job.expressions[index]}"
     elif job.purpose == "scene_art":
-        base = f"{job.character_id} CG"
+        names = [item["character_id"] for item in job.reference_assets or []]
+        base = f"{' and '.join(names) or job.character_id} CG"
     else:
         base = f"{job.character_id} {'sprite' if job.transparent else 'portrait'}"
     return f"{base} {index + 1}"

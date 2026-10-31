@@ -42,10 +42,10 @@ test("the reference stays the creator's pick while it is still offered", () => {
 });
 
 test("a CG request needs a character, an approved reference and a bounded scene", () => {
-  const ready = { character: "quen", reference: "a", scene: "  Quen sitting on the couch\n at night " };
+  const ready = { picks: [{ character: "quen", reference: "a" }], scene: "  Quen sitting on the couch\n at night " };
   assert.equal(cg.cgProblem(ready), null);
-  assert.match(cg.cgProblem({ ...ready, character: "" }), /character/);
-  assert.match(cg.cgProblem({ ...ready, reference: null }), /Approve/);
+  assert.match(cg.cgProblem({ ...ready, picks: [{ character: "", reference: "a" }] }), /character/);
+  assert.match(cg.cgProblem({ ...ready, picks: [{ character: "quen", reference: null }] }), /Approve/);
   assert.match(cg.cgProblem({ ...ready, scene: "   " }), /Describe/);
   assert.match(cg.cgProblem({ ...ready, scene: "x".repeat(cg.CG_SCENE_LIMIT + 1) }), /shorter/);
   assert.deepEqual(cg.cgRequest(ready), {
@@ -55,9 +55,30 @@ test("a CG request needs a character, an approved reference and a bounded scene"
   });
 });
 
+test("a second character stands on the right and needs its own approved image", () => {
+  const two = { picks: [{ character: "quen", reference: "a" }, { character: "lina", reference: "b" }], scene: "on a couch" };
+  assert.equal(cg.cgProblem(two), null);
+  assert.deepEqual(cg.cgRequest(two).characters, [
+    { character_id: "quen", reference_asset_id: "a" }, { character_id: "lina", reference_asset_id: "b" },
+  ]);
+  assert.match(cg.cgProblem({ ...two, picks: [two.picks[0], { character: "quen", reference: "a" }] }), /two different/);
+  assert.match(cg.cgProblem({ ...two, picks: [two.picks[0], { character: "lina", reference: null }] }), /Approve/);
+  assert.match(cg.cgProblem({ ...two, picks: [...two.picks, { character: "mira", reference: "c" }] }), /two/);
+  assert.equal(cg.CG_MAX_CHARACTERS, 2);
+  // The second picker offers everyone but the first character.
+  assert.deepEqual(cg.otherCharacters(["mira", "quen", "lina"], "quen"), ["mira", "lina"]);
+});
+
 test("CG jobs read as CGs and explain a worker without the identity adapter", () => {
   const job = { purpose: "scene_art", status: "completed", transparent: false, assets: [{}, {}], cancel_requested: false };
   assert.equal(characters.jobStatus(job), "2 CGs ready");
   assert.match(characters.jobStatus({ ...job, status: "failed", error_code: "ip_adapter_unavailable" }), /IP-Adapter/);
   assert.equal(characters.jobStatus({ ...job, status: "running", progress: 1, count: 4 }), "Generated 1 of 4…");
+});
+
+test("a CG job names every character it draws", () => {
+  const names = { quen: "Quen Aldwinia", lina: "Lina" };
+  const two = { character_id: "quen", reference_assets: [{ character_id: "quen" }, { character_id: "lina" }] };
+  assert.equal(cg.cgSubject(two, names), "Quen Aldwinia and Lina");
+  assert.equal(cg.cgSubject({ character_id: "mira", reference_assets: null }, names), "mira");
 });
