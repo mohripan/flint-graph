@@ -14,8 +14,8 @@ one approved base sprite instead:
 - **Poses (slice B):** redraw the figure in a new pose, keeping identity through the
   base image.
 - **Scene art (slice C):** a full 16:9 event illustration of the character in a
-  described scene, keeping identity through the same reference, for the CG layer
-  another branch adds to the player.
+  described scene, keeping identity through an approved image of them, for the
+  player's CG layer (ADR 0042).
 
 ## Feasibility (2026-10-31, RTX 12 GB, Animagine XL 4.0)
 
@@ -160,45 +160,55 @@ seeds.
 - **Pins.** Model manifests are pinned like the others: one directory and manifest
   SHA-256 per model, and the job records each model's identity.
 
-## Slice C: scene art (planned, after B)
+## Slice C: scene art (built 2026-10-31)
 
 The user asked for event CGs on 2026-10-31: a full illustration of an existing
 character in a scene, for example Quen Aldwinia from the "Stage & theme demo" project
 sitting on a couch. The character is referenced by an approved image, not described
-again.
+again. Built before slice B; report:
+[scene art CGs](../../reports/2026-10-31-scene-art-cgs.md).
 
-- **Request.** `POST /v1/narrative/projects/{project}/characters/{character}/scene-art-jobs`
-  with `reference_asset_id` (an approved, non-discarded PNG sprite, image or portrait
-  of the project), a `scene` description (bounded free text, for example "sitting on
-  a couch in a sunlit living room, reading a book"), one to four images and an
-  idempotency key.
+- **Request.** `POST /v1/narrative/projects/{project}/assets/scene-art-jobs` (and `GET`
+  to list them) with `scene` (bounded free text), `characters` (exactly one
+  `{character_id, reference_asset_id}` for now), one to four images and an idempotency
+  key. The plan put the route under one character; it sits with the background jobs
+  instead because Assets → CGs starts and lists CG jobs for the whole project. The
+  reference is an approved, non-discarded PNG sprite, image or portrait of the project,
+  64–2560 px.
 - **Generation.** Text-to-image SDXL from the pinned Animagine weights at 1344×768,
-  the SDXL 16:9 bucket that backgrounds already use. IP-Adapter Plus SDXL with the
-  ViT-H encoder, the models slice B pins, takes the reference composited on white
-  and cropped to the figure as the identity image. The server builds the prompt:
-  character type and `solo`, the scene tags, the character's appearance tags, then
-  quality tags. No ControlNet and no cutout: the output is an opaque RGB scene.
-- **Content policy.** The scene description goes through the image content policy
-  like every other image description (ADR 0039, `narrative/image_content_policy.toml`,
-  overridable with `FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY`). The route passes
-  `policy=content_policy(settings.narrative_image_content_policy)` into
-  `create_scene_art_job`. The request builder calls `policy.check()` on the scene
-  text, so a blocked word refuses the job with a 422 before anything is queued. The
-  negative prompt starts with `_negative(policy)`, then the character's own
-  negatives and `multiple girls`/`multiple boys`, within CLIP's 77 tokens. The IP-Adapter scale, about 0.6, is
-  tuned in qualification; too high copies the reference pose and framing.
-- **Storage.** The job is an image job (`scene_art`) on the same outbox, fenced
-  activity, isolated child and hash-checked storage. Results are candidate library
-  assets of kind `image`, named `{character} scene N`. Their provenance records the
-  reference asset, scene text, prompt, IP-Adapter scale and model identities. The
-  creator approves them in the library or the character sheet.
-- **Order.** It shares slice B's IP-Adapter pins, loader and memory work (CPU offload
-  if SDXL, IP-Adapter and ViT-H exceed 12 GB), so it follows B.
-- **Not in this slice.** The story format and runtime. Showing an approved image as a
-  full-screen CG and a gallery is the player side, built separately on branch
-  `codex/cg-presentation`: an optional stage-node `cg` field holding an ordinary
-  image asset ID, a CG layer and a gallery, runtime 0.5.0. Scene art only produces
-  approved images for it. Identity is close, not exact, so every result needs review.
+  the 16:9 bucket that backgrounds use. IP-Adapter Plus SDXL with the ViT-H encoder
+  (`h94/IP-Adapter`, Apache-2.0, pinned by manifest) takes the reference: the figure
+  cut along its alpha (sprites) or against its corner backdrop (opaque portraits),
+  centred on white in a square. A square of the upper body drew the character twice,
+  so the whole figure is used. The encoder runs once while SDXL is still on the CPU
+  and is released before the render: 8.0 GiB peak instead of 9.2 GiB, 8.5 GiB free
+  required, about 11 s per image. No ControlNet and no cutout: the output is an
+  opaque RGB scene.
+- **Prompt.** Character type and `solo`, the scene as written (names included: they
+  did not change the render), the character's appearance tags, then quality tags
+  without `looking at viewer`. The negative is the character's portrait negative plus
+  `multiple boys` or `multiple girls`, within CLIP's 77 tokens.
+- **Scale.** 0.5. At 0.6 the reference's pose starts to repeat; at 0.7 the scene
+  washes toward the reference's plain backdrop.
+- **Content policy.** The route passes `policy=content_policy(...)` into
+  `create_scene_art_job`, and `scene_art_request` calls `policy.check()` on the scene
+  and on the character's stored description; a blocked word refuses the job with 422
+  before anything is queued. The policy's negative tags lead the negative prompt.
+- **Storage.** `scene_art` image jobs (migration 0030: `reference_assets`,
+  `ip_adapter_scale`, `ip_adapter_model`) on the same outbox, fenced activity, isolated
+  child and hash-checked storage; the worker fetches each reference hash-verified.
+  Results are candidate `image` assets named `{character} CG {n}`, tagged with the
+  character. Provenance records the scene, prompt, references (with SHA-256) and the
+  adapter (repo, revision, license, scale). The creator approves them among the CGs.
+- **Studio.** Assets → CGs → **Generate CGs**: character, "Look from" (the character's
+  approved portraits, sprites and images, its chosen portrait first), scene, four
+  candidates. The CGs group stays in the library rail when empty.
+- **Two characters (not built).** Two references masked to the left and right halves
+  kept both identities in one render of seven; text tags leak across the halves. It
+  needs regional prompting or a second inpainting pass per character.
+- **Not in this slice.** The story format and runtime: the player's CG layer and
+  gallery are ADR 0042 (runtime 0.5.0). Identity is close, not exact, so every result
+  needs review.
 
 ## Out of scope
 

@@ -140,6 +140,12 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
   selects the CG / image kind; PNG files use the same rights declaration and approval
   rules as other library files. Choose an approved image in **Write → Stage → Event CG**
   to show it in the story. The CGs view keeps the background generator out of the way.
+  The CGs group stays in the rail while it is empty.
+- **Assets → CGs → Generate CGs:** draw four event CGs of one existing character from an
+  approved image of them ("Look from": its portraits, sprites and images, the chosen
+  portrait first) and a scene description. They arrive under **To review** like other
+  generated art. Needs the image worker with the IP-Adapter configured
+  ([image generation runbook](narrative-image-generation.md)).
 - **Characters → On stage:** set a name colour (with opacity) and add expressions. Each expression
   is an approved sprite, image or portrait. Removing an expression the story still
   uses is refused, with a count of where it is used. **Size on stage** sets how tall

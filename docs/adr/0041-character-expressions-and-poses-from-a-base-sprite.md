@@ -1,7 +1,7 @@
 # ADR 0041: Character expressions and poses from a base sprite
 
-Date: 2026-10-31. Status: accepted. Slice A (expressions) is implemented; slices B
-(poses) and C (scene art) are planned. Design: [expressions and poses](../superpowers/specs/2026-10-31-character-expressions-and-poses-design.md).
+Date: 2026-10-31. Status: accepted. Slices A (expressions) and C (scene art) are
+implemented; slice B (poses) is planned. Design: [expressions and poses](../superpowers/specs/2026-10-31-character-expressions-and-poses-design.md).
 
 ## Context
 
@@ -30,12 +30,15 @@ same body and hair, different expressions, and sometimes different poses.
    the others.
 4. **No face detector.** The Studio proposes a face box from the sprite's alpha, and
    the creator adjusts it.
-5. **Scene art (slice C, after B)** makes event CGs: a 1344×768 text-to-image scene
-   from a description, with one approved image of the character as the IP-Adapter
-   identity reference (the same pinned models as poses), no cutout. The scene
-   description passes the image content policy like every other description. Results are
-   candidate library images (`scene_art` jobs) for the CG layer that the player adds
-   separately; scene art does not change the story format or runtime.
+5. **Scene art (slice C)** makes event CGs: a 1344×768 text-to-image scene from a
+   description, with one approved image of the character as the IP-Adapter Plus
+   (ViT-H) identity reference at scale 0.5, no cutout. The image encoder runs once
+   before SDXL moves to the GPU and is released, so the peak stays at 8.0 GiB. The
+   scene description and the character's own description pass the image content
+   policy. Results are candidate library images (`scene_art` jobs, asked for from
+   Assets → CGs) for the CG layer of ADR 0042; scene art does not change the story
+   format or runtime. It was built before slice B and adds the IP-Adapter pin that
+   poses will reuse.
 
 ## Consequences
 
@@ -49,6 +52,9 @@ same body and hair, different expressions, and sometimes different poses.
   carry tested tag sets.
 - Poses and scene art keep identity only approximately (outfit details can change),
   so every result is a reviewed candidate. Scene art shows one referenced character
-  per image.
+  per image: with two references masked to the left and right halves, one render in
+  seven kept both identities, because text tags apply to the whole image.
 - Migration 0026 adds the base, box, strength, expressions and per-image prompts to
-  image jobs, with checks that bind them to the new purpose.
+  image jobs, with checks that bind them to the new purpose. Migration 0030 adds the
+  scene-art references (a checked JSON list, since library assets are never deleted),
+  the adapter scale and the adapter that ran.

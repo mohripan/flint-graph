@@ -17,6 +17,11 @@ service.
   Apache-2.0): `isnetis.onnx` plus its `README.md` and `flintgraph-download.json`
   manifest in one directory and no other files. It runs on the CPU (about 1 s per
   image).
+- Optional, for event CGs of a character (scene art): the IP-Adapter download
+  (`h94/IP-Adapter`, revision `018e402774aeeddd60609b4ecdb7e298259dc729`, Apache-2.0):
+  `sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors`, `models/image_encoder/`
+  (`config.json`, `model.safetensors`), `README.md` and its `flintgraph-download.json`
+  manifest in one directory and no other files.
 - The isolated runtime, installed once (PyTorch with CUDA is several gigabytes):
 
   ```powershell
@@ -47,6 +52,8 @@ service.
 | `FLINT_GRAPH_NARRATIVE_IMAGE_MODEL_MANIFEST_SHA256` | SHA-256 of `flintgraph-download.json`; the pin. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MODEL_DIR` | Optional: absolute path to the anime-seg directory. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_CUTOUT_MANIFEST_SHA256` | SHA-256 of that directory's manifest; required with the directory. |
+| `FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MODEL_DIR` | Optional: absolute path to the IP-Adapter directory, for event CGs. |
+| `FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_MANIFEST_SHA256` | SHA-256 of that directory's manifest; required with the directory. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL` | Optional: Ollama model to unload when the GPU is busy. |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_MAX_ACTIVE_JOBS_PER_WORKSPACE` | Queued plus running jobs per workspace (default 2). |
 | `FLINT_GRAPH_NARRATIVE_IMAGE_JOB_DEADLINE_SECONDS` | Child watchdog (default 600). |
@@ -56,7 +63,9 @@ it with `python -m flint_graph.processes.narrative_image_worker`. At startup it
 hashes every model file against the pinned manifest (about 20 s) and refuses to run
 on a mismatch, an extra file or a missing runtime. The same applies to the cutout
 directory when it is configured; the log says whether the cutout is ready. Without
-it, transparent jobs fail with `cutout_unavailable` and everything else works.
+it, transparent jobs fail with `cutout_unavailable` and everything else works. The
+IP-Adapter is checked the same way (about 15 s more); without it, event CG jobs fail
+with `ip_adapter_unavailable`.
 
 ## What it generates
 
@@ -90,6 +99,18 @@ it, transparent jobs fail with `cutout_unavailable` and everything else works.
   kind, named `{character} {expression}`. "Use as" approves one and sets it as that
   expression's sprite. The worker fetches the base hash-verified from the store,
   and the child checks the hash again.
+- Event CGs of a character (ADR 0041 slice C): Assets → CGs → "Generate CGs"
+  (`POST /v1/narrative/projects/{id}/assets/scene-art-jobs`). Choose the character
+  and one of its approved portraits, sprites or images ("Look from"), and describe
+  the scene. The child cuts the figure out of that image, centres it on white and
+  passes it to IP-Adapter Plus (ViT-H) at scale 0.5 while it renders a 1344×768 scene
+  from the server-built prompt (type, `solo`, the scene as written, the character's
+  appearance tags, quality tags). Results are opaque candidate images named
+  `{character} CG {n}`; approve one and pick it in Write → Stage → Event CG. The
+  job records `reference_assets`, `ip_adapter_scale` and `ip_adapter_model`, and
+  each CG's provenance names its references by SHA-256. A plain reference works
+  best: effects or busy backdrops around the figure carry into the scene. One
+  character per CG; two references swapped their looks in most renders.
 
 All of them use the same worker, queue and limits. Candidates wait in the library until a
 member approves them. Uploads (PNG images, static TTF/OTF fonts) need no worker.
@@ -140,7 +161,9 @@ What is kept out of images is data, not code: the versioned TOML file
   with the GPU free: 12 s to load the model, about 28 s for the first image and about
   11 s for each later one. A high-resolution sprite took 40 s for its first image
   (15 s standard) on the RTX 5070 Ti, and it needs 9.5 GiB of free dedicated memory
-  (8.5 GiB at 1.5×) instead of 8 GiB.
+  (8.5 GiB at 1.5×) instead of 8 GiB. An event CG needs 8.5 GiB: four took 95 s
+  including the model load (about 11 s each), with the image encoder released before
+  the render (8.0 GiB peak instead of 9.2 GiB).
 - Ollama's 12B assistant model holds about 8 GB. If too little dedicated memory is
   free, the child refuses with `gpu_busy` rather than letting Windows spill into
   shared memory (about 10× slower). With the release setting, the worker asks Ollama
@@ -149,7 +172,8 @@ What is kept out of images is data, not code: the versioned TOML file
 - Child failures map to safe codes (`gpu_busy`, `out_of_memory`,
   `generation_timeout`, `invalid_output`, `model_invalid`, `storage_unavailable`,
   and for sprites `cutout_failed` when no render had a plausible figure and
-  `cutout_unavailable` when the worker has no segmenter). A sprite render without
+  `cutout_unavailable` when the worker has no segmenter; `ip_adapter_unavailable`
+  for an event CG on a worker without the IP-Adapter). A sprite render without
   a usable figure is skipped, so a job can finish with fewer candidates than asked.
 - Other GPU programs count too. The child needs 8 GB free (9.5 GiB for high
   resolution), so a local vLLM or similar container holding most of a 12 GB GPU

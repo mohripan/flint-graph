@@ -58,8 +58,12 @@ bump is involved. Existing owned API/assistant processes need an owner-managed r
 to use the new endpoints/prompt; never restart another session's processes.
 Expressions (ADR 0041 slice A, migration 0026) repaint only the face of an approved
 base sprite as `character_expression` image jobs, so expressions swap on stage without
-jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) and
-character-referenced scene art (slice C) are planned with IP-Adapter.
+jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) are
+planned. Slice C (migration 0030) draws event CGs of one character from an approved
+image of them through a pinned IP-Adapter Plus (ViT-H): Assets → CGs → Generate CGs,
+`scene_art` image jobs, opaque 1344×768 candidates. The image worker needs the optional
+`FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_*` pin; read `docs/reports/2026-10-31-scene-art-cgs.md`.
+Two characters per CG are not supported (identities swapped in probes).
 Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
 `notes/models/`; no generation pipeline exists yet. The Studio rail is now a
@@ -107,7 +111,7 @@ story ID outside slots in exports and stay in memory in playtests. The Studio st
 panel picks CGs and previews the overlay; Assets → CGs browses and uploads the image
 library with a dedicated CG panel. See
 `docs/reports/2026-10-31-event-cgs.md` for parity, private builder/preview and real
-release qualification. Art generation from character references remains separate work.
+release qualification. CG generation from a character's approved image is ADR 0041 slice C.
 [ADR 0043](docs/adr/0043-asset-folders-and-line-voices.md) adds editor-only asset folders
 (migration 0028; automatic groups by kind and character) and voiced lines on runtime 0.6.0
 (0.6.1 plays the first voiced line in playtests and adds a web start screen when sound is blocked):

@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-31",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU, 12 GB, Windows 11",
+  "runtime": {"torch": "2.11.0+cu128", "diffusers": "0.42.1", "cuda": "12.8"},
+  "models": {
+    "base": "cagliostrolab/animagine-xl-4.0@2b7c1b397761bf5bd3cc42e5b39ec99314a75a96",
+    "ip_adapter": "h94/IP-Adapter@018e402774aeeddd60609b4ecdb7e298259dc729",
+    "ip_adapter_files": [
+      "sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors",
+      "models/image_encoder/model.safetensors"
+    ]
+  },
+  "reference": "Quen Aldwinia's approved portrait from the Stage & theme demo project, copied read-only into a QA project",
+  "probes": {
+    "memory_peak_allocated_gib": {"encoder_on_gpu": 9.17, "encoder_released": 7.99},
+    "free_after_load_gib": {"encoder_on_gpu": 2.64, "encoder_released": 3.87},
+    "seconds_per_image_1344x768_28_steps": 11.3,
+    "seconds_per_image_masked_two_characters": 15.0,
+    "scale": {
+      "0.0": "white hair and red eyes from text, but a different outfit (grey sweater, shorts)",
+      "0.5": "recognizable: white bob, red eyes, oversized black jacket over a white top, dark trousers; scene keeps its light",
+      "0.6": "recognizable; the reference's hand-to-shoulder pose starts to repeat",
+      "0.7": "recognizable; the scene washes toward the reference's plain light backdrop"
+    },
+    "reference_crop": {
+      "full_figure_padded_square": "one character",
+      "upper_body_square": "two copies of the character in one image"
+    },
+    "reference_with_effects": "red slash effects around a sprite carried into the scene",
+    "name_in_scene_text": "'quen sitting on ...' and 'boy sitting on ...' gave near-identical renders for the same seed",
+    "grey_instead_of_white_padding": "no improvement; kept white",
+    "two_characters_masked_left_right": {
+      "renders": 7,
+      "both_identities_kept": 1,
+      "failure": "hair colour and outfit swap or merge between the halves; text tags apply to the whole image"
+    },
+    "clip_vit_h_similarity_to_reference": {
+      "text_only": 0.7,
+      "scale_0.5_to_0.7": [0.732, 0.771],
+      "worker_and_studio_cgs": [0.694, 0.747],
+      "conclusion": "global image similarity is dominated by the scene and does not measure identity; recognizability was judged by eye"
+    }
+  },
+  "live_worker_test": {
+    "test": "tests/integration/test_narrative_image_workflow_live.py::test_real_gpu_scene_art_draws_the_referenced_character",
+    "path": "API job -> outbox -> owned Temporal workflow and fenced activity -> real child on the GPU -> hash-verified storage",
+    "result": "passed in 126 s",
+    "job_seconds": 112,
+    "images": 2,
+    "checks": {"mode": "RGB", "size": [1344, 768], "distinct_colours_64x36": [1632, 1929]},
+    "prompt_tokens": 49,
+    "recognizable": "both"
+  },
+  "studio_qa": {
+    "stack": "worktree Studio on API 8121, playtest 5212, frontend 5193, database flint_cg_qa, image queue narrative-image-cgqa",
+    "steps": [
+      "Assets -> CGs (listed with 0 CGs) -> Generate CGs",
+      "Character Quen Aldwinia; reference: the approved portrait (only choice, preselected)",
+      "Scene: Quen sitting on the couch by the window at night, city lights outside",
+      "Generate 4 CGs: 'Loading the model...' then 4 candidates under To review",
+      "Approve quen CG 4",
+      "Write -> stage of the first scene -> Event CG -> quen CG 4 -> Save revision (revision 3)",
+      "Playtest revision 3: the CG covers the stage under Quen's first line"
+    ],
+    "job_seconds": 95,
+    "images": 4,
+    "recognizable": "all four",
+    "phone_width_390": {"document_scroll_width": 390, "horizontal_scroll": false}
+  }
+}
