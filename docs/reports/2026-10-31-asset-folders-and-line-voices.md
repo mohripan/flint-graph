@@ -43,12 +43,16 @@ the rail's CGs group).
   `user://flint_graph/settings.json`; playtests keep it in memory. The bridge, preview
   and Studio playtest accept audio up to 10 MiB; builds accept `.wav` with the exact-bytes
   `keep` remap; the toolchain, release identity and build child moved to 0.6.0.
-- **Generation (ADR 0039 pattern, CPU).** `runtimes/voicegen` is an isolated child with
-  its own uv lock (CPU PyTorch 2.11, Kokoro 0.9.4, Misaki 0.9.4, spaCy model pinned as
+- **Generation (ADR 0039 pattern, GPU first).** `runtimes/voicegen` is an isolated child
+  with its own uv lock (CUDA 12.8 PyTorch 2.11, Kokoro 0.9.4, Misaki 0.9.4, spaCy model pinned as
   a wheel, eSpeak NG fallback for sounds such as "fufu"), started with `python -I`, a
   minimal environment, offline flags and a watchdog. The opt-in
   `narrative_voice_worker` owns the `narrative.voice_job_*` outbox topics and a fenced
-  `NarrativeVoiceJobWorkflow` on its own queue (IDs only in history), verifies the
+  `NarrativeVoiceJobWorkflow` on its own queue (IDs only in history). The child speaks
+  on the GPU when NVML reports at least 1 GiB free on the shared card and otherwise (or
+  after an out-of-memory mid-job) on the CPU; each clip's provenance and the job's
+  runtime record the device. A lasting `CUDA_CACHE_PATH` keeps compiled kernels between
+  jobs (without it every GPU job recompiled: 26 s instead of 8.5–10 s). The worker verifies the
   Kokoro directory against its manifest at start-up, checks every clip as canonical
   24 kHz mono WAV of the announced length, stores it create-only and hash-verified, and
   records it as a candidate `voice` asset with model, voice, text, mode and seed.
@@ -69,6 +73,16 @@ the rail's CGs group).
 - **Assistant.** Voice actions are left for a follow-up. The outline shows each line's
   voice, and a line the assistant rewrites for the same speaker keeps it.
 - **Launcher.** `tools/narrative/studio.py` runs the worker as the `voice` service.
+
+## GPU first (the user's request, 2026-10-31)
+
+The user asked for the GPU instead of the CPU. Measured on the shared RTX 5070 Ti
+Laptop GPU (12 GB): Kokoro needs about 0.3 GB; once warm a line takes 0.05–0.1 s on
+the GPU against 0.2–0.6 s on the CPU. A job's fixed cost is about 7 s of imports and
+model load either way. The first GPU jobs compile CUDA kernels (about 50 s for the
+very first, then shorter while the cache fills to about 0.7 GB); afterwards a
+three-line job takes about 10 s. `FLINT_GRAPH_NARRATIVE_VOICE_DEVICE=cpu` keeps a job
+off the GPU.
 
 ## Live run (local Studio from this branch)
 
@@ -96,7 +110,13 @@ voice worker, playtest server and frontend. Steps in the in-app browser:
    served locally and played in the browser pane: line 1 played Mira's clip
    (`voice_playing` true), line 2 played `quen_fufu`, the narration stopped it and played
    nothing. The Voice slider set to 30 % survived a reload.
-6. **Folders.** The rail grouped the three clips (Voice clips 3; Mira 2, Quen 1; one
+6. **GPU.** After the switch, Mira's last line was set to Full voice and generated
+   from the Studio, and Quen's "fufu" was regenerated. Both clips record `cuda` in
+   their provenance (25.5 s each while the worker's kernel cache filled). A fresh take
+   now shows next to an already bound clip ("New take: Listen / Use this take"), a gap
+   found here. Revision 4 built as a second runtime 0.6.0 release, and the browser
+   played Mira's clip, Quen's GPU take, silence on the narration and Mira's GPU clip.
+7. **Folders.** The rail grouped the three clips (Voice clips 3; Mira 2, Quen 1; one
    sample to review). A folder "Voices" with "Harbor scene" inside was created, and both
    line clips moved into it in one step ("Moved 2 assets."); counts and labels updated.
 

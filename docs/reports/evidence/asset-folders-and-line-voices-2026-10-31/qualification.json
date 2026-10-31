@@ -9,33 +9,136 @@
     "repo": "hexgrad/Kokoro-82M",
     "revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
     "license": "apache-2.0",
-    "runtime": {"torch": "2.11.0+cpu", "kokoro": "0.9.4", "misaki": "0.9.4", "device": "cpu"}
+    "runtime": {
+      "torch": "2.11.0+cpu",
+      "kokoro": "0.9.4",
+      "misaki": "0.9.4",
+      "device": "cpu"
+    }
   },
   "child_probe": {
-    "items": ["full: The lanterns are lit again. Someone must have come back.", "vocalization: Fufu"],
+    "items": [
+      "full: The lanterns are lit again. Someone must have come back.",
+      "vocalization: Fufu"
+    ],
     "voice": "bf_emma",
-    "samples": [93600, 20400],
+    "samples": [
+      93600,
+      20400
+    ],
     "wall_seconds_including_load": 13.4
   },
   "live_run": {
-    "voices": {"mira": "bf_emma", "quen": "af_bella"},
-    "lines": {"opening": "full", "laugh": "vocalization fufu", "tide": "narration (no voice control)", "late": "silent"},
+    "voices": {
+      "mira": "bf_emma",
+      "quen": "af_bella"
+    },
+    "lines": {
+      "opening": "full",
+      "laugh": "vocalization fufu",
+      "tide": "narration (no voice control)",
+      "late": "silent"
+    },
     "clips": {
-      "mira_the_lanterns_are_lit_again_someone_must_have_come_b": {"sha256": "880dd022d9105e5d6a06307a4dfc0f26053dc3ba8945af1ba0bce5c51a8b39b1", "seconds": 3.9},
-      "quen_fufu": {"sha256": "ee5852507bb2c0d97fb2e9b3682a5d034bc88139a8fa8b3278dcf771653ca0ea", "seconds": 1.5}
+      "mira_the_lanterns_are_lit_again_someone_must_have_come_b": {
+        "sha256": "880dd022d9105e5d6a06307a4dfc0f26053dc3ba8945af1ba0bce5c51a8b39b1",
+        "seconds": 3.9
+      },
+      "quen_fufu": {
+        "sha256": "ee5852507bb2c0d97fb2e9b3682a5d034bc88139a8fa8b3278dcf771653ca0ea",
+        "seconds": 1.5
+      }
     },
     "revision": 3,
     "release": {
       "status": "completed",
-      "source_assets": ["content/assets/mira_the_lanterns_are_lit_again_someone_must_have_come_b.wav", "content/assets/quen_fufu.wav"],
+      "source_assets": [
+        "content/assets/mira_the_lanterns_are_lit_again_someone_must_have_come_b.wav",
+        "content/assets/quen_fufu.wav"
+      ],
       "web_zip_bytes": 10553605,
       "played": [
-        {"node": "opening", "clip": "mira_the_lanterns_are_lit_again_someone_must_have_come_b", "playing": true},
-        {"node": "laugh", "clip": "quen_fufu", "playing": true},
-        {"node": "tide", "clip": null, "playing": false}
+        {
+          "node": "opening",
+          "clip": "mira_the_lanterns_are_lit_again_someone_must_have_come_b",
+          "playing": true
+        },
+        {
+          "node": "laugh",
+          "clip": "quen_fufu",
+          "playing": true
+        },
+        {
+          "node": "tide",
+          "clip": null,
+          "playing": false
+        }
       ],
       "voice_volume_after_reload": 30
     },
-    "folders": {"created": ["Voices", "Voices / Harbor scene"], "moved": 2}
+    "folders": {
+      "created": [
+        "Voices",
+        "Voices / Harbor scene"
+      ],
+      "moved": 2
+    }
+  },
+  "gpu": {
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "torch": "2.11.0+cu128",
+    "nvml_floor_bytes": 1073741824,
+    "warm_seconds_per_line": [
+      0.05,
+      0.1
+    ],
+    "cpu_seconds_per_line": [
+      0.2,
+      0.6
+    ],
+    "job_seconds": {
+      "first_ever_with_compile": 58,
+      "no_kernel_cache": 26,
+      "warm_cache_three_lines": 10
+    },
+    "live_jobs": [
+      {
+        "character": "mira",
+        "text": "You're late. The tide waits for no one.",
+        "clip_device": "cuda",
+        "run_seconds": 25.5
+      },
+      {
+        "character": "quen",
+        "text": "fufu",
+        "clip_device": "cuda",
+        "run_seconds": 25.6
+      }
+    ],
+    "release_revision_4": {
+      "status": "completed",
+      "played": [
+        {
+          "node": "opening",
+          "clip": "mira_the_lanterns_are_lit_again_someone_must_have_come_b",
+          "playing": true
+        },
+        {
+          "node": "laugh",
+          "clip": "quen_fufu_2",
+          "playing": true
+        },
+        {
+          "node": "tide",
+          "clip": null,
+          "playing": false
+        },
+        {
+          "node": "late",
+          "clip": "mira_you_re_late_the_tide_waits_for_no_one",
+          "playing": true
+        }
+      ]
+    }
   }
 }

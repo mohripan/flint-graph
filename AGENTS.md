@@ -112,7 +112,7 @@ release qualification. Art generation from character references remains separate
 (migration 0028; automatic groups by kind and character) and voiced lines on runtime 0.6.0:
 format 2 `audio` assets (canonical WAV) and an optional line `voice` (full or a
 vocalization such as "fufu"; silent by default), played by all four implementations with a
-player Voice slider. Clips come from Kokoro-82M on the CPU through the opt-in
+player Voice slider. Clips come from Kokoro-82M on the GPU (CPU fallback) through the opt-in
 `narrative_voice_worker` and the isolated `runtimes/voicegen` child (migration 0029; a
 Kokoro voice per character profile), or from WAV uploads. Read
 `docs/reports/2026-10-31-asset-folders-and-line-voices.md` and
