@@ -5,7 +5,8 @@ environment and no credentials. Nothing it returns is trusted: output lines are
 bounded, events must follow the protocol exactly, the output directory must hold
 exactly the expected files, and every PNG is normalized and passes the strict
 validator with exact dimensions before the bytes leave this module. Cutout sprites
-must be 8-bit RGBA crops that match the box the child reports.
+must be 8-bit RGBA crops that match the box the child reports. High-resolution
+images are checked at their upscaled size, and sprite boxes must lie inside it.
 """
 
 import asyncio
@@ -23,6 +24,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from flint_graph.narrative.imagegen import HiresFix
 from flint_graph.narrative.png import normalize_png, validate_png
 from flint_graph.narrative.values import PackageError
 
@@ -103,6 +105,14 @@ class GenerationRequest:
     cutout: bool = False
     # Repaint only the face of a base image, one prompt per seed; the size is the base's.
     inpaint: InpaintRequest | None = None
+    # Upscale the base render and repaint it lightly at the larger size.
+    hires: HiresFix | None = None
+
+    @property
+    def output_size(self) -> tuple[int, int]:
+        if self.hires is None:
+            return self.width, self.height
+        return self.hires.size(self.width, self.height)
 
 
 @dataclass(frozen=True)
@@ -242,7 +252,8 @@ def _box(value: object, request: GenerationRequest) -> tuple[int, int, int, int]
     ):
         raise ImageGenerationError("invalid_output")
     left, top, right, bottom = value
-    if not (0 <= left < right <= request.width and 0 <= top < bottom <= request.height):
+    width, height = request.output_size
+    if not (0 <= left < right <= width and 0 <= top < bottom <= height):
         raise ImageGenerationError("invalid_output")
     return left, top, right, bottom
 
@@ -283,11 +294,15 @@ class LocalImageGenerator:
     async def generate(
         self, request: GenerationRequest, *, on_progress: Progress
     ) -> GenerationResult:
-        if not 1 <= len(request.seeds) <= MAX_IMAGES:
+        if not 1 <= len(request.seeds) <= MAX_IMAGES or (
+            request.hires is not None and not request.hires.valid()
+        ):
             raise ImageGenerationError("bad_request")
         inpaint = request.inpaint
         if inpaint is not None and (
-            request.cutout or len(inpaint.prompts) != len(request.seeds)
+            request.cutout
+            or request.hires is not None
+            or len(inpaint.prompts) != len(request.seeds)
         ):
             raise ImageGenerationError("bad_request")
         if request.cutout and self.cutout is None:
@@ -325,6 +340,9 @@ class LocalImageGenerator:
                     "strength": inpaint.strength,
                     "prompts": list(inpaint.prompts),
                 }
+            # Only sent when asked for, so a standard job also runs on an older child.
+            if request.hires is not None:
+                fields["hires"] = {"scale": request.hires.scale, "strength": request.hires.strength}
             body = json.dumps(fields).encode()
             process = await asyncio.create_subprocess_exec(
                 str(self.python),
@@ -443,9 +461,7 @@ class LocalImageGenerator:
             width, height = _dimensions(data)
             thumb_width, thumb_height = _dimensions(thumbnail)
             expected_size = (
-                (request.width, request.height)
-                if box is None
-                else (box[2] - box[0], box[3] - box[1])
+                request.output_size if box is None else (box[2] - box[0], box[3] - box[1])
             )
             if (
                 (width, height) != expected_size

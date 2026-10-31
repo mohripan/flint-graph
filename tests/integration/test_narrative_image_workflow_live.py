@@ -30,6 +30,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     verify_model,
 )
 from flint_graph.main import app
+from flint_graph.narrative.imagegen import HIRES_SCALE
 from flint_graph.worker.activities.narrative_image import NarrativeImageActivities
 from flint_graph.workflows.narrative_image import NarrativeImageJobWorkflow
 
@@ -230,7 +231,8 @@ print(json.dumps({
     ),
     reason="requires the isolated runtime, both local models and their pinned manifests",
 )
-async def test_real_gpu_transparent_job_stores_a_cut_out_sprite(live_case, tmp_path):
+@pytest.mark.parametrize("hires", [False, True], ids=["standard", "hires"])
+async def test_real_gpu_transparent_job_stores_a_cut_out_sprite(live_case, tmp_path, hires):
     case = live_case
     runtime = Path(os.environ["FLINT_GRAPH_NARRATIVE_IMAGE_RUNTIME_DIR"])
     python, script = runtime_paths(runtime)
@@ -258,10 +260,15 @@ async def test_real_gpu_transparent_job_stores_a_cut_out_sprite(live_case, tmp_p
         count=1,
         framing="full_body",
         transparent=True,
+        hires=hires,
     )
     async with worker(case, generator, releaser):
         done = await case["until"](job["id"], {"completed", "failed"}, 1200)
     assert done["status"] == "completed", done["error_code"]
+    output = (done["output_width"], done["output_height"])
+    assert output == (
+        (round(832 * HIRES_SCALE), round(1216 * HIRES_SCALE)) if hires else (832, 1216)
+    )
     assert done["cutout"] == {
         "model": f"{cutout.identity.repo}@{cutout.identity.revision}",
         "sha256": cutout.sha256,
@@ -274,6 +281,9 @@ async def test_real_gpu_transparent_job_stores_a_cut_out_sprite(live_case, tmp_p
     assert hashlib.sha256(content.content).hexdigest() == asset["sha256"]
     left, top, right, bottom = asset["provenance"]["cutout"]["box"]
     assert (asset["width"], asset["height"]) == (right - left, bottom - top)
+    assert right <= output[0] and bottom <= output[1]
+    assert asset["height"] > (1216 if hires else 900), "A full-body figure fills the height"
+    assert ("hires" in asset["provenance"]) == hires
     sprite = tmp_path / "sprite.png"
     await asyncio.to_thread(sprite.write_bytes, content.content)
     probe = await asyncio.create_subprocess_exec(

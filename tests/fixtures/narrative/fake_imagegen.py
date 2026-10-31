@@ -42,6 +42,14 @@ output = Path(request["output_dir"])
 width, height = request["width"], request["height"]
 cutout = request.get("cutout")
 inpaint = request.get("inpaint")
+# A high-resolution request is upscaled after the base render; boxes scale with it.
+hires = request.get("hires")
+factor = hires["scale"] if hires else 1
+width, height = round(width * factor), round(height * factor)
+if mode == "hireslow":
+    width, height = request["width"], request["height"]
+if mode == "hiresonly":
+    width, height = width * 2, height * 2
 # The real child hashes the segmenter bytes it loads; so does this stand-in.
 if cutout and hashlib.sha256(Path(cutout["model"]).read_bytes()).hexdigest() != cutout["sha256"]:
     emit("error", code="model_invalid")
@@ -83,11 +91,17 @@ for index, seed in enumerate(request["seeds"]):
         if mode == "cutfail":
             emit("error", code="cutout_failed")
             raise SystemExit(2)
-        box = [100, 40, 612, 1176]
-        image = png(512 + (1 if mode == "badbox" else 0), 1136, index * 40, mode != "opaquecut")
-        thumbnail = png(256, round(1136 * 256 / 512), index * 40, True)
+        box = [round(value * factor) for value in (100, 40, 612, 1176)]
         if mode == "outsidebox":
-            box = [400, 40, 912, 1176]
+            box = [round(value * factor) for value in (400, 40, 912, 1176)]
+        crop_width, crop_height = box[2] - box[0], box[3] - box[1]
+        image = png(
+            crop_width + (1 if mode == "badbox" else 0),
+            crop_height,
+            index * 40,
+            mode != "opaquecut",
+        )
+        thumbnail = png(256, round(crop_height * 256 / crop_width), index * 40, True)
         if mode != "nobox":
             extra["box"] = box
     elif inpaint:

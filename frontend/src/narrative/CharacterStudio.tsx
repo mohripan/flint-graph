@@ -3,8 +3,8 @@ import { ApiError, api } from "../lib/api";
 import type { CharacterFraming, CharacterProfile, CharacterType, ImageJob, NarrativeImage } from "../lib/api";
 import { CharacterAvatar, CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import {
-  CHARACTER_TYPES, FRAMINGS, MAX_APPEARANCE, PORTRAITS_PER_JOB, canCutOut, cleanAppearance, generateLabel, isActive,
-  jobStatus,
+  CHARACTER_TYPES, FRAMINGS, MAX_APPEARANCE, PORTRAITS_PER_JOB, canCutOut, cleanAppearance, defaultHires, generateLabel,
+  hiresLabel, isActive, jobSize, jobStatus,
 } from "./characterModel";
 import { CharacterSprites } from "./CharacterSprites";
 import { Field } from "./FormFields";
@@ -56,6 +56,9 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
   // Cut-out stage sprites instead of portraits; a per-request choice, not profile data.
   const [transparent, setTransparent] = useState(false);
   const sprite = transparent && canCutOut(framing);
+  // Follows the sprite choice until the creator sets it themselves.
+  const [hiresChoice, setHiresChoice] = useState<boolean | null>(null);
+  const hires = hiresChoice ?? defaultHires(sprite);
   const [jobs, setJobs] = useState<ImageJob[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [viewing, setViewing] = useState<NarrativeImage | null>(null);
@@ -128,7 +131,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
       if (dirty && !(await persist())) return;
       const job = await api.createPortraitJob(tenantId, projectId, id, {
         appearance: cleanAppearance(appearance), character_type: type, framing, count: PORTRAITS_PER_JOB,
-        idempotency_key: crypto.randomUUID(), transparent: sprite,
+        idempotency_key: crypto.randomUUID(), transparent: sprite, hires,
       });
       setJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
     } catch (error) { setNotice(message(error, "Could not start generating portraits.")); }
@@ -200,6 +203,9 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
           onChange={event => setTransparent(event.target.checked)} />
           <span>Transparent background: cut the character out as a stage sprite
             {canCutOut(framing) ? "." : " (needs full-body framing)."}</span></label>
+        <label className="studio-check"><input type="checkbox" checked={hires}
+          onChange={event => setHiresChoice(event.target.checked)} />
+          <span>{hiresLabel()}</span></label>
         {!readOnly && <div className="studio-actions">
           <button type="button" className="studio-primary" disabled={busy || Boolean(active) || !cleanAppearance(appearance)}
             onClick={() => void generate()}>{active ? "Generating…" : generateLabel(sprite)}</button>
@@ -234,7 +240,8 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
         <dt>Model</dt><dd>{latest.model ?? "Not run yet"}</dd>
         {latest.transparent && <><dt>Cutout</dt><dd>{latest.cutout
           ? `${latest.cutout.model}, SHA-256 ${latest.cutout.sha256.slice(0, 12)}…` : "Not run yet"}</dd></>}
-        <dt>Settings</dt><dd>{latest.width}×{latest.height}, {latest.steps} steps, guidance {latest.guidance}</dd>
+        <dt>Size</dt><dd>{jobSize(latest)}</dd>
+        <dt>Settings</dt><dd>{latest.steps} steps, guidance {latest.guidance}</dd>
       </dl></details>}
     {viewing && <Viewer tenantId={tenantId} projectId={projectId} asset={viewing} onClose={() => setViewing(null)} />}
   </section>;
@@ -268,7 +275,7 @@ function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onA
         : chosen ? <strong>Current portrait</strong>
           : !readOnly && <button type="button" className="studio-secondary" onClick={onChoose}>Use as portrait</button>}
       {!chosen && !readOnly && <button type="button" className="studio-link studio-danger" onClick={onDiscard}>Discard</button>}
-      <small>{sprite ? "Transparent sprite · " : ""}Seed {asset.seed}</small>
+      <small>{sprite ? "Transparent sprite · " : ""}{asset.width}×{asset.height} · Seed {asset.seed}</small>
     </figcaption>
   </figure>;
 }

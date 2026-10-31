@@ -68,6 +68,17 @@ it, transparent jobs fail with `cutout_unavailable` and everything else works.
   "Approve sprite" or in the library. The job records the segmenter as
   `cutout_model` (`repo@revision`) and `cutout_sha256` (the ONNX file). Each sprite's
   provenance has the crop box inside the 832×1216 render.
+- High resolution: the "High resolution" box in the character form (on by default
+  for transparent sprites; `"hires": true` on a portrait job). Each 832×1216 render is
+  upscaled 2× with Lanczos and repainted lightly by the same model (img2img, same
+  prompt and seed, strength 0.35), then cut out. Images come out at 1664×2432 (sprites
+  are crops of that). The job stores `hires_scale` and `hires_strength`; its `width`
+  and `height` stay the base render and `output_width`/`output_height` give the final
+  size. Asset provenance records `hires` next to the generation size. Use it for
+  characters the stage draws large. Sprites come out two to three times as large
+  (1.9–3.5 MB measured, against about 1.0–1.1 MB), so a story's 48 MiB asset budget
+  holds roughly 14–26 of them instead of about 45. The repaint can change small
+  details, so review the result like any other candidate.
 - Backgrounds: 1344×768 scenery with `no humans`, from the Assets tab
   (`POST /v1/narrative/projects/{id}/assets/background-jobs`).
 - Character expressions (ADR 0041): Characters → On stage → "Generate
@@ -127,7 +138,9 @@ What is kept out of images is data, not code: the versioned TOML file
 
 - One generation runs at a time. A job of four 832×1216 portraits takes about 80 s
   with the GPU free: 12 s to load the model, about 28 s for the first image and about
-  11 s for each later one.
+  11 s for each later one. A high-resolution sprite took 40 s for its first image
+  (15 s standard) on the RTX 5070 Ti, and it needs 9.5 GiB of free dedicated memory
+  (8.5 GiB at 1.5×) instead of 8 GiB.
 - Ollama's 12B assistant model holds about 8 GB. If too little dedicated memory is
   free, the child refuses with `gpu_busy` rather than letting Windows spill into
   shared memory (about 10× slower). With the release setting, the worker asks Ollama
@@ -138,9 +151,10 @@ What is kept out of images is data, not code: the versioned TOML file
   and for sprites `cutout_failed` when no render had a plausible figure and
   `cutout_unavailable` when the worker has no segmenter). A sprite render without
   a usable figure is skipped, so a job can finish with fewer candidates than asked.
-- Other GPU programs count too. The child needs 8 GB free, so a local vLLM or
-  similar container holding most of a 12 GB GPU makes every job fail with
-  `gpu_busy`; the Ollama release setting cannot free that memory.
+- Other GPU programs count too. The child needs 8 GB free (9.5 GiB for high
+  resolution), so a local vLLM or similar container holding most of a 12 GB GPU
+  makes every job fail with `gpu_busy`; the Ollama release setting cannot free that
+  memory.
   The child's stderr is discarded. To diagnose, run `runtimes/imagegen/generate.py`
   by hand with a JSON request on stdin.
 - Images are stored create-only under

@@ -177,6 +177,29 @@ CUTOUT_TAGS = "white background"
 CUTOUT_NEGATIVE = "feet out of frame, gradient background"
 
 
+# High resolution ("hires fix"): the base render is upscaled with Lanczos, then the
+# same model repaints it lightly at the larger size (img2img with the same prompt and
+# seed), which adds real detail instead of stretched pixels. Strength is the share of
+# the denoising schedule that is rerun: low keeps the composition, high redraws it.
+HIRES_SCALES = (1.5, 2.0)
+HIRES_STRENGTHS = (0.2, 0.6)
+HIRES_SCALE = 2.0
+HIRES_STRENGTH = 0.35
+
+
+@dataclass(frozen=True)
+class HiresFix:
+    scale: float
+    strength: float
+
+    def valid(self) -> bool:
+        low, high = HIRES_STRENGTHS
+        return self.scale in HIRES_SCALES and low <= self.strength <= high
+
+    def size(self, width: int, height: int) -> tuple[int, int]:
+        return round(width * self.scale), round(height * self.scale)
+
+
 @dataclass(frozen=True)
 class ImageRequest:
     prompt: str
@@ -185,6 +208,14 @@ class ImageRequest:
     height: int
     steps: int
     guidance: float
+    hires: HiresFix | None = None
+
+    @property
+    def output_size(self) -> tuple[int, int]:
+        """The rendered image's size: the base size, or the upscaled one."""
+        if self.hires is None:
+            return self.width, self.height
+        return self.hires.size(self.width, self.height)
 
 
 def clean_appearance(appearance: str) -> str:
@@ -247,6 +278,7 @@ def portrait_request(
     *,
     transparent: bool = False,
     policy: ContentPolicy = DEFAULT_POLICY,
+    hires: bool = False,
 ) -> ImageRequest:
     if character_type not in CHARACTER_TYPES or framing not in FRAMINGS:
         raise ValueError("Unknown character type or framing")
@@ -271,6 +303,7 @@ def portrait_request(
         height=height,
         steps=STEPS,
         guidance=GUIDANCE,
+        hires=HiresFix(scale=HIRES_SCALE, strength=HIRES_STRENGTH) if hires else None,
     )
 
 

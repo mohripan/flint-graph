@@ -16,6 +16,10 @@ With an ``inpaint`` request (ADR 0041) it repaints only the face of a base image
 one prompt per seed: a square around the face box is upscaled, inpainted under a
 feathered ellipse, scaled back and pasted, and the base alpha is restored. Size,
 silhouette and everything outside the face stay exactly as they were.
+
+With a ``hires`` request each render is upscaled (Lanczos) and lightly repainted
+at the larger size by the same weights (img2img, same prompt and seed), so large
+stage sprites gain real detail; the cutout then runs on the final image.
 """
 
 import hashlib
@@ -31,6 +35,11 @@ MAX_IMAGES = 4
 SIZES = {(832, 1216), (1216, 832), (1024, 1024), (1344, 768), (768, 1344)}
 # SDXL fp16 with a tiled VAE peaks near this much dedicated device memory.
 MIN_FREE_BYTES = 8 * 1024**3
+HIRES_SCALES = {1.5, 2.0}
+HIRES_STRENGTH = (0.2, 0.6)
+# The repaint at the upscaled size needs more; measured peaks on a 12 GB RTX 5070 Ti
+# were 8.3 GiB (standard), 8.4 GiB (1.5x) and 9.5 GiB (2x) of dedicated memory.
+HIRES_MIN_FREE_BYTES = {1.5: int(8.5 * 1024**3), 2.0: int(9.5 * 1024**3)}
 THUMBNAIL_WIDTH = 256
 SEGMENTER_LIMIT = 512 * 1024 * 1024
 # The anime-seg ISNet takes a 1024x1024 letterboxed image and returns a 0..1 mask.
@@ -75,6 +84,20 @@ def dedicated_free_bytes() -> int:
         pynvml.nvmlShutdown()
 
 
+def hires_size(width: int, height: int, scale: float) -> tuple[int, int]:
+    return round(width * scale), round(height * scale)
+
+
+def upscale(image, scale: float):
+    from PIL import Image
+
+    return image.resize(hires_size(image.width, image.height, scale), Image.LANCZOS)
+
+
+def required_free_bytes(hires: dict | None) -> int:
+    return MIN_FREE_BYTES if hires is None else HIRES_MIN_FREE_BYTES[hires["scale"]]
+
+
 def emit(event: str, **fields: object) -> None:
     sys.stdout.write(json.dumps({"protocol": PROTOCOL, "event": event, **fields}) + "\n")
     sys.stdout.flush()
@@ -93,7 +116,7 @@ def read_request() -> dict:
         request = json.loads(raw)
     except ValueError:
         fail("bad_request")
-    # ``cutout`` is optional so a parent that predates it keeps working.
+    # ``cutout`` and ``hires`` are optional so a parent that predates them keeps working.
     expected = {
         "protocol",
         "model_dir",
@@ -108,12 +131,24 @@ def read_request() -> dict:
     }
     if (
         type(request) is not dict
-        or set(request) - {"cutout", "inpaint"} != expected
+        or set(request) - {"cutout", "inpaint", "hires"} != expected
         or request["protocol"] != PROTOCOL
     ):
         fail("bad_request")
     request.setdefault("cutout", None)
     request.setdefault("inpaint", None)
+    request.setdefault("hires", None)
+    hires = request["hires"]
+    if hires is not None and (
+        type(hires) is not dict
+        or set(hires) != {"scale", "strength"}
+        or type(hires["scale"]) not in (int, float)
+        or hires["scale"] not in HIRES_SCALES
+        or type(hires["strength"]) not in (int, float)
+        or not HIRES_STRENGTH[0] <= hires["strength"] <= HIRES_STRENGTH[1]
+        or request["inpaint"] is not None
+    ):
+        fail("bad_request")
     cutout = request["cutout"]
     if cutout is not None and (
         type(cutout) is not dict
@@ -413,6 +448,7 @@ def main() -> None:
     import torch
     from diffusers import (
         EulerAncestralDiscreteScheduler,
+        StableDiffusionXLImg2ImgPipeline,
         StableDiffusionXLInpaintPipeline,
         StableDiffusionXLPipeline,
     )
@@ -426,8 +462,9 @@ def main() -> None:
         free = dedicated_free_bytes()
     except Exception:
         fail("gpu_unavailable")
-    if free < MIN_FREE_BYTES:
-        emit("busy", free_bytes=free, required_bytes=MIN_FREE_BYTES)
+    required = required_free_bytes(request["hires"])
+    if free < required:
+        emit("busy", free_bytes=free, required_bytes=required)
         fail("gpu_busy")
     started = time.monotonic()
     # Load the small segmenter first so a bad pin fails before the minutes of SDXL work.
@@ -450,6 +487,17 @@ def main() -> None:
     pipeline.to("cuda")
     # Decoding 832x1216 latents in tiles keeps the peak within the free-memory floor.
     pipeline.vae.enable_tiling()
+    hires = request["hires"]
+    # The repaint shares every module (and the tiled VAE) with the base pipeline. Without
+    # an explicit dtype, from_pipe casts the shared modules to float32 in place, which
+    # doubles their memory and spills past a 12 GB card.
+    refine = (
+        StableDiffusionXLImg2ImgPipeline.from_pipe(pipeline, torch_dtype=torch.float16)
+        if hires
+        else None
+    )
+    if refine is not None:
+        refine.set_progress_bar_config(disable=True)
     prompts = inpaint["prompts"] if inpaint else [request["prompt"]] * len(request["seeds"])
     tokens = max(len(pipeline.tokenizer(prompt).input_ids) for prompt in prompts)
     limit = pipeline.tokenizer.model_max_length
@@ -502,6 +550,16 @@ def main() -> None:
                     guidance_scale=float(request["guidance"]),
                     generator=torch.Generator("cuda").manual_seed(seed),
                 ).images[0]
+                if refine is not None:
+                    image = refine(
+                        prompt=request["prompt"],
+                        negative_prompt=request["negative_prompt"],
+                        image=upscale(image, hires["scale"]),
+                        strength=float(hires["strength"]),
+                        num_inference_steps=request["steps"],
+                        guidance_scale=float(request["guidance"]),
+                        generator=torch.Generator("cuda").manual_seed(seed),
+                    ).images[0]
         except torch.OutOfMemoryError:
             fail("out_of_memory")
         extra: dict[str, object] = {}

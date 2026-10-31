@@ -107,6 +107,35 @@ class MaskToAlphaTest(unittest.TestCase):
         self.assertGreater(float(mask.min()), 0.99)
 
 
+class HiresTest(unittest.TestCase):
+    def test_every_base_size_upscales_to_whole_latents_within_the_png_bounds(self):
+        for width, height in generate.SIZES:
+            for scale in generate.HIRES_SCALES:
+                out_width, out_height = generate.hires_size(width, height, scale)
+                self.assertEqual((out_width % 8, out_height % 8), (0, 0))
+                self.assertLessEqual(max(out_width, out_height), 4096)
+                self.assertLessEqual(out_width * out_height, 16_777_216)
+        self.assertEqual(generate.hires_size(832, 1216, 2.0), (1664, 2432))
+        self.assertEqual(generate.hires_size(832, 1216, 1.5), (1248, 1824))
+
+    def test_upscaling_is_lanczos_to_the_exact_size(self):
+        image = Image.new("RGB", (832, 1216), (128, 128, 128))
+        image.putpixel((10, 10), (0, 0, 0))
+        large = generate.upscale(image, 2.0)
+        self.assertEqual(large.size, (1664, 2432))
+        self.assertEqual(large.mode, "RGB")
+        # Lanczos overshoots beside a dark dot (143 here); bicubic reaches 136, bilinear 128.
+        self.assertGreater(max(large.getpixel((x, 21))[0] for x in range(14, 28)), 140)
+
+    def test_high_resolution_needs_more_free_memory_than_a_standard_render(self):
+        standard = generate.required_free_bytes(None)
+        self.assertEqual(standard, generate.MIN_FREE_BYTES)
+        for scale in generate.HIRES_SCALES:
+            hires = generate.required_free_bytes({"scale": scale, "strength": 0.35})
+            self.assertGreaterEqual(hires, standard)
+            self.assertLess(hires, 12 * 1024**3, "Still fits the 12 GB development GPU")
+
+
 class ChildRequestCase(unittest.TestCase):
     def setUp(self):
         self.work = tempfile.TemporaryDirectory()
@@ -170,6 +199,39 @@ class RequestTest(ChildRequestCase):
                     io.BytesIO(json.dumps({**self.request, **extra}).encode())
                 )
                 self.assertEqual(generate.read_request()["cutout"], extra.get("cutout"))
+        finally:
+            sys.stdin = stdin
+
+    def test_bad_hires_fields_are_rejected_before_any_model_loads(self):
+        for hires in (
+            {"scale": 3, "strength": 0.35},
+            {"scale": "2", "strength": 0.35},
+            {"scale": True, "strength": 0.35},
+            {"scale": 2.0, "strength": 0.05},
+            {"scale": 2.0, "strength": 0.9},
+            {"scale": 2.0},
+            {"scale": 2.0, "strength": 0.35, "steps": 9},
+            "yes",
+        ):
+            completed = self.run_child({**self.request, "hires": hires})
+            self.assertEqual(completed.returncode, 2, hires)
+            event = json.loads(completed.stdout.decode().splitlines()[-1])
+            self.assertEqual(event["code"], "bad_request", hires)
+
+    def test_valid_hires_requests_pass_validation(self):
+        stdin = sys.stdin
+        try:
+            for extra in (
+                {},
+                {"hires": None},
+                {"hires": {"scale": 2.0, "strength": 0.35}},
+                {"hires": {"scale": 1.5, "strength": 0.4}},
+                {"hires": {"scale": 2, "strength": 0.3}, "width": 1344, "height": 768},
+            ):
+                sys.stdin = io.TextIOWrapper(
+                    io.BytesIO(json.dumps({**self.request, **extra}).encode())
+                )
+                self.assertEqual(generate.read_request()["hires"], extra.get("hires"))
         finally:
             sys.stdin = stdin
 
@@ -288,6 +350,8 @@ class InpaintRequestTest(ChildRequestCase):
             {**self.request, "width": 201},
             {**self.request, "cutout": {"model": str(self.segmenter),
                                         "sha256": hashlib.sha256(b"weights").hexdigest()}},
+            # A hires repaint would redraw the whole base, not just its face.
+            {**self.request, "hires": {"scale": 2.0, "strength": 0.35}},
         ):
             completed = self.run_child(request)
             self.assertEqual(completed.returncode, 2)

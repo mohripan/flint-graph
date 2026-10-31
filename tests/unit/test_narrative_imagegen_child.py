@@ -17,6 +17,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     verify_cutout_model,
     verify_model,
 )
+from flint_graph.narrative.imagegen import HiresFix
 
 FAKE = Path(__file__).parents[1] / "fixtures" / "narrative" / "fake_imagegen.py"
 MODEL = ModelIdentity(repo="fixture/model", revision="a" * 40, license="openrail++")
@@ -36,7 +37,10 @@ def generator(deadline=30, cutout=None):
     )
 
 
-def request(mode="ok", seeds=(11, 22), cutout=False):
+HIRES = HiresFix(scale=2.0, strength=0.35)
+
+
+def request(mode="ok", seeds=(11, 22), cutout=False, hires=None):
     return GenerationRequest(
         prompt=f"{mode}, solo",
         negative_prompt="lowres",
@@ -46,6 +50,7 @@ def request(mode="ok", seeds=(11, 22), cutout=False):
         guidance=5.0,
         seeds=tuple(seeds),
         cutout=cutout,
+        hires=hires,
     )
 
 
@@ -183,6 +188,45 @@ async def test_cutout_output_is_checked(tmp_path, mode, code):
             request(mode, seeds=(3,), cutout=True), on_progress=ignore
         )
     assert raised.value.code == code
+
+
+@pytest.mark.anyio
+async def test_high_resolution_images_are_checked_at_the_upscaled_size(tmp_path):
+    result = await generator().generate(request(seeds=(4,), hires=HIRES), on_progress=ignore)
+    image = result.images[0]
+    assert (image.width, image.height) == (1664, 2432)
+    assert (image.thumbnail_width, image.thumbnail_height) == (256, 374)
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator().generate(request("hireslow", seeds=(4,), hires=HIRES), on_progress=ignore)
+    assert raised.value.code == "invalid_output", "A base-size image is not what was asked"
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator().generate(request("hiresonly"), on_progress=ignore)
+    assert raised.value.code == "invalid_output", "Nor is an upscaled one for a standard job"
+
+
+@pytest.mark.anyio
+async def test_high_resolution_sprites_are_cropped_inside_the_upscaled_render(tmp_path):
+    model = segmenter(tmp_path)
+    result = await generator(cutout=model).generate(
+        request(seeds=(7,), cutout=True, hires=HIRES), on_progress=ignore
+    )
+    sprite = result.images[0]
+    assert sprite.box == (200, 80, 1224, 2352), "Outside 832x1216, inside 1664x2432"
+    assert (sprite.width, sprite.height) == (1024, 2272)
+    assert sprite.data[24:26] == bytes([8, 6])
+    with pytest.raises(ImageGenerationError) as raised:
+        await generator(cutout=model).generate(
+            request("outsidebox", seeds=(7,), cutout=True, hires=HIRES), on_progress=ignore
+        )
+    assert raised.value.code == "invalid_output"
+
+
+@pytest.mark.anyio
+async def test_unsupported_high_resolution_settings_never_reach_the_child():
+    for hires in (HiresFix(scale=3.0, strength=0.35), HiresFix(scale=2.0, strength=0.9)):
+        with pytest.raises(ImageGenerationError) as raised:
+            await generator().generate(request(seeds=(1,), hires=hires), on_progress=ignore)
+        assert raised.value.code == "bad_request"
 
 
 @pytest.mark.anyio
@@ -328,6 +372,8 @@ async def test_inpainting_needs_one_prompt_per_seed_and_no_cutout(tmp_path):
     for bad in (
         replace(request, inpaint=replace(request.inpaint, prompts=("only one",))),
         replace(request, cutout=True),
+        # A hires repaint would redraw the whole base, not just its face.
+        replace(request, hires=HIRES),
     ):
         with pytest.raises(ImageGenerationError) as raised:
             await generator(cutout=segmenter(tmp_path)).generate(bad, on_progress=ignore)

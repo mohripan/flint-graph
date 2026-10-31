@@ -81,7 +81,9 @@ stage panel, line expressions, character sprites, upgrade button) completes ADR 
 flag now defaults on and new projects start on v2. Read
 `docs/reports/2026-10-31-vn-studio-editors.md`; editor logic is in
 `frontend/src/narrative/stageModel.ts`. Runtime 0.4.0 adds stage framing (character size and
-top, free horizontal placement); read `docs/reports/2026-10-31-stage-framing.md`. Owned playtests need
+top, free horizontal placement); read `docs/reports/2026-10-31-stage-framing.md`. Character jobs can
+ask for high resolution (2× hires fix: Lanczos upscale plus a light img2img repaint, migration 0027,
+on by default for sprites); read `docs/reports/2026-10-31-high-resolution-sprites.md`. Owned playtests need
 `VITE_FLINT_GRAPH_PREVIEW_ORIGIN` on the frontend dev server.
 The whole local Studio now starts with `uv run python tools/narrative/studio.py`
 (API, four workers, playtest server, frontend), configured by the git-ignored

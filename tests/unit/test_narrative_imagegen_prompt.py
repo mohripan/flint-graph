@@ -9,9 +9,12 @@ from flint_graph.narrative.imagegen import (
     DEFAULT_POLICY_PATH,
     EXPRESSION_TAGS,
     FRAMINGS,
+    HIRES_SCALE,
+    HIRES_STRENGTH,
     MAX_APPEARANCE,
     NEGATIVE,
     ContentPolicy,
+    HiresFix,
     appearance_tags,
     background_request,
     expression_request,
@@ -180,6 +183,23 @@ def test_transparent_sprites_are_full_body_on_a_plain_white_background():
     )
     with pytest.raises(ValueError, match="full-body"):
         portrait_request("silver hair", "girl", "portrait", transparent=True)
+
+
+def test_high_resolution_upscales_the_same_render_and_refines_it():
+    standard = portrait_request("silver hair", "girl", "full_body", transparent=True)
+    hires = portrait_request("silver hair", "girl", "full_body", transparent=True, hires=True)
+    assert standard.hires is None and standard.output_size == (832, 1216)
+    assert hires.hires == HiresFix(scale=HIRES_SCALE, strength=HIRES_STRENGTH)
+    assert (hires.prompt, hires.negative_prompt) == (standard.prompt, standard.negative_prompt)
+    assert (hires.width, hires.height, hires.steps) == (832, 1216, 28), "The base render"
+    assert hires.output_size == (round(832 * HIRES_SCALE), round(1216 * HIRES_SCALE))
+    assert HIRES_SCALE in (1.5, 2.0) and 0.25 <= HIRES_STRENGTH <= 0.45
+    portrait = portrait_request("silver hair", "girl", "portrait", hires=True)
+    assert portrait.hires == hires.hires, "Opaque portraits may be sharp too"
+    # The output stays inside the strict PNG validator's bounds (4096 px, 16 MP).
+    width, height = hires.output_size
+    assert width % 8 == 0 and height % 8 == 0
+    assert max(width, height) <= 4096 and width * height <= 16_777_216
 
 
 @pytest.mark.parametrize(

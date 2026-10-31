@@ -38,6 +38,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     ModelIdentity,
 )
 from flint_graph.main import app
+from flint_graph.narrative.imagegen import HIRES_SCALE, HIRES_STRENGTH, HiresFix
 from flint_graph.worker.activities.narrative_image import NarrativeImageActivities
 
 MODEL = ModelIdentity("cagliostrolab/animagine-xl-4.0", "c" * 40, "openrail++")
@@ -99,8 +100,12 @@ class FakeGenerator:
         if self.failures:
             raise ImageGenerationError(self.failures.pop(0))
         cut = request.cutout and not self.skip_cutout
+        scale = request.hires.scale if request.hires else 1
+        box = tuple(round(value * scale) for value in BOX)
         width, height = (
-            (BOX[2] - BOX[0], BOX[3] - BOX[1]) if cut else (request.width, request.height)
+            (box[2] - box[0], box[3] - box[1])
+            if cut
+            else (round(request.width * scale), round(request.height * scale))
         )
         # A repainted face keeps the base's size and transparency.
         alpha = cut or (request.inpaint is not None and request.inpaint.image[25] == 6)
@@ -120,7 +125,7 @@ class FakeGenerator:
                     thumbnail_sha256=hashlib.sha256(thumb).hexdigest(),
                     thumbnail_width=16,
                     thumbnail_height=24,
-                    box=BOX if cut else None,
+                    box=box if cut else None,
                 )
             )
             await on_progress(index + 1)
@@ -508,6 +513,49 @@ async def test_transparent_jobs_cut_out_full_body_sprites_for_the_library(studio
     async with factory() as session:
         row = await session.get(NarrativeImageJob, UUID(job["id"]))
         assert row is not None and row.cutout_sha256 == SEGMENTER.sha256
+
+
+@pytest.mark.anyio
+async def test_high_resolution_jobs_upscale_the_render_and_record_the_hires_fix(studio):
+    client, factory, store, headers, base, *_ = studio
+    refused = await client.post(
+        f"{base}/characters/mira/portrait-jobs", headers=headers, json=job_body(hires="yes")
+    )
+    assert refused.status_code == 422
+    body = job_body(framing="full_body", transparent=True, hires=True)
+    created = await client.post(f"{base}/characters/mira/portrait-jobs", headers=headers, json=body)
+    assert created.status_code == 202, created.text
+    job = created.json()
+    assert job["hires"] == {"scale": HIRES_SCALE, "strength": HIRES_STRENGTH}
+    assert (job["width"], job["height"]) == (832, 1216), "The base render"
+    output = (round(832 * HIRES_SCALE), round(1216 * HIRES_SCALE))
+    assert (job["output_width"], job["output_height"]) == output
+    changed = await client.post(
+        f"{base}/characters/mira/portrait-jobs", headers=headers, json={**body, "hires": False}
+    )
+    assert changed.status_code == 409, "The flag is part of the request identity"
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=job["id"]
+    )
+    generator = FakeGenerator()
+    assert (await run_job(factory, store, payload, generator))["status"] == "completed"
+    assert [request.hires for request in generator.requests] == [
+        HiresFix(scale=HIRES_SCALE, strength=HIRES_STRENGTH)
+    ]
+    done = (await client.get(f"{base}/image-jobs/{job['id']}", headers=headers)).json()
+    sprite = done["assets"][0]
+    box = [round(value * HIRES_SCALE) for value in BOX]
+    assert (sprite["width"], sprite["height"]) == (box[2] - box[0], box[3] - box[1])
+    assert sprite["provenance"]["width"] == 832, "Provenance keeps the generation size"
+    assert sprite["provenance"]["hires"] == {"scale": HIRES_SCALE, "strength": HIRES_STRENGTH}
+    assert sprite["provenance"]["cutout"]["box"] == box
+    standard, standard_payload = await queue_job(client, headers, base, character="oren")
+    assert standard["hires"] is None
+    assert (standard["output_width"], standard["output_height"]) == (832, 1216)
+    await run_job(factory, store, standard_payload, generator)
+    assert generator.requests[-1].hires is None
+    opaque = (await client.get(f"{base}/image-jobs/{standard['id']}", headers=headers)).json()
+    assert "hires" not in opaque["assets"][0]["provenance"]
 
 
 @pytest.mark.anyio

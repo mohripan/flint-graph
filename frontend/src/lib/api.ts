@@ -45,6 +45,8 @@ export interface ImageJob {
   // Expressions repainted from a base image (ADR 0041): one expression and prompt per image.
   base_asset_id?: string | null; face_box?: number[] | null; strength?: number | null;
   expressions?: string[] | null; prompts?: string[] | null;
+  // High resolution: width × height is the base render, upscaled to the output size.
+  hires: { scale: number; strength: number } | null; output_width: number; output_height: number;
 }
 import type {
   AnswerProvenance,
@@ -369,7 +371,7 @@ export const api = {
 
   createPortraitJob(tenantId: string, projectId: string, characterId: string, body: {
     appearance: string; character_type: CharacterType; framing: CharacterFraming; count: number;
-    idempotency_key: string; transparent?: boolean;
+    idempotency_key: string; transparent?: boolean; hires?: boolean;
   }, signal?: AbortSignal): Promise<ImageJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait-jobs`, {
       method: "POST", headers: tenantHeaders(tenantId), signal, json: body,

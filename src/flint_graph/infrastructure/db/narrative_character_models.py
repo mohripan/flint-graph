@@ -42,6 +42,13 @@ EXPRESSION_RULE = (
     "(purpose = 'character_expression') = (base_asset_id IS NOT NULL AND face_box IS NOT NULL "
     "AND strength IS NOT NULL AND expressions IS NOT NULL AND prompts IS NOT NULL)"
 )
+# High-resolution character renders are upscaled by one of two scales and repainted
+# lightly (migration 0027); expression and background jobs never are.
+HIRES_RULE = (
+    "(hires_scale IS NULL AND hires_strength IS NULL) "
+    "OR (purpose = 'character_portrait' AND hires_scale IN (1.5, 2.0) "
+    "AND hires_strength BETWEEN 0.2 AND 0.6)"
+)
 
 
 class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -89,6 +96,7 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         CheckConstraint(TRANSPARENT_RULE, name="ck_narrative_image_job_transparent"),
         CheckConstraint(CUTOUT_RULE, name="ck_narrative_image_job_cutout"),
+        CheckConstraint(HIRES_RULE, name="ck_narrative_image_job_hires"),
         Index("ix_narrative_image_job_purpose", "project_id", "purpose", "created_at", "id"),
         Index(
             "ix_narrative_image_job_active",
@@ -124,6 +132,8 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     strength: Mapped[float | None] = mapped_column(Float)
     expressions: Mapped[list[str] | None] = mapped_column(JSON)
     prompts: Mapped[list[str] | None] = mapped_column(JSON)
+    hires_scale: Mapped[float | None] = mapped_column(Float)
+    hires_strength: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(16), default="queued")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)

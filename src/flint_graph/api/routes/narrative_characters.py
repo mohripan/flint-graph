@@ -26,6 +26,7 @@ from flint_graph.api.narrative_character_schemas import (
     AssetResponse,
     CutoutResponse,
     ExpressionJobCreate,
+    HiresResponse,
     ImageJobListResponse,
     ImageJobResponse,
     PortraitChoice,
@@ -47,6 +48,7 @@ from flint_graph.application.services.narrative_images import (
     create_expression_job,
     create_portrait_job,
     get_image_job,
+    job_hires,
     list_image_jobs,
 )
 from flint_graph.application.services.narrative_package_v2 import (
@@ -85,6 +87,10 @@ def _profile(row: NarrativeCharacterProfile, portrait: NarrativeAsset | None) ->
 
 
 def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJobResponse:
+    hires = job_hires(job)
+    output_width, output_height = (
+        hires.size(job.width, job.height) if hires else (job.width, job.height)
+    )
     return ImageJobResponse(
         id=job.id,
         purpose=job.purpose,
@@ -102,6 +108,9 @@ def job_response(job: NarrativeImageJob, assets: list[NarrativeAsset]) -> ImageJ
         negative_prompt=job.negative_prompt,
         width=job.width,
         height=job.height,
+        hires=HiresResponse(scale=hires.scale, strength=hires.strength) if hires else None,
+        output_width=output_width,
+        output_height=output_height,
         steps=job.steps,
         guidance=job.guidance,
         seeds=list(job.seeds),
@@ -218,6 +227,7 @@ async def create_character_portrait_job(
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
             transparent=payload.transparent,
             policy=content_policy(settings.narrative_image_content_policy),
+            hires=payload.hires,
         ),
     )
     return job_response(job, [])

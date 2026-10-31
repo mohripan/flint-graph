@@ -41,3 +41,17 @@ test("transparent sprites are a full-body option that reads as sprites", () => {
   assert.match(model.jobError("cutout_failed"), /could not be separated/);
   assert.match(model.jobError("cutout_unavailable"), /cutout model/);
 });
+
+test("high resolution is on by default for sprites and the details show the final size", () => {
+  assert.equal(model.defaultHires(true), true);
+  assert.equal(model.defaultHires(false), false);
+  const base = { width: 832, height: 1216, output_width: 832, output_height: 1216, hires: null, transparent: false, assets: [] };
+  assert.equal(model.jobSize(base), "832×1216");
+  const hires = { ...base, output_width: 1664, output_height: 2432, hires: { scale: 2, strength: 0.35 } };
+  assert.equal(model.jobSize(hires), "1664×2432 (rendered at 832×1216, upscaled 2× and refined at strength 0.35)");
+  const sprites = { ...hires, transparent: true, assets: [{ width: 1100, height: 2390 }, { width: 980, height: 2400 }, { width: 1100, height: 2390 }] };
+  assert.equal(model.jobSize(sprites),
+    "1664×2432 (rendered at 832×1216, upscaled 2× and refined at strength 0.35); sprites cropped to 1100×2390, 980×2400");
+  assert.equal(model.jobSize({ ...base, transparent: true }), "832×1216");
+  assert.match(model.hiresLabel(), /^High resolution: 2× larger/);
+});

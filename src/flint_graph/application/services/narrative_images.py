@@ -45,6 +45,7 @@ from flint_graph.narrative.imagegen import (
     DEFAULT_POLICY,
     ContentPolicy,
     ExpressionRequest,
+    HiresFix,
     ImageRequest,
     background_request,
     clean_appearance,
@@ -156,6 +157,7 @@ async def create_expression_job(
         character_type=character_type,
         framing="face",
         transparent=False,
+        hires=False,
         build=lambda: expression_request(appearance, character_type, expressions, policy=policy),
         count=len(expressions),
         idempotency_key=idempotency_key,
@@ -184,8 +186,12 @@ async def create_portrait_job(
     max_active_jobs: int,
     transparent: bool = False,
     policy: ContentPolicy = DEFAULT_POLICY,
+    hires: bool = False,
 ) -> NarrativeImageJob:
-    """Queue candidate portraits, or cut-out stage sprites when ``transparent``."""
+    """Queue candidate portraits, or cut-out stage sprites when ``transparent``.
+
+    ``hires`` upscales each render and repaints it lightly, for sprites drawn large.
+    """
     return await _queue_job(
         session,
         tenant_id=tenant_id,
@@ -197,8 +203,14 @@ async def create_portrait_job(
         character_type=character_type,
         framing=framing,
         transparent=transparent,
+        hires=hires,
         build=lambda: portrait_request(
-            appearance, character_type, framing, transparent=transparent, policy=policy
+            appearance,
+            character_type,
+            framing,
+            transparent=transparent,
+            policy=policy,
+            hires=hires,
         ),
         count=count,
         idempotency_key=idempotency_key,
@@ -233,6 +245,7 @@ async def create_background_job(
         character_type="other",
         framing="scenery",
         transparent=False,
+        hires=False,
         build=lambda: background_request(description, policy=policy),
         count=count,
         idempotency_key=idempotency_key,
@@ -254,6 +267,7 @@ async def _queue_job(
     character_type: str,
     framing: str,
     transparent: bool,
+    hires: bool,
     build: Callable[[], ImageRequest | ExpressionRequest],
     count: int,
     idempotency_key: UUID,
@@ -280,12 +294,15 @@ async def _queue_job(
         "framing": framing,
         "count": count,
     }
-    # Only sprite requests carry the flag, so earlier requests keep their hashes.
+    # Only sprite and high-resolution requests carry their flags, so earlier requests
+    # keep their hashes.
     if transparent:
         identity["transparent"] = True
     if base is not None:
         identity |= {"base_asset_id": str(base[0].id), "face_box": list(base[1]),
                      "expressions": expressions}
+    if hires:
+        identity["hires"] = True
     request_hash = sha256(canonical_json(identity)).hexdigest()
     existing = await session.scalar(
         select(NarrativeImageJob).where(
@@ -324,7 +341,13 @@ async def _queue_job(
             "prompts": list(built.prompts),
         }
     else:
-        built_fields = {"prompt": built.prompt, "width": built.width, "height": built.height}
+        built_fields = {
+            "prompt": built.prompt,
+            "width": built.width,
+            "height": built.height,
+            "hires_scale": built.hires.scale if built.hires else None,
+            "hires_strength": built.hires.strength if built.hires else None,
+        }
     active = (
         await session.scalar(
             select(func.count(NarrativeImageJob.id)).where(
@@ -598,8 +621,15 @@ async def claim_image_job(
             guidance=job.guidance,
             seeds=tuple(job.seeds),
             cutout=job.transparent,
+            hires=job_hires(job),
         ),
     )
+
+
+def job_hires(job: NarrativeImageJob) -> HiresFix | None:
+    if job.hires_scale is None or job.hires_strength is None:
+        return None
+    return HiresFix(scale=job.hires_scale, strength=job.hires_strength)
 
 
 async def record_progress(
@@ -678,6 +708,9 @@ async def complete_image_job(
             "seed": image.seed,
             "runtime": result.runtime,
         }
+        # Width and height stay the generation size; the hires fix scaled it from there.
+        if (hires := job_hires(job)) is not None:
+            provenance["hires"] = {"scale": hires.scale, "strength": hires.strength}
         if cutout is not None and image.box is not None:
             provenance["cutout"] = {
                 "model_repo": cutout.identity.repo,

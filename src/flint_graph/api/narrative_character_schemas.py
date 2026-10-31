@@ -39,6 +39,8 @@ class PortraitJobCreate(BaseModel):
     idempotency_key: UUID
     # Cut the figure out into a transparent stage sprite (full-body framing only).
     transparent: StrictBool = False
+    # Upscale and lightly repaint each render so sprites stay sharp when drawn large.
+    hires: StrictBool = False
 
     @model_validator(mode="after")
     def _sprites_are_full_body(self) -> Self:
@@ -124,6 +126,11 @@ class CutoutResponse(BaseModel):
     sha256: str
 
 
+class HiresResponse(BaseModel):
+    scale: float
+    strength: float
+
+
 class ImageJobResponse(BaseModel):
     id: UUID
     purpose: str
@@ -139,8 +146,12 @@ class ImageJobResponse(BaseModel):
     framing: str
     prompt: str
     negative_prompt: str
+    # The base render; a high-resolution job upscales it to the output size.
     width: int
     height: int
+    hires: HiresResponse | None
+    output_width: int
+    output_height: int
     steps: int
     guidance: float
     seeds: list[int]
