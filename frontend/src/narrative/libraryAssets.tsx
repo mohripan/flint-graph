@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import type { NarrativeImage } from "../lib/api";
 import { fontFamily } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
+import type { StoryDraft } from "./types";
 
 // Approved library assets for the story pickers (backgrounds, sprites, fonts). One list
 // per project, shared by every picker and refreshed whenever the library changes.
@@ -51,6 +52,14 @@ export function useApprovedAssets(tenantId: string, projectId: string): { assets
     return () => { live = false; };
   }, [tenantId, projectId, version]);
   return state;
+}
+
+/** The bytes of the story's first stage background, for previews. */
+export function firstBackground(story: StoryDraft): string | undefined {
+  for (const node of Object.values(story.nodes)) {
+    if (node.type === "stage" && typeof node.background === "string") return story.assets[node.background]?.sha256;
+  }
+  return undefined;
 }
 
 export const IMAGE_KINDS = new Set(["background", "image"]);

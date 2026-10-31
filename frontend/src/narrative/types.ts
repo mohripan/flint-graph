@@ -18,7 +18,8 @@ export interface ChoiceOption {
 }
 type Display = { text_id: string; text: string };
 export type StagePosition = "left" | "center" | "right";
-export interface StageShow { character: string; sprite: string; position: StagePosition }
+// ``x`` (runtime 0.4.0) is the placement's horizontal centre as % of the screen width.
+export interface StageShow { character: string; sprite: string; position: StagePosition; x?: number }
 export type StoryNode =
   | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string })
   | { type: "stage"; next: string; background?: string | null; show?: StageShow[]; hide?: string[] }
@@ -33,7 +34,9 @@ export interface StoryTheme {
   choices?: { background?: string; text?: string; border?: string };
   font?: { asset?: string | null; size?: number };
 }
-export interface StoryCharacter { name: string; color?: string; sprites?: Record<string, string> }
+// ``stage`` framing: drawn height as % of the screen and the top edge as % of its height.
+export interface CharacterFraming { scale?: number; top?: number }
+export interface StoryCharacter { name: string; color?: string; sprites?: Record<string, string>; stage?: CharacterFraming }
 export interface StoryDraft {
   schema_version: "1" | "2";
   id: string;

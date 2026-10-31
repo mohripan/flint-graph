@@ -93,6 +93,8 @@ func _staged(node: Dictionary) -> Dictionary:
 				present.erase(other)
 		present[entry["character"]] = {"id": entry["character"], "sprite": entry["sprite"],
 			"position": entry["position"]}
+		if entry.has("x"):
+			present[entry["character"]]["x"] = entry["x"]  # This placement's own horizontal place.
 	var ordered: Array = []
 	for position: String in POSITIONS:
 		for item: Dictionary in present.values():
@@ -250,7 +252,9 @@ func _checked_stage(value: Variant) -> Variant:
 	var seen := {}
 	var last := -1
 	for item: Variant in characters:
-		if not item is Dictionary or item.size() != 3 or not item.has("id") or not item.has("sprite") or not item.has("position"):
+		if not item is Dictionary or item.size() != (4 if item.has("x") else 3) or not item.has("id") or not item.has("sprite") or not item.has("position"):
+			return null
+		if item.has("x") and (typeof(item["x"]) != TYPE_INT or item["x"] < 0 or item["x"] > 100):
 			return null
 		if not item["id"] is String or not _story["characters"].has(item["id"]) or seen.has(item["id"]):
 			return null

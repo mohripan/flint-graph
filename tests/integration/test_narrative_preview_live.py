@@ -203,7 +203,12 @@ def test_dynamic_preview_validates_v2_stage_rules_and_asset_identity(tmp_path: P
         "language": "en",
         "entry": "s0",
         "characters": {
-            "mira": {"name": "Mira", "color": "#d5ae68", "sprites": {"neutral": "mira"}},
+            "mira": {
+                "name": "Mira",
+                "color": "#d5ae68",
+                "sprites": {"neutral": "mira"},
+                "stage": {"scale": 160, "top": 4},
+            },
             "oren": {"name": "Oren"},
         },
         "variables": {},
@@ -234,7 +239,7 @@ def test_dynamic_preview_validates_v2_stage_rules_and_asset_identity(tmp_path: P
             "s0": {
                 "type": "stage",
                 "background": "dusk",
-                "show": [{"character": "mira", "sprite": "neutral", "position": "left"}],
+                "show": [{"character": "mira", "sprite": "neutral", "position": "left", "x": 30}],
                 "next": "l1",
             },
             "l1": {
@@ -312,6 +317,11 @@ def test_dynamic_preview_validates_v2_stage_rules_and_asset_identity(tmp_path: P
         lambda s: s["assets"]["type"].update(path="assets/type.woff"),
         lambda s: s["assets"]["dusk"].update(kind="audio"),
         lambda s: s.update(schema_version="1"),
+        lambda s: s["characters"]["mira"]["stage"].update(scale=301),
+        lambda s: s["characters"]["mira"]["stage"].update(top=-51),
+        lambda s: s["characters"]["mira"]["stage"].update(zoom=2),
+        lambda s: s["nodes"]["s0"]["show"][0].update(x=101),
+        lambda s: s["nodes"]["s0"]["show"][0].update(x=True),
     ]:
         changed = copy.deepcopy(story)
         change(changed)

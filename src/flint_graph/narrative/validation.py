@@ -259,10 +259,18 @@ def _characters_v2(value: Any, assets: dict[str, Any]) -> dict[str, Any]:
     characters = mapping(value, 256, "characters")
     for key, character in characters.items():
         location = f"characters.{key}"
-        fields(character, {"name"}, {"color", "sprites"}, location)
+        fields(character, {"name"}, {"color", "sprites", "stage"}, location)
         text(character["name"], location + ".name")
         if "color" in character:
             _color(character["color"], location + ".color", alpha=False)
+        if "stage" in character:
+            # Framing on stage (runtime 0.4.0): drawn height as % of the screen and the
+            # top edge as % of the screen height; larger figures are cut off below.
+            framing = fields(character["stage"], set(), {"scale", "top"}, location + ".stage")
+            if "scale" in framing:
+                _bounded(framing["scale"], 40, 300, location + ".stage.scale")
+            if "top" in framing:
+                _bounded(framing["top"], -50, 100, location + ".stage.top")
         if "sprites" in character:
             sprites = mapping(character["sprites"], 32, location + ".sprites")
             for expression, asset in sprites.items():
@@ -445,7 +453,11 @@ class _Nodes:
                 shown: set[str] = set()
                 taken: set[str] = set()
                 for entry in sequence(node["show"], 8, location + ".show"):
-                    fields(entry, {"character", "sprite", "position"}, set(), location + ".show")
+                    fields(entry, {"character", "sprite", "position"}, {"x"}, location + ".show")
+                    if "x" in entry:
+                        # Horizontal centre as % of the screen width; the slot still
+                        # decides who replaces whom.
+                        _bounded(entry["x"], 0, 100, location + ".show")
                     character = reference(entry["character"], characters, location + ".show")
                     sprites = characters[character].get("sprites", {})
                     reference(entry["sprite"], sprites, location + ".show")

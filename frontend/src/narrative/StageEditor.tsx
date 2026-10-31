@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { CharacterProfilesContext } from "./characterImages";
 import { AssetThumb, IMAGE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
-import { POSITIONS, bindAsset, describeSnapshot, sceneStage, setSceneStage } from "./stageModel";
+import { POSITIONS, SLOT_CENTERS, bindAsset, describeSnapshot, sceneStage, setSceneStage } from "./stageModel";
 import type { StageEdit, StageSnapshot } from "./stageModel";
 import type { StagePosition, StoryDraft } from "./types";
 
@@ -74,6 +74,13 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
             const show = edit.show.map((item, at) => at === index ? { ...item, ...patch } : item);
             apply({ ...edit, show });
           };
+          const resetPlace = () => {
+            const show = edit.show.map((item, at) => {
+              if (at !== index) return item;
+              const { x: _, ...rest } = item; return rest;
+            });
+            apply({ ...edit, show });
+          };
           return <div className="studio-stage-row" key={`${entry.character}:${index}`}>
             <select aria-label="Character" value={entry.character} onChange={event => {
               const sprite = Object.keys(story.characters[event.target.value]?.sprites ?? {})[0];
@@ -83,6 +90,12 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
               {sprites.map(sprite => <option key={sprite} value={sprite}>{sprite}</option>)}</select>
             <select aria-label="Position" value={entry.position} onChange={event => change({ position: event.target.value as StagePosition })}>
               {POSITIONS.map(position => <option key={position} value={position}>{position}</option>)}</select>
+            <label className="studio-stage-place">
+              <span>Place {entry.x ?? SLOT_CENTERS[entry.position]}%</span>
+              <input type="range" min={0} max={100} aria-label="Horizontal place"
+                value={entry.x ?? SLOT_CENTERS[entry.position]} onChange={event => change({ x: Number(event.target.value) })} />
+            </label>
+            {entry.x !== undefined && <button type="button" className="studio-link" onClick={resetPlace}>Slot default</button>}
             <button type="button" className="studio-link studio-danger"
               onClick={() => apply({ ...edit, show: edit.show.filter((_, at) => at !== index) })}>Remove</button>
           </div>;

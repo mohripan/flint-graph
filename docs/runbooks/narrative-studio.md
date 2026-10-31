@@ -90,10 +90,14 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
   name; files the story no longer uses are dropped from it.
 - **Characters → On stage:** set a name colour and add expressions. Each expression
   is an approved sprite, image or portrait. Removing an expression the story still
-  uses is refused, with a count of where it is used.
+  uses is refused, with a count of where it is used. **Size on stage** sets how tall
+  the character is drawn (as % of the screen) and where the top edge sits; above 100%
+  the figure is cut off below the screen, as visual novels usually show characters.
+  The preview uses the story's first background.
 - **Write → Stage:** the panel above a scene's lines writes the stage step that opens
   the scene. Choose a background (or keep the earlier one, or none), place
-  characters with an expression at left, center or right, and tick who leaves. "From
+  characters with an expression at left, center or right (each with a **Place**
+  slider to move them anywhere across the screen), and tick who leaves. "From
   earlier scenes" shows what is already on stage on every path; "varies by path" means
   routes disagree. The scene keeps its ID, folder and routes.
 - **Lines:** when the speaker has expressions, an expression picker sits under the

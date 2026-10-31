@@ -345,7 +345,9 @@ def static_font() -> bytes:
     return header + directory + body
 
 
-def stage_package(tmp_path: Path, nodes: dict | None = None, entry: str = "s0") -> StoryPackage:
+def stage_package(
+    tmp_path: Path, nodes: dict | None = None, entry: str = "s0", framed: bool = False
+) -> StoryPackage:
     """Story format 2 with every stage rule: set, clear, move, replace, hide, expressions."""
     files = {
         "dusk": stage_png(10),
@@ -442,6 +444,10 @@ def stage_package(tmp_path: Path, nodes: dict | None = None, entry: str = "s0") 
             "e2": {"type": "end", "text_id": "e2", "text": "Stayed.", "ending": "dark"},
         },
     }
+    if framed:
+        # Runtime 0.4.0: Mira drawn at 160% of the screen height from 4% down, at x 30.
+        story["characters"]["mira"]["stage"] = {"scale": 160, "top": 4}
+        story["nodes"]["s0"]["show"][0]["x"] = 30
     source = tmp_path / "source"
     (source / "assets").mkdir(parents=True)
     (source / "story.json").write_text(json.dumps(story), encoding="utf-8")
@@ -570,6 +576,39 @@ def native_ui_probe(tmp_path: Path, case: str, package: StoryPackage | None = No
             if line.startswith("UI_RESULT:")
         )
     )
+
+
+def test_real_godot_player_matches_reference_with_framing_and_placement(tmp_path: Path) -> None:
+    package = stage_package(tmp_path, framed=True)
+    actions = ["advance", "choose:go", "advance"]
+    actual = native_probe(package, tmp_path, {"actions": actions, "save_after": 1})
+    reference = Player(package)
+    frames = [reference.frame()]
+    for action in actions:
+        reference.act(action)
+        frames.append(reference.frame(action))
+    assert actual["frames"] == frames
+    assert frames[0]["stage"]["characters"][0]["x"] == 30
+    restored = Player(package)
+    restored.load_save(actual["save"].encode())
+    assert restored.state["stage"]["characters"][0] == {
+        "id": "mira",
+        "sprite": "happy",
+        "position": "left",
+        "x": 30,
+    }
+
+
+def test_native_stage_view_draws_framed_figures_cut_off_below(tmp_path: Path) -> None:
+    opening = native_ui_probe(tmp_path, "stage_layout", stage_package(tmp_path, framed=True))[
+        "screens"
+    ][0]
+    (mira,) = opening["figures"]
+    # 160% of 720 tall from 4% down, keeping the 1:2 sprite aspect, centred at 30%.
+    assert mira["height"] == pytest.approx(720 * 1.6, abs=1)
+    assert mira["width"] == pytest.approx(720 * 1.6 / 2, abs=1)
+    assert mira["bottom"] == pytest.approx(720 * 0.04 + 720 * 1.6, abs=1)
+    assert mira["x"] + mira["width"] / 2 == pytest.approx(1280 * 0.3, abs=1)
 
 
 def test_native_stage_view_lays_out_the_stage_text_box_and_choices(tmp_path: Path) -> None:
