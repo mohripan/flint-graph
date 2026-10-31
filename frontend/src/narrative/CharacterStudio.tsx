@@ -165,9 +165,9 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
         <Field label="Name"><input value={character.name} onChange={event => onChange({
           ...story, characters: { ...story.characters, [id]: { ...character, name: event.target.value } },
         }, `character:${id}:name`)} /></Field>
-        <Field label="Appearance" hint="Describe looks: hair, eyes, clothing, expression. Not real people or existing characters.">
+        <Field label="Appearance" hint="Short tags separated by commas follow best, for example: medium hair, white hair, red eyes, androgynous, black coat. Not real people or existing characters.">
           <textarea rows={4} maxLength={MAX_APPEARANCE} value={appearance}
-            placeholder="silver hair in a low ponytail, amber eyes, weathered navy coat, calm smile"
+            placeholder="silver hair, low ponytail, amber eyes, navy coat, calm smile"
             onChange={event => setAppearance(event.target.value)} /></Field>
         <div className="studio-character-choices">
           <Field label="Character type"><select value={type} onChange={event => setType(event.target.value as CharacterType)}>

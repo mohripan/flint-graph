@@ -47,6 +47,25 @@ on a mismatch, an extra file or a missing runtime.
 Both use the same worker, queue and limits. Candidates wait in the library until a
 member approves them. Uploads (PNG images, static TTF/OTF fonts) need no worker.
 
+## How portrait prompts are built
+
+`flint_graph.narrative.imagegen` builds every prompt on the server, and each job
+stores the exact prompt and negative prompt the model saw ("How the latest portraits
+were made" in the character sheet).
+
+- The description is split on commas, semicolons, line breaks and sentence ends.
+  A fixed phrase map turns common wording into Danbooru tags: `shoulder-length` →
+  `medium hair`, `chin-length` → `short hair`, `long silver hair` → `silver hair,
+  long hair`, `white-haired` → `white hair`, `red-eyed` → `red eyes`. For a boy or
+  man, "his face looks like a girl", "girlish face" or "feminine features" becomes
+  `androgynous` (the reverse for a girl or woman). Other text passes through as written.
+- Boy and man add `male focus` and negate `1girl, female focus, breasts`. Girl and
+  woman negate `1boy, male focus`. Other stays neutral.
+- A short or medium hair length without a long one also negates `long hair, very
+  long hair`, because the model otherwise defaults to long hair.
+- CLIP reads 77 tokens. The longest negative measures 68. A long description is
+  truncated, which the job records and the sheet reports.
+
 ## Operation
 
 - One generation runs at a time. A job of four 832×1216 portraits takes about 80 s
