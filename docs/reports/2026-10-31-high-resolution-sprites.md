@@ -143,6 +143,13 @@ was captured in headless Edge.
   `npm run typecheck` and `npm run build` pass.
 - Live on the real GPU: the hires live test passed once (above).
 
+After the rebase onto master (`4127d47`, with character expressions):
+`uv run pytest` gives 1728 passed, 89 skipped. ruff, mypy, the image child's
+unittest (22 tests, OK, 1 skipped) and the frontend (88 tests, typecheck, build)
+pass. `alembic heads` shows the single head `0027_narrative_image_hires`. The GPU
+measurements above were taken before the rebase. The merged child's hires path is
+the same code inside master's base-render branch; it was not rerun on the GPU.
+
 ## Combining with character expressions
 
 The change is rebased onto master after ADR 0041 (character expressions) landed.
