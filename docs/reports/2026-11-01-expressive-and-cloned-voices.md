@@ -78,6 +78,21 @@ refused with `gpu_busy` instead of oversubscribing the card.
 Watermark: Perth's detector reads 1.0 on Turbo and Chatterbox clips (after the
 float→16-bit WAV conversion) and 0.0 on the Kokoro reference.
 
+## Creator assessment
+
+The creator listened to every model cloning their own reference (a Japanese-language
+recording) and the Qwen3 stock voices, and judged them as a whole rather than by score:
+
+- **IndexTTS-2.5** is the best overall; its Japanese is very good, its English only fair.
+- **Qwen3-TTS stock voices** speak Japanese very well; its English stock voices are male.
+- **Chatterbox Multilingual V3** gives the best English with this reference.
+- **Chatterbox-Turbo** is poor with this reference.
+
+The creator noted that a Japanese reference probably handicaps the English-only models
+(Chatterbox English and Turbo) and that a cleaner or same-language reference may score
+differently. Recommended per language: IndexTTS-2.5 or Qwen3 stock voices for Japanese,
+Chatterbox Multilingual V3 for English when cloning from a non-English sample.
+
 ## Live qualification (QA Studio from the branch, database `flint_m39_qa`)
 
 The QA Studio ran from the worktree on 8111/5202/5183 with its own queues, a 0.7.0

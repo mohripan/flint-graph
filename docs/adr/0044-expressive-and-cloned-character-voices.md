@@ -45,8 +45,10 @@ Measured through the real parent and child on the shared card, one job per run
 | Qwen3-TTS 1.7B CustomVoice | 4.2–4.3 GiB | 31–43 s | 9.1 s | stock voices, instructions |
 | Chatterbox Multilingual V3 | 3.6 GiB | 51–83 s | 2.6 s | cloning in 23 languages incl. Japanese |
 
-Creator ratings of the same fixed lines in the creator's own voice are in the
-report. Japanese: Qwen3-TTS, Chatterbox Multilingual V3 and IndexTTS-2.5 speak it;
+The creator rated the samples in their own (Japanese-language) voice: IndexTTS-2.5
+best overall and very good in Japanese but only fair in English, Qwen3-TTS stock
+voices very good in Japanese, Chatterbox Multilingual V3 best in English, and
+Chatterbox-Turbo poor with that reference (see the report). Japanese: Qwen3-TTS, Chatterbox Multilingual V3 and IndexTTS-2.5 speak it;
 Kokoro and the English Chatterbox models do not.
 
 ## Decision
