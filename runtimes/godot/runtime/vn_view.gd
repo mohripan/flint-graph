@@ -53,6 +53,9 @@ var _voice_generation := -1
 var _voice_session: RefCounted
 var _voice_volume := 100
 var _volume_slider: HSlider
+# Browsers keep sound off until the first click or key press. Where a page may not
+# start sound yet, that input opens a start screen instead of skipping the first line.
+var _sound_gate: Control
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> void:
@@ -65,6 +68,10 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> 
 	_voice_volume = _read_volume()
 	_player = PlayerScript.new(source, package_hash, _gallery_saved)
 	_build()
+	if _has_voice_clips():
+		# Deferred: playtests configure inside the browser callback that delivers the
+		# story, where the probe cannot run. It still runs before the first clip starts.
+		_gate_sound.call_deferred()
 	resized.connect(_layout)
 	_render()
 	if OS.has_feature("web"):
@@ -400,8 +407,60 @@ func _play_voice(current: Dictionary) -> void:
 
 
 func _start_voice(generation: int, session: RefCounted) -> void:
+	if _sound_gate != null and _sound_gate.visible:
+		return  # Played once the start screen is opened.
 	if generation == _voice_generation and session == _voice_session and _voice_player.stream != null:
 		_voice_player.play()
+
+
+func _has_voice_clips() -> bool:
+	for node: Dictionary in _source["nodes"].values():
+		var voice: Variant = node.get("voice")
+		if voice is Dictionary and voice.has("audio"):
+			return true
+	return false
+
+
+func _sound_blocked() -> bool:
+	# A fresh AudioContext starts suspended where the page may not play sound yet.
+	# No eval: Studio playtests forbid it.
+	if not OS.has_feature("web") or JavaScriptBridge.get_interface("AudioContext") == null:
+		return false
+	var probe: JavaScriptObject = JavaScriptBridge.create_object("AudioContext")
+	var state: Variant = probe.state
+	probe.close()
+	return state != "running"
+
+
+func _gate_sound() -> void:
+	if _sound_gate == null and _sound_blocked():
+		_build_sound_gate()
+		_publish_qa.call_deferred()
+
+
+func _build_sound_gate() -> void:
+	_sound_gate = PanelContainer.new()
+	_sound_gate.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_sound_gate.mouse_filter = Control.MOUSE_FILTER_STOP
+	_sound_gate.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_sound_gate.add_theme_stylebox_override("panel", _style(Color(INK, 0.82), Color.TRANSPARENT, 0, 0))
+	var label := Label.new()
+	label.text = "Click or press any key to start\nThis story has voice acting."
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_override("font", _font)
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", PAPER)
+	_sound_gate.add_child(label)
+	add_child(_sound_gate)
+
+
+func _open_sound_gate() -> void:
+	# The engine resumes browser audio on this same input; start the settled line's clip.
+	_sound_gate.hide()
+	_start_voice.call_deferred(_voice_generation, _voice_session)
+	_publish_qa.call_deferred()
 
 
 func current_voice() -> Variant:
@@ -653,6 +712,16 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _sound_gate != null and _sound_gate.visible:
+		# The first click, tap or key press opens the story; it never advances it.
+		var key: bool = event is InputEventKey and event.pressed and not event.echo
+		if key or ((event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed):
+			if key and event.keycode in [KEY_ENTER, KEY_SPACE]:
+				_advance_key = event.keycode  # Its release must not press Continue either.
+			_open_sound_gate()
+		if not event is InputEventMouseMotion:
+			get_viewport().set_input_as_handled()
+		return
 	if not event is InputEventKey or not event.keycode in [KEY_ENTER, KEY_SPACE]:
 		return
 	# Claim the entire keystroke before GUI dispatch: the focused Continue button
@@ -730,7 +799,7 @@ func _publish_qa() -> void:
 		"cg_loaded": _cg.texture != null, "gallery": _player.gallery, "gallery_open": _gallery_panel.visible,
 		"toolbar": toolbar, "gallery_controls": gallery_controls, "gallery_image_loaded": _gallery_image.texture != null,
 		"voice_volume": _voice_volume, "voice_clip": current_voice(), "voice_playing": _voice_player.playing,
-		"volume_slider": _rect(_volume_slider)}
+		"volume_slider": _rect(_volume_slider), "sound_gate": _sound_gate != null and _sound_gate.visible}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")
 	if browser != null and json != null:

@@ -96,5 +96,8 @@ hashing; float, 8/24-bit, compressed and MP3/Ogg files are refused.
 - English voices only; Japanese and other Kokoro voices need more Misaki packages.
 - WAV is uncompressed (≈48 KB per second of mono 24 kHz speech) and counts against the
   48 MiB story asset budget. Fully voiced long stories need a compressed format later.
-- Browsers start audio only after a first click or key press, so a release's first
-  line may stay silent until the player interacts.
+- Browsers start audio only after a first click or key press. Since runtime 0.6.1 the
+  Studio playtest frame inherits the click that opened it (`allow="autoplay"`), so the
+  first voiced line plays at once. A web page that still may not play sound shows a
+  "Click or press any key to start" screen for stories with voice clips; that input
+  starts the first line's clip instead of skipping the line.

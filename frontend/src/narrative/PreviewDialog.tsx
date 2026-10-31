@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { acceptPreviewMessage, checkedAssets, previewOrigin, snapshotMessage, storyAssets } from "./previewProtocol";
+import { acceptPreviewMessage, checkedAssets, PLAYTEST_FRAME_ALLOW, previewOrigin, snapshotMessage, storyAssets } from "./previewProtocol";
 import type { PreviewPhase } from "./previewProtocol";
 import { StudioDialog } from "./StudioDialog";
 import type { NarrativeRevision } from "./types";
@@ -65,7 +65,7 @@ export function PreviewDialog({ revision, onClose }: { revision: NarrativeRevisi
         : <><p role="status" className="studio-preview-status">{phase === "loaded" ? "Playing saved revision"
             : ready ? "Starting the story player…" : "Loading this revision's images and fonts…"}</p>
           {ready && <iframe ref={iframe} src={`${origin}/index.html${qa}#${nonce}`} title="Saved story playtest"
-            sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'" />}</>}
+            sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" allow={PLAYTEST_FRAME_ALLOW} />}</>}
     </div>
   </StudioDialog>;
 }

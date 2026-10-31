@@ -557,7 +557,11 @@ def test_native_bootstrap_verifies_font_assets(tmp_path: Path) -> None:
 
 
 def native_ui_probe(
-    tmp_path: Path, case: str, package: StoryPackage | None = None, extra: dict | None = None
+    tmp_path: Path,
+    case: str,
+    package: StoryPackage | None = None,
+    extra: dict | None = None,
+    frames: int = 8,
 ) -> dict:
     project = tmp_path / "game"
     export_godot(package or load_package(FIXTURE), project)
@@ -575,7 +579,7 @@ def native_ui_probe(
     imported = run_engine(project, environment, "--editor", "--import")
     assert imported.returncode == 0, imported.stderr
     result = run_engine(
-        project, environment, "--script", "res://qualification.gd", "--quit-after", "8"
+        project, environment, "--script", "res://qualification.gd", "--quit-after", str(frames)
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SCRIPT ERROR" not in result.stderr

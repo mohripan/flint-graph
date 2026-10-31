@@ -7,6 +7,8 @@ export function previewOrigin(value: string, parent: string): string {
     throw new Error("Playtest needs a separate trusted host. Configure the preview origin.");
   return child.origin;
 }
+// The click that opened the playtest lets its frame start sound, so the first voiced line plays.
+export const PLAYTEST_FRAME_ALLOW = "autoplay; camera 'none'; microphone 'none'; geolocation 'none'";
 // Story format 2 (ADR 0040): playtests carry the revision's image and font bytes.
 export const ASSET_CAPS = { image: 10485760, font: 8388608, audio: 10485760 } as const;
 export const ASSET_TOTAL = 104857600;

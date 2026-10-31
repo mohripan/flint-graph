@@ -147,3 +147,33 @@ def test_actual_voice_playback_volume_and_wav_parsing(tmp_path, preview):
     # Exports keep the volume on the device; Studio playtests never write user://.
     assert result["stored"] is not preview
     assert result["stored_volume"] == (100 if preview else 30)
+
+
+@engine
+@pytest.mark.parametrize("preview", [False, True], ids=["release", "preview"])
+def test_a_muted_browser_shows_a_start_screen_then_plays_the_first_line(tmp_path, preview):
+    # Browsers keep sound off until a click or key press; that first input must not
+    # also skip the first voiced line (runtime 0.6.1).
+    package, _ = voice_package(tmp_path)
+    result = native_ui_probe(
+        tmp_path, "voice_gate_preview" if preview else "voice_gate", package, frames=60
+    )
+    gated = {"gate": True, "clip": "hello", "playing": False, "same_line": True}
+    opened = {"gate": False, "clip": "hello", "playing": True, "same_line": True}
+    for flow in ("click", "key"):
+        assert result[flow]["before"] == gated
+        assert result[flow]["opened"] == opened, flow
+        assert result[flow]["next"] == {
+            "gate": False,
+            "clip": "fufu",
+            "playing": True,
+            "same_line": False,
+        }
+    # No voice clips, or a page that may already play sound: no start screen.
+    assert result["silent"]["before"] == {
+        "gate": False,
+        "clip": None,
+        "playing": False,
+        "same_line": True,
+    }
+    assert result["allowed"]["before"] == {**opened, "gate": False}

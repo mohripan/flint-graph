@@ -152,7 +152,7 @@ def test_v2_export_ships_fonts_and_images_with_keep_remaps(tmp_path):
     assert (game / "content/assets/hi.wav").read_bytes() == HI
     assert 'importer="keep"' in (game / "content/assets/hi.wav.import").read_text()
     manifest = json.loads((game / "build-manifest.json").read_bytes())
-    assert manifest["runtime_version"] == "0.6.0"
+    assert manifest["runtime_version"] == "0.6.1"
     assert {"content/assets/dusk.png", "content/assets/type.ttf.import"} <= set(manifest["files"])
     with pytest.raises(Exception, match="asset_unavailable"):
         export_godot(referencing(), tmp_path / "unattached")
@@ -172,9 +172,9 @@ def test_wheels_bundle_every_runtime_template_file():
 
 def test_runtime_version_is_pinned_consistently():
     toolchain = json.loads((ROOT / "runtimes/godot/toolchain.json").read_bytes())
-    assert toolchain["runtime_version"] == "0.6.0"
-    assert BuildIdentity("sha256:" + "a" * 64, "b" * 64).runtime_version == "0.6.0"
-    assert "runtime 0.6.0" in (ROOT / "runtimes/godot/README.txt").read_text()
+    assert toolchain["runtime_version"] == "0.6.1"
+    assert BuildIdentity("sha256:" + "a" * 64, "b" * 64).runtime_version == "0.6.1"
+    assert "runtime 0.6.1" in (ROOT / "runtimes/godot/README.txt").read_text()
 
 
 def child_fixture(tmp_path):

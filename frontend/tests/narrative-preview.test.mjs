@@ -11,6 +11,11 @@ test("preview hosting requires a separate host, exact origin, and secure remote 
   for (const child of ["http://localhost:5192", "https://x.test/path", "http://x.test", "https://u:p@x.test", "null"])
     assert.throws(() => protocol.previewOrigin(child, "http://localhost:5173"));
 });
+test("playtests may play the story's sound once the creator opened them, and nothing more", () => {
+  // Opening a playtest is a click in the Studio; the frame inherits it so the first voiced line plays.
+  const allow = protocol.PLAYTEST_FRAME_ALLOW.split(";").map(part => part.trim());
+  assert.deepEqual(allow, ["autoplay", "camera 'none'", "microphone 'none'", "geolocation 'none'"]);
+});
 test("the preview channel rejects wrong-window, wrong-origin, wrong-nonce and unmatched acknowledgments", () => {
   const child = {}, origin = "http://127.0.0.1:5192";
   const context = { window: child, origin, nonce, revision, hash };

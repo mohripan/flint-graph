@@ -109,7 +109,8 @@ library with a dedicated CG panel. See
 `docs/reports/2026-10-31-event-cgs.md` for parity, private builder/preview and real
 release qualification. Art generation from character references remains separate work.
 [ADR 0043](docs/adr/0043-asset-folders-and-line-voices.md) adds editor-only asset folders
-(migration 0028; automatic groups by kind and character) and voiced lines on runtime 0.6.0:
+(migration 0028; automatic groups by kind and character) and voiced lines on runtime 0.6.0
+(0.6.1 plays the first voiced line in playtests and adds a web start screen when sound is blocked):
 format 2 `audio` assets (canonical WAV) and an optional line `voice` (full or a
 vocalization such as "fufu"; silent by default), played by all four implementations with a
 player Voice slider. Clips come from Kokoro-82M on the GPU (CPU fallback) through the opt-in

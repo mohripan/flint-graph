@@ -105,6 +105,58 @@ func _initialize() -> void:
 			"stored_volume": load("res://runtime/save_store.gd").read_voice_volume()}))
 		quit(0)
 		return
+	if config["case"] in ["voice_gate", "voice_gate_preview"]:
+		# A browser that may not start sound yet: a start screen, then the first clip.
+		var base := "res://preview/vn_view.gd" if config["case"] == "voice_gate_preview" else "res://runtime/vn_view.gd"
+		var muted := GDScript.new()
+		muted.source_code = "extends \"%s\"\nfunc _sound_blocked() -> bool:\n\treturn true\n" % base
+		muted.reload()
+		var states: Dictionary = {}
+		for flow: String in ["click", "key", "silent", "allowed"]:
+			var story: Dictionary = checked["story"].duplicate(true)
+			if flow == "silent":
+				for node: Dictionary in story["nodes"].values():
+					node.erase("voice")
+			var stage: Control = (load(base) if flow == "allowed" else muted).new()
+			root.add_child(stage)
+			stage.size = Vector2(1280, 720)
+			stage.configure(story, checked["package_hash"], checked["assets"])
+			await process_frame
+			await process_frame
+			var first: String = stage._player.state["node_id"]
+			var snap := func() -> Dictionary:
+				return {"gate": stage._sound_gate != null and stage._sound_gate.visible, "clip": stage.current_voice(),
+					"playing": stage._voice_player.playing, "same_line": stage._player.state["node_id"] == first}
+			states[flow] = {"before": snap.call()}
+			if flow in ["click", "key"]:
+				for pressed: bool in [true, false]:
+					var event: InputEvent
+					if flow == "click":
+						event = InputEventMouseButton.new()
+						event.button_index = MOUSE_BUTTON_LEFT
+						event.position = Vector2(640, 360)
+					else:
+						event = InputEventKey.new()
+						event.keycode = KEY_ENTER
+					event.pressed = pressed
+					root.push_input(event)
+				await process_frame
+				await process_frame
+				states[flow]["opened"] = snap.call()
+				var enter := InputEventKey.new()
+				enter.keycode = KEY_ENTER
+				enter.pressed = true
+				root.push_input(enter)
+				enter = enter.duplicate()
+				enter.pressed = false
+				root.push_input(enter)
+				await process_frame
+				states[flow]["next"] = snap.call()
+			stage.queue_free()
+			await process_frame
+		print("UI_RESULT:" + JSON.stringify(states))
+		quit(0)
+		return
 	if config["case"] in ["cg_gallery", "cg_preview"]:
 		var preview: bool = config["case"] == "cg_preview"
 		var script: GDScript = load("res://preview/vn_view.gd" if preview else "res://runtime/vn_view.gd")

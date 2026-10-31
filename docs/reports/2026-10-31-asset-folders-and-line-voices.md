@@ -171,6 +171,37 @@ were read from `studio.local.env` and never printed.
 - WAV is uncompressed (≈48 KB/s of mono 24 kHz speech). Fully voiced long stories will
   need a compressed format (Ogg Vorbis with #163, music and sound effects).
 - English voices only for now.
-- Browsers start audio after the first click or key press, so a release's first line
-  may be silent until the player interacts.
+- Browsers start audio after the first click or key press. Runtime 0.6.1 fixes the
+  silent first line; see "Runtime 0.6.1: the first voiced line" below.
 - The QA database `flint_voice_qa` and its MinIO objects can be dropped.
+
+## Runtime 0.6.1: the first voiced line
+
+The user found that a playtest's first voiced line (Quen's, in "Stage & theme demo")
+was silent and only played after Play again. The playtest frame could not start sound
+until a click inside it, and that click also advanced past the line. Released web
+games had the same problem.
+
+- The Studio's playtest frame now allows `autoplay`. The click on Playtest lets the
+  frame start sound, so the first clip plays at once. Camera, microphone and
+  geolocation stay denied.
+- On the web, a story with voice clips probes a fresh `AudioContext` (through
+  `JavaScriptBridge.create_object`, because playtests forbid `eval`). If it starts
+  suspended, a "Click or press any key to start" screen covers the stage. The first
+  click, tap or key press opens it and plays the settled line's clip, without
+  advancing. Desktop exports and pages that may already play sound show no screen.
+- Runtime moves to 0.6.1, so the playtest build and the release builder image were
+  rebuilt and `studio.local.env` points at them. Releases built on 0.6.0 keep their
+  identity.
+
+Evidence: new Godot probes (`test_a_muted_browser_shows_a_start_screen_then_plays_the_first_line`,
+release and preview views) check the start screen, an unadvanced first line, its clip
+playing after a click or Enter, normal advancing afterwards, and no screen without voice
+clips or when sound is allowed. A frontend test pins the frame permissions. In Edge
+(Chromium, `--autoplay-policy=document-user-activation-required`) on the user's
+project:
+
+- Opening the playtest with a real click had no start screen, and line `l1` was playing
+  Quen's clip.
+- Opening it from script (no user activation) showed the start screen with the clip
+  waiting. One click opened it, the line stayed `l1`, and the clip played.
