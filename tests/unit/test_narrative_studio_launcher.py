@@ -169,7 +169,7 @@ def test_output_a_console_cannot_encode_is_replaced_not_fatal(monkeypatch):
 
 def test_the_frontend_starts_after_everything_else_answers():
     assert studio.waves(list(studio.plan(config()))) == [
-        ["api", "worker", "relay", "assistant", "image", "preview"],
+        ["api", "worker", "relay", "assistant", "image", "voice", "preview"],
         ["frontend"],
     ]
     assert studio.waves(["frontend"]) == [["frontend"]]
