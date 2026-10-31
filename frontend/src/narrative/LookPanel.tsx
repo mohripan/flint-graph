@@ -146,4 +146,3 @@ function StagePreview({ story, theme, screen, tenantId, projectId, font, backgro
     </div>
   </div>;
 }
-
