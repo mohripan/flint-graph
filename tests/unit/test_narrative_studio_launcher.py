@@ -163,3 +163,12 @@ def test_output_a_console_cannot_encode_is_replaced_not_fatal(monkeypatch):
     studio.say("[frontend] ➜  Local: http://localhost:5173/")
     console.flush()
     assert raw.getvalue().startswith(b"[frontend] ?  Local: http://localhost:5173/")
+
+
+def test_the_frontend_starts_after_everything_else_answers():
+    assert studio.waves(list(studio.plan(config()))) == [
+        ["api", "worker", "relay", "assistant", "image", "preview"],
+        ["frontend"],
+    ]
+    assert studio.waves(["frontend"]) == [["frontend"]]
+    assert studio.waves(["api", "worker"]) == [["api", "worker"]]

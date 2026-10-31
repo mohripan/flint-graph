@@ -376,36 +376,47 @@ def _answers(url: str) -> bool:
         return False
 
 
+def _wait_ready(name: str, service: Service, process: subprocess.Popen[bytes]) -> None:
+    deadline = time.monotonic() + (READY_SECONDS if service.ready else WORKER_GRACE_SECONDS)
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise StudioError(f"{name} exited while starting; see its output above")
+        if service.ready and _answers(service.ready):
+            return
+        time.sleep(0.5)
+    if service.ready:
+        raise StudioError(f"{name} did not answer at {service.ready}")
+
+
+def waves(names: Sequence[str]) -> list[list[str]]:
+    """Start order: the frontend last, once the API answers, so an open tab finds it."""
+    backend = [name for name in names if name != "frontend"]
+    return [wave for wave in (backend, [n for n in names if n == "frontend"]) if wave]
+
+
 def run(config: StudioConfig) -> int:
     services = plan(config)
     running: dict[str, subprocess.Popen[bytes]] = {}
     # On Windows a separate group keeps Ctrl+C from reaching the children before we stop them.
     flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     try:
-        for name, service in services.items():
-            print(f"[studio] starting {name}", flush=True)
-            process = subprocess.Popen(
-                service.argv,
-                cwd=service.cwd,
-                env=service.env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                creationflags=flags,
-                start_new_session=os.name != "nt",
-            )
-            running[name] = process
-            threading.Thread(target=_relay, args=(name, process), daemon=True).start()
-        for name, service in services.items():
-            deadline = time.monotonic() + (READY_SECONDS if service.ready else WORKER_GRACE_SECONDS)
-            while time.monotonic() < deadline:
-                if running[name].poll() is not None:
-                    raise StudioError(f"{name} exited while starting; see its output above")
-                if service.ready and _answers(service.ready):
-                    break
-                time.sleep(0.5)
-            else:
-                if service.ready:
-                    raise StudioError(f"{name} did not answer at {service.ready}")
+        for wave in waves(list(services)):
+            for name in wave:
+                service = services[name]
+                print(f"[studio] starting {name}", flush=True)
+                process = subprocess.Popen(
+                    service.argv,
+                    cwd=service.cwd,
+                    env=service.env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    creationflags=flags,
+                    start_new_session=os.name != "nt",
+                )
+                running[name] = process
+                threading.Thread(target=_relay, args=(name, process), daemon=True).start()
+            for name in wave:
+                _wait_ready(name, services[name], running[name])
         print("[studio] ready", flush=True)
         if "frontend" in services:
             print(f"[studio] open http://localhost:{config.frontend_port}", flush=True)
