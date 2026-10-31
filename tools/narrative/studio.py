@@ -10,8 +10,8 @@ settings and go to the API and workers; ``STUDIO_*`` lines configure this launch
 Before starting anything it starts the listed Docker containers, waits for
 PostgreSQL, the object store, Temporal and Ollama, checks that the ports are free and
 that the playtest build matches the frontend and the Godot runtime, and applies the
-database migrations. It then runs the API, the build, relay, assistant and image
-workers, the playtest server and the frontend, prefixes their output, and stops all
+database migrations. It then runs the API, the build, relay, assistant, image and
+voice workers, the playtest server and the frontend, prefixes their output, and stops all
 of them on Ctrl+C or when one fails to start. Settings values are never printed.
 """
 
@@ -36,12 +36,13 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "studio.local.env"
-SERVICES = ("api", "worker", "relay", "assistant", "image", "preview", "frontend")
+SERVICES = ("api", "worker", "relay", "assistant", "image", "voice", "preview", "frontend")
 WORKERS = {
     "worker": ("FLINT_GRAPH_NARRATIVE_WORKER_ENABLED", "narrative_worker"),
     "relay": ("FLINT_GRAPH_NARRATIVE_RELAY_ENABLED", "narrative_relay"),
     "assistant": ("FLINT_GRAPH_NARRATIVE_ASSISTANT_WORKER_ENABLED", "narrative_assistant_worker"),
     "image": ("FLINT_GRAPH_NARRATIVE_IMAGE_WORKER_ENABLED", "narrative_image_worker"),
+    "voice": ("FLINT_GRAPH_NARRATIVE_VOICE_WORKER_ENABLED", "narrative_voice_worker"),
 }
 LAUNCHER_KEYS = {
     "STUDIO_API_PORT",

@@ -75,6 +75,7 @@ class AssetResponse(BaseModel):
     media_type: str
     width: int | None
     height: int | None
+    duration_ms: int | None = None
     sha256: str
     size_bytes: int
     thumbnail_width: int | None
@@ -155,6 +156,8 @@ class ProfileResponse(BaseModel):
     character_type: str
     framing: str
     portrait: AssetResponse | None
+    # A Kokoro voice ID (ADR 0043); editor metadata like the portrait.
+    voice: str | None = None
     version: int
 
 

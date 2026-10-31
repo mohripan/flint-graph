@@ -85,6 +85,7 @@ def test_each_service_gets_only_its_own_role():
         "relay": "FLINT_GRAPH_NARRATIVE_RELAY_ENABLED",
         "assistant": "FLINT_GRAPH_NARRATIVE_ASSISTANT_WORKER_ENABLED",
         "image": "FLINT_GRAPH_NARRATIVE_IMAGE_WORKER_ENABLED",
+        "voice": "FLINT_GRAPH_NARRATIVE_VOICE_WORKER_ENABLED",
     }
     for name in ("api", *flags):
         env = plan[name].env
@@ -117,6 +118,7 @@ def test_commands_ports_and_readiness():
     assert plan["api"].ready == "http://127.0.0.1:8201/health/live"
     assert plan["worker"].argv[1:] == ["-m", "flint_graph.processes.narrative_worker"]
     assert plan["image"].argv[1:] == ["-m", "flint_graph.processes.narrative_image_worker"]
+    assert plan["voice"].argv[1:] == ["-m", "flint_graph.processes.narrative_voice_worker"]
     assert plan["preview"].argv[2:] == [
         "--build",
         str(ROOT / "notes/preview"),

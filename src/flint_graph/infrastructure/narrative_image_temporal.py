@@ -1,5 +1,6 @@
-"""Exact-run, IDs-only image dispatch on its own task queue."""
+"""Exact-run, IDs-only image (and voice, ADR 0043) dispatch on its own task queue."""
 
+from collections.abc import Callable
 from datetime import timedelta
 from uuid import UUID
 
@@ -18,15 +19,23 @@ RPC_TIMEOUT = timedelta(seconds=10)
 
 
 class TemporalImageDispatcher:
-    def __init__(self, client: Client, *, task_queue: str) -> None:
+    def __init__(
+        self,
+        client: Client,
+        *,
+        task_queue: str,
+        workflow: str = IMAGE_WORKFLOW,
+        workflow_id: Callable[[ImageJobPayload], str] = image_job_workflow_id,
+    ) -> None:
         self._client, self._queue = client, task_queue
+        self._workflow, self._workflow_id = workflow, workflow_id
 
     async def start(self, payload: ImageJobPayload) -> UUID:
         data = validate_image_payload(payload)
-        workflow_id = image_job_workflow_id(data)
+        workflow_id = self._workflow_id(data)
         try:
             handle = await self._client.start_workflow(
-                IMAGE_WORKFLOW,
+                self._workflow,
                 data,
                 id=workflow_id,
                 task_queue=self._queue,
@@ -55,13 +64,13 @@ class TemporalImageDispatcher:
         self, payload: ImageJobPayload, run_id: UUID
     ) -> WorkflowExecutionStatus | None:
         data = validate_image_payload(payload)
-        workflow_id = image_job_workflow_id(data)
+        workflow_id = self._workflow_id(data)
         handle = self._client.get_workflow_handle(workflow_id, run_id=str(run_id))
         description = await handle.describe(rpc_timeout=RPC_TIMEOUT)
         if (
             description.id != workflow_id
             or description.run_id != str(run_id)
-            or description.workflow_type != IMAGE_WORKFLOW
+            or description.workflow_type != self._workflow
             or description.task_queue != self._queue
         ):
             raise ValueError("dispatch_identity")
@@ -75,7 +84,7 @@ class TemporalImageDispatcher:
             raise ValueError("dispatch_identity")
         start = event.workflow_execution_started_event_attributes
         if (
-            start.workflow_type.name != IMAGE_WORKFLOW
+            start.workflow_type.name != self._workflow
             or start.task_queue.name != self._queue
             or start.original_execution_run_id != str(run_id)
             or start.continued_execution_run_id
@@ -105,9 +114,9 @@ class TemporalImageDispatcher:
         data = validate_image_payload(payload)
         if await self.closed(data, run_id=run_id):
             return
-        handle = self._client.get_workflow_handle(image_job_workflow_id(data), run_id=str(run_id))
+        handle = self._client.get_workflow_handle(self._workflow_id(data), run_id=str(run_id))
         try:
-            await handle.cancel(reason="Image job cancelled", rpc_timeout=RPC_TIMEOUT)
+            await handle.cancel(reason="Job cancelled", rpc_timeout=RPC_TIMEOUT)
         except Exception:
             if not await self.closed(data, run_id=run_id):
                 raise ValueError("dispatch_unavailable") from None

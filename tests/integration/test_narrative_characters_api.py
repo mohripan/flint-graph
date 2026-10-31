@@ -77,7 +77,8 @@ class MemoryStore:
         self.objects = {}
 
     async def put_once(self, key, data, *, expected_sha256, content_type, max_bytes):
-        assert content_type in ("image/png", "font/ttf", "font/otf") and len(data) <= max_bytes
+        assert content_type in ("image/png", "font/ttf", "font/otf", "audio/wav")
+        assert len(data) <= max_bytes
         assert hashlib.sha256(data).hexdigest() == expected_sha256
         self.objects[key] = data
 
@@ -275,6 +276,7 @@ async def test_profiles_save_with_versions_and_respect_roles(studio):
         "character_type": "man",
         "framing": "portrait",
         "portrait": None,
+        "voice": None,
         "version": 1,
     }
     stale = await client.put(f"{base}/characters/oren", headers=headers, json=body)

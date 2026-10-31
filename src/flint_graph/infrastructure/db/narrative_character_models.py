@@ -178,17 +178,35 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "status IN ('candidate','approved','discarded')", name="ck_narrative_asset_status"
         ),
         CheckConstraint(
-            "kind IN ('character_portrait','background','sprite','image','font')",
+            "kind IN ('character_portrait','background','sprite','image','font','voice')",
             name="ck_narrative_asset_kind",
         ),
         CheckConstraint(
-            "media_type IN ('image/png','font/ttf','font/otf')",
+            "media_type IN ('image/png','font/ttf','font/otf','audio/wav')",
             name="ck_narrative_asset_media_type",
         ),
+        # Voice clips (ADR 0043) are canonical WAV with a duration and no size.
         CheckConstraint(
-            "size_bytes > 0 AND ((media_type = 'image/png' AND width > 0 AND height > 0) "
-            "OR (media_type <> 'image/png' AND width IS NULL AND height IS NULL))",
+            "size_bytes > 0 AND ((media_type = 'image/png' AND width > 0 AND height > 0 "
+            "AND duration_ms IS NULL) OR (media_type = 'audio/wav' AND width IS NULL "
+            "AND height IS NULL AND duration_ms > 0) OR (media_type IN ('font/ttf','font/otf') "
+            "AND width IS NULL AND height IS NULL AND duration_ms IS NULL))",
             name="ck_narrative_asset_shape",
+        ),
+        UniqueConstraint("voice_job_id", "job_index", name="uq_narrative_asset_voice_job_index"),
+        ForeignKeyConstraint(
+            ["voice_job_id", "project_id", "tenant_id"],
+            [
+                "narrative_voice_jobs.id",
+                "narrative_voice_jobs.project_id",
+                "narrative_voice_jobs.tenant_id",
+            ],
+            name="fk_narrative_asset_voice_job",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        CheckConstraint(
+            "job_id IS NULL OR voice_job_id IS NULL", name="ck_narrative_asset_one_job"
         ),
         CheckConstraint(
             "status <> 'approved' OR approved_at IS NOT NULL",
@@ -238,6 +256,7 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source: Mapped[str] = mapped_column(String(16))
     name: Mapped[str] = mapped_column(String(120))
     job_id: Mapped[UUID | None]
+    voice_job_id: Mapped[UUID | None]
     job_index: Mapped[int | None]
     character_id: Mapped[str | None] = mapped_column(String(64))
     folder_id: Mapped[UUID | None]
@@ -246,6 +265,7 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(Integer)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
     # Generated images carry a smaller thumbnail; uploads serve the original instead.
     thumbnail_sha256: Mapped[str | None] = mapped_column(String(64))
     thumbnail_size_bytes: Mapped[int | None] = mapped_column(Integer)
@@ -263,6 +283,75 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT")
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NarrativeVoiceJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One fenced local Kokoro run speaking up to 24 texts in one character's voice."""
+
+    __tablename__ = "narrative_voice_jobs"
+    __table_args__ = (
+        UniqueConstraint("id", "project_id", "tenant_id", name="uq_narrative_voice_job_scope"),
+        UniqueConstraint("project_id", "idempotency_key", name="uq_narrative_voice_job_key"),
+        ForeignKeyConstraint(
+            ["project_id", "tenant_id"],
+            ["narrative_projects.id", "narrative_projects.tenant_id"],
+            name="fk_narrative_voice_job_project",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('queued','running','completed','failed','cancelled')",
+            name="ck_narrative_voice_job_status",
+        ),
+        CheckConstraint(
+            "(status = 'running' AND execution_token IS NOT NULL) OR "
+            "(status <> 'running' AND execution_token IS NULL)",
+            name="ck_narrative_voice_job_execution_fence",
+        ),
+        CheckConstraint(
+            "status <> 'completed' OR NOT cancel_requested",
+            name="ck_narrative_voice_job_not_cancelled_completed",
+        ),
+        CheckConstraint(
+            "(workflow_run_id IS NULL AND activity_attempt IS NULL) OR "
+            "(workflow_run_id IS NOT NULL AND activity_attempt IS NOT NULL "
+            "AND activity_attempt >= 0)",
+            name="ck_narrative_voice_job_workflow_owner",
+        ),
+        CheckConstraint("count BETWEEN 1 AND 24", name="ck_narrative_voice_job_count"),
+        CheckConstraint("progress BETWEEN 0 AND count", name="ck_narrative_voice_job_progress"),
+        CheckConstraint("speed BETWEEN 0.7 AND 1.3", name="ck_narrative_voice_job_speed"),
+        Index(
+            "ix_narrative_voice_job_active",
+            "tenant_id",
+            postgresql_where=text("status IN ('queued','running')"),
+            sqlite_where=text("status IN ('queued','running')"),
+        ),
+        Index("ix_narrative_voice_job_run_status", "status", "workflow_run_id"),
+        Index("ix_narrative_voice_job_character", "project_id", "character_id", "created_at", "id"),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    character_id: Mapped[str] = mapped_column(String(64))
+    requested_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    idempotency_key: Mapped[UUID]
+    request_hash: Mapped[str] = mapped_column(String(64))
+    voice: Mapped[str] = mapped_column(String(32))
+    speed: Mapped[float] = mapped_column(Float)
+    seed: Mapped[int] = mapped_column(BigInteger)
+    # [{"mode": "full" | "vocalization", "text": str, "node_id": str | None}]
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    count: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    execution_token: Mapped[UUID | None]
+    workflow_run_id: Mapped[UUID | None]
+    activity_attempt: Mapped[int | None]
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    model: Mapped[str | None] = mapped_column(String(200))
+    runtime: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class NarrativeAssetFolder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -331,5 +420,7 @@ class NarrativeCharacterProfile(TimestampMixin, Base):
     character_type: Mapped[str] = mapped_column(String(16))
     framing: Mapped[str] = mapped_column(String(16))
     portrait_asset_id: Mapped[UUID | None]
+    # A Kokoro voice ID (ADR 0043), e.g. "af_heart"; editor metadata like the portrait.
+    voice: Mapped[str | None] = mapped_column(String(32))
     version: Mapped[int] = mapped_column(Integer)
     updated_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))

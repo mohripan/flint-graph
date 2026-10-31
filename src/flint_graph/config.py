@@ -272,6 +272,23 @@ class Settings(BaseSettings):
     # tags and blocked words. Unset uses the shipped narrative/image_content_policy.toml.
     narrative_image_content_policy: str | None = Field(default=None, min_length=1, max_length=2048)
 
+    # Local voice generation (ADR 0043): Kokoro-82M on the CPU in an isolated child.
+    # The API admits jobs only when enabled; the opt-in worker needs the runtime, the
+    # model directory and its pinned manifest.
+    narrative_voice_generation_enabled: bool = False
+    narrative_voice_worker_enabled: bool = False
+    narrative_voice_task_queue: str = Field(
+        default="narrative-voice", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
+    )
+    narrative_voice_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_voice_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_voice_model_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    narrative_voice_max_active_jobs_per_workspace: int = Field(default=4, ge=1, le=20)
+    narrative_voice_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
+    narrative_voice_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True
@@ -345,6 +362,26 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "The image cutout requires an absolute model directory together "
                     "with its pinned manifest"
+                )
+        if self.narrative_voice_worker_enabled:
+            queues = {
+                self.temporal_task_queue,
+                self.narrative_task_queue,
+                self.narrative_assistant_task_queue,
+                self.narrative_image_task_queue,
+            }
+            if self.narrative_voice_task_queue in queues:
+                raise ValueError("A separate narrative voice task queue is required")
+            if (
+                not self.narrative_voice_runtime_dir
+                or not self.narrative_voice_model_dir
+                or not Path(self.narrative_voice_runtime_dir).is_absolute()
+                or not Path(self.narrative_voice_model_dir).is_absolute()
+                or not self.narrative_voice_model_manifest_sha256
+            ):
+                raise ValueError(
+                    "The narrative voice worker requires absolute runtime and model "
+                    "directories and a pinned model manifest"
                 )
         return self
 

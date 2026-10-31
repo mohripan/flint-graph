@@ -55,7 +55,7 @@ from flint_graph.infrastructure.narrative_artifact_store import (
 from flint_graph.narrative.imagegen import content_policy
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}/assets", tags=["narrative"])
-Kind = Literal["character_portrait", "background", "sprite", "image", "font"]
+Kind = Literal["character_portrait", "background", "sprite", "image", "font", "voice"]
 
 
 def _text(value: str, field: str, *, limit: int, required: bool) -> str:
@@ -108,6 +108,7 @@ async def upload_asset_endpoint(
     license: Annotated[str, Form(max_length=400)],
     rights_declared: Annotated[bool, Form()],
     notice: Annotated[str, Form(max_length=8000)] = "",
+    character_id: Annotated[str | None, Form(pattern=CHARACTER_ID)] = None,
 ) -> AssetResponse:
     if not rights_declared:
         raise DomainError(
@@ -119,9 +120,12 @@ async def upload_asset_endpoint(
     clean_name = _text(name, "name", limit=120, required=True)
     clean_license = _text(license, "license", limit=120, required=True)
     clean_notice = _text(notice, "notice", limit=4000, required=False)
-    if kind not in ("background", "sprite", "image", "font"):
+    if kind not in ("background", "sprite", "image", "font", "voice"):
         raise DomainError(
-            422, "Invalid asset", "Choose background, sprite, image or font.", "invalid-asset"
+            422,
+            "Invalid asset",
+            "Choose background, sprite, image, font or voice.",
+            "invalid-asset",
         )
     limit = upload_limit(kind)
     data = await file.read(limit + 1)
@@ -143,7 +147,7 @@ async def upload_asset_endpoint(
                 tenant_id=tenant_id,
                 project_id=project_id,
                 asset_id=asset_id,
-                variant="font" if kind == "font" else "image",
+                variant="font" if kind == "font" else "audio" if kind == "voice" else "image",
             ),
             upload.data,
             expected_sha256=upload.sha256,
@@ -166,6 +170,7 @@ async def upload_asset_endpoint(
             license=clean_license,
             notice=clean_notice,
             author_user_id=current_user.user.id,
+            character_id=character_id,
         ),
     )
     return AssetResponse.model_validate(asset)

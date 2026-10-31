@@ -24,9 +24,10 @@ from flint_graph.infrastructure.db.models import NarrativeAsset
 from flint_graph.narrative.font import FONT_LIMIT, validate_font
 from flint_graph.narrative.png import normalize_png, validate_png
 from flint_graph.narrative.values import PackageError
+from flint_graph.narrative.wav import AUDIO_LIMIT, normalize_wav, wav_info
 
 IMAGE_KINDS = ("background", "sprite", "image")
-UPLOAD_KINDS = (*IMAGE_KINDS, "font")
+UPLOAD_KINDS = (*IMAGE_KINDS, "font", "voice")
 IMAGE_LIMIT = 10 * 1024 * 1024
 
 
@@ -52,12 +53,25 @@ class Upload:
     sha256: str
     width: int | None
     height: int | None
+    duration_ms: int | None = None
 
 
 def inspect_upload(kind: str, data: bytes) -> Upload:
     """Validate an upload for its kind; nothing is stored before this passes."""
     if kind not in UPLOAD_KINDS:
-        raise _invalid("Choose background, sprite, image or font.")
+        raise _invalid("Choose background, sprite, image, font or voice.")
+    if kind == "voice":
+        try:
+            # Players read one exact WAV form (ADR 0043); metadata chunks are dropped.
+            data = normalize_wav(data, "file")
+        except PackageError:
+            raise _invalid(
+                "Upload a 16-bit PCM WAV file (mono or stereo, 16 to 48 kHz, at most 60 seconds)."
+            ) from None
+        duration = wav_info(data).duration_ms
+        return Upload(
+            kind, "audio/wav", data, sha256(data).hexdigest(), None, None, max(1, duration)
+        )
     if kind == "font":
         try:
             flavor = validate_font(data, "file")
@@ -79,7 +93,7 @@ def inspect_upload(kind: str, data: bytes) -> Upload:
 
 
 def upload_limit(kind: str) -> int:
-    return FONT_LIMIT if kind == "font" else IMAGE_LIMIT
+    return FONT_LIMIT if kind == "font" else AUDIO_LIMIT if kind == "voice" else IMAGE_LIMIT
 
 
 # Decompressing a large PNG costs CPU and up to ~128 MiB; keep it off the event loop
@@ -126,6 +140,7 @@ async def record_upload(
     license: str,
     notice: str,
     author_user_id: UUID,
+    character_id: str | None = None,
 ) -> NarrativeAsset:
     """Persist an upload whose bytes were already stored create-only and verified."""
     project = await get_project(
@@ -146,6 +161,8 @@ async def record_upload(
         size_bytes=len(upload.data),
         width=upload.width,
         height=upload.height,
+        duration_ms=upload.duration_ms,
+        character_id=character_id,
         provenance={"source": "upload"},
         license=license,
         notice=notice or None,

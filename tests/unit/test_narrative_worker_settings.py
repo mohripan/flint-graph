@@ -62,3 +62,26 @@ def test_image_cutout_needs_an_absolute_model_directory_and_its_manifest_pin(tmp
     ):
         with pytest.raises(ValidationError, match="cutout"):
             Settings(**base, **partial)
+
+
+async def test_voice_worker_is_opt_in_with_its_own_queue_runtime_and_model_pin(tmp_path):
+    from flint_graph.processes.narrative_voice_worker import run_worker
+
+    with pytest.raises(SystemExit, match="voice worker is disabled"):
+        await run_worker(Settings(env="test"))
+    base = {
+        "env": "test",
+        "narrative_voice_worker_enabled": True,
+        "narrative_voice_runtime_dir": str(tmp_path),
+        "narrative_voice_model_dir": str(tmp_path),
+        "narrative_voice_model_manifest_sha256": "a" * 64,
+    }
+    assert Settings(**base).narrative_voice_task_queue == "narrative-voice"
+    for change in (
+        {"narrative_voice_model_manifest_sha256": None},
+        {"narrative_voice_runtime_dir": "runtimes/voicegen"},
+        {"narrative_voice_model_dir": None},
+        {"narrative_voice_task_queue": "narrative-image"},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**{**base, **change})

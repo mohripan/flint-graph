@@ -219,6 +219,8 @@ class AuditAction(StrEnum):
     NARRATIVE_ASSISTANT_PROPOSAL_REJECTED = "narrative.assistant_proposal_rejected"
     NARRATIVE_IMAGE_JOB_REQUESTED = "narrative.image_job_requested"
     NARRATIVE_IMAGE_JOB_CANCELLED = "narrative.image_job_cancelled"
+    NARRATIVE_VOICE_JOB_REQUESTED = "narrative.voice_job_requested"
+    NARRATIVE_VOICE_JOB_CANCELLED = "narrative.voice_job_cancelled"
     NARRATIVE_CHARACTER_PORTRAIT_CHOSEN = "narrative.character_portrait_chosen"
     NARRATIVE_ASSET_DISCARDED = "narrative.asset_discarded"
     WORKSPACE_CREATED = "workspace.created"

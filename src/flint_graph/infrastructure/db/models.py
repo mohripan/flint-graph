@@ -82,6 +82,9 @@ from flint_graph.infrastructure.db.narrative_character_models import (
 from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeImageJob as NarrativeImageJob,
 )
+from flint_graph.infrastructure.db.narrative_character_models import (
+    NarrativeVoiceJob as NarrativeVoiceJob,
+)
 from flint_graph.infrastructure.db.narrative_models import NarrativeProject as NarrativeProject
 from flint_graph.infrastructure.db.narrative_models import (
     NarrativeProjectLayout as NarrativeProjectLayout,

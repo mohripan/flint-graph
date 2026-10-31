@@ -83,6 +83,8 @@ async def bind_story_assets(
         expected = (
             "image/png"
             if item["kind"] == "image"
+            else "audio/wav"
+            if item["kind"] == "audio"
             else "font/ttf"
             if item["path"].endswith(".ttf")
             else "font/otf"
@@ -102,7 +104,9 @@ async def bind_story_assets(
 
 
 def bound_object_key(tenant_id: UUID, project_id: UUID, item: Bound) -> str:
-    variant: Literal["image", "font"] = "font" if item.kind == "font" else "image"
+    variant: Literal["image", "font", "audio"] = (
+        "font" if item.kind == "font" else "audio" if item.kind == "audio" else "image"
+    )
     return asset_object_key(
         tenant_id=tenant_id, project_id=project_id, asset_id=item.asset.id, variant=variant
     )
