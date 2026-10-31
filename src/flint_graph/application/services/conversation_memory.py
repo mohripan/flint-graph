@@ -40,10 +40,12 @@ from flint_graph.infrastructure.db.models import (
     QueryContextPackRecord,
     QueryRun,
 )
+from flint_graph.prompts.source import current_snapshot
 
 
 def conversation_policy_fingerprint(settings: Settings) -> str:
     policy = {
+        "prompt_bundle_sha256": current_snapshot().sha256,
         "version": MEMORY_POLICY_VERSION,
         "answer": [settings.query_answer_provider, answer_generator_model(settings)],
         "support": [settings.query_support_provider, support_checker_model(settings)],

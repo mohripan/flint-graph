@@ -258,3 +258,12 @@ def test_oversized_api_reports_fail_safely(capsys, monkeypatch):
         response=httpx.Response(200, text="private-secret" * 200000),
     )
     assert result == 1
+
+
+def test_prompt_only_offline_diagnostics_need_no_api_or_remote_credentials(capsys, monkeypatch):
+    monkeypatch.setenv("FLINT_GRAPH_PROMPT_SOURCE", "langfuse")
+    monkeypatch.delenv("FLINT_GRAPH_LANGFUSE_SECRET_KEY", raising=False)
+    assert main(["--prompts", "--offline", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["prompts"]["remote"] == "not_checked"
+    assert len(report["prompts"]["bundle_sha256"]) == 64

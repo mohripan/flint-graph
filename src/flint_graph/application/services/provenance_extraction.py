@@ -19,6 +19,7 @@ from flint_graph.application.extraction_proposals import (
     ExtractionBatch,
     ExtractionInputChunk,
 )
+from flint_graph.application.services.prompt_bundles import pin_bundle
 from flint_graph.domain.enums import (
     EntityType,
     ExtractionInvocationStatus,
@@ -41,6 +42,7 @@ from flint_graph.infrastructure.db.models import (
     ExtractionRun,
 )
 from flint_graph.infrastructure.object_store import ObjectStore, artifact_object_key, object_uri
+from flint_graph.prompts.source import current_snapshot
 
 MANIFEST_SCHEMA_VERSION = "1"
 
@@ -98,8 +100,10 @@ async def persist_provenance_extraction_run(
         model_name=metadata.model_name,
     )
     if (
-        existing is not None and existing.status == ExtractionRunStatus.READY
-        and existing.manifest_uri is not None and existing.manifest_hash is not None
+        existing is not None
+        and existing.status == ExtractionRunStatus.READY
+        and existing.manifest_uri is not None
+        and existing.manifest_hash is not None
     ):
         return PersistedProvenanceExtraction(
             extraction_run_id=existing.id,
@@ -143,6 +147,8 @@ async def persist_provenance_extraction_run(
 
     invocation_index = existing.invocation_count if existing is not None else 0
     run = existing or ExtractionRun(
+        prompt_bundle_sha256=await pin_bundle(session),
+        prompt_identity=current_snapshot().identity("extraction.proposals.ollama"),
         tenant_id=tenant_id,
         document_id=document_id,
         document_version_id=version_id,
@@ -313,6 +319,8 @@ async def persist_failed_provenance_extraction_run(
 
     invocation_index = existing.invocation_count if existing is not None else 0
     run = existing or ExtractionRun(
+        prompt_bundle_sha256=await pin_bundle(session),
+        prompt_identity=current_snapshot().identity("extraction.proposals.ollama"),
         tenant_id=tenant_id,
         document_id=document_id,
         document_version_id=version_id,
@@ -386,6 +394,14 @@ def _manifest_payload(
             "document_version_id": str(version_id),
         },
         provider={
+            "prompt_bundle_sha256": current_snapshot().sha256,
+            "prompt_entry_sha256": current_snapshot().entry("extraction.proposals.ollama").sha256,
+            "prompt_template_sha256": current_snapshot().identity("extraction.proposals.ollama")[
+                "template_sha256"
+            ],
+            "prompt_config_sha256": current_snapshot().identity("extraction.proposals.ollama")[
+                "config_sha256"
+            ],
             "prompt_version": metadata.prompt_version,
             "extractor_version": metadata.extractor_version,
             "model_provider": metadata.model_provider,
@@ -447,6 +463,7 @@ async def _find_run(
             ExtractionRun.input_hash == input_hash,
             ExtractionRun.schema_version == schema_version,
             ExtractionRun.prompt_version == prompt_version,
+            ExtractionRun.prompt_bundle_sha256 == current_snapshot().sha256,
             ExtractionRun.extractor_version == extractor_version,
             ExtractionRun.model_name == model_name,
         )

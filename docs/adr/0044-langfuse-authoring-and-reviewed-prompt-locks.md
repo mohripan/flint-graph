@@ -1,7 +1,9 @@
 # ADR 0044: Langfuse authoring and reviewed prompt locks
 
-Date: 2026-11-01. Decision contract for #134 / M35; runtime integration is
-**not delivered** by this ADR. Follow-on implementation is #135–#140.
+Date: 2026-11-01. Decision for #134 / M35. The catalog, optional self-hosted
+profile and approved runtime resolver are implemented in #135–#137; see the
+[migration report](../reports/2026-11-01-langfuse-prompt-migration.md). Quality
+rollouts and broader evaluation changes remain separate (#138–#140).
 
 ## Context and alternatives
 
@@ -20,8 +22,8 @@ while answer/support/extraction paths mostly record hand-maintained versions.
 Langfuse is the authoring source of truth. A reviewed `prompts.lock` is the
 deployment authority and contains the complete fallback templates/configuration,
 not just their hashes. Local hard-coded/TOML copies cease being independently
-editable authorities only when their specific migration lands. No current file
-or setting is removed by this decision.
+editable authorities only when their specific migration lands. The migrated builders now resolve through the catalog; the old image TOML is
+an explicit locked-mode compatibility override, never an independently active default.
 
 ## Bundle and rendering contract
 
@@ -139,8 +141,9 @@ permission. Application code still validates the policy and refuses matching
 descriptions before generation; negative tags still lead the constructed prompt.
 Image results are not certified by a keyword list or negative conditioning.
 
-The existing TOML and `FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY` remain active
-until that migration is implemented with the image owner. Initial import preserves
+The migrated default policy is a typed catalog entry. The existing TOML and
+`FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY` remain explicit compatibility overrides
+only in locked mode; combining an override with managed Langfuse mode is refused. Initial import preserves
 the current normalized lists, order, bounds and configurable empty-list semantics.
 Import repository defaults; publishing a custom operator override requires an
 explicit source selection and privacy review, never automatic file discovery.
@@ -168,8 +171,23 @@ Langfuse receives no application LLM-provider credentials for this feature.
 
 Server 4.72.0 and Python SDK 4.15.0 are the compatibility candidates qualified by
 source review, exact dependency resolution and an isolated real-SDK transport probe.
-No server is deployed or production prompt resolver implemented here. #136/#137
-must qualify actual self-hosted reads, key restrictions, cold/outage behavior,
-label movement, rollback and privacy before activation. See
+The isolated self-hosted profile and resolver now qualify real reads, Viewer-key
+write restrictions, cold/outage behavior, label movement during an assistant call,
+rollback and GET-only privacy. Production deployment still needs the documented
+TLS/authentication/backup/retention controls. See
 [the report](../reports/2026-11-01-langfuse-prompt-contract.md) and
 [ADR 0029 addendum](../architecture/prompt-management-threat-model.md).
+
+
+## Implementation note (2026-11-01)
+
+Runtime uses the generated async prompt API directly, without constructing the
+SDK facade, tracer provider, media consumers or score threads. The SDK probe uses
+`tracing_enabled=False`; the production resolver creates none of those owners.
+Nullable references in migration `0033_prompt_bundles` pin generic manifests at
+admission; extraction identities stay separate from historical `prompt_version`.
+The assistant's existing `prompt_sha256` meaning and historical pins are preserved.
+Image jobs record normalized policy identity and complete constructed prompts.
+The existing query usage ledger records actual provider configuration before
+network dispatch and links only identity values into the existing span owner.
+See the [runbook](../runbooks/prompt-management.md) for publication and rollback.

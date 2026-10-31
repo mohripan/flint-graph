@@ -227,7 +227,17 @@ READINESS_PROBE_DURATION = _spec(
 )
 
 
+PROMPT_REFRESH_RESULTS = _spec(
+    "flint_graph.prompts.refresh",
+    InstrumentKind.COUNTER,
+    "{refresh}",
+    "Approved prompt refreshes and local fallback reasons.",
+    "flint_graph.prompt_refresh.result",
+)
+
+
 ALL_INSTRUMENTS: tuple[InstrumentSpec, ...] = (
+    PROMPT_REFRESH_RESULTS,
     HTTP_REQUEST_DURATION,
     HTTP_REQUESTS_IN_FLIGHT,
     HTTP_RATE_LIMIT_REJECTIONS,

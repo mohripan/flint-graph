@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -14,17 +17,26 @@ from flint_graph.api.router import api_router
 from flint_graph.api.routes.observability import scrape_metrics
 from flint_graph.config import Settings, get_settings
 from flint_graph.observability.runtime import API_ROLE, configure_observability
+from flint_graph.prompts.runtime import PromptSnapshotMiddleware, prompt_runtime
 
 
 def create_app(settings_override: Settings | None = None) -> FastAPI:
     settings = settings_override or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        async with prompt_runtime(settings) as source:
+            application.state.prompt_source = source
+            yield
 
     app = FastAPI(
         title="FlintGraph API",
         version=settings.service_version,
         docs_url="/docs" if settings.env != "production" else None,
         redoc_url=None,
+        lifespan=lifespan,
     )
+    app.add_middleware(PromptSnapshotMiddleware, state=app.state)
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(RequestSizeLimitMiddleware, settings=settings)
     app.add_middleware(NarrativeBodyLimitMiddleware, settings=settings)

@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from flint_graph.narrative.assistant.assets import LibraryEntry
-from flint_graph.narrative.assistant.prompts import SYSTEM_PROMPT
+from flint_graph.narrative.assistant.prompts import system_prompt
+from flint_graph.prompts.source import render
 
 HISTORY_TURNS = 8
 HISTORY_CHARS = 2000
@@ -60,7 +61,7 @@ def build_turn_messages(
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
 ) -> tuple[list[dict[str, str]], ContextStats]:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt()}]
     recent = list(history)[-HISTORY_TURNS:]
     for turn in recent:
         messages.append({"role": turn.role, "content": turn.content[:HISTORY_CHARS]})
@@ -68,7 +69,9 @@ def build_turn_messages(
     messages.append(
         {
             "role": "user",
-            "content": f"<story>\n{context}\n</story>\n\nRequest:\n{request[:REQUEST_CHARS]}",
+            "content": render(
+                "narrative.assistant.context", story=context, request=request[:REQUEST_CHARS]
+            ),
         }
     )
     return messages, ContextStats(len(story["nodes"]), outlined, shown, len(recent))

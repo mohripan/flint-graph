@@ -1,0 +1,168 @@
+{
+  "server": "4.72.0",
+  "sdk": "4.15.0",
+  "images": {
+    "langfuse-web": "docker.langfuse.com/langfuse/langfuse:4.72.0@sha256:18d288adb5d736127d1d04c05ea8c2148365ffd3e6c31f3945d0e149b3f7c143",
+    "langfuse-worker": "docker.langfuse.com/langfuse/langfuse-worker:4.72.0@sha256:694599a334d327b86e1802bef04893dd90ee15772f8ab46233928b7a33ce4633",
+    "postgres": "postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193",
+    "redis": "redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
+    "minio": "minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+    "clickhouse": "clickhouse/clickhouse-server:25.12@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6"
+  },
+  "resources": {
+    "at": "2026-10-31T18:55:10.506711+00:00",
+    "idle": [
+      {
+        "Name": "flint-codex-prompts-langfuse-web-1",
+        "CPUPerc": "0.43%",
+        "MemUsage": "759.4MiB / 1GiB",
+        "BlockIO": "0B / 0B",
+        "PIDs": "15"
+      },
+      {
+        "Name": "flint-codex-prompts-langfuse-worker-1",
+        "CPUPerc": "1.57%",
+        "MemUsage": "328.4MiB / 512MiB",
+        "BlockIO": "0B / 0B",
+        "PIDs": "15"
+      },
+      {
+        "Name": "flint-codex-prompts-postgres-1",
+        "CPUPerc": "0.12%",
+        "MemUsage": "149.6MiB / 192MiB",
+        "BlockIO": "43.6MB / 125MB",
+        "PIDs": "56"
+      },
+      {
+        "Name": "flint-codex-prompts-redis-1",
+        "CPUPerc": "0.64%",
+        "MemUsage": "8.117MiB / 64MiB",
+        "BlockIO": "0B / 745kB",
+        "PIDs": "6"
+      },
+      {
+        "Name": "flint-codex-prompts-clickhouse-1",
+        "CPUPerc": "4.16%",
+        "MemUsage": "531.5MiB / 768MiB",
+        "BlockIO": "0B / 207MB",
+        "PIDs": "805"
+      },
+      {
+        "Name": "flint-codex-prompts-minio-1",
+        "CPUPerc": "42.96%",
+        "MemUsage": "77.34MiB / 128MiB",
+        "BlockIO": "58.4MB / 1.25MB",
+        "PIDs": "25"
+      }
+    ],
+    "loaded": [
+      {
+        "Name": "flint-codex-prompts-langfuse-web-1",
+        "CPUPerc": "81.76%",
+        "MemUsage": "770.7MiB / 1GiB",
+        "BlockIO": "0B / 0B",
+        "PIDs": "15"
+      },
+      {
+        "Name": "flint-codex-prompts-langfuse-worker-1",
+        "CPUPerc": "27.67%",
+        "MemUsage": "329.2MiB / 512MiB",
+        "BlockIO": "0B / 0B",
+        "PIDs": "15"
+      },
+      {
+        "Name": "flint-codex-prompts-postgres-1",
+        "CPUPerc": "3.23%",
+        "MemUsage": "151MiB / 192MiB",
+        "BlockIO": "43.6MB / 125MB",
+        "PIDs": "50"
+      },
+      {
+        "Name": "flint-codex-prompts-redis-1",
+        "CPUPerc": "4.43%",
+        "MemUsage": "8.766MiB / 64MiB",
+        "BlockIO": "0B / 745kB",
+        "PIDs": "6"
+      },
+      {
+        "Name": "flint-codex-prompts-clickhouse-1",
+        "CPUPerc": "5.35%",
+        "MemUsage": "528.9MiB / 768MiB",
+        "BlockIO": "0B / 214MB",
+        "PIDs": "805"
+      },
+      {
+        "Name": "flint-codex-prompts-minio-1",
+        "CPUPerc": "5.32%",
+        "MemUsage": "75.59MiB / 128MiB",
+        "BlockIO": "58.4MB / 1.25MB",
+        "PIDs": "25"
+      }
+    ],
+    "loaded_reads": 3553,
+    "load_seconds": 12,
+    "concurrency": 4,
+    "volume_disk": {
+      "postgres": [
+        {
+          "kib": 71424,
+          "path": "/var/lib/postgresql/data"
+        }
+      ],
+      "redis": [
+        {
+          "kib": 360,
+          "path": "/data"
+        }
+      ],
+      "minio": [
+        {
+          "kib": 320,
+          "path": "/data"
+        }
+      ],
+      "clickhouse": [
+        {
+          "kib": 103464,
+          "path": "/var/lib/clickhouse"
+        },
+        {
+          "kib": 2968,
+          "path": "/var/log/clickhouse-server"
+        }
+      ]
+    }
+  },
+  "doctor": {
+    "approved": {
+      "optional": true,
+      "bundle_sha256": "10edfc6d4fe91637bd77ef970dfd03f299d0903bb667a0787eacfd6fd2a0e391",
+      "remote": "approved",
+      "key": "valid",
+      "drift": "none"
+    },
+    "invalid_key": {
+      "optional": true,
+      "bundle_sha256": "10edfc6d4fe91637bd77ef970dfd03f299d0903bb667a0787eacfd6fd2a0e391",
+      "remote": "invalid_credentials",
+      "key": "invalid",
+      "drift": "unknown"
+    },
+    "outage": {
+      "optional": true,
+      "bundle_sha256": "10edfc6d4fe91637bd77ef970dfd03f299d0903bb667a0787eacfd6fd2a0e391",
+      "remote": "unavailable",
+      "key": "unknown",
+      "drift": "unknown"
+    }
+  },
+  "privacy": {
+    "runtime_methods": [
+      "GET"
+    ],
+    "runtime_path_prefix": "/api/public/v2/prompts/",
+    "runtime_request_body_bytes": 0,
+    "trace_export_enabled": false
+  },
+  "fixtures": "Isolated flint-codex-prompts stack; synthetic prompts only; no Studio projects."
+}

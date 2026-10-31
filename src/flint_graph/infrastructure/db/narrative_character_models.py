@@ -24,6 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from flint_graph.infrastructure.db.prompt_models import PromptBundleReference
 
 # Transparent sprites are full-body character renders; a completed one names the
 # segmenter that cut it out (migration 0025).
@@ -59,7 +60,7 @@ HIRES_RULE = (
 )
 
 
-class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class NarrativeImageJob(PromptBundleReference, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """One fenced local generation of up to four candidate images."""
 
     __tablename__ = "narrative_image_jobs"
@@ -116,6 +117,7 @@ class NarrativeImageJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_narrative_image_job_run_status", "status", "workflow_run_id"),
         Index("ix_narrative_image_job_character", "project_id", "character_id", "created_at", "id"),
     )
+    prompt_identity: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     tenant_id: Mapped[UUID]
     project_id: Mapped[UUID]
     character_id: Mapped[str | None] = mapped_column(String(64))

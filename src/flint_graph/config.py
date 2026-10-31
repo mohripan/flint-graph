@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DETERMINISTIC_EMBEDDING_MODEL = "deterministic-test"
@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     dev_auth_name: str = "Local Developer"
     service_name: str = "flint-graph-api"
     service_version: str = "0.1.0"
+    prompt_source: Literal["locked", "langfuse"] = "locked"
+    prompt_lock_path: str | None = None
+    langfuse_base_url: str = "http://127.0.0.1:6090"
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_prompt_label: str = Field(default="production", pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    langfuse_refresh_seconds: float = Field(default=60, ge=1, le=60)
     log_level: str = "INFO"
     public_base_url: str | None = None
     allowed_origins: list[str] = Field(

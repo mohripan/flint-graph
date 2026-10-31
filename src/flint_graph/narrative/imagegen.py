@@ -21,28 +21,17 @@ from dataclasses import dataclass
 from functools import lru_cache, partial
 from pathlib import Path
 
+from flint_graph.prompts.source import conditioning, current_snapshot, render
+
 MAX_APPEARANCE = 600
-CHARACTER_TYPES = {
-    "girl": "1girl",
-    "boy": "1boy, male focus",
-    "woman": "1girl, mature female",
-    "man": "1boy, mature male, male focus",
-    "other": "",
-}
+CHARACTER_TYPES = conditioning("CHARACTER_TYPES")
 FRAMINGS = {
-    "portrait": ("upper body, portrait", (832, 1216)),
-    "full_body": ("full body, standing", (832, 1216)),
+    key: (conditioning("FRAMING_TAGS")[key], (832, 1216)) for key in ("portrait", "full_body")
 }
 STEPS = 28
 GUIDANCE = 5.0
-QUALITY = (
-    "looking at viewer, simple background, safe, masterpiece, high score, great score, absurdres"
-)
-QUALITY_NEGATIVE = (
-    "lowres, bad anatomy, bad hands, text, error, missing finger, "
-    "extra digits, fewer digits, cropped, worst quality, low quality, low score, "
-    "bad score, average score, signature, watermark, username, blurry"
-)
+QUALITY = conditioning("QUALITY")
+QUALITY_NEGATIVE = conditioning("QUALITY_NEGATIVE")
 # The shipped policy; FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY points at another copy.
 DEFAULT_POLICY_PATH = Path(__file__).with_name("image_content_policy.toml")
 POLICY_VERSION = 1
@@ -97,33 +86,44 @@ class ContentPolicy:
                 raise ValueError(f'"{term}" is blocked in image descriptions')
 
 
-DEFAULT_POLICY = ContentPolicy.load(DEFAULT_POLICY_PATH)
+def _catalog_policy() -> ContentPolicy:
+    data = current_snapshot().entry("narrative.image.content_policy").config
+    if (
+        set(data) != {"version", "negative", "blocked"}
+        or type(data["version"]) is not int
+        or data["version"] != POLICY_VERSION
+    ):
+        raise ValueError("Invalid catalog image content policy")
+    if not isinstance(data["negative"], list) or not isinstance(data["blocked"], list):
+        raise ValueError("Image policy entries must be lists")
+    return ContentPolicy.create(data["negative"], data["blocked"])
+
+
+DEFAULT_POLICY = _catalog_policy()
 
 
 @lru_cache(maxsize=4)
+def _legacy_policy_file(path: str) -> ContentPolicy:
+    return ContentPolicy.load(path)
+
+
 def content_policy(path: str | None) -> ContentPolicy:
-    """The configured policy, read once per path; restart the API after editing it."""
-    return DEFAULT_POLICY if path is None else ContentPolicy.load(path)
+    """The scoped catalog policy, or an explicit legacy operator file override."""
+    return _catalog_policy() if path is None else _legacy_policy_file(path)
 
 
 def _negative(policy: ContentPolicy) -> str:
-    return ", ".join(part for part in (policy.negative, QUALITY_NEGATIVE) if part)
+    return ", ".join(part for part in (policy.negative, conditioning("QUALITY_NEGATIVE")) if part)
 
 
 NEGATIVE = _negative(DEFAULT_POLICY)
 # Without these, a girl-leaning word or look in the description beats "1boy".
 # CLIP reads 77 tokens; the longest negative (boy or man, short hair) measures 68.
-TYPE_NEGATIVES = {
-    "girl": "1boy, male focus",
-    "boy": "1girl, female focus, breasts",
-    "woman": "1boy, male focus",
-    "man": "1girl, female focus, breasts",
-    "other": "",
-}
-SHORT_LENGTHS = ("very short hair", "short hair", "medium hair")
-LONG_LENGTHS = ("long hair", "very long hair", "absurdly long hair")
+TYPE_NEGATIVES = conditioning("TYPE_NEGATIVES")
+SHORT_LENGTHS = tuple(conditioning("SHORT_LENGTHS"))
+LONG_LENGTHS = tuple(conditioning("LONG_LENGTHS"))
 # The model's prior toward long hair otherwise overrides a shorter stated length.
-LONG_HAIR_NEGATIVE = "long hair, very long hair"
+LONG_HAIR_NEGATIVE = conditioning("LONG_HAIR_NEGATIVE")
 
 # "<reach>-length hair", by where Danbooru's length tags end.
 _REACH = {
@@ -173,8 +173,8 @@ _ANDROGYNY = {"boy": _FEMININE, "man": _FEMININE, "girl": _MASCULINE, "woman": _
 # separates most cleanly; the whole figure has to stay inside the frame. The
 # positive "simple background, white background" already rules out scenery; these
 # two keep the longest sprite negative (boy or man, short hair) at 76 of 77 tokens.
-CUTOUT_TAGS = "white background"
-CUTOUT_NEGATIVE = "feet out of frame, gradient background"
+CUTOUT_TAGS = conditioning("CUTOUT_TAGS")
+CUTOUT_NEGATIVE = conditioning("CUTOUT_NEGATIVE")
 
 
 # High resolution ("hires fix"): the base render is upscaled with Lanczos, then the
@@ -247,7 +247,10 @@ def _segment_tags(segment: str, character_type: str) -> list[str]:
 
 def appearance_tags(appearance: str, character_type: str) -> list[str]:
     """Split a description into tags, mapping common phrases to Danbooru tags."""
-    fixed = {"solo", *(tag.strip() for tag in CHARACTER_TYPES[character_type].split(","))}
+    fixed = {
+        "solo",
+        *(tag.strip() for tag in conditioning("CHARACTER_TYPES")[character_type].split(",")),
+    }
     tags: list[str] = []
     seen: set[str] = set()
     for raw in re.split(r"[,;\n]|\.(?=\s|$)", appearance):
@@ -262,12 +265,14 @@ def appearance_tags(appearance: str, character_type: str) -> list[str]:
 def _portrait_negative(
     tags: list[str], character_type: str, transparent: bool, policy: ContentPolicy
 ) -> str:
-    parts = [_negative(policy), TYPE_NEGATIVES[character_type]]
+    parts = [_negative(policy), conditioning("TYPE_NEGATIVES")[character_type]]
     lengths = {tag.lower() for tag in tags}
-    if lengths.intersection(SHORT_LENGTHS) and not lengths.intersection(LONG_LENGTHS):
-        parts.append(LONG_HAIR_NEGATIVE)
+    if lengths.intersection(conditioning("SHORT_LENGTHS")) and not lengths.intersection(
+        conditioning("LONG_LENGTHS")
+    ):
+        parts.append(conditioning("LONG_HAIR_NEGATIVE"))
     if transparent:
-        parts.append(CUTOUT_NEGATIVE)
+        parts.append(conditioning("CUTOUT_NEGATIVE"))
     return ", ".join(part for part in parts if part)
 
 
@@ -277,10 +282,11 @@ def portrait_request(
     framing: str,
     *,
     transparent: bool = False,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
     hires: bool = False,
 ) -> ImageRequest:
-    if character_type not in CHARACTER_TYPES or framing not in FRAMINGS:
+    policy = policy or content_policy(None)
+    if character_type not in conditioning("CHARACTER_TYPES") or framing not in FRAMINGS:
         raise ValueError("Unknown character type or framing")
     if transparent and framing != "full_body":
         raise ValueError("Transparent sprites need full-body framing")
@@ -291,13 +297,23 @@ def portrait_request(
         raise ValueError("Describe the character's appearance")
     policy.check(text)
     framing_tags, (width, height) = FRAMINGS[framing]
+    framing_tags = conditioning("FRAMING_TAGS")[framing]
     # Tags come from the raw text so line breaks still separate them.
     tags = appearance_tags(appearance, character_type)
-    parts = [CHARACTER_TYPES[character_type], "solo", *tags, framing_tags, QUALITY]
-    if transparent:
-        parts.insert(parts.index(framing_tags) + 1, CUTOUT_TAGS)
+
+    def suffix(value: str) -> str:
+        return ", " + value if value else ""
+
+    subject = conditioning("CHARACTER_TYPES")[character_type]
     return ImageRequest(
-        prompt=", ".join(part for part in parts if part),
+        prompt=render(
+            "narrative.image.portrait",
+            subject=subject + ", " if subject else "",
+            appearance="".join(suffix(tag) for tag in tags),
+            framing=suffix(framing_tags),
+            cutout=suffix(conditioning("CUTOUT_TAGS")) if transparent else "",
+            quality=suffix(conditioning("QUALITY")),
+        ),
         negative_prompt=_portrait_negative(tags, character_type, transparent, policy),
         width=width,
         height=height,
@@ -309,25 +325,12 @@ def portrait_request(
 
 # Expressions repaint only the face of a base sprite (ADR 0041). Presets carry tag sets
 # that read clearly at the default strength; anything else is used as tags as typed.
-EXPRESSION_TAGS = {
-    "happy": "smile, open mouth, happy",
-    "laughing": "laughing, closed eyes, open mouth, smile",
-    "sad": "sad, frown, furrowed brow, looking down",
-    "crying": "crying, tears, sad, open mouth",
-    "angry": "angry, frown, v-shaped eyebrows, glaring, clenched teeth",
-    "surprised": "surprised, wide-eyed, open mouth, :o, raised eyebrows",
-    "embarrassed": "embarrassed, blush, wavy mouth, looking away",
-    "worried": "worried, frown, furrowed brow, sweatdrop",
-    "smug": "smug, smirk, half-closed eyes",
-    "thinking": "pensive, closed mouth, looking up",
-    "sleepy": "sleepy, half-closed eyes, yawning",
-    "determined": "determined, serious, closed mouth, v-shaped eyebrows",
-}
+EXPRESSION_TAGS = conditioning("EXPRESSION_TAGS")
 MAX_EXPRESSIONS = 4
 EXPRESSION_GUIDANCE = 6.0
 EXPRESSION_STRENGTH = 0.9
 # "looking at viewer" would fight expressions that look away or down.
-EXPRESSION_QUALITY = "safe, masterpiece, high score, great score, absurdres"
+EXPRESSION_QUALITY = conditioning("EXPRESSION_QUALITY")
 _EXPRESSION_NAME = re.compile(r"[a-z0-9][a-z0-9 '\-]{0,39}\Z")
 
 
@@ -364,10 +367,11 @@ def expression_request(
     character_type: str,
     expressions: list[str],
     *,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
 ) -> ExpressionRequest:
     """One face-inpainting prompt per expression: subject, expression, then looks."""
-    if character_type not in CHARACTER_TYPES:
+    policy = policy or content_policy(None)
+    if character_type not in conditioning("CHARACTER_TYPES"):
         raise ValueError("Unknown character type")
     if len(appearance) > MAX_APPEARANCE * 2:
         raise ValueError("Appearance is too long")
@@ -376,31 +380,34 @@ def expression_request(
         policy.check(text)
     ids = tuple(expression_id(name) for name in names)
     tags = appearance_tags(clean_appearance(appearance), character_type) if appearance else []
+
+    def suffix(value: str) -> str:
+        return ", " + value if value else ""
+
+    subject = conditioning("CHARACTER_TYPES")[character_type]
     prompts = tuple(
-        ", ".join(
-            part
-            for part in (
-                CHARACTER_TYPES[character_type],
-                "solo, close-up, face",
-                EXPRESSION_TAGS.get(name, name),
-                *tags,
-                "white background",
-                EXPRESSION_QUALITY,
-            )
-            if part
+        render(
+            "narrative.image.expression",
+            subject=subject + ", " if subject else "",
+            expression=suffix(conditioning("EXPRESSION_TAGS").get(name, name)),
+            appearance="".join(suffix(tag) for tag in tags),
+            quality=suffix(conditioning("EXPRESSION_QUALITY")),
         )
         for name in names
     )
-    negative = _portrait_negative(tags, character_type, False, policy) + ", expressionless"
+    negative = render(
+        "narrative.image.expression_negative",
+        base=_portrait_negative(tags, character_type, False, policy),
+    )
     return ExpressionRequest(
         ids, prompts, negative, STEPS, EXPRESSION_GUIDANCE, EXPRESSION_STRENGTH
     )
 
 
 BACKGROUND_SIZE = (1344, 768)
-BACKGROUND_QUALITY = "safe, masterpiece, high score, great score, absurdres"
+BACKGROUND_QUALITY = conditioning("BACKGROUND_QUALITY")
 # People in a background would be fixed into every scene that uses it.
-BACKGROUND_PEOPLE_NEGATIVE = "1girl, 1boy, people, person, character, crowd"
+BACKGROUND_PEOPLE_NEGATIVE = conditioning("BACKGROUND_PEOPLE_NEGATIVE")
 
 
 # Scene art (ADR 0041 slice C): an event CG of one or two existing characters, identity
@@ -503,9 +510,7 @@ def scene_art_request(
         [(prompt, negative, _)] = solos
         return scene_art(prompt=prompt, negative_prompt=negative)
     kinds = [_KINDS[kind] for _, kind in characters]
-    counts = ", ".join(
-        _count_tag(kinds.count(kind), kind) for kind in dict.fromkeys(kinds)
-    )
+    counts = ", ".join(_count_tag(kinds.count(kind), kind) for kind in dict.fromkeys(kinds))
     looks: list[str] = []
     for _, _, tags in solos:
         looks.extend(tag for tag in tags if tag.lower() not in {seen.lower() for seen in looks})
@@ -515,7 +520,8 @@ def scene_art_request(
     )
 
 
-def background_request(description: str, *, policy: ContentPolicy = DEFAULT_POLICY) -> ImageRequest:
+def background_request(description: str, *, policy: ContentPolicy | None = None) -> ImageRequest:
+    policy = policy or content_policy(None)
     if len(description) > MAX_APPEARANCE * 2:
         raise ValueError("Description is too long")
     text = clean_appearance(description)
@@ -524,8 +530,16 @@ def background_request(description: str, *, policy: ContentPolicy = DEFAULT_POLI
     policy.check(text)
     width, height = BACKGROUND_SIZE
     return ImageRequest(
-        prompt=", ".join(("no humans", "scenery", text, BACKGROUND_QUALITY)),
-        negative_prompt=f"{_negative(policy)}, {BACKGROUND_PEOPLE_NEGATIVE}",
+        prompt=render(
+            "narrative.image.background",
+            description=text,
+            quality=conditioning("BACKGROUND_QUALITY"),
+        ),
+        negative_prompt=render(
+            "narrative.image.background_negative",
+            base=_negative(policy),
+            people=conditioning("BACKGROUND_PEOPLE_NEGATIVE"),
+        ),
         width=width,
         height=height,
         steps=STEPS,

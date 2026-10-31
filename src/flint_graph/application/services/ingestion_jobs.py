@@ -12,6 +12,7 @@ from flint_graph.application.outbox_contracts import (
     IngestionJobQueuedPayload,
 )
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
+from flint_graph.application.services.prompt_bundles import pin_bundle
 from flint_graph.domain.enums import DocumentVersionStatus, IngestionJobStatus
 from flint_graph.domain.errors import ConflictError, NotFoundError
 from flint_graph.infrastructure.db.models import (
@@ -94,6 +95,7 @@ async def create_ingestion_job(
             await session.flush()
 
             job = IngestionJob(
+                prompt_bundle_sha256=await pin_bundle(session),
                 tenant_id=tenant_id,
                 document_id=document.id,
                 document_version_id=version.id,

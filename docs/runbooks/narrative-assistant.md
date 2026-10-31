@@ -159,3 +159,14 @@ See [qualification](../reports/2026-10-31-assistant-image-actions.md).
 
 On Windows, if the Vite dev server serves an old stylesheet after edits, touch the
 file or restart Vite; production builds are unaffected.
+
+
+## Reviewed prompt catalog
+
+Assistant instructions, provider/extraction templates and default image conditioning
+and content policy use the reviewed catalog. Apply `0033_prompt_bundles`; queued
+work retains its admission-time bundle. The default stays offline. Langfuse is an
+optional authoring/refresh service with Viewer runtime credentials, no tenant-data
+uploads, and no SDK tracing. See [prompt management](prompt-management.md) for
+import, review, activation, diagnosis and rollback. Image TOML overrides remain
+explicit in locked mode and cannot be combined with managed Langfuse mode.

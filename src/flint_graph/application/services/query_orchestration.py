@@ -19,6 +19,7 @@ from flint_graph.application.query_orchestration import (
 from flint_graph.application.services.conversation_memory import (
     prepare_conversation_context,
 )
+from flint_graph.application.services.prompt_bundles import execution_bundle
 from flint_graph.application.services.query_answering import generate_query_answer
 from flint_graph.application.services.query_context_packing import pack_query_context
 from flint_graph.application.services.query_fusion import (
@@ -28,6 +29,7 @@ from flint_graph.application.services.query_fusion import (
 from flint_graph.application.services.query_planning import classify_query_run, link_query_entities
 from flint_graph.application.services.query_runs import (
     append_query_run_event,
+    get_query_run,
     persist_query_candidate,
     persist_query_diagnostics,
     transition_query_run,
@@ -39,6 +41,7 @@ from flint_graph.observability.instruments import (
     QUERY_RUN_TERMINAL_STATES,
     QUERY_STAGE_DURATION,
 )
+from flint_graph.prompts.source import use_snapshot
 
 RetrieverName = Literal["lexical", "vector", "graph"]
 
@@ -174,68 +177,71 @@ async def run_query_retrieval_graph(
     usage_recorder: QueryUsageRecorder | None = None,
     conversation_fingerprint: str | None = None,
 ) -> QueryRetrievalGraphResult:
-    graph = _build_retrieval_graph(
-        session=session,
-        retrievers=retrievers,
-        reranker=reranker,
-        answer_generator=answer_generator,
-        support_checker=support_checker,
-        graph_depth=graph_depth,
-        rerank_max_results=rerank_max_results,
-        context_token_budget=context_token_budget,
-        context_max_records=context_max_records,
-        min_supported_claim_ratio=min_supported_claim_ratio,
-        min_context_relevance=min_context_relevance,
-        usage_pricing=usage_pricing,
-        usage_currency=usage_currency,
-        retrieval_session_factory=retrieval_session_factory,
-        commit_after_node=commit_after_node,
-        after_node_commit=after_node_commit,
-        usage_recorder=usage_recorder,
-        conversation_fingerprint=conversation_fingerprint,
-    )
-    state = await graph.ainvoke(
-        {
-            "tenant_id": tenant_id,
-            "query_run_id": query_run_id,
-            "errors": [],
-            "enabled_retrievers": [],
-            "linked_entity_ids": [],
-            "retrieved_candidate_count": 0,
-            "fused_candidate_count": 0,
-            "reranked_candidate_count": 0,
-            "context_pack_record_count": 0,
-            "context_token_count": 0,
-            "answer_citation_count": 0,
-            "insufficient_context": False,
-        }
-    )
-    await persist_query_diagnostics(
-        session,
-        tenant_id=tenant_id,
-        query_run_id=query_run_id,
-    )
-    metrics.add(
-        QUERY_RUN_TERMINAL_STATES,
-        **{"flint_graph.query.status": str(state["status"])},
-    )
-    return QueryRetrievalGraphResult(
-        query_run_id=query_run_id,
-        tenant_id=tenant_id,
-        status=state["status"],
-        classification_label=state.get("classification_label"),
-        enabled_retrievers=state.get("enabled_retrievers", []),
-        linked_entity_ids=state.get("linked_entity_ids", []),
-        retrieved_candidate_count=state.get("retrieved_candidate_count", 0),
-        fused_candidate_count=state.get("fused_candidate_count", 0),
-        reranked_candidate_count=state.get("reranked_candidate_count", 0),
-        context_pack_record_count=state.get("context_pack_record_count", 0),
-        context_token_count=state.get("context_token_count", 0),
-        answer_text=state.get("answer_text"),
-        answer_citation_count=state.get("answer_citation_count", 0),
-        insufficient_context=state.get("insufficient_context", False),
-        errors=state.get("errors", []),
-    )
+    run = await get_query_run(session, tenant_id=tenant_id, query_run_id=query_run_id)
+    bundle = await execution_bundle(session, run)
+    with use_snapshot(bundle):
+        graph = _build_retrieval_graph(
+            session=session,
+            retrievers=retrievers,
+            reranker=reranker,
+            answer_generator=answer_generator,
+            support_checker=support_checker,
+            graph_depth=graph_depth,
+            rerank_max_results=rerank_max_results,
+            context_token_budget=context_token_budget,
+            context_max_records=context_max_records,
+            min_supported_claim_ratio=min_supported_claim_ratio,
+            min_context_relevance=min_context_relevance,
+            usage_pricing=usage_pricing,
+            usage_currency=usage_currency,
+            retrieval_session_factory=retrieval_session_factory,
+            commit_after_node=commit_after_node,
+            after_node_commit=after_node_commit,
+            usage_recorder=usage_recorder,
+            conversation_fingerprint=conversation_fingerprint,
+        )
+        state = await graph.ainvoke(
+            {
+                "tenant_id": tenant_id,
+                "query_run_id": query_run_id,
+                "errors": [],
+                "enabled_retrievers": [],
+                "linked_entity_ids": [],
+                "retrieved_candidate_count": 0,
+                "fused_candidate_count": 0,
+                "reranked_candidate_count": 0,
+                "context_pack_record_count": 0,
+                "context_token_count": 0,
+                "answer_citation_count": 0,
+                "insufficient_context": False,
+            }
+        )
+        await persist_query_diagnostics(
+            session,
+            tenant_id=tenant_id,
+            query_run_id=query_run_id,
+        )
+        metrics.add(
+            QUERY_RUN_TERMINAL_STATES,
+            **{"flint_graph.query.status": str(state["status"])},
+        )
+        return QueryRetrievalGraphResult(
+            query_run_id=query_run_id,
+            tenant_id=tenant_id,
+            status=state["status"],
+            classification_label=state.get("classification_label"),
+            enabled_retrievers=state.get("enabled_retrievers", []),
+            linked_entity_ids=state.get("linked_entity_ids", []),
+            retrieved_candidate_count=state.get("retrieved_candidate_count", 0),
+            fused_candidate_count=state.get("fused_candidate_count", 0),
+            reranked_candidate_count=state.get("reranked_candidate_count", 0),
+            context_pack_record_count=state.get("context_pack_record_count", 0),
+            context_token_count=state.get("context_token_count", 0),
+            answer_text=state.get("answer_text"),
+            answer_citation_count=state.get("answer_citation_count", 0),
+            insufficient_context=state.get("insufficient_context", False),
+            errors=state.get("errors", []),
+        )
 
 
 def _build_retrieval_graph(

@@ -21,6 +21,7 @@ from flint_graph.observability.instruments import (
     PROVIDER_CALL_ERRORS,
 )
 from flint_graph.observability.tracing import tracer
+from flint_graph.prompts.identity import provider_identity
 
 
 class ProviderCall:
@@ -48,14 +49,25 @@ async def provider_call(
         "flint_graph.model": model,
         "flint_graph.operation": operation.value,
     }
+    attributes.update(
+        {
+            "flint_graph.prompt." + key: value
+            for key, value in provider_identity().items()
+            if key
+            in {
+                "name",
+                "catalog_version",
+                "langfuse_version",
+                "bundle_sha256",
+                "entry_sha256",
+                "effective_config_sha256",
+            }
+        }
+    )
     if operation is ProviderUsageOperation.EMBEDDING:
-        attributes.update(
-            {"openinference.span.kind": "EMBEDDING", "embedding.model_name": model}
-        )
+        attributes.update({"openinference.span.kind": "EMBEDDING", "embedding.model_name": model})
     elif operation is ProviderUsageOperation.RERANK:
-        attributes.update(
-            {"openinference.span.kind": "RERANKER", "reranker.model_name": model}
-        )
+        attributes.update({"openinference.span.kind": "RERANKER", "reranker.model_name": model})
     else:
         attributes.update(
             {"openinference.span.kind": "LLM", "llm.model_name": model, "llm.provider": provider}

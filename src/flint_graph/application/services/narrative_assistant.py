@@ -30,6 +30,7 @@ from flint_graph.application.services.narrative_projects import (
     get_revision,
 )
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
+from flint_graph.application.services.prompt_bundles import execution_bundle, pin_bundle
 from flint_graph.domain.enums import AuditAction
 from flint_graph.domain.errors import (
     ConflictError,
@@ -59,6 +60,7 @@ from flint_graph.narrative.assistant.context import HistoryTurn
 from flint_graph.narrative.assistant.operations import Proposal, check_proposal
 from flint_graph.narrative.assistant.turn import TurnResult
 from flint_graph.narrative.values import canonical_json
+from flint_graph.prompts.source import PromptBundle
 
 HISTORY_TURNS = 4
 _ACTIVE = ("queued", "running")
@@ -87,6 +89,7 @@ class TurnWork:
     # character's described looks (editor metadata the model may reuse).
     library: tuple[LibraryEntry, ...] = ()
     profiles: dict[str, str] = field(default_factory=dict)
+    prompt_bundle: PromptBundle | None = None
 
 
 async def create_thread(
@@ -270,6 +273,7 @@ async def post_turn(
     if active >= max_active_turns:
         raise TooManyRequestsError("Wait for the assistant to finish its current reply.")
     turn = NarrativeAssistantTurn(
+        prompt_bundle_sha256=await pin_bundle(session),
         id=uuid4(),
         tenant_id=tenant_id,
         project_id=project_id,
@@ -759,6 +763,7 @@ async def claim_turn(
         history=tuple(history),
         library=library,
         profiles=profiles,
+        prompt_bundle=await execution_bundle(session, turn),
     )
 
 

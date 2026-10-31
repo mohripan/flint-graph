@@ -29,6 +29,7 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
   "pyjwt[crypto]>=2.10,<3",
   "opentelemetry-exporter-prometheus>=0.51b0,<1",
+  "jsonschema==4.26.0",
 ]
 
 [dependency-groups]
@@ -38,16 +39,23 @@ dev = [
   "pytest>=8.4,<10",
   "pytest-asyncio>=1.0,<2",
   "ruff>=0.12,<1",
+  "types-jsonschema>=4.26.0.20261006",
   "types-pyyaml>=6,<7",
 ]
 
 [project.scripts]
+flint-graph-prompts = "flint_graph.cli.prompts:main"
 flint-graph-eval = "flint_graph.cli.eval:main"
 flint-graph-doctor = "flint_graph.cli.doctor:main"
 flint-graph-dev = "flint_graph.cli.dev:main"
 flint-graph-corpus = "flint_graph.cli.corpus:main"
 flint-graph-telemetry = "flint_graph.cli.telemetry:main"
 flint-graph-narrative = "flint_graph.cli.narrative:main"
+
+[project.optional-dependencies]
+langfuse = [
+    "langfuse==4.15.0",
+]
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

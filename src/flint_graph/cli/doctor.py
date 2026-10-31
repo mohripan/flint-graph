@@ -15,6 +15,9 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
+from flint_graph.prompts.catalog import PromptError
+from flint_graph.prompts.diagnostics import prompt_report
+
 Name = Annotated[str, Field(min_length=1, max_length=256, pattern=r"^[\w./:@+\-]+$")]
 Count = Annotated[int, Field(strict=True, ge=0)]
 Provider = Literal["deterministic", "ollama", "anthropic", "openai_compatible"]
@@ -334,6 +337,11 @@ def main(argv: Sequence[str] | None = None, *, transport: httpx.BaseTransport | 
     parser.add_argument(
         "--timeout", type=float, default=20.0, help="Per-request timeout in seconds (max 120)."
     )
+    parser.add_argument(
+        "--prompts",
+        action="store_true",
+        help="Inspect the local lock and optional Langfuse manager only.",
+    )
     parser.add_argument("--json", action="store_true", help="Print a structured, redacted report.")
     args = parser.parse_args(argv)
     report: dict[str, Any] = {
@@ -356,7 +364,30 @@ def main(argv: Sequence[str] | None = None, *, transport: httpx.BaseTransport | 
             else "Executable not found on PATH.",
             "Install only if required for your development workflow." if not found else "",
         )
-    if args.offline:
+    if args.prompts:
+        try:
+            report["prompts"] = prompt_report(offline=args.offline)
+            remote = report["prompts"]["remote"]
+            _check(
+                report,
+                "prompts.optional",
+                "pass" if remote in {"approved", "not_checked"} else "warn",
+                "Local prompt lock valid; remote result: " + remote,
+                "Review prompt labels/Viewer credentials with the prompt runbook."
+                if remote not in {"approved", "not_checked"}
+                else "",
+            )
+            exit_code = 0
+        except PromptError:
+            _check(
+                report,
+                "prompts.lock",
+                "fail",
+                "Local prompt lock invalid or unavailable.",
+                "Restore the reviewed lock before admitting work.",
+            )
+            exit_code = 1
+    elif args.offline:
         _check(
             report,
             "offline.scope",

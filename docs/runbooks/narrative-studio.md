@@ -217,3 +217,14 @@ authorized release artifacts are delivered by #124; see the
 HTTPS/cookie scope/gateway hosting, isolated creator-code compilation and asset
 authoring are later work.
 No paid model or inference service is enabled by these flows.
+
+
+## Reviewed prompt catalog
+
+Assistant instructions, provider/extraction templates and default image conditioning
+and content policy use the reviewed catalog. Apply `0033_prompt_bundles`; queued
+work retains its admission-time bundle. The default stays offline. Langfuse is an
+optional authoring/refresh service with Viewer runtime credentials, no tenant-data
+uploads, and no SDK tracing. See [prompt management](prompt-management.md) for
+import, review, activation, diagnosis and rollback. Image TOML overrides remain
+explicit in locked mode and cannot be combined with managed Langfuse mode.

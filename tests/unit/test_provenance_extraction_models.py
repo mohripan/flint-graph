@@ -41,6 +41,7 @@ def test_extraction_run_is_unique_per_document_version_and_ready_run_key() -> No
         "input_hash",
         "schema_version",
         "prompt_version",
+        "prompt_bundle_sha256",
         "extractor_version",
         "model_name",
     ) in _unique_column_sets(ExtractionRun)

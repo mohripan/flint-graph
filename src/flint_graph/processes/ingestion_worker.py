@@ -5,6 +5,7 @@ from temporalio.worker import Worker
 from flint_graph.config import get_settings
 from flint_graph.infrastructure.temporal import connect_temporal
 from flint_graph.observability.runtime import INGESTION_WORKER_ROLE, configure_observability
+from flint_graph.prompts.runtime import run_prompt_process
 from flint_graph.worker.activities.index_backfill import (
     complete_index_backfill_activity,
     fail_index_backfill_activity,
@@ -81,7 +82,7 @@ async def run_worker() -> None:
 
 
 def main() -> None:
-    asyncio.run(run_worker())
+    asyncio.run(run_prompt_process(run_worker))
 
 
 if __name__ == "__main__":

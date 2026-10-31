@@ -111,6 +111,8 @@ from flint_graph.infrastructure.db.narrative_voice_models import (
 from flint_graph.infrastructure.db.narrative_voice_models import (
     NarrativeVoiceReference as NarrativeVoiceReference,
 )
+from flint_graph.infrastructure.db.prompt_models import PromptBundleRecord as PromptBundleRecord
+from flint_graph.infrastructure.db.prompt_models import PromptBundleReference
 
 
 def enum_column(enum_type: type[PyEnum], length: int) -> SAEnum:
@@ -562,7 +564,7 @@ class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class QueryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class QueryRun(PromptBundleReference, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "query_runs"
     __table_args__ = (
         UniqueConstraint("id", "tenant_id", name="uq_query_runs_id_tenant"),
@@ -877,7 +879,7 @@ class QueryContextPackRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     context_pack: Mapped[QueryContextPack] = relationship(back_populates="records")
 
 
-class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class IngestionJob(PromptBundleReference, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ingestion_jobs"
     __table_args__ = (
         UniqueConstraint("document_version_id"),
@@ -1185,7 +1187,7 @@ class MergeDecision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
-class ExtractionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class ExtractionRun(PromptBundleReference, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "extraction_runs"
     __table_args__ = (
         UniqueConstraint(
@@ -1193,6 +1195,7 @@ class ExtractionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "input_hash",
             "schema_version",
             "prompt_version",
+            "prompt_bundle_sha256",
             "extractor_version",
             "model_name",
             name="uq_extraction_runs_ready_key",
@@ -1216,6 +1219,7 @@ class ExtractionRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=ExtractionRunStatus.PENDING,
     )
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    prompt_identity: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
     extractor_version: Mapped[str] = mapped_column(String(100), nullable=False)
     model_provider: Mapped[str] = mapped_column(String(100), nullable=False)

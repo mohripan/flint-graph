@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
+from flint_graph.prompts.source import render
+
 EXTRACTION_SCHEMA_VERSION = "2"
 EXTRACTION_PROMPT_VERSION = "builtin-graph-v2"
 
@@ -83,40 +85,6 @@ def _valid_items[ModelT: BaseModel](value: object, model: type[ModelT]) -> list[
 
 
 def build_extraction_prompt(chunks: Sequence[tuple[str, str]]) -> str:
-    schema = {
-        "title": "string|null",
-        "summary": "string",
-        "topics": ["string"],
-        "entities": [
-            {
-                "name": "string",
-                "type": "person|organization|place|concept|other",
-            }
-        ],
-        "claims": [
-            {
-                "subject": "string",
-                "predicate": "string",
-                "object": "string",
-                "evidence_chunk_ids": ["string"],
-            }
-        ],
-    }
-    chunk_text = "\n\n".join(f"[{chunk_id}]\n{text}" for chunk_id, text in chunks)
-    return "\n".join(
-        [
-            "Extract structured facts and relationship claims from the document chunks.",
-            "Rules:",
-            "- summary is a short non-empty string describing the document.",
-            "- Each entity has a non-empty name and a type from: "
-            "person, organization, place, concept, other.",
-            "- Each claim is a (subject, predicate, object) triple.",
-            "- subject, predicate, and object must each be a single non-empty string; "
-            "never use null or a list.",
-            "- evidence_chunk_ids is a list of the bracketed chunk ids that support the claim.",
-            "Return only JSON matching this schema:",
-            json.dumps(schema, indent=2, sort_keys=True),
-            "Document chunks:",
-            chunk_text,
-        ]
+    return render(
+        "extraction.builtin.ollama", chunks="\n\n".join(f"[{key}]\n{text}" for key, text in chunks)
     )

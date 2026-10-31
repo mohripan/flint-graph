@@ -20,9 +20,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from flint_graph.narrative.assistant.assets import LibraryEntry, add_library_assets
 from flint_graph.narrative.assistant.context import HistoryTurn, build_turn_messages
 from flint_graph.narrative.assistant.operations import Proposal, check_proposal
-from flint_graph.narrative.assistant.prompts import RESPONSE_SCHEMA, prompt_sha256
+from flint_graph.narrative.assistant.prompts import prompt_sha256, response_schema
 from flint_graph.narrative.assistant.stream import ReplyScanner
 from flint_graph.narrative.values import Diagnostic
+from flint_graph.prompts.source import render, snapshot_async
 
 RESPONSE_CHARS = 256 * 1024
 REPLY_CHARS = 4000
@@ -116,13 +117,9 @@ def _parse(content: str) -> tuple[_Envelope | None, Proposal | None, tuple[Diagn
 
 
 def _repair_request(diagnostics: Sequence[Diagnostic]) -> str:
-    lines = "\n".join(f"- {item.code} at {item.location}" for item in diagnostics)
-    return (
-        "Your previous answer could not be used. Diagnostics (code at location):\n"
-        f"{lines}\n"
-        "Return the complete corrected JSON object with the same intent, fixing exactly "
-        "these problems. The creator never saw that answer: write the reply as your first "
-        "answer to them, describing the change, with no apology or mention of problems."
+    return render(
+        "narrative.assistant.repair",
+        diagnostics="\n".join(f"- {item.code} at {item.location}" for item in diagnostics),
     )
 
 
@@ -172,6 +169,7 @@ class _CallStream:
             await self.observer.text(self.call, text)
 
 
+@snapshot_async
 async def run_turn(
     model: AssistantModel,
     story: dict[str, Any],
@@ -215,7 +213,7 @@ async def run_turn(
             "model", "started", {"call": attempt, "of": calls, "provider": model.provider}
         )
         stream = _CallStream(watch, attempt)
-        answer = await model.respond(messages, RESPONSE_SCHEMA, stream)
+        answer = await model.respond(messages, response_schema(), stream)
         done: dict[str, Any] = {"call": attempt}
         if answer.output_tokens is not None:
             done["output_tokens"] = answer.output_tokens

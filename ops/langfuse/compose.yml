@@ -1,0 +1,226 @@
+# Optional isolated prompt-authoring stack; upstream v4.72.0 (7efeac5).
+services:
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4.72.0@sha256:18d288adb5d736127d1d04c05ea8c2148365ffd3e6c31f3945d0e149b3f7c143
+    restart: unless-stopped
+    mem_limit: 1024m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    depends_on: &id001
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      NEXTAUTH_URL: http://127.0.0.1:${LANGFUSE_LOCAL_PORT:-6090}
+      DATABASE_URL: postgresql://postgres:${LF_POSTGRES_PASSWORD:?required}@postgres:5432/langfuse
+      SALT: ${LF_SALT:?required}
+      ENCRYPTION_KEY: ${LF_ENCRYPTION_KEY:?required}
+      TELEMETRY_ENABLED: 'false'
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?required}
+      CLICKHOUSE_CLUSTER_ENABLED: 'false'
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?required}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?required}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://127.0.0.1:${LANGFUSE_LOCAL_S3_PORT:-6091}
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_AUTH: ${LF_REDIS_PASSWORD:?required}
+      LANGFUSE_IN_APP_AGENT_ENABLED: 'false'
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: 'false'
+      NODE_OPTIONS: --max-old-space-size=640
+      NEXTAUTH_SECRET: ${LF_NEXTAUTH_SECRET:?required}
+      AUTH_DISABLE_SIGNUP: 'true'
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      LANGFUSE_INIT_ORG_ID: ${LF_INIT_ORG_ID:?required}
+      LANGFUSE_INIT_ORG_NAME: ${LF_INIT_ORG_NAME:?required}
+      LANGFUSE_INIT_PROJECT_ID: ${LF_INIT_PROJECT_ID:?required}
+      LANGFUSE_INIT_PROJECT_NAME: ${LF_INIT_PROJECT_NAME:?required}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LF_INIT_PROJECT_PUBLIC_KEY:?required}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LF_INIT_PROJECT_SECRET_KEY:?required}
+      LANGFUSE_INIT_USER_EMAIL: ${LF_INIT_USER_EMAIL:?required}
+      LANGFUSE_INIT_USER_NAME: ${LF_INIT_USER_NAME:?required}
+      LANGFUSE_INIT_USER_PASSWORD: ${LF_INIT_USER_PASSWORD:?required}
+    ports:
+    - 127.0.0.1:${LANGFUSE_LOCAL_PORT:-6090}:3000
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.72.0@sha256:694599a334d327b86e1802bef04893dd90ee15772f8ab46233928b7a33ce4633
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    depends_on: *id001
+    environment:
+      NEXTAUTH_URL: http://127.0.0.1:${LANGFUSE_LOCAL_PORT:-6090}
+      DATABASE_URL: postgresql://postgres:${LF_POSTGRES_PASSWORD:?required}@postgres:5432/langfuse
+      SALT: ${LF_SALT:?required}
+      ENCRYPTION_KEY: ${LF_ENCRYPTION_KEY:?required}
+      TELEMETRY_ENABLED: 'false'
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?required}
+      CLICKHOUSE_CLUSTER_ENABLED: 'false'
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?required}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?required}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_AUTH: ${LF_REDIS_PASSWORD:?required}
+      LANGFUSE_IN_APP_AGENT_ENABLED: 'false'
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: 'false'
+      NODE_OPTIONS: --max-old-space-size=640
+  postgres:
+    image: postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: unless-stopped
+    mem_limit: 192m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    volumes:
+    - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U postgres
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LF_POSTGRES_PASSWORD:?required}
+  redis:
+    image: redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    volumes:
+    - langfuse_redis_data:/data
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    command:
+    - redis-server
+    - --requirepass
+    - ${LF_REDIS_PASSWORD:?required}
+    - --maxmemory
+    - 64mb
+    - --maxmemory-policy
+    - noeviction
+    environment:
+      REDISCLI_AUTH: ${LF_REDIS_PASSWORD:?required}
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    volumes:
+    - langfuse_minio_data:/data
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:9000/minio/health/live
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" /data'
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: ${LF_MINIO_PASSWORD:?required}
+    ports:
+    - 127.0.0.1:${LANGFUSE_LOCAL_S3_PORT:-6091}:9000
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    volumes:
+    - langfuse_clickhouse_data:/var/lib/clickhouse
+    - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit
+        1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+    user: 101:101
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?required}
+volumes:
+  langfuse_postgres_data:
+    driver: local
+  langfuse_clickhouse_data:
+    driver: local
+  langfuse_clickhouse_logs:
+    driver: local
+  langfuse_minio_data:
+    driver: local
+  langfuse_redis_data:
+    driver: local

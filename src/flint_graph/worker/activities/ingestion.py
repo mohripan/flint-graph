@@ -32,6 +32,7 @@ from flint_graph.application.services.extraction import (
     ExtractionServiceConfig,
 )
 from flint_graph.application.services.job_transitions import transition_ingestion_job
+from flint_graph.application.services.prompt_bundles import execution_bundle
 from flint_graph.application.services.proposal_candidate_generation import (
     generate_proposal_candidates_for_run,
 )
@@ -43,12 +44,13 @@ from flint_graph.application.services.provenance_extraction import (
 from flint_graph.config import Settings, get_settings
 from flint_graph.domain.enums import DocumentVersionStatus, IngestionJobStatus
 from flint_graph.domain.errors import NotFoundError
-from flint_graph.infrastructure.db.models import Document, DocumentVersion
+from flint_graph.infrastructure.db.models import Document, DocumentVersion, IngestionJob
 from flint_graph.infrastructure.db.session import SessionFactory
 from flint_graph.infrastructure.object_store import ObjectStore, create_object_store
 from flint_graph.infrastructure.ollama import OllamaProposalExtractionModel
 from flint_graph.observability.instruments import INGESTION_STAGE_DURATION
 from flint_graph.observability.metrics import timed_stage
+from flint_graph.prompts.source import use_snapshot
 from flint_graph.workflows.ingestion import (
     MARK_JOB_CANCELLED_ACTIVITY,
     MARK_JOB_COMPLETED_ACTIVITY,
@@ -177,61 +179,73 @@ async def run_ingestion_pipeline_for_payload(
         document_id=document_id,
         version_id=version_id,
     )
-    if version.object_uri is None:
-        raise RuntimeError("document version has no raw object uri")
-    if version.content_hash is None:
-        raise RuntimeError("document version has no raw content hash")
+    job = await session.scalar(
+        select(IngestionJob).where(
+            IngestionJob.id == _job_id(payload),
+            IngestionJob.tenant_id == _tenant_id(payload),
+            IngestionJob.document_id == UUID(payload["document_id"]),
+            IngestionJob.document_version_id == UUID(payload["document_version_id"]),
+        )
+    )
+    if job is None:
+        raise RuntimeError("ingestion_job_unavailable")
+    bundle = await execution_bundle(session, job)
+    with use_snapshot(bundle):
+        if version.object_uri is None:
+            raise RuntimeError("document version has no raw object uri")
+        if version.content_hash is None:
+            raise RuntimeError("document version has no raw content hash")
 
-    # Stages are timed individually: "ingestion is slow" is not actionable, but
-    # "parse is slow" or "extract is slow" is.
-    async with ingestion_stage("fetch_raw"):
-        raw_source = await object_store.get_bytes(version.object_uri)
-        if _content_hash(raw_source) != version.content_hash:
-            raise RuntimeError("raw source content hash mismatch")
+        # Stages are timed individually: "ingestion is slow" is not actionable, but
+        # "parse is slow" or "extract is slow" is.
+        async with ingestion_stage("fetch_raw"):
+            raw_source = await object_store.get_bytes(version.object_uri)
+            if _content_hash(raw_source) != version.content_hash:
+                raise RuntimeError("raw source content hash mismatch")
 
-    source_metadata = _source_metadata(version, document_id=document_id, version_id=version_id)
-    async with ingestion_stage("parse"):
-        normalized_document = await to_thread(
-            parser_runner.parse,
-            raw_source,
-            metadata=source_metadata,
-        )
-    async with ingestion_stage("persist_artifacts"):
-        persisted_artifacts = await persist_content_artifacts(
-            session,
-            object_store=object_store,
-            bucket=bucket,
-            tenant_id=tenant_id,
-            document_id=document_id,
-            version_id=version_id,
-            normalized_document=normalized_document,
-            chunking_config=chunking_config,
-        )
-    async with ingestion_stage("extract"):
-        extraction_run_id = await _run_provenance_extraction(
-            session,
-            object_store=object_store,
-            bucket=bucket,
-            tenant_id=tenant_id,
-            document_id=document_id,
-            version_id=version_id,
-            chunks=[
-                ExtractionInputChunk(chunk_id=chunk.chunk_id, text=chunk.text)
-                for chunk in persisted_artifacts.chunk_manifest.chunks
-            ],
-            config=extraction_config,
-            extraction_model=extraction_model,
-        )
-    if extraction_run_id is not None:
-        async with ingestion_stage("generate_candidates"):
-            await generate_proposal_candidates_for_run(
-                session,
-                tenant_id=tenant_id,
-                extraction_run_id=extraction_run_id,
-                auto_threshold=candidate_auto_threshold,
-                review_threshold=candidate_review_threshold,
-                limit_per_source=candidate_limit,
+        source_metadata = _source_metadata(version, document_id=document_id, version_id=version_id)
+        async with ingestion_stage("parse"):
+            normalized_document = await to_thread(
+                parser_runner.parse,
+                raw_source,
+                metadata=source_metadata,
             )
+        async with ingestion_stage("persist_artifacts"):
+            persisted_artifacts = await persist_content_artifacts(
+                session,
+                object_store=object_store,
+                bucket=bucket,
+                tenant_id=tenant_id,
+                document_id=document_id,
+                version_id=version_id,
+                normalized_document=normalized_document,
+                chunking_config=chunking_config,
+            )
+        async with ingestion_stage("extract"):
+            extraction_run_id = await _run_provenance_extraction(
+                session,
+                object_store=object_store,
+                bucket=bucket,
+                tenant_id=tenant_id,
+                document_id=document_id,
+                version_id=version_id,
+                chunks=[
+                    ExtractionInputChunk(chunk_id=chunk.chunk_id, text=chunk.text)
+                    for chunk in persisted_artifacts.chunk_manifest.chunks
+                ],
+                config=extraction_config,
+                extraction_model=extraction_model,
+            )
+        if extraction_run_id is not None:
+            async with ingestion_stage("generate_candidates"):
+                await generate_proposal_candidates_for_run(
+                    session,
+                    tenant_id=tenant_id,
+                    extraction_run_id=extraction_run_id,
+                    auto_threshold=candidate_auto_threshold,
+                    review_threshold=candidate_review_threshold,
+                    limit_per_source=candidate_limit,
+                )
 
 
 @activity.defn(name=RUN_INGESTION_PIPELINE_ACTIVITY)
@@ -315,10 +329,13 @@ async def _get_document_version(
             Document.deleted_at.is_(None),
             DocumentVersion.document_id == document_id,
             DocumentVersion.id == version_id,
-            DocumentVersion.status.notin_([
-                DocumentVersionStatus.DELETED, DocumentVersionStatus.SUPERSEDED,
-                DocumentVersionStatus.CANCELLED,
-            ]),
+            DocumentVersion.status.notin_(
+                [
+                    DocumentVersionStatus.DELETED,
+                    DocumentVersionStatus.SUPERSEDED,
+                    DocumentVersionStatus.CANCELLED,
+                ]
+            ),
         )
     )
     if version is None:

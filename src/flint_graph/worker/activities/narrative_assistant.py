@@ -33,6 +33,7 @@ from flint_graph.application.services.narrative_assistant import (
 from flint_graph.application.services.narrative_assistant_events import TurnEventWriter
 from flint_graph.infrastructure.db.models import NarrativeAssistantTurn
 from flint_graph.narrative.assistant.turn import AssistantModel, AssistantModelError, run_turn
+from flint_graph.prompts.source import current_snapshot, use_snapshot
 
 _TRANSIENT = {"provider_unavailable", "provider_timeout"}
 _TERMINAL = ("completed", "failed", "cancelled")
@@ -112,17 +113,18 @@ class NarrativeAssistantActivities:
         # Live progress goes straight to PostgreSQL; Temporal only sees IDs and status.
         events = TurnEventWriter(self.factory, turn_id=turn_id, execution_token=token)
         try:
-            result = await run_turn(
-                self.model,
-                work.story,
-                work.request,
-                focus=work.focus,
-                history=work.history,
-                budget=self.context_chars,
-                observer=events,
-                library=work.library,
-                profiles=work.profiles,
-            )
+            with use_snapshot(work.prompt_bundle or current_snapshot()):
+                result = await run_turn(
+                    self.model,
+                    work.story,
+                    work.request,
+                    focus=work.focus,
+                    history=work.history,
+                    budget=self.context_chars,
+                    observer=events,
+                    library=work.library,
+                    profiles=work.profiles,
+                )
             await events.flush()
         except AssistantModelError as error:
             if error.code in _TRANSIENT and attempt < self.max_attempts:

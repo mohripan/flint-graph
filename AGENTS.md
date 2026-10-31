@@ -140,6 +140,19 @@ M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.
 
+Prompt management now uses a typed catalog and reviewed complete lock (ADR 0044,
+#135–#137), with an optional isolated digest-pinned Langfuse 4.72.0 profile and
+SDK 4.15.0 generated read API. See `docs/runbooks/prompt-management.md` and
+`docs/reports/2026-11-01-langfuse-prompt-migration.md`. Migration 0033 pins generic
+bundle manifests on runs/jobs; keep nullable historical identities unknown and
+never replay a missing referenced bundle using current defaults. Provider/assistant
+wording and default image policy/conditioning live in `prompts/prompts.lock`;
+version every authored change, preserve history, and use CLI check against the Git
+base. Runtime keys are Viewer-only; author/release keys and tenant inputs never
+enter prompt refresh. Default is locked/offline. Do not enable SDK tracing or
+restart owned services to activate a new lock. The legacy image TOML is an explicit
+locked-mode override, never an automatic source to publish.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

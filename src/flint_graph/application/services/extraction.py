@@ -17,10 +17,12 @@ from flint_graph.application.extraction import (
     build_extraction_prompt,
     parse_extraction_response,
 )
+from flint_graph.application.services.prompt_bundles import pin_bundle
 from flint_graph.domain.enums import DocumentArtifactType
 from flint_graph.domain.errors import NotFoundError
 from flint_graph.infrastructure.db.models import Document, DocumentArtifact, DocumentVersion
 from flint_graph.infrastructure.object_store import ObjectStore, artifact_object_key, object_uri
+from flint_graph.prompts.source import current_snapshot
 
 ExtractionMode = Literal["disabled", "optional", "required"]
 ExtractionStatus = Literal["succeeded", "failed", "skipped"]
@@ -46,6 +48,7 @@ class ExtractionServiceConfig(BaseModel):
 
 
 class ExtractionProvenance(BaseModel):
+    prompt_identity: dict[str, Any] | None = None
     provider: str
     model: str
     prompt_version: str
@@ -96,6 +99,10 @@ async def persist_extraction_artifact(
         version_id=version_id,
     )
 
+    await pin_bundle(session)
+    prompt_identity = current_snapshot().identity(
+        "extraction.builtin.ollama", {"provider": config.provider, "model": config.model}
+    )
     manifest_bytes = _json_bytes(chunk_manifest)
     input_manifest_hash = _content_hash(manifest_bytes)
     chunks = [(chunk.chunk_id, chunk.text) for chunk in chunk_manifest.chunks]
@@ -126,6 +133,7 @@ async def persist_extraction_artifact(
         _content_hash(response_text.encode("utf-8")) if response_text is not None else None
     )
     provenance = ExtractionProvenance(
+        prompt_identity=prompt_identity,
         provider=config.provider,
         model=config.model,
         prompt_version=config.prompt_version,

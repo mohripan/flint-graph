@@ -87,7 +87,7 @@ async def test_questions_get_an_answer_without_a_proposal():
     assert (result.input_tokens, result.output_tokens) == (10, 5)
     assert result.prompt_sha256 == prompt_sha256()
     messages, schema = model.calls[0]
-    assert schema is RESPONSE_SCHEMA
+    assert schema == RESPONSE_SCHEMA
     assert messages[0]["role"] == "system"
     assert "<story>" in messages[-1]["content"]
     assert messages[-1]["content"].endswith("How many endings are there?")

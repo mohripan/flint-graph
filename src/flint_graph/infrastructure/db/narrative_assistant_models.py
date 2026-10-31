@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from flint_graph.infrastructure.db.prompt_models import PromptBundleReference
 
 
 class NarrativeAssistantThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -50,7 +51,7 @@ class NarrativeAssistantThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class NarrativeAssistantTurn(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class NarrativeAssistantTurn(PromptBundleReference, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """One creator request and the assistant's durable reply job."""
 
     __tablename__ = "narrative_assistant_turns"

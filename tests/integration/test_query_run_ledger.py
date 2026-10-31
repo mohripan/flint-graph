@@ -93,7 +93,17 @@ async def test_create_query_run_persists_hash_status_and_tenant_boundary(
     assert run.status == QueryRunStatus.QUEUED
     assert run.query_text == "Where is Acme Corporation headquartered?"
     assert run.normalized_query_hash.startswith("sha256:")
-    assert run.metadata_ == {"source": "test"}
+    assert set(run.metadata_) == {"source", "prompt_catalog"}
+    assert run.metadata_["source"] == "test"
+    catalog = run.metadata_["prompt_catalog"]
+    assert catalog["bundle_sha256"] == run.prompt_bundle_sha256
+    assert {entry["name"] for entry in catalog["entries"]} == {
+        "grounded.answer.anthropic",
+        "grounded.answer.ollama",
+        "grounded.support.anthropic",
+        "grounded.support.ollama",
+    }
+    assert all(len(entry["template_sha256"]) == 64 for entry in catalog["entries"])
 
     assert await get_query_run(db_session, tenant_id=tenant.id, query_run_id=run.id) == run
     with pytest.raises(NotFoundError):

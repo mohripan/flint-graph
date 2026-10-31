@@ -18,6 +18,7 @@ from flint_graph.application.query_orchestration import (
 from flint_graph.application.query_orchestration import (
     QueryContextPack as ApplicationQueryContextPack,
 )
+from flint_graph.application.services.prompt_bundles import pin_bundle
 from flint_graph.domain.enums import (
     QueryRunStatus,
     RetrievalIndexScope,
@@ -35,6 +36,7 @@ from flint_graph.infrastructure.db.models import (
     QueryRunLinkedEntity,
     RetrievalIndexVersion,
 )
+from flint_graph.prompts.source import current_snapshot
 
 _TERMINAL_STATUSES = {
     QueryRunStatus.COMPLETED,
@@ -66,7 +68,21 @@ async def create_query_run(
         retrieval_index_version_id=spec.retrieval_index_version_id,
     )
 
+    bundle = current_snapshot()
+    metadata = {
+        **spec.metadata,
+        "prompt_catalog": {
+            "bundle_sha256": bundle.sha256,
+            "entries": [
+                entry.identity()
+                for entry in bundle.entries
+                if entry.name.startswith(("grounded.answer.", "grounded.support."))
+            ],
+        },
+    }
+    _validate_json_size("metadata", metadata)
     run = QueryRun(
+        prompt_bundle_sha256=await pin_bundle(session),
         tenant_id=spec.tenant_id,
         retrieval_index_version_id=spec.retrieval_index_version_id,
         query_text=query_text,
@@ -77,7 +93,7 @@ async def create_query_run(
         candidate_count=0,
         context_token_count=0,
         error_details={},
-        metadata_=dict(spec.metadata),
+        metadata_=metadata,
     )
     session.add(run)
     await session.flush()
@@ -109,18 +125,18 @@ async def list_query_runs(
     statement = select(QueryRun).where(QueryRun.tenant_id == tenant_id)
     if before_id is not None:
         cursor = await get_query_run(session, tenant_id=tenant_id, query_run_id=before_id)
-        statement = statement.where(or_(
-            QueryRun.created_at < cursor.created_at,
-            and_(QueryRun.created_at == cursor.created_at, QueryRun.id < cursor.id),
-        ))
+        statement = statement.where(
+            or_(
+                QueryRun.created_at < cursor.created_at,
+                and_(QueryRun.created_at == cursor.created_at, QueryRun.id < cursor.id),
+            )
+        )
     if query and query.strip():
         # Literal substring search; '%' and '_' supplied by users are not wildcards.
         statement = statement.where(QueryRun.query_text.icontains(query.strip(), autoescape=True))
     return list(
         await session.scalars(
-            statement
-            .order_by(QueryRun.created_at.desc(), QueryRun.id.desc())
-            .limit(limit)
+            statement.order_by(QueryRun.created_at.desc(), QueryRun.id.desc()).limit(limit)
         )
     )
 
@@ -502,9 +518,7 @@ async def _require_visible_active_index_version(
             RetrievalIndexVersion.id == retrieval_index_version_id,
             RetrievalIndexVersion.status == RetrievalIndexVersionStatus.ACTIVE,
             (
-                (
-                    RetrievalIndexVersion.scope == RetrievalIndexScope.GLOBAL
-                )
+                (RetrievalIndexVersion.scope == RetrievalIndexScope.GLOBAL)
                 & RetrievalIndexVersion.tenant_id.is_(None)
             )
             | (

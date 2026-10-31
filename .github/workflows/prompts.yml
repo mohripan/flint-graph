@@ -1,0 +1,39 @@
+name: Reviewed prompt locks
+on:
+  pull_request:
+    paths:
+      - 'src/flint_graph/prompts/**'
+      - 'tests/**/test_prompt*'
+      - 'ops/langfuse/**'
+      - 'tools/langfuse/**'
+      - '.github/workflows/prompts.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'src/flint_graph/prompts/**'
+      - 'ops/langfuse/**'
+      - '.github/workflows/prompts.yml'
+permissions:
+  contents: read
+jobs:
+  reviewed-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --all-groups --extra langfuse
+      - name: Validate lock and retained version history
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          uv run flint-graph-prompts check
+          if git cat-file -e "$BASE:src/flint_graph/prompts/prompts.lock" 2>/dev/null; then
+            uv run flint-graph-prompts check --base-ref "$BASE"
+          fi
+      - run: uv run --extra langfuse pytest tests/unit/test_prompt_catalog.py tests/unit/test_prompt_migration.py tests/unit/test_prompt_source.py tests/unit/test_prompt_cli.py tests/integration/test_prompt_snapshots.py -q
+      - name: Validate optional native Compose profile
+        run: |
+          uv run python tools/langfuse/init_local.py --output notes/langfuse-ci.env
+          docker compose --env-file notes/langfuse-ci.env -f ops/langfuse/compose.yml config --quiet

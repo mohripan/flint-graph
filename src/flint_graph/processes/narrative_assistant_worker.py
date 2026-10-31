@@ -20,6 +20,7 @@ from flint_graph.application.services.narrative_assistant_relay import (
 from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_assistant import build_narrative_assistant
 from flint_graph.infrastructure.narrative_assistant_temporal import TemporalAssistantDispatcher
+from flint_graph.prompts.runtime import run_prompt_process
 from flint_graph.worker.activities.narrative_assistant import NarrativeAssistantActivities
 from flint_graph.workflows.narrative_assistant import NarrativeAssistantTurnWorkflow
 
@@ -89,7 +90,7 @@ async def run_worker(settings: Settings | None = None) -> None:
 
 def main() -> None:
     try:
-        asyncio.run(run_worker())
+        asyncio.run(run_prompt_process(run_worker))
     except KeyboardInterrupt:
         pass
     except Exception:

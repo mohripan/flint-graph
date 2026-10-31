@@ -22,6 +22,7 @@ from flint_graph.application.narrative_image_workflow import CANCELLED_TOPIC, QU
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
+from flint_graph.application.services.prompt_bundles import pin_bundle
 from flint_graph.domain.enums import AuditAction
 from flint_graph.domain.errors import (
     ConflictError,
@@ -43,7 +44,6 @@ from flint_graph.infrastructure.narrative_imagegen import (
     ModelIdentity,
 )
 from flint_graph.narrative.imagegen import (
-    DEFAULT_POLICY,
     MAX_SCENE_CHARACTERS,
     ContentPolicy,
     ExpressionRequest,
@@ -52,12 +52,15 @@ from flint_graph.narrative.imagegen import (
     SceneArtRequest,
     background_request,
     clean_appearance,
+    content_policy,
     expression_names,
     expression_request,
     portrait_request,
     scene_art_request,
 )
 from flint_graph.narrative.values import canonical_json
+from flint_graph.prompts.catalog import digest
+from flint_graph.prompts.source import current_snapshot, snapshot_async
 
 _ACTIVE = ("queued", "running")
 
@@ -120,6 +123,7 @@ def _invalid_scene(detail: str) -> DomainError:
     return DomainError(422, "Invalid scene art request", detail, "invalid-scene-art-request")
 
 
+@snapshot_async
 async def create_scene_art_job(
     session: AsyncSession,
     *,
@@ -133,10 +137,11 @@ async def create_scene_art_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
 ) -> NarrativeImageJob:
     """Queue event CGs of one or two characters, each drawn from an approved image of them
     (ADR 0041 slice C). The first character stands on the left."""
+    policy = policy or content_policy(None)
     if not 1 <= len(characters) <= MAX_SCENE_CHARACTERS:
         raise _invalid_scene(f"Choose one to {MAX_SCENE_CHARACTERS} characters for this CG.")
     if len({character for character, _ in characters}) != len(characters):
@@ -185,6 +190,7 @@ async def create_scene_art_job(
         framing="scene",
         transparent=False,
         hires=False,
+        policy=policy,
         build=lambda: scene_art_request(scene, looks, policy=policy),
         count=count,
         idempotency_key=idempotency_key,
@@ -195,6 +201,7 @@ async def create_scene_art_job(
     )
 
 
+@snapshot_async
 async def create_expression_job(
     session: AsyncSession,
     *,
@@ -209,7 +216,7 @@ async def create_expression_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
 ) -> NarrativeImageJob:
     """Queue face repaints of one base image, one per expression (ADR 0041)."""
     base = await session.scalar(
@@ -259,6 +266,7 @@ async def create_expression_job(
         framing="face",
         transparent=False,
         hires=False,
+        policy=policy or content_policy(None),
         build=lambda: expression_request(appearance, character_type, expressions, policy=policy),
         count=len(expressions),
         idempotency_key=idempotency_key,
@@ -270,6 +278,7 @@ async def create_expression_job(
     )
 
 
+@snapshot_async
 async def create_portrait_job(
     session: AsyncSession,
     *,
@@ -286,7 +295,7 @@ async def create_portrait_job(
     available: bool,
     max_active_jobs: int,
     transparent: bool = False,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
     hires: bool = False,
 ) -> NarrativeImageJob:
     """Queue candidate portraits, or cut-out stage sprites when ``transparent``.
@@ -305,6 +314,7 @@ async def create_portrait_job(
         framing=framing,
         transparent=transparent,
         hires=hires,
+        policy=policy or content_policy(None),
         build=lambda: portrait_request(
             appearance,
             character_type,
@@ -321,6 +331,7 @@ async def create_portrait_job(
     )
 
 
+@snapshot_async
 async def create_background_job(
     session: AsyncSession,
     *,
@@ -333,7 +344,7 @@ async def create_background_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
 ) -> NarrativeImageJob:
     return await _queue_job(
         session,
@@ -347,6 +358,7 @@ async def create_background_job(
         framing="scenery",
         transparent=False,
         hires=False,
+        policy=policy or content_policy(None),
         build=lambda: background_request(description, policy=policy),
         count=count,
         idempotency_key=idempotency_key,
@@ -370,6 +382,7 @@ async def _queue_job(
     transparent: bool,
     hires: bool,
     build: Callable[[], ImageRequest | ExpressionRequest | SceneArtRequest],
+    policy: ContentPolicy,
     count: int,
     idempotency_key: UUID,
     actor: AuditActor,
@@ -401,8 +414,11 @@ async def _queue_job(
     if transparent:
         identity["transparent"] = True
     if base is not None:
-        identity |= {"base_asset_id": str(base[0].id), "face_box": list(base[1]),
-                     "expressions": expressions}
+        identity |= {
+            "base_asset_id": str(base[0].id),
+            "face_box": list(base[1]),
+            "expressions": expressions,
+        }
     if hires:
         identity["hires"] = True
     reference_assets = [
@@ -476,6 +492,12 @@ async def _queue_job(
     if active >= max_active_jobs:
         raise TooManyRequestsError("Wait for the current images to finish.")
     job = NarrativeImageJob(
+        prompt_bundle_sha256=await pin_bundle(session),
+        prompt_identity={
+            "bundle_sha256": current_snapshot().sha256,
+            "negative_prompt_sha256": digest(built.negative_prompt),
+            "policy_sha256": digest({"negative": policy.negative, "blocked": policy.blocked}),
+        },
         tenant_id=tenant_id,
         project_id=project_id,
         character_id=character_id,

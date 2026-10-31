@@ -21,6 +21,7 @@ from flint_graph.application.services.usage import _record_usage_metrics
 from flint_graph.application.usage import estimate_cost_micros, usage_from_metadata
 from flint_graph.domain.enums import ProviderUsageOperation
 from flint_graph.infrastructure.db.models import ProviderUsageEvent
+from flint_graph.prompts.identity import observe_identity
 
 T = TypeVar("T")
 QUERY_USAGE_VERSION = "query-invocations-v1"
@@ -88,7 +89,17 @@ class QueryUsageRecorder:
             await writer.commit()
         started = monotonic()
         try:
-            result = await call()
+
+            async def record_identity(identity: dict[str, object]) -> None:
+                async with self.session_factory() as writer:
+                    event = await writer.get(ProviderUsageEvent, invocation_id)
+                    if event is None or event.tenant_id != self.tenant_id:
+                        raise RuntimeError("prompt_usage_attempt_unavailable")
+                    event.metadata_ = {**event.metadata_, "prompt_identity": identity}
+                    await writer.commit()
+
+            with observe_identity(record_identity):
+                result = await call()
             await self.finish(
                 invocation_id,
                 result=result,
@@ -158,6 +169,11 @@ class QueryUsageRecorder:
                 **event.metadata_,
                 "status": status,
                 "usage_known": usage.usage_known,
+                **(
+                    {"prompt_identity": source["prompt_identity"]}
+                    if "prompt_identity" in source
+                    else {}
+                ),
             }
             await writer.commit()
         _record_usage_metrics(usage, cost_micros=event.estimated_cost_micros)
@@ -179,13 +195,10 @@ class QueryUsageRecorder:
             operation: sum(event.operation is operation for event in current)
             for operation in self.expected
         }
-        complete = (
-            actual == self.expected
-            and all(
-                event.metadata_.get("status") == "completed"
-                and event.metadata_.get("usage_known") is True
-                for event in events
-            )
+        complete = actual == self.expected and all(
+            event.metadata_.get("status") == "completed"
+            and event.metadata_.get("usage_known") is True
+            for event in events
         )
         run.provider_input_tokens = sum(event.input_tokens for event in events)
         run.provider_output_tokens = sum(event.output_tokens for event in events)

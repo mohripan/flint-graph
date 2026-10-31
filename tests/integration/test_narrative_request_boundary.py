@@ -1,6 +1,5 @@
 """Exercise actual HTTP middleware before narrative body parsing or persistence."""
 
-import asyncio
 import tracemalloc
 
 import httpx
@@ -177,7 +176,11 @@ async def test_rate_buckets_use_the_same_token_and_workspace_normalization_as_au
 
 
 @pytest.mark.anyio
-async def test_narrative_rate_state_is_bounded_without_evicting_active_credentials() -> None:
+async def test_narrative_rate_state_is_bounded_without_evicting_active_credentials(
+    monkeypatch,
+) -> None:
+    now = 0.0
+    monkeypatch.setattr("flint_graph.api.middleware.monotonic", lambda: now)
     settings = Settings(
         _env_file=None,
         env="test",
@@ -211,7 +214,7 @@ async def test_narrative_rate_state_is_bounded_without_evicting_active_credentia
         assert (await send("second")).status_code == 200
         assert (await send("third")).status_code == 429
         assert (await send("first")).status_code == 200
-        await asyncio.sleep(1.05)
+        now = 1.05
         assert (await send("third")).status_code == 200
 
 

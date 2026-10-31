@@ -188,3 +188,14 @@ What is kept out of images is data, not code: the versioned TOML file
   `tenants/{tenant}/narrative/projects/{project}/assets/{id}/` and served only after
   their recorded SHA-256 verifies. Discarded candidates keep their bytes; cleanup is
   not implemented yet.
+
+
+## Reviewed prompt catalog
+
+Assistant instructions, provider/extraction templates and default image conditioning
+and content policy use the reviewed catalog. Apply `0033_prompt_bundles`; queued
+work retains its admission-time bundle. The default stays offline. Langfuse is an
+optional authoring/refresh service with Viewer runtime credentials, no tenant-data
+uploads, and no SDK tracing. See [prompt management](prompt-management.md) for
+import, review, activation, diagnosis and rollback. Image TOML overrides remain
+explicit in locked mode and cannot be combined with managed Langfuse mode.

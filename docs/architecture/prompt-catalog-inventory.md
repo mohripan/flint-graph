@@ -74,3 +74,16 @@ Sources: [RBAC](https://langfuse.com/docs/administration/rbac),
 [API label mutation authorization](https://github.com/langfuse/langfuse/blob/v4.72.0/web/src/features/prompts/server/utils/authorizeProtectedLabelMutation.ts),
 [audit persistence gate](https://github.com/langfuse/langfuse/blob/v4.72.0/web/src/features/audit-logs/isAuditLogEnabled.ts).
 The source/edition review is not a claim that these permissions have been live-tested.
+
+
+## Implemented catalog migration (2026-11-01)
+
+The provider, extraction, assistant and image defaults now resolve from
+`src/flint_graph/prompts/prompts.lock`; adapters own serialization and provider
+protocols. `tests/fixtures/prompts/legacy_renderings.json` was captured from
+`b4b6729` before builder changes. Schemas, exact template bytes and configuration
+have distinct hashes; migrations preserve existing historical version fields.
+Image admission uses the scoped policy rather than an import-time TOML default.
+See the [migration report](../reports/2026-11-01-langfuse-prompt-migration.md) and
+[operator runbook](../runbooks/prompt-management.md). The compatibility matrix above
+records the original contract probe; the report adds actual deployed-service proof.
