@@ -330,7 +330,7 @@ export function LicenseDialog({ tenantId, model, onAccepted, onClose }: {
     ? "Every game that ships this model's audio will carry the license in its NOTICES and show players a one-time license screen."
     : model.license.obligations === "attribution" ? "Every game that ships this model's audio will carry the license in its NOTICES." : "";
   return <StudioDialog label={`${model.license.name} for ${model.name}`} onClose={onClose}>
-    <div className="studio-license">
+    <div className="studio-peek-body studio-license">
       <h2>Accept the {model.license.name}?</h2>
       <p><strong>{model.name}</strong> puts duties on the audio you make with it. In short:</p>
       <p>{model.license.summary}</p>

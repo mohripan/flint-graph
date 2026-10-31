@@ -90,7 +90,8 @@ class VoiceModelSpec:
     stock_voices: tuple[StockVoice, ...] = ()
     tags: tuple[str, ...] = ()
     watermark: str | None = None
-    # Free dedicated GPU memory the child needs before it uses the card.
+    # Free dedicated GPU memory the child needs before it uses the card: the measured
+    # peak it reserves on the shared 12 GB card plus headroom (ADR 0044).
     min_free_gib: float = 1.0
     # Whether a job may finish on the CPU when the card is busy (otherwise it refuses).
     cpu_fallback: bool = True
@@ -219,7 +220,7 @@ MODELS: dict[str, VoiceModelSpec] = {
             languages=("en",),
             deliveries=_CHATTERBOX,
             watermark="perth",
-            min_free_gib=4.0,
+            min_free_gib=4.5,
             description=(
                 "Clones a voice from a reference. Delivery is one expressiveness control, "
                 "so emotions are approximate."
@@ -256,7 +257,7 @@ MODELS: dict[str, VoiceModelSpec] = {
                 "clear_throat",
             ),
             watermark="perth",
-            min_free_gib=3.0,
+            min_free_gib=3.5,
             description="Fast cloning with laughs, sighs and style tags.",
         ),
         VoiceModelSpec(
@@ -272,7 +273,7 @@ MODELS: dict[str, VoiceModelSpec] = {
             languages=("en", "ja", "zh", "ko", "de", "fr", "es", "it", "pt", "ru"),
             deliveries=_CHATTERBOX,
             watermark="perth",
-            min_free_gib=4.0,
+            min_free_gib=4.5,
             description="Chatterbox cloning in 23 languages, including Japanese.",
             extra={"t3": "t3_mtl23ls_v3.safetensors"},
         ),
@@ -288,7 +289,7 @@ MODELS: dict[str, VoiceModelSpec] = {
             sample_rate=24000,
             languages=_QWEN_LANGUAGES,
             deliveries={"neutral": "full"},
-            min_free_gib=6.0,
+            min_free_gib=5.5,
             reference_transcript="optional",
             description=(
                 "Clones a voice from a few seconds of speech; a transcript of the reference "
@@ -308,7 +309,7 @@ MODELS: dict[str, VoiceModelSpec] = {
             languages=_QWEN_LANGUAGES,
             deliveries=dict.fromkeys(DELIVERIES, "full"),
             stock_voices=_QWEN_SPEAKERS,
-            min_free_gib=6.0,
+            min_free_gib=5.5,
             description="Nine stock voices whose delivery follows fixed instructions.",
         ),
         VoiceModelSpec(
@@ -333,7 +334,7 @@ MODELS: dict[str, VoiceModelSpec] = {
                 "shout": "approximate",
                 "dramatic": "approximate",
             },
-            min_free_gib=8.0,
+            min_free_gib=7.0,
             cpu_fallback=False,
             description=(
                 "Clones a voice and controls its emotion separately. Its license puts duties "
