@@ -118,7 +118,10 @@ uv run flint-graph-doctor --prompts --offline --json
 The prompt-only doctor needs no workspace, model credentials or running Studio API.
 Remote failures are optional warnings; corrupt local locks are failures. It reports
 reachability/key status and lock drift with no endpoint, key or authored content.
-Do not add Langfuse availability to API readiness. A missing SDK extra in managed
+Do not add Langfuse availability to API readiness. An explicit lock override missing current required entries also fails startup;
+old artifacts remain valid for their already-admitted jobs. Roll back template
+versions within a compatible catalog inventory; do not downgrade a populated
+manifest database or remove retained run history. A missing SDK extra in managed
 mode fails configuration explicitly; install the optional extra in that deployment.
 
 Apply migration `0033_prompt_bundles` before enabling the migrated application.
@@ -147,3 +150,22 @@ secrets with #43. Back up PostgreSQL, all S3 buckets, ClickHouse data and the
 reviewed lock/receipts together; test restoration and key rotation in a separate
 instance. Set retention and quotas explicitly for that deployment. This local
 fixture does not qualify HA, production retention or bulk trace ingestion.
+
+
+## Isolated live qualification
+
+`tests/integration/test_prompt_langfuse_live.py` uses a dedicated disposable
+Langfuse project with generic imported names and fixed synthetic versions 2–4.
+Provide `FLINT_GRAPH_LANGFUSE_LIVE=1`, the loopback `FLINT_GRAPH_LANGFUSE_BASE_URL`,
+a Viewer pair in `FLINT_GRAPH_LANGFUSE_PUBLIC_KEY` / `...SECRET_KEY`, and a separate
+author pair in `FLINT_GRAPH_PROMPT_AUTHOR_PUBLIC_KEY` / `...SECRET_KEY`, then run:
+
+```powershell
+uv run --extra langfuse pytest tests/integration/test_prompt_langfuse_live.py -q --tb=short
+```
+
+The test creates synthetic versions and moves only `qualification` labels, restoring
+the baseline afterward. Use a fresh dedicated project rather than an author's real
+prompt history. It checks an actual assistant call across promotion, subsequent
+admission, unreviewed/schema rejection, refused-socket fallback and server-side
+Viewer write denials. Model inference stays scripted; the service calls are real.

@@ -159,10 +159,11 @@ locked-mode override, never an automatic source to publish.
 `docs/architecture/prompt-catalog-inventory.md` and the ADR 0029 prompt-management
 threat addendum. `docs/reports/2026-11-01-langfuse-prompt-contract.md` records the
 compatibility qualification: server 4.72.0 / isolated SDK 4.15.0 with existing
-OTel 1.43.0. No Langfuse service, runtime resolver, dependency or prompt migration
-is enabled by that delivery; #135–#140 remain implementation work. Image content
-policy is inventoried for a coordinated typed-config migration, not relaxed or
-replaced here. Keep #79 trace export separate from prompt management.
+OTel 1.43.0. That contract-only delivery enabled no runtime. The catalog, optional
+profile and resolver (#135–#137), including assistant/image/scene-art defaults, are
+now implemented and qualified in `docs/reports/2026-11-01-langfuse-prompt-migration.md`.
+The shipped policy lists are unchanged. Further quality/context work remains
+separate (#138–#140); keep #79 trace export separate from prompt management.
 
 The user added #133–#167 on 2026-10-30: M35 prompt management, M36 context
 engineering, M37 controlled memory, M38 package-v2 visual novel presentation,

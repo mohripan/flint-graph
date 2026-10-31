@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache, partial
 from pathlib import Path
+from typing import Any
 
 from flint_graph.prompts.source import conditioning, current_snapshot, render
 
@@ -416,16 +417,16 @@ BACKGROUND_PEOPLE_NEGATIVE = conditioning("BACKGROUND_PEOPLE_NEGATIVE")
 # and plain backdrop start to show.
 SCENE_SIZE = BACKGROUND_SIZE
 SCENE_ADAPTER_SCALE = 0.5
-SCENE_QUALITY = BACKGROUND_QUALITY
+
+
+def _scene_conditioning(key: str) -> Any:
+    return current_snapshot().entry("narrative.image.scene_conditioning").config[key]
+
+
+SCENE_QUALITY = _scene_conditioning("quality")
 MAX_SCENE_CHARACTERS = 2
-# One person: a second figure would take on the same face.
-SOLO_NEGATIVES = {
-    "girl": "multiple girls",
-    "woman": "multiple girls",
-    "boy": "multiple boys",
-    "man": "multiple boys",
-    "other": "multiple girls, multiple boys",
-}
+# Compatibility export; execution resolves the selected scoped bundle.
+SOLO_NEGATIVES = _scene_conditioning("solo_negatives")
 # Two characters: each reference conditions its half of the image (first left), and the
 # prompt counts them and lists both looks. Looks still swap in about 5 renders of 12
 # (docs/reports/2026-10-31-scene-art-cgs.md); a repaint of each half did not help.
@@ -451,13 +452,13 @@ def _pair_negative(kinds: list[str], policy: ContentPolicy) -> str:
     """Nobody of a kind that is not there, and no third person of one that is."""
     parts = [_negative(policy)]
     if "boy" not in kinds:
-        parts.append("1boy, male focus")
+        parts.append(_scene_conditioning("pair_absent")["boy"])
     if "girl" not in kinds:
-        parts.append("1girl, female focus")
-    for kind, plural in (("boy", "boys"), ("girl", "girls")):
+        parts.append(_scene_conditioning("pair_absent")["girl"])
+    for kind in ("boy", "girl"):
         count = kinds.count(kind)
         if count:
-            parts.append(f"multiple {plural}" if count == 1 else f"3{plural}")
+            parts.append(_scene_conditioning("pair_single" if count == 1 else "pair_double")[kind])
     return ", ".join(part for part in parts if part)
 
 
@@ -467,23 +468,30 @@ def _solo_scene(
     looks = clean_appearance(appearance)
     policy.check(looks)
     tags = appearance_tags(appearance, character_type) if looks else []
-    parts = [CHARACTER_TYPES[character_type], "solo", text, *tags, SCENE_QUALITY]
+    subject = conditioning("CHARACTER_TYPES")[character_type]
     negative = _portrait_negative(tags, character_type, False, policy)
-    prompt = ", ".join(part for part in parts if part)
-    return prompt, f"{negative}, {SOLO_NEGATIVES[character_type]}", tags
+    prompt = render(
+        "narrative.image.scene_solo",
+        subject=subject + ", " if subject else "",
+        scene=text,
+        looks=", " + ", ".join(tags) if tags else "",
+        quality=_scene_conditioning("quality"),
+    )
+    return prompt, f"{negative}, {_scene_conditioning('solo_negatives')[character_type]}", tags
 
 
 def scene_art_request(
     scene: str,
     characters: Sequence[tuple[str, str]],
     *,
-    policy: ContentPolicy = DEFAULT_POLICY,
+    policy: ContentPolicy | None = None,
 ) -> SceneArtRequest:
     """Prompts for a CG of one or two characters, given as (appearance, character type).
 
     One character: subject, the scene as written, then its looks (the reference does
     the rest). Two: count both people, the scene, then both looks.
     """
+    policy = policy or content_policy(None)
     if not 1 <= len(characters) <= MAX_SCENE_CHARACTERS:
         raise ValueError(f"A CG shows one to {MAX_SCENE_CHARACTERS} characters")
     if any(kind not in CHARACTER_TYPES for _, kind in characters):
@@ -515,7 +523,13 @@ def scene_art_request(
     for _, _, tags in solos:
         looks.extend(tag for tag in tags if tag.lower() not in {seen.lower() for seen in looks})
     return scene_art(
-        prompt=", ".join((counts, text, *looks, SCENE_QUALITY)),
+        prompt=render(
+            "narrative.image.scene_pair",
+            subjects=counts,
+            scene=text,
+            looks=", " + ", ".join(looks) if looks else "",
+            quality=_scene_conditioning("quality"),
+        ),
         negative_prompt=_pair_negative(kinds, policy),
     )
 

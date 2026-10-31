@@ -182,3 +182,38 @@ async def test_identity_is_recorded_before_provider_dispatch():
         result = await Provider().generate()
     assert calls == ["durable-identity", "dispatch"]
     assert result.metadata["prompt_identity"]["name"] == "grounded.answer.ollama"
+
+
+def test_scene_art_migration_preserves_latest_master_renderings():
+    from dataclasses import asdict
+
+    from flint_graph.narrative.imagegen import scene_art_request
+
+    fixture = json.loads(
+        (Path(__file__).parents[1] / "fixtures/prompts/legacy_scene_art.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for case in fixture["cases"]:
+        assert asdict(scene_art_request(case["scene"], case["characters"])) == case["expected"]
+
+
+def test_scene_art_uses_scoped_reviewed_conditioning_and_policy():
+    from flint_graph.narrative.imagegen import scene_art_request
+
+    original = current_snapshot()
+    data = original.entry("narrative.image.scene_conditioning").data
+    data.pop("type")
+    data["catalog_version"] += 1
+    data["config"]["quality"] = "reviewed scene quality"
+    replacement = PromptEntry.create(**data)
+    changed = PromptBundle.create(
+        [replacement if e.name == replacement.name else e for e in original.entries],
+        source_revision="fixture",
+        evaluation_record="fixture",
+    )
+    with use_snapshot(changed):
+        assert (
+            "reviewed scene quality"
+            in scene_art_request("train carriage", [("white hair, blue coat", "boy")]).prompt
+        )

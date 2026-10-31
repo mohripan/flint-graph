@@ -164,5 +164,37 @@
     "runtime_request_body_bytes": 0,
     "trace_export_enabled": false
   },
-  "fixtures": "Isolated flint-codex-prompts stack; synthetic prompts only; no Studio projects."
+  "fixtures": "Isolated flint-codex-prompts stack; synthetic prompts only; no Studio projects.",
+  "rebased_validation": {
+    "default_bundle_sha256": "7fac3a365744514a1ff6a16b29d866163b39a0e3bf259ebadb57c5b92244b093",
+    "catalog_entries": 21,
+    "migration": "0033_prompt_bundles",
+    "base_revision": "e8316ec",
+    "doctor": {
+      "approved": {
+        "optional": true,
+        "bundle_sha256": "7fac3a365744514a1ff6a16b29d866163b39a0e3bf259ebadb57c5b92244b093",
+        "remote": "approved",
+        "key": "valid",
+        "drift": "none"
+      },
+      "invalid_key": {
+        "optional": true,
+        "bundle_sha256": "7fac3a365744514a1ff6a16b29d866163b39a0e3bf259ebadb57c5b92244b093",
+        "remote": "invalid_credentials",
+        "key": "invalid",
+        "drift": "unknown"
+      },
+      "outage": {
+        "optional": true,
+        "bundle_sha256": "7fac3a365744514a1ff6a16b29d866163b39a0e3bf259ebadb57c5b92244b093",
+        "remote": "unavailable",
+        "key": "unknown",
+        "drift": "unknown"
+      }
+    },
+    "fixture_project": "flint-codex-prompts-final",
+    "postgres_fixture": "flint-codex-prompt-pg-final",
+    "shared_services_restarted": false
+  }
 }

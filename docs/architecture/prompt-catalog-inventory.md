@@ -1,8 +1,9 @@
 # Prompt inventory and Langfuse compatibility contract
 
-Baseline: `77cb2c8`, reviewed 2026-11-01 for #134. Names below are the proposed
-catalog names; these templates have **not** been extracted yet. All fragments and
-provider wire-schema variants belong to the containing bundle identity.
+Original contract baseline: `77cb2c8`, reviewed 2026-11-01 for #134. The migration
+is now implemented: the table records the former builders and their variable
+contracts. All fragments and provider wire-schema variants belong to the complete
+bundle identity. See the implementation notes and report below.
 
 ## Exact migration inventory
 
@@ -16,13 +17,13 @@ provider wire-schema variants belong to the containing bundle identity.
 | `extraction.builtin.ollama` / text | `application/extraction.py::build_extraction_prompt`; `builtin-graph-v2` | ordered chunk IDs/text serialized locally, output-shape text/schema; preserve headings and separators |
 | `extraction.proposals.ollama` / text | `ollama.py::_build_proposal_extraction_prompt`, `_proposal_extraction_schema`; `proposal-v1` in `worker/activities/ingestion.py` | formatted chunks and example-output instructions; hand-built provider response schema plus `ExtractionBatch` validation |
 | `narrative.assistant.system` / chat system message | `narrative/assistant/prompts.py::SYSTEM_PROMPT`, `RESPONSE_SCHEMA`, `PROMPT_VERSION`, `prompt_sha256`, `PINNED_PROMPTS`; currently v3 | static system instructions and schema; keep old hashes meaningful for historical actions |
-| `narrative.assistant.context` / chat user message | `narrative/assistant/context.py::build_turn_messages`, `_render`, formatting helpers | bounded/escaped story outline, focus/neighbors, library IDs/metadata, saved appearance profiles, request and bounded history; formatting algorithms remain trusted code |
+| `narrative.assistant.context` / text inserted as user message | `narrative/assistant/context.py::build_turn_messages`, `_render`, formatting helpers | bounded/escaped story outline, focus/neighbors, library IDs/metadata, saved appearance profiles, request and bounded history; formatting algorithms remain trusted code |
 | `narrative.assistant.repair` / text appended as user message | `narrative/assistant/turn.py::_repair_request` | bounded diagnostics code/location list; include the complete corrective wording |
-| `narrative.image.portrait` / text conditioning, staged migration | `narrative/imagegen.py::portrait_request`, `_portrait_negative`, `QUALITY`, `QUALITY_NEGATIVE`, `TYPE_NEGATIVES` and transparency/type/framing fragments | normalized appearance and character type; generation/hires settings are typed config, resource ceilings remain code |
-| `narrative.image.expression` / text conditioning, staged migration | `imagegen.py::expression_request`, `EXPRESSION_QUALITY`, expression/negative fragments | approved-base description and expression tags; crop/reference/strength validation remains code |
-| `narrative.image.background` / text conditioning, staged migration | `imagegen.py::background_request`, `BACKGROUND_QUALITY`, people-exclusion and quality-negative fragments | place description; keep negative-prefix order and token limits |
-| `narrative.image.scene` / text conditioning, staged migration | `imagegen.py::scene_art_request`, `_solo_scene`, `_pair_negative`, `SCENE_QUALITY`, `SOLO_NEGATIVES` and the character-count tags | scene text and each referenced character's description (one or two); reference images, adapter scale and half masks remain code |
-| `narrative.image.content_policy` / policy, staged migration | `narrative/image_content_policy.toml`; `imagegen.py::ContentPolicy`, `content_policy`, `_negative` | typed version/negative/blocked config. A Langfuse text record can carry a fixed schema marker plus config; it is never itself sent as an LLM request |
+| `narrative.image.portrait` / text conditioning | `narrative/imagegen.py::portrait_request`, `_portrait_negative`, `QUALITY`, `QUALITY_NEGATIVE`, `TYPE_NEGATIVES` and transparency/type/framing fragments | normalized appearance and character type; generation/hires settings are typed config, resource ceilings remain code |
+| `narrative.image.expression` / text conditioning | `imagegen.py::expression_request`, `EXPRESSION_QUALITY`, expression/negative fragments | approved-base description and expression tags; crop/reference/strength validation remains code |
+| `narrative.image.background` / text conditioning | `imagegen.py::background_request`, `BACKGROUND_QUALITY`, people-exclusion and quality-negative fragments | place description; keep negative-prefix order and token limits |
+| `narrative.image.scene_solo`, `narrative.image.scene_pair` / text; `narrative.image.scene_conditioning` / policy | `imagegen.py::scene_art_request`, `_solo_scene`, `_pair_negative`, `SCENE_QUALITY`, `SOLO_NEGATIVES` and the character-count tags | scene text and each referenced character's description (one or two); reference images, adapter scale and half masks remain code |
+| `narrative.image.content_policy` / policy | `narrative/image_content_policy.toml`; `imagegen.py::ContentPolicy`, `content_policy`, `_negative` | typed version/negative/blocked config. A Langfuse text record can carry a fixed schema marker plus config; it is never itself sent as an LLM request |
 
 Paths are under `src/flint_graph/` unless stated. The catalog renderer owns
 instruction wording; provider adapters retain transport, retry and response parsing.
@@ -31,9 +32,10 @@ to execute expressions. Embedding input text, voiced dialogue and deterministic
 test-provider output are data rather than additional instruction templates. New
 CG/audio instructions must be inventoried by their owners when implemented.
 
-Stage the migration: #135 handles the existing LLM builders and their nullable
-identity persistence first; coordinate narrative/image migration with their owners
-through #137/#140/#167. This ADR inventories image policy without changing it.
+The migration preserves the old wording, wire schemas and shipped image policy.
+Image normalization, character counting, dimensions, adapter scale, masks and
+resource ceilings remain trusted code. The current default has 21 entries; the
+original 18-entry artifact remains available for historical replay.
 
 ## Pinned compatibility candidates
 
@@ -87,3 +89,11 @@ Image admission uses the scoped policy rather than an import-time TOML default.
 See the [migration report](../reports/2026-11-01-langfuse-prompt-migration.md) and
 [operator runbook](../runbooks/prompt-management.md). The compatibility matrix above
 records the original contract probe; the report adds actual deployed-service proof.
+
+
+The rebase included the scene-art builder from `133a551`; its one/two-character
+renderings were captured before migration in `tests/fixtures/prompts/legacy_scene_art.json`.
+Both text templates and typed negative/quality configuration now use the scoped
+catalog. The new catalog retains the old complete bundle. Explicit lock overrides
+missing current required entries fail readiness; historical run manifests remain
+loadable independently of the current default inventory.

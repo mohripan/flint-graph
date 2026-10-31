@@ -193,6 +193,35 @@ class PromptEntry:
                     raise PromptError("invalid_conditioning_config")
             except ValidationError:
                 raise PromptError("invalid_conditioning_config") from None
+        if name == "narrative.image.scene_conditioning":
+
+            def string_map_schema(keys: set[str]) -> dict[str, Any]:
+                return {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": sorted(keys),
+                    "properties": {key: {"type": "string", "maxLength": 4096} for key in keys},
+                }
+
+            properties = {
+                "quality": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "solo_negatives": string_map_schema({"boy", "girl", "man", "woman", "other"}),
+                **{
+                    key: string_map_schema({"boy", "girl"})
+                    for key in ("pair_absent", "pair_single", "pair_double")
+                },
+            }
+            try:
+                Draft202012Validator(
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": sorted(properties),
+                        "properties": properties,
+                    }
+                ).validate(config)
+            except ValidationError:
+                raise PromptError("invalid_scene_conditioning_config") from None
         data = {
             "name": name,
             "kind": kind,

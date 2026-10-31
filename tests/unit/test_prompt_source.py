@@ -218,3 +218,17 @@ async def test_manager_diagnostics_distinguish_credentials_and_missing_labels(st
     assert source.status()["last_result"] == reason
     assert "private" not in str(source.status())
     assert source.snapshot().sha256 == first.sha256
+
+
+@pytest.mark.anyio
+async def test_runtime_refuses_an_obsolete_lock_missing_current_catalog_entries(tmp_path):
+    from flint_graph.config import Settings
+    from flint_graph.prompts.catalog import PromptError
+    from flint_graph.prompts.runtime import prompt_runtime
+
+    old = bundle("obsolete", 1)
+    path = tmp_path / "obsolete.lock"
+    path.write_bytes(LockedPromptSource.pack([old], old.sha256))
+    with pytest.raises(PromptError, match="incomplete_catalog"):
+        async with prompt_runtime(Settings(env="test", prompt_lock_path=str(path))):
+            pytest.fail("A runtime must not admit work without its required templates")

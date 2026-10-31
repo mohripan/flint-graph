@@ -27,7 +27,7 @@ SDK retries, four concurrent requests, bounded bodies and GET-only same-origin
 transport. The generated async API creates no SDK tracer/exporter/media/score owner.
 Existing FlintGraph OTel spans retain ownership and link identity values only.
 
-Migration `0030_prompt_bundles` adds generic content-addressed manifests and
+Migration `0033_prompt_bundles` adds generic content-addressed manifests and
 nullable references to query, ingestion/extraction runs, assistant turns and image
 jobs. Historical unknown identities stay null. Queued work snapshots at admission;
 legacy pending work pins its first execution. Referenced missing/corrupt manifests
@@ -199,3 +199,58 @@ cross-bundle extraction regression verifies distinct manifests even for identica
 model output and idempotence within one bundle. Completed legacy rows are never
 assigned invented identities. Document deletion/authorization checks run before
 loading an ingestion snapshot, preserving their existing refusal behavior.
+
+
+## Latest-master integration and final qualification
+
+Rebased onto `e8316ec`, preserving the newly merged CG and expressive/cloned-voice
+work, including runtime 0.7.0 and migrations 0030–0032. The prompt migration was
+renumbered to **0033** after `0032_narrative_voice_models`. No owner runtime/model
+pipeline changes were dropped or edited. The newly added scene-art prompt builder
+was then migrated too: `scene_solo`, `scene_pair` and `scene_conditioning` raise the
+default catalog to **21 entries**. The old 18-entry artifact is retained. Five
+one/two-character outputs, including the unspecified-character case, match the
+captured `133a551` builder exactly. A selected-bundle test first failed on the old
+hard-coded quality and now passes with scoped conditioning; custom policies are
+also scoped at CG admission. A stale explicit lock missing current required names
+is refused before admission rather than failing when a new feature first runs.
+
+The final complete Python run passed **1,908 tests with 117 opt-in skips**:
+`uv run pytest -q --tb=short`. Ruff passed; mypy passed **266** source files. Frontend
+`npm test`, `npm run typecheck` and `npm run build` passed (**116** tests). Native
+root and optional Compose validation, SQL migration generation and offline Acme
+evaluation passed again. Real Godot/preview/CG conformance, with engine and Web
+export templates set as above, passed **33 tests, 1 skipped** (only the explicit
+prepared-builder CG release remains gated). The same expanded PostgreSQL command
+above passed **131 checks**, now using a fresh task-owned PostgreSQL container and
+actual upgrade to 0033, downgrade to 0032 and re-upgrade. It never opened a real
+Studio project or altered the owned application database.
+
+During the session all previously running Docker containers were externally
+stopped, including the shared fixtures and the first qualification stack. No shared
+container was restarted. Final service qualification used fresh task-owned
+`flint-codex-prompts-final` containers and a fresh `flint-codex-prompt-pg-final`
+fixture (loopback 6192), with new private initialization/Viewer credentials. The
+fresh service imported all 21 entries and repeated real promotion/old-call/new-call,
+rejection, outage, rollback, doctor and CLI checks successfully. These are the exact
+final service commands, with private credentials injected only by ignored wrappers:
+
+```powershell
+uv run python tools/langfuse/init_local.py --output notes/langfuse-final.env
+docker compose -p flint-codex-prompts-final --env-file notes/langfuse-final.env -f ops/langfuse/compose.yml up -d
+uv run --extra langfuse python notes/run-live-langfuse.py
+uv run --extra langfuse python notes/check-live-doctor.py
+uv run --extra langfuse python notes/qualify-cli.py
+uv run --extra langfuse flint-graph-prompts check --base-ref HEAD
+```
+
+The live test passed **1** again (6.66 s); the doctor correctly reported approved,
+invalid credentials and unavailable; the CLI pull/diff/lock/promote/rollback all
+passed against the fresh service. No production labels were moved.
+[Final 21-entry UI proof](langfuse-prompt-migration-2026-11-01/catalog-final.png).
+Current fixture ownership and private file locations are recorded in ignored
+`notes/prompt-service-owned.json`; the public receipt contains no keys. The original
+resource sample remains explicitly associated with the earlier stack using the
+same pinned images/limits. `npm ci` reported one pre-existing high-severity audit
+advisory; this change does not modify frontend dependencies or apply an unrelated
+lock upgrade.

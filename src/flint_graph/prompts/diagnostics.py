@@ -16,6 +16,10 @@ async def diagnose_prompts(*, offline: bool) -> dict[str, Any]:
         if os.getenv("FLINT_GRAPH_PROMPT_LOCK_PATH")
         else DEFAULT_LOCK
     )
+    if os.getenv("FLINT_GRAPH_PROMPT_LOCK_PATH"):
+        required = {entry.name for entry in LockedPromptSource.load().snapshot().entries}
+        if not required.issubset({entry.name for entry in lock.snapshot().entries}):
+            raise PromptError("incomplete_catalog")
     report = {
         "optional": True,
         "bundle_sha256": lock.snapshot().sha256,

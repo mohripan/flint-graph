@@ -26,6 +26,10 @@ async def prompt_runtime(
     lock = LockedPromptSource.load(
         Path(settings.prompt_lock_path) if settings.prompt_lock_path else DEFAULT_LOCK
     )
+    if settings.prompt_lock_path:
+        required = {entry.name for entry in LockedPromptSource.load().snapshot().entries}
+        if not required.issubset({entry.name for entry in lock.snapshot().entries}):
+            raise PromptError("incomplete_catalog")
     source: LockedPromptSource | LangfusePromptSource = lock
     if settings.prompt_source == "langfuse":
         if not settings.langfuse_public_key or settings.langfuse_secret_key is None:

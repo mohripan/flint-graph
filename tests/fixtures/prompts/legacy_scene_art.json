@@ -1,0 +1,103 @@
+{
+  "source_revision": "133a5519a99a41820adf4d1f72c78eee8c0b18c6",
+  "cases": [
+    {
+      "scene": "sitting on a couch in a lit train carriage",
+      "characters": [
+        [
+          "white hair, blue coat",
+          "boy"
+        ]
+      ],
+      "expected": {
+        "prompt": "1boy, male focus, solo, sitting on a couch in a lit train carriage, white hair, blue coat, safe, masterpiece, high score, great score, absurdres",
+        "negative_prompt": "nsfw, explicit, lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, 1girl, female focus, breasts, multiple boys",
+        "width": 1344,
+        "height": 768,
+        "steps": 28,
+        "guidance": 5.0,
+        "adapter_scale": 0.5
+      }
+    },
+    {
+      "scene": "standing by the window",
+      "characters": [
+        [
+          "black hair, green eyes, red jacket",
+          "girl"
+        ]
+      ],
+      "expected": {
+        "prompt": "1girl, solo, standing by the window, black hair, green eyes, red jacket, safe, masterpiece, high score, great score, absurdres",
+        "negative_prompt": "nsfw, explicit, lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, 1boy, male focus, multiple girls",
+        "width": 1344,
+        "height": 768,
+        "steps": 28,
+        "guidance": 5.0,
+        "adapter_scale": 0.5
+      }
+    },
+    {
+      "scene": "talking on a park bench",
+      "characters": [
+        [
+          "white hair, blue coat",
+          "boy"
+        ],
+        [
+          "black hair, red jacket",
+          "girl"
+        ]
+      ],
+      "expected": {
+        "prompt": "1boy, 1girl, talking on a park bench, white hair, blue coat, black hair, red jacket, safe, masterpiece, high score, great score, absurdres",
+        "negative_prompt": "nsfw, explicit, lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, multiple boys, multiple girls",
+        "width": 1344,
+        "height": 768,
+        "steps": 28,
+        "guidance": 5.0,
+        "adapter_scale": 0.5
+      }
+    },
+    {
+      "scene": "standing in the courtyard",
+      "characters": [
+        [
+          "white hair, blue coat",
+          "boy"
+        ],
+        [
+          "black hair, red jacket",
+          "boy"
+        ]
+      ],
+      "expected": {
+        "prompt": "2boys, standing in the courtyard, white hair, blue coat, black hair, red jacket, safe, masterpiece, high score, great score, absurdres",
+        "negative_prompt": "nsfw, explicit, lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, 1girl, female focus, 3boys",
+        "width": 1344,
+        "height": 768,
+        "steps": 28,
+        "guidance": 5.0,
+        "adapter_scale": 0.5
+      }
+    },
+    {
+      "scene": "under the station lights",
+      "characters": [
+        [
+          "silver hair, black suit",
+          "other"
+        ]
+      ],
+      "expected": {
+        "prompt": "solo, under the station lights, silver hair, black suit, safe, masterpiece, high score, great score, absurdres",
+        "negative_prompt": "nsfw, explicit, lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, multiple girls, multiple boys",
+        "width": 1344,
+        "height": 768,
+        "steps": 28,
+        "guidance": 5.0,
+        "adapter_scale": 0.5
+      }
+    }
+  ]
+}
