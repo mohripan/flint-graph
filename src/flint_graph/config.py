@@ -233,9 +233,10 @@ class Settings(BaseSettings):
     )
     narrative_assistant_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
 
-    # Story package v2 (ADR 0040): stage, expressions and theme. Off until the Godot
-    # runtime, playtest and release builds support it; existing v2 stories stay editable.
-    narrative_package_v2_enabled: bool = False
+    # Story package v2 (ADR 0040): stage, expressions and theme. On by default since
+    # runtime 0.3.0 plays it in playtests and releases: new projects start on v2 and v1
+    # stories can upgrade. Off keeps new projects on v1; existing v2 stories stay editable.
+    narrative_package_v2_enabled: bool = True
     narrative_package_v2_asset_budget_bytes: int = Field(
         default=48 * 1024 * 1024, ge=1, le=100 * 1024 * 1024
     )

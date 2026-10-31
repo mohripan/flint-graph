@@ -4,15 +4,20 @@ import { TargetSelect } from "./FormFields";
 import { deletePassage, describeStage, insertLineAfter, removeLine, replaceScene } from "./model";
 import type { Passage } from "./passages";
 import { SceneForm } from "./SceneForm";
+import { SceneStage, UpgradeNotice } from "./StageEditor";
+import { setLineExpression, setLineSpeaker } from "./stageModel";
+import type { StageSnapshot } from "./stageModel";
 import type { StoryDraft } from "./types";
 
 // One scene as a script: every line in order, with state changes inline and the
 // choice, condition or ending that closes it. Edits change the same story nodes
-// the runtime plays; nothing here is a separate format.
-export function PassageEditor({ story, passage, readOnly, onChange, onError, onOpenNode, onDeleted }: {
+// the runtime plays; nothing here is a separate format. In story format 2 a stage
+// step opening the scene is edited in the panel above the lines.
+export function PassageEditor({ story, passage, readOnly, onChange, onError, onOpenNode, onDeleted, inherited, onUpgrade }: {
   story: StoryDraft; passage: Passage; readOnly: boolean;
   onChange: (story: StoryDraft, group?: string) => void; onError: (message: string) => void;
   onOpenNode: (id: string) => void; onDeleted: (next: StoryDraft) => void;
+  inherited?: StageSnapshot; onUpgrade?: () => void;
 }) {
   const focusNext = useRef<string | null>(null), list = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -20,7 +25,9 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
     list.current?.querySelector<HTMLTextAreaElement>(`[data-line="${CSS.escape(focusNext.current)}"]`)?.focus();
     focusNext.current = null;
   });
-  const body = passage.exit ? passage.nodes.slice(0, -1) : passage.nodes;
+  const staged = story.schema_version === "2";
+  const opening = staged && story.nodes[passage.id]?.type === "stage" && passage.nodes.length > 1;
+  const body = (passage.exit ? passage.nodes.slice(0, -1) : passage.nodes).slice(opening ? 1 : 0);
   const last = story.nodes[passage.nodes[passage.nodes.length - 1]];
   const run = (action: () => void) => { try { action(); } catch (error) { onError(error instanceof Error ? error.message : String(error)); } };
   const characters = Object.entries(story.characters);
@@ -28,6 +35,9 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
     <div className="studio-section-heading"><div><p className="studio-eyebrow">Scene</p>
       <h2 className="studio-script-title">{passage.title}</h2></div>
       <code>{passage.id}{story.entry === passage.id ? " · start" : ""}</code></div>
+    {staged ? <SceneStage story={story} head={passage.id} inherited={inherited} readOnly={readOnly}
+      onChange={onChange} onError={onError} />
+      : onUpgrade && <UpgradeNotice readOnly={readOnly} onUpgrade={onUpgrade} />}
     <ol ref={list} className="studio-script-lines">
       {body.map(id => {
         const node = story.nodes[id];
@@ -51,13 +61,17 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
             {node.speaker && story.characters[node.speaker] &&
               <CharacterAvatar characterId={node.speaker} name={story.characters[node.speaker].name} />}
             <select aria-label="Speaker" className="studio-script-speaker" disabled={readOnly} value={node.speaker ?? ""}
-              onChange={event => {
-                const { speaker: _, ...rest } = node;
-                onChange(replaceScene(story, id, event.target.value ? { ...rest, speaker: event.target.value } : rest), `${id}:speaker`);
-              }}>
+              onChange={event => run(() => onChange(setLineSpeaker(story, id, event.target.value || null), `${id}:speaker`))}>
               <option value="">Narration</option>
               {characters.map(([key, character]) => <option key={key} value={key}>{character.name}</option>)}
             </select>
+            {staged && node.speaker && Object.keys(story.characters[node.speaker]?.sprites ?? {}).length > 0 &&
+              <select aria-label="Expression" className="studio-script-expression" disabled={readOnly} value={node.expression ?? ""}
+                onChange={event => run(() => onChange(setLineExpression(story, id, event.target.value || null), `${id}:expression`))}>
+                <option value="">Same expression</option>
+                {Object.keys(story.characters[node.speaker]?.sprites ?? {}).map(sprite =>
+                  <option key={sprite} value={sprite}>{sprite}</option>)}
+              </select>}
           </div>
           <textarea data-line={id} aria-label="Line" className="studio-script-text studio-prose" readOnly={readOnly}
             rows={Math.min(8, Math.max(1, Math.ceil(node.text.length / 70)))} value={node.text}
@@ -80,7 +94,7 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
     <section className="studio-script-exit" aria-label="How this scene ends">
       <h3>Then</h3>
       {passage.exit ? <SceneForm story={story} sceneId={passage.exit} readOnly={readOnly} onChange={onChange} onError={onError} />
-        : last && (last.type === "line" || last.type === "set") ? <fieldset className="studio-form" disabled={readOnly}>
+        : last && (last.type === "line" || last.type === "set" || last.type === "stage") ? <fieldset className="studio-form" disabled={readOnly}>
           <TargetSelect story={story} value={last.next} label="Continue to scene"
             onChange={target => onChange(replaceScene(story, passage.nodes[passage.nodes.length - 1], { ...last, next: target }))} />
         </fieldset> : null}

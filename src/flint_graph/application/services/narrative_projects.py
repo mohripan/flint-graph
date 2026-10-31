@@ -3,7 +3,7 @@
 import json
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_, select
@@ -187,7 +187,9 @@ async def create_project(
     name: str,
     idempotency_key: UUID,
     actor: AuditActor,
+    schema_version: Literal["1", "2"] = "1",
 ) -> NarrativeProject:
+    """New projects start on story format 2 (stage and theme) where it is enabled."""
     name = name.strip()
     try:
         name.encode("utf-8")
@@ -217,7 +219,7 @@ async def create_project(
     session.add(project)
     await session.flush()
     story = {
-        "schema_version": "1",
+        "schema_version": schema_version,
         "id": "story_" + uuid4().hex,
         "title": name,
         "language": "en",

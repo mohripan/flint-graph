@@ -79,6 +79,30 @@ opener. Close/timeouts/access loss remove the iframe/listener. Normal exported-g
 Save/Load behavior is unchanged. `?qa=1` on the editor explicitly enables the shared
 read-only runtime probe in the child; normal URLs expose no probe.
 
+## Stage, look and expressions (story format 2)
+
+New projects start on story format 2. A format 1 story shows **Use stage & theme**
+(Look, Characters and each scene). It saves a new revision; save or undo pending
+changes first. Stories with per-line pictures from format 1 cannot be upgraded.
+
+- **Assets:** approve or upload backgrounds, sprites and fonts first. Pickers list
+  approved assets only. Choosing one adds it to the story under an ID made from its
+  name; files the story no longer uses are dropped from it.
+- **Characters → On stage:** set a name colour and add expressions. Each expression
+  is an approved sprite, image or portrait. Removing an expression the story still
+  uses is refused, with a count of where it is used.
+- **Write → Stage:** the panel above a scene's lines writes the stage step that opens
+  the scene. Choose a background (or keep the earlier one, or none), place
+  characters with an expression at left, center or right, and tick who leaves. "From
+  earlier scenes" shows what is already on stage on every path; "varies by path" means
+  routes disagree. The scene keeps its ID, folder and routes.
+- **Lines:** when the speaker has expressions, an expression picker sits under the
+  speaker; it changes their sprite from that line on.
+- **Look:** text box position, width, colours and corner radius; the name box;
+  choice colours; and the font (built-in Lora or an uploaded static TTF/OTF) and its
+  size. The preview is drawn to scale with the runtime's rules. **Reset to defaults**
+  removes the theme.
+
 ## Build and download a release
 
 **Releases** opens the server-backed release dialog. Choose a saved revision; it

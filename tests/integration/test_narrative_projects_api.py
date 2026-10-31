@@ -155,7 +155,8 @@ async def test_invalid_source_returns_safe_diagnostics_and_keeps_head(narrative_
     if case == "duplicate":
         source = '{"schema_version":"1",' + source[1:]
     elif case == "asset":
-        story = json.loads(source)
+        # Format 1 never carries assets in a Studio save; new projects start on v2.
+        story = json.loads(source) | {"schema_version": "1"}
         story["assets"] = {"sky": {"path": "assets/sky.png", "sha256": "0" * 64}}
         source = json.dumps(story)
     elif case == "notice_nul":

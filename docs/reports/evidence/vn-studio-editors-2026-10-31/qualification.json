@@ -1,0 +1,180 @@
+{
+  "schema_version": "1",
+  "date": "2026-10-31",
+  "browser": "headless Edge 156 over the DevTools protocol, 1366x900 and 390x844",
+  "studio_flow": [
+    {
+      "name": "scene stage",
+      "summary": "From earlier scenes: No background",
+      "rows": [
+        [
+          "quen",
+          "neutral",
+          "left"
+        ]
+      ],
+      "expressions": [
+        "",
+        "smile",
+        ""
+      ]
+    },
+    {
+      "name": "picker",
+      "options": [
+        "harbor fog",
+        "harbor dusk"
+      ]
+    },
+    {
+      "name": "after background + place",
+      "rows": [
+        [
+          "quen",
+          "neutral",
+          "left"
+        ],
+        [
+          "mira",
+          "neutral",
+          "center"
+        ]
+      ],
+      "dirty": "Narrative studio"
+    },
+    {
+      "name": "fog scene",
+      "summary": "From earlier scenes: No background",
+      "leaving": []
+    },
+    {
+      "name": "look",
+      "box": "34.4781px",
+      "width": "70%",
+      "font": "flint-asset-1c7645f4-4c5b-4f48-8ded-f4c585761b9a, Lora, serif"
+    },
+    {
+      "name": "character",
+      "expressions": [
+        "neutral",
+        "smile"
+      ],
+      "uses": [
+        "Used 2 times",
+        "Used once"
+      ]
+    },
+    {
+      "name": "saved",
+      "notice": "Saved revision 4.",
+      "diagnostics": []
+    },
+    {
+      "name": "playtest",
+      "node": "l1",
+      "textbox": {
+        "height": 151,
+        "width": 890.400085449219,
+        "x": 190.800003051758,
+        "y": 67.5749969482422
+      },
+      "viewport": {
+        "height": 729,
+        "width": 1272
+      },
+      "stage": {
+        "background": "harbor_fog",
+        "characters": [
+          {
+            "id": "quen",
+            "position": "left",
+            "sprite": "neutral"
+          },
+          {
+            "id": "mira",
+            "position": "center",
+            "sprite": "neutral"
+          }
+        ]
+      },
+      "font": true
+    },
+    {
+      "name": "before upgrade",
+      "notice": "Stage and theme need the newer story format.",
+      "disabled": true
+    },
+    {
+      "name": "upgraded",
+      "notice": "This story now uses stage and theme (revision 3).",
+      "formDisabled": false
+    }
+  ],
+  "follow_up": [
+    {
+      "name": "line layout",
+      "who": [
+        [
+          170,
+          170
+        ],
+        [
+          170,
+          170
+        ],
+        [
+          170,
+          170
+        ]
+      ]
+    },
+    {
+      "name": "fog scene",
+      "summary": "From earlier scenes: Background harbor_fog \u00c2\u00b7 Quen Aldwinia (smile) at left \u00c2\u00b7 Mira (neutral) at right",
+      "leaving": [
+        [
+          "Quen Aldwinia",
+          false,
+          true
+        ],
+        [
+          "Mira",
+          true,
+          false
+        ]
+      ],
+      "rows": [
+        [
+          "quen",
+          "neutral",
+          "center"
+        ]
+      ]
+    },
+    {
+      "name": "phone overflow",
+      "scroll": {
+        "doc": 390,
+        "view": 390
+      }
+    },
+    {
+      "name": "phone look",
+      "stage": {
+        "width": 326,
+        "height": 183,
+        "top": 691
+      }
+    }
+  ],
+  "release_of_themed_revision": {
+    "revision": 4,
+    "status": "completed",
+    "artifact_bytes": {
+      "source": 3804375,
+      "web": 14056636,
+      "manifest": 935
+    }
+  },
+  "new_project_schema_on_owned_api": "2"
+}

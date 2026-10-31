@@ -266,6 +266,15 @@ export const api = {
     });
   },
 
+  // Explicit, idempotent move of a format 1 story to stage and theme (ADR 0040).
+  upgradeNarrativeProject(tenantId: string, projectId: string, baseRevisionId: string, key: string,
+    signal?: AbortSignal): Promise<NarrativeRevision> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/upgrade`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { base_revision_id: baseRevisionId, idempotency_key: key },
+    });
+  },
+
   listNarrativeReleases(tenantId: string, projectId: string, options: {
     limit?: number; beforeId?: string; signal?: AbortSignal;
   } = {}): Promise<NarrativeRelease[]> {

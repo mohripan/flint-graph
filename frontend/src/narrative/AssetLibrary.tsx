@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError, api } from "../lib/api";
 import type { ImageJob, NarrativeImage } from "../lib/api";
-import { FILTERS, KIND_LABELS, UPLOAD_KINDS, filterQuery, fontFamily, kindForFile, suggestName, uploadProblem } from "./assetModel";
+import { FILTERS, KIND_LABELS, UPLOAD_KINDS, filterQuery, kindForFile, suggestName, uploadProblem } from "./assetModel";
 import type { AssetFilter, UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
+import { refreshLibrary, useAssetFont } from "./libraryAssets";
 import { isActive, jobStatus } from "./characterModel";
 import { Viewer } from "./CharacterStudio";
 import { Field } from "./FormFields";
@@ -52,7 +53,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
   const replace = (asset: NarrativeImage) => setAssets(current => current?.map(item => item.id === asset.id ? asset : item) ?? null);
   async function act(run: () => Promise<void>, fallback: string) {
     setNotice(null);
-    try { await run(); } catch (error) { setNotice(message(error, fallback)); }
+    try { await run(); refreshLibrary(); } catch (error) { setNotice(message(error, fallback)); }
   }
 
   return <section className="studio-assets" aria-label="Assets">
@@ -87,7 +88,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
           }, "Could not discard.")} />)}</div>}
     {next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
     {uploading && <UploadDialog tenantId={tenantId} projectId={projectId} onClose={() => setUploading(false)}
-      onUploaded={asset => { setUploading(false); setNotice(`Added “${asset.name}”.`);
+      onUploaded={asset => { setUploading(false); setNotice(`Added “${asset.name}”.`); refreshLibrary();
         setAssets(current => filter === "all" || filter === asset.kind ? [asset, ...(current ?? [])] : current); }} />}
     {viewing && viewing.media_type === "image/png" && <Viewer tenantId={tenantId} projectId={projectId}
       asset={viewing} onClose={() => setViewing(null)} />}
@@ -152,26 +153,10 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
   </figure>;
 }
 
-const loadedFonts = new Map<string, Promise<boolean>>();
-
 function FontSample({ tenantId, projectId, asset }: { tenantId: string; projectId: string; asset: NarrativeImage }) {
-  const family = fontFamily(asset.id);
-  const [ready, setReady] = useState<boolean | null>(null);
-  useEffect(() => {
-    let pending = loadedFonts.get(family);
-    if (!pending) {
-      pending = api.getNarrativeFont(tenantId, projectId, asset.id)
-        .then(buffer => new FontFace(family, buffer).load())
-        .then(face => { document.fonts.add(face); return true; })
-        .catch(() => { loadedFonts.delete(family); return false; });
-      loadedFonts.set(family, pending);
-    }
-    let live = true;
-    void pending.then(ok => { if (live) setReady(ok); });
-    return () => { live = false; };
-  }, [tenantId, projectId, asset.id, family]);
-  return <div className="studio-asset-preview font" style={ready ? { fontFamily: `"${family}"` } : undefined}>
-    {ready === false ? "This font could not be previewed." : <><span>Aa</span><p>The bell rang once across the harbor.</p></>}
+  const family = useAssetFont(tenantId, projectId, asset.id);
+  return <div className="studio-asset-preview font" style={family ? { fontFamily: `"${family}"` } : undefined}>
+    {family === false ? "This font could not be previewed." : <><span>Aa</span><p>The bell rang once across the harbor.</p></>}
   </div>;
 }
 

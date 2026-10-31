@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { draftReducer, initialDraftState, prepareSave } from "./draftState";
@@ -13,6 +13,8 @@ import { SceneOptionsContext } from "./sceneOptions";
 import { CharacterProfilesProvider } from "./characterImages";
 import { AssetLibrary } from "./AssetLibrary";
 import { CharacterStudio } from "./CharacterStudio";
+import { LookPanel } from "./LookPanel";
+import { stageBefore } from "./stageModel";
 import { StatePanel, StoryPanel } from "./RecordPanels";
 import { RouteMap } from "./RouteMap";
 import { SceneForm } from "./SceneForm";
@@ -24,9 +26,10 @@ import { releaseIntents } from "./releaseModel";
 import type { NarrativeProject, NarrativeRevision, RevisionSummary, RevisionWrite, StoryDraft, StoryNode } from "./types";
 import "./studio.css";
 
-type Panel = "write" | "scenes" | "map" | "characters" | "assets" | "state" | "story" | "history" | "source";
+type Panel = "write" | "scenes" | "map" | "characters" | "assets" | "look" | "state" | "story" | "history" | "source";
 const panels: Array<[Panel, string]> = [["write", "Write"], ["scenes", "Scenes"], ["map", "Map"],
-  ["characters", "Characters"], ["assets", "Assets"], ["state", "State"], ["story", "Details"], ["history", "History"], ["source", "Source"]];
+  ["characters", "Characters"], ["assets", "Assets"], ["look", "Look"], ["state", "State"], ["story", "Details"],
+  ["history", "History"], ["source", "Source"]];
 
 function readSelection(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -111,6 +114,9 @@ export function StudioPage({ onDirtyChange }: {
   const story = useMemo(() => rawMode ? null
     : lastEdit.current?.source === state.source ? lastEdit.current.story : parsedStory(state.source), [state.source, rawMode]);
   const scenes = useMemo(() => story ? buildPassages(story) : null, [story]);
+  // What is on stage as each scene begins (story format 2); deferred so typing stays fast.
+  const settledStory = useDeferredValue(story);
+  const stageMap = useMemo(() => settledStory?.schema_version === "2" ? stageBefore(settledStory) : null, [settledStory]);
   const optionsKey = scenes ? scenes.passages.map(item => `${item.id}\u0001${item.title.slice(0, 48)}`).join("\u0000") : "";
   const sceneOptions = useMemo(() => {
     if (!optionsKey) return null;
@@ -262,6 +268,23 @@ export function StudioPage({ onDirtyChange }: {
     setNotice(`Accepted the assistant's proposal as revision ${revision.revision_number}.`);
     void refreshHistory(current.project.id, generation);
   }
+  async function upgradeStory() {
+    const current = stateRef.current;
+    if (!canWrite || saving.current || !current.project || !current.revision) return;
+    if (dirtyRef.current) { setNotice("Save or undo your changes before upgrading the story format."); return; }
+    saving.current = true; const generation = epoch.current, request = controller();
+    try {
+      const revision = await api.upgradeNarrativeProject(tenantId, current.project.id, current.revision.id,
+        crypto.randomUUID(), request.signal);
+      if (!mounted.current || epoch.current !== generation) return;
+      history.current.clear(); redrawHistory(value => value + 1);
+      dispatch({ type: "saved", generation, revision });
+      setProjects(rows => rows.map(row => row.id === current.project!.id ? { ...row, head_revision_id: revision.id } : row));
+      setNotice(`This story now uses stage and theme (revision ${revision.revision_number}).`);
+      void refreshHistory(current.project.id, generation);
+    } catch (error) { failure(error, generation); }
+    finally { controllers.current.delete(request); if (epoch.current === generation) saving.current = false; }
+  }
   function assistantConflict() {
     const current = stateRef.current.project;
     if (current) void refreshHistory(current.id, epoch.current);
@@ -313,6 +336,7 @@ export function StudioPage({ onDirtyChange }: {
       setSceneId(id); choosePanel("write");
     } else if (section === "variables") choosePanel("state");
     else if (section === "characters") choosePanel("characters");
+    else if (section === "theme") choosePanel("look");
     else if (["title", "language", "entry", "NOTICES"].includes(section)) choosePanel("story");
     else choosePanel("source");
   }
@@ -424,7 +448,7 @@ export function StudioPage({ onDirtyChange }: {
       <div className="studio-editor">
       <nav className="studio-tabs" aria-label="Story editor panels">{panels.map(([id, label]) => <button type="button" key={id}
         aria-pressed={panel === id} className={`${panel === id ? "selected" : ""} studio-tab-${id} ${id === "write" && panel === "scenes" ? "wide-selected" : ""}`} onClick={() => choosePanel(id)}>{label}</button>)}</nav>
-      <div className={`studio-desk ${panel === "scenes" ? "show-scenes" : ""} ${panel === "characters" || panel === "assets" ? "no-rail" : ""}`}>
+      <div className={`studio-desk ${panel === "scenes" ? "show-scenes" : ""} ${panel === "characters" || panel === "assets" || panel === "look" ? "no-rail" : ""}`}>
         <aside className="studio-rail" aria-label="Scenes">{hierarchy ?? <p className="studio-hint">Open Write to see scenes.</p>}</aside>
         <section className="studio-sheet">
           {panel === "source" ? <fieldset className="studio-form" disabled={readOnly}>
@@ -439,14 +463,17 @@ export function StudioPage({ onDirtyChange }: {
             {historyMore && <button type="button" className="studio-secondary" disabled={historyBusy}
               onClick={() => void refreshHistory(state.project!.id, epoch.current, historyRows[historyRows.length - 1]?.id)}>Load older revisions</button>}
           </div> : common ? panel === "map" ? <RouteMap story={common.story} selected={sceneId} onSelect={id => { setSceneId(id); setPanel("write"); }} />
-            : panel === "characters" ? <CharacterStudio {...common} />
-            : panel === "assets" && state.project ? <AssetLibrary tenantId={tenantId} projectId={state.project.id} canWrite={canWrite} /> : panel === "state" ? <StatePanel {...common} />
+            : panel === "characters" ? <CharacterStudio {...common} onUpgrade={canWrite ? () => void upgradeStory() : undefined} />
+            : panel === "assets" && state.project ? <AssetLibrary tenantId={tenantId} projectId={state.project.id} canWrite={canWrite} />
+            : panel === "look" ? <LookPanel {...common} onUpgrade={() => void upgradeStory()} />
+            : panel === "state" ? <StatePanel {...common} />
             : panel === "story" ? <><StoryPanel {...common} /><Field label="Content notices"><textarea rows={5} value={state.notices} disabled={readOnly}
                 onChange={event => edit(state.source, event.target.value, "notices")} /></Field></>
             : nodeEditor && common.story.nodes[nodeEditor] ? <><button type="button" className="studio-link"
                 onClick={() => setNodeEditor(null)}>← Back to the scene script</button>
                 <SceneForm {...common} sceneId={nodeEditor} /></>
             : passage ? <PassageEditor key={passage.id} {...common} passage={passage} onOpenNode={setNodeEditor}
+                inherited={stageMap?.get(passage.id)} onUpgrade={canWrite ? () => void upgradeStory() : undefined}
                 onDeleted={next => { updateStory(next); setSceneId(next.entry); }} />
             : <SceneForm {...common} sceneId={sceneId} />
             : <p className="studio-empty">Open Source to inspect this draft, or reopen a valid saved revision.</p>}

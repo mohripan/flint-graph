@@ -43,7 +43,9 @@ async def v2(narrative_env, oidc_auth):
         ).json()
         headers = {**owner, "X-Tenant-ID": workspace["id"]}
 
-        async def project(name="Harbor"):
+        async def project(name="Harbor", schema="1"):
+            # Upgrade flows start from a v1 project, which needs v2 off at creation.
+            configure(narrative_package_v2_enabled=schema == "2")
             created = (
                 await client.post(
                     "/v1/narrative/projects",
@@ -51,6 +53,7 @@ async def v2(narrative_env, oidc_auth):
                     json={"name": name, "idempotency_key": str(uuid4())},
                 )
             ).json()
+            configure(narrative_package_v2_enabled=True)
             return f"/v1/narrative/projects/{created['id']}", created
 
         yield client, factory, store, headers, project
@@ -88,6 +91,22 @@ async def save(client, headers, base, story, notices=""):
             "notices": notices,
         },
     )
+
+
+@pytest.mark.anyio
+async def test_new_projects_start_on_v2_unless_it_is_disabled(v2):
+    client, _, _, headers, project = v2
+    assert Settings(env="test").narrative_package_v2_enabled is True
+    base, _ = await project(schema="2")
+    revision = await head(client, headers, base)
+    story = json.loads(revision["story_json"])
+    assert story["schema_version"] == "2"
+    package = load_text_package(revision["story_json"].encode())
+    assert revision["content_hash"] == package.content_hash
+    assert (await upgrade(client, headers, base)).status_code == 409
+    old_base, _ = await project("Old")
+    old = json.loads((await head(client, headers, old_base))["story_json"])
+    assert old["schema_version"] == "1"
 
 
 @pytest.mark.anyio

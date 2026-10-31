@@ -69,8 +69,11 @@ saves, asset binding by SHA-256, server-built NOTICES and the explicit upgrade. 
 `docs/reports/2026-10-31-story-package-v2.md`. Slice 3 (runtime 0.3.0) plays v2
 everywhere: Godot `vn_view.gd`, playtests with transferred asset bytes and a revision
 asset endpoint, and release builds with assets; read
-`docs/reports/2026-10-31-vn-stage-runtime.md`. The flag default stays off until slice 4
-(Studio editors); the owned API turns it on. Owned playtests need
+`docs/reports/2026-10-31-vn-stage-runtime.md`. Slice 4 (Studio editors: Look tab, scene
+stage panel, line expressions, character sprites, upgrade button) completes ADR 0040; the
+flag now defaults on and new projects start on v2. Read
+`docs/reports/2026-10-31-vn-studio-editors.md`; editor logic is in
+`frontend/src/narrative/stageModel.ts`. Owned playtests need
 `VITE_FLINT_GRAPH_PREVIEW_ORIGIN` on the frontend dev server. The owned PostgreSQL, MinIO and Temporal
 fixtures now use Docker volumes with fixed ports
 (`notes/persist-narrative-fixtures.py`). The earlier tmpfs fixtures lost all data on

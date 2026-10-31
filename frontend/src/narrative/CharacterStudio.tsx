@@ -6,20 +6,23 @@ import {
   CHARACTER_TYPES, FRAMINGS, MAX_APPEARANCE, PORTRAITS_PER_JOB, canCutOut, cleanAppearance, generateLabel, isActive,
   jobStatus,
 } from "./characterModel";
+import { CharacterSprites } from "./CharacterSprites";
 import { Field } from "./FormFields";
+import { refreshLibrary } from "./libraryAssets";
 import { addCharacter, deleteCharacter } from "./model";
 import type { StoryDraft } from "./types";
 
 interface Props {
   story: StoryDraft; readOnly: boolean;
   onChange: (story: StoryDraft, group?: string) => void; onError: (message: string) => void;
+  onUpgrade?: () => void;
 }
 
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
 
 // Characters: who speaks, what they look like and the portrait the creator approved.
 // Names live in the story; appearance and portraits are shared editor metadata.
-export function CharacterStudio({ story, readOnly, onChange, onError }: Props) {
+export function CharacterStudio({ story, readOnly, onChange, onError, onUpgrade }: Props) {
   const ids = Object.keys(story.characters);
   const [selected, setSelected] = useState<string | null>(ids[0] ?? null);
   const current = selected && story.characters[selected] ? selected : ids[0] ?? null;
@@ -38,11 +41,11 @@ export function CharacterStudio({ story, readOnly, onChange, onError }: Props) {
       </button>)}
     </aside>
     {current ? <CharacterSheet key={current} id={current} story={story} readOnly={readOnly}
-      onChange={onChange} onError={onError} /> : null}
+      onChange={onChange} onError={onError} onUpgrade={onUpgrade} /> : null}
   </div></div>;
 }
 
-function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id: string }) {
+function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: Props & { id: string }) {
   const context = useContext(CharacterProfilesContext);
   const profile: CharacterProfile = context?.profiles[id] ?? {
     character_id: id, appearance: "", character_type: "other", framing: "portrait", portrait: null, version: 0,
@@ -151,7 +154,8 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
       setJobs(current => current.map(job => ({
         ...job, assets: job.assets.map(item => item.id === next.id ? next : item),
       })));
-      setNotice("Sprite approved. It is in the asset library.");
+      refreshLibrary();
+      setNotice("Sprite approved. Add it as an expression under On stage.");
     } catch (error) { setNotice(message(error, "Could not approve this sprite.")); }
   }
 
@@ -208,6 +212,8 @@ function CharacterSheet({ id, story, readOnly, onChange, onError }: Props & { id
         <p className="studio-hint" role="status">{notice ?? (dirty ? "Saving…" : "")}</p>
       </fieldset>
     </div>
+    <CharacterSprites id={id} story={story} tenantId={tenantId} projectId={projectId} readOnly={readOnly}
+      onChange={onChange} onError={onError} onUpgrade={onUpgrade} />
     {active && <div className="studio-job" role="status">
       <div className="studio-job-bar"><span style={{ width: `${Math.max(4, (active.progress / active.count) * 100)}%` }} /></div>
       <span>{jobStatus(active)}</span>

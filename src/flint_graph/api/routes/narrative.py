@@ -66,6 +66,7 @@ async def create_project_endpoint(
     current_user: CurrentUserDep,
     session: SessionDep,
     actor: AuditActorDep,
+    settings: SettingsDep,
 ) -> NarrativeProjectResponse:
     project = await _persist(
         session,
@@ -76,6 +77,7 @@ async def create_project_endpoint(
             name=payload.name,
             idempotency_key=payload.idempotency_key,
             actor=actor,
+            schema_version="2" if settings.narrative_package_v2_enabled else "1",
         ),
     )
     return NarrativeProjectResponse.model_validate(project)

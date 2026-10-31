@@ -1,8 +1,12 @@
 # ADR 0040: Visual novel stage, theme and asset library (story package v2)
 
-Date: 2026-10-31. Status: accepted for implementation (tracking #157, #128, #161,
-#164; the user chose this order on 2026-10-31). This records intent, not delivered
-behavior.
+Date: 2026-10-31. Status: accepted and delivered in four slices (tracking #157, #128,
+#161, #164; the user chose this order on 2026-10-31). Delivery reports:
+[asset library](../reports/2026-10-31-asset-library.md),
+[package v2](../reports/2026-10-31-story-package-v2.md),
+[runtime, playtests and releases](../reports/2026-10-31-vn-stage-runtime.md) and
+[Studio editors](../reports/2026-10-31-vn-studio-editors.md). Transparent sprites
+followed in [character sprite cutout](../reports/2026-10-31-character-sprite-cutout.md).
 
 ## Context
 
