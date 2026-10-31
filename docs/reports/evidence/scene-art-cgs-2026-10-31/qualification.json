@@ -156,6 +156,12 @@
         "document_scroll_width": 390,
         "horizontal_scroll": false
       }
+    },
+    "experimental_default": {
+      "note": "Experimental: the two characters may swap hair or clothes. Generate a few and keep the best.",
+      "jobs_per_generate": 2,
+      "images_per_job": 4,
+      "checked": "one Generate 8 CGs queued two jobs of four in the QA Studio; both were cancelled to free the GPU"
     }
   }
 }

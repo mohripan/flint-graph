@@ -208,8 +208,9 @@ again. Built before slice B; report:
   On 12 fixed seeds 7 keep both identities; the rest swap hair and outfits. Regional
   prompting (one attention pass per prompt, blended by half) fused the two into one
   figure, and repainting each half with only its character's prompt and reference
-  kept the rate at 7 of 12 while doubling the time, so neither ships. The Studio
-  marks two-character CGs as less reliable. Report:
+  kept the rate at 7 of 12 while doubling the time, so neither ships. Two-character
+  CGs ship as experimental: the Studio says so and starts two jobs of four. M40
+  (#185, #180) owns raising the 7-of-12 baseline. Report:
   [scene art CGs](../../reports/2026-10-31-scene-art-cgs.md#two-characters).
 - **Not in this slice.** The story format and runtime: the player's CG layer and
   gallery are ADR 0042 (runtime 0.5.0). Identity is close, not exact, so every result

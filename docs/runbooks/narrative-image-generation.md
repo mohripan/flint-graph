@@ -109,9 +109,11 @@ with `ip_adapter_unavailable`.
   `{character} CG {n}`; approve one and pick it in Write → Stage → Event CG. The
   job records `reference_assets`, `ip_adapter_scale` and `ip_adapter_model`, and
   each CG's provenance names its references by SHA-256. A plain reference works
-  best: effects or busy backdrops around the figure carry into the scene. With two
-  characters each reference conditions its half of the image; both looks survive in
-  about 7 renders of 12, so check both faces, hair and outfits before approving.
+  best: effects or busy backdrops around the figure carry into the scene. Two
+  characters are experimental: each reference conditions its half of the image and
+  both looks survive in about 7 renders of 12, so the Studio starts two jobs of four
+  (eight candidates) and asks to keep the best. Check both faces, hair and outfits
+  before approving.
 
 All of them use the same worker, queue and limits. Candidates wait in the library until a
 member approves them. Uploads (PNG images, static TTF/OTF fonts) need no worker.

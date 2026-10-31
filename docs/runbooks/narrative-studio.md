@@ -144,7 +144,8 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
 - **Assets → CGs → Generate CGs:** draw four event CGs of one or two existing characters
   from an approved image of each ("Look from": their portraits, sprites and images, the
   chosen portrait first) and a scene description. **Add a second character** puts them
-  on the right; two characters are less reliable, so check both looks before approving. They arrive under **To review** like other
+  on the right. Two characters are experimental (they may swap hair or clothes), so
+  the button generates eight candidates; keep the best. They arrive under **To review** like other
   generated art. Needs the image worker with the IP-Adapter configured
   ([image generation runbook](narrative-image-generation.md)).
 - **Characters → On stage:** set a name colour (with opacity) and add expressions. Each expression

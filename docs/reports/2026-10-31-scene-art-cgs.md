@@ -10,8 +10,9 @@ A creator opens Assets → CGs → **Generate CGs**, picks one or two characters
 approved image of each, and describes the scene. Four 16:9 candidates that look like
 those characters wait among the CGs for approval, like any generated asset. An
 approved one is picked in a stage node's Event CG field. The story format, runtime
-and player do not change. One character is dependable; two keep both looks in about
-7 renders of 12, so the Studio marks them as less reliable (see "Two characters").
+and player do not change. One character is dependable and stays the default. Two
+characters are **experimental**: they keep both looks in about 7 renders of 12, so the
+Studio says so and starts eight candidates instead of four (see "Two characters").
 
 Slice C was planned after slice B (poses) because both use IP-Adapter. B is still
 not built, so this slice adds the IP-Adapter pin and loader; poses can reuse them.
@@ -91,9 +92,13 @@ not built, so this slice adds the IP-Adapter pin and loader; poses can reuse the
   (`CgGenerator.tsx`, logic in `cgModel.ts`). The panel has a character list, "Look
   from" thumbnails of the character's approved portraits, sprites and images (its
   chosen portrait first; generated CGs never), **Add a second character** (a "Right
-  character" with its own "Look from", and a note that two characters are less
-  reliable), the scene text, **Generate 4 CGs**, progress, cancel and the error of a
-  failed job. Active CG jobs also show under the
+  character" with its own "Look from"), the scene text, **Generate 4 CGs** (or
+  **Generate 8 CGs** for two characters), progress, cancel and the error of a failed
+  job. With two characters the panel shows "Experimental: the two characters may swap
+  hair or clothes. Generate a few and keep the best." and starts two jobs of four.
+  The per-job cap (four images) and the GPU memory floor do not change; the worker
+  runs the jobs one after the other. If the workspace's active-job limit (default 2)
+  refuses the second job, the first still runs and the panel says so. Active CG jobs also show under the
   library header in every view. The CGs group in the side rail now stays listed when
   it is empty, because otherwise there was no way to reach Generate CGs in a project
   without CGs: the browser QA found that.
@@ -193,13 +198,25 @@ dark jacket) and Lina on the right (long black hair, blue ribbon, sailor uniform
   Quen's white hair. The tags in one prompt bind to the wrong person. Dropping the
   tags removed the swaps but often drew one person or hid a face.
 
-**Shipped:** the masked first pass, about 16 s per image. Four candidates per job make
-it likely (about 97 % at 7 in 12 each) that at least one keeps both looks. The panel
-says two characters are less reliable and asks to check both before approving.
-Regional prompting with region-aware text encoders or character LoRAs are M40 topics
-([#184](https://github.com/mohripan/flint-graph/issues/184),
-[#185](https://github.com/mohripan/flint-graph/issues/185)), and the CCIP scores of
-[#180](https://github.com/mohripan/flint-graph/issues/180) could flag swaps automatically.
+**Shipped, as experimental:** the masked first pass, about 16 s per image. The user
+chose to ship it unfinished rather than wait ("at least we can have two characters
+even with more generations"). Two jobs of four give eight candidates per Generate;
+at 7 in 12 per image, at least one keeps both looks in about 99.9 % of Generates
+(about 97 % with four).
+
+**Baseline for M40.** The per-seed result of the shipped method (scene "sitting on the
+couch together by the window at night, city lights", Quen and Lina, scale 0.5):
+
+| Seed | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Both looks kept | yes | no | yes | no | yes | yes | yes | yes | no | no | yes | no |
+
+That is 7 of 12 (58 %). Improving it belongs to M40: the reference and regional
+techniques of [#185](https://github.com/mohripan/flint-graph/issues/185) on the shared
+bench of [#186](https://github.com/mohripan/flint-graph/issues/186), scored with CCIP
+([#180](https://github.com/mohripan/flint-graph/issues/180)), which could also flag swaps
+automatically. Character LoRAs ([#184](https://github.com/mohripan/flint-graph/issues/184))
+are another candidate. The seeds and request above make the comparison repeatable.
 
 **GPU end to end through the worker: passed.** `test_real_gpu_scene_art_draws_two_characters`
 ran Quen and Lina through the API, owned Temporal and the real child: both CGs keep
@@ -210,8 +227,10 @@ one-character test in 163 s.
 as revision 4, her reference uploaded with her character ID):
 
 1. Assets → CGs → **Generate CGs** → Quen Aldwinia, **Add a second character** → Lina,
-   each with its approved image preselected; the note on reliability shows
-   ([screenshot](evidence/scene-art-cgs-2026-10-31/08-generate-two-characters.png)).
+   each with its approved image preselected. This run predates the experimental note
+   and the eight-candidate default; a later check showed both
+   ([screenshot](evidence/scene-art-cgs-2026-10-31/08-generate-two-characters.png)), and
+   one **Generate 8 CGs** queued two jobs of four (cancelled to free the GPU).
 2. Scene "Quen and Lina sitting on the couch together by the window at night, city
    lights" → **Generate 4 CGs**. Four candidates arrived after 108 s
    ([screenshot](evidence/scene-art-cgs-2026-10-31/09-two-character-candidates.png)):
@@ -238,6 +257,14 @@ At 390 px the two-character panel stacks without horizontal scrolling.
 - Two characters can also gain a third person (one of four in the Studio run).
 - Evidence images, job records and the probe outputs are in ignored
   `notes/scene-art-qualification/`.
+
+## Merging
+
+The voice branch `claude/m39-voices` adds `0030_narrative_voice_references` and
+`0031_narrative_voice_models` on top of `0029_narrative_voice`, so whichever branch lands
+second renumbers. If the voices land first, this migration becomes
+`0032_narrative_scene_art` with `down_revision = "0031_narrative_voice_models"`. The
+migrations touch different tables, and `alembic heads` must show one head afterwards.
 
 ## Checks
 

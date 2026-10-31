@@ -52,10 +52,13 @@ same body and hair, different expressions, and sometimes different poses.
 - Free-text expressions are tags, so the quality of uncommon ones varies; presets
   carry tested tag sets.
 - Poses and scene art keep identity only approximately (outfit details can change),
-  so every result is a reviewed candidate. Two characters keep both looks in about 7
-  renders of 12 (looks swap because the tags in one prompt bind to the wrong person),
-  so the Studio marks them as less reliable. Regional prompting fused the two into
+  so every result is a reviewed candidate. Two-character CGs are experimental: on 12
+  fixed seeds (101–112) 7 keep both looks; the rest swap hair or clothes because the
+  tags in one prompt bind to the wrong person. Regional prompting fused the two into
   one figure, and repainting each half did not raise the rate, so neither is used.
+  The Studio labels them experimental and starts eight candidates instead of four.
+  That 7 of 12 is the baseline M40 (#185, scored with CCIP #180) owns improving; the
+  report lists it per seed.
 - Migration 0026 adds the base, box, strength, expressions and per-image prompts to
   image jobs, with checks that bind them to the new purpose. Migration 0030 adds the
   scene-art references (a checked JSON list, since library assets are never deleted),

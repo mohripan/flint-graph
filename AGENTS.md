@@ -63,7 +63,8 @@ planned. Slice C (migration 0030) draws event CGs of one or two characters from 
 image of each through a pinned IP-Adapter Plus (ViT-H): Assets → CGs → Generate CGs,
 `scene_art` image jobs, opaque 1344×768 candidates. The image worker needs the optional
 `FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_*` pin; read `docs/reports/2026-10-31-scene-art-cgs.md`.
-Two characters keep both looks in about 7 of 12 renders and are marked less reliable.
+Two-character CGs are experimental (7 of 12 seeds keep both looks; eight candidates per
+Generate); M40 #185 owns improving that baseline.
 Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
 `notes/models/`; no generation pipeline exists yet. The Studio rail is now a
