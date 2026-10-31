@@ -3,6 +3,8 @@
 Delivered [ADR 0043](../adr/0043-asset-folders-and-line-voices.md) following its
 [design](../superpowers/specs/2026-10-31-asset-folders-and-line-voices-design.md), in the
 order the user asked for: asset folders first, then voice audio for dialogue lines.
+The branch is rebased onto master `2bbe8d7` (the Assets tab's CG section now opens from
+the rail's CGs group).
 
 ## Asset folders
 
@@ -119,9 +121,9 @@ Tests came first in each slice.
   clips, parse six WAV cases exactly as Python does, and keep the volume on disk
   (export) or in memory (playtest). **37 passed**, plus the Linux release builder test on
   the new image (**1 passed**).
-- **Frontend.** `npm test` **98 passed** (voice model parity with the shared fixture,
+- **Frontend.** `npm test` **100 passed** (voice model parity with the shared fixture,
   folder model), typecheck and production build.
-- **Gates.** `uv run pytest` **1,794 passed, 102 skipped** (opt-in live and service
+- **Gates.** `uv run pytest` **1,795 passed, 102 skipped** (opt-in live and service
   tests); `ruff check`; `mypy`; `uv lock --check` (root and `runtimes/voicegen`);
   offline migration SQL through `0029`; `docker compose config`; the deterministic eval.
 
