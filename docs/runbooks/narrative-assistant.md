@@ -82,6 +82,37 @@ thinking and the reply text as they are produced. Finished replies collapse to
 
 ## Behavior and limits
 
+Prompt `narrative-assistant/v3` asks focused follow-up questions when a new
+character's name, clothes or intended image are missing. It returns a reply with
+no proposal while clarifying. Established thread/profile details are reused;
+explicitly delegating a choice lets the model make it. Transparent stage sprites
+default to high resolution (2×); an explicit `hires: false` opts out. The default
+is explained rather than asked as another required question. Sufficiently specified
+background requests proceed directly to a proposal. This is model instruction,
+qualified on the local model in the linked report; creators still review proposals.
+
+Image suggestions start only after acceptance and a creator clicks **Generate**.
+`GET .../assistant/proposals/{id}/image-actions` reads their jobs without starting
+anything. `POST .../image-actions/{index}` starts/replays one job, with the original
+operation index, scoped project and tenant, and a server-derived UUID5 idempotency
+key. The browser sends no image parameters or random retry key. Concurrent clicks,
+navigation and reloads retain the same job, including its terminal status. A new
+proposal/action represents a new generation request. Failed/cancelled suggestions
+remain visible; request another suggestion or use the editor for a fresh job.
+
+Older v1/v2 prompt suggestions did not store a job link. A compatibility read
+finds the newest matching legacy UUID4 request by the accepting creator after
+acceptance, checking purpose, parameters and count. These old links are inferred
+and can be ambiguous for identical historical requests. No old job, proposal,
+profile or key is rewritten. New suggestions always use the exact UUID5 link.
+
+Assets polls for background jobs even when it did not start them, and keeps
+progress visible across filters, including **CGs**. Completed jobs refresh the
+review candidates. Assistant restores progress before offering a Generate button.
+API and assistant-worker code must both be refreshed by their owner to activate
+the endpoints and prompt. There is no database migration or Godot rebuild.
+See [qualification](../reports/2026-10-31-assistant-image-actions.md).
+
 - One reply at a time per workspace by default; a second send returns 429.
 - Unusable model output is sent back with diagnostics for at most two repairs. A
   proposal that is still invalid is shown as "Can't be used" and cannot be accepted.

@@ -24,6 +24,7 @@ from flint_graph.api.dependencies import (
 )
 from flint_graph.api.narrative_assistant_schemas import (
     AssistantDecision,
+    AssistantImageActionResponse,
     AssistantProposalResponse,
     AssistantProposalSummary,
     AssistantThreadCreate,
@@ -32,8 +33,10 @@ from flint_graph.api.narrative_assistant_schemas import (
     AssistantTurnEventResponse,
     AssistantTurnResponse,
 )
+from flint_graph.api.narrative_character_schemas import ImageJobResponse
 from flint_graph.api.narrative_schemas import NarrativeRevisionResponse
 from flint_graph.api.routes.narrative import _persist
+from flint_graph.api.routes.narrative_characters import job_response
 from flint_graph.application.services.narrative_assistant import (
     accept_proposal,
     cancel_turn,
@@ -48,6 +51,8 @@ from flint_graph.application.services.narrative_assistant import (
     turn_status,
 )
 from flint_graph.application.services.narrative_assistant_events import events_after
+from flint_graph.application.services.narrative_assistant_images import action_jobs, start_action
+from flint_graph.application.services.narrative_images import get_image_job
 from flint_graph.infrastructure.db.models import NarrativeAssistantProposal, NarrativeAssistantTurn
 from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
 
@@ -57,6 +62,63 @@ _TERMINAL = ("completed", "failed", "cancelled")
 STREAM_POLL_SECONDS = 0.25
 STREAM_KEEPALIVE_SECONDS = 10.0
 STREAM_MAX_SECONDS = 300.0
+
+
+@router.get(
+    "/proposals/{proposal_id}/image-actions", response_model=list[AssistantImageActionResponse]
+)
+async def image_actions_endpoint(
+    project_id: UUID,
+    proposal_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+) -> list[AssistantImageActionResponse]:
+    result = []
+    for index, job in await action_jobs(
+        session, tenant_id=tenant_id, project_id=project_id, proposal_id=proposal_id
+    ):
+        if job is not None:
+            job, assets = await get_image_job(
+                session, tenant_id=tenant_id, project_id=project_id, job_id=job.id
+            )
+            result.append(AssistantImageActionResponse(index=index, job=job_response(job, assets)))
+        else:
+            result.append(AssistantImageActionResponse(index=index, job=None))
+    return result
+
+
+@router.post(
+    "/proposals/{proposal_id}/image-actions/{index}",
+    response_model=ImageJobResponse,
+    status_code=202,
+)
+async def start_image_action_endpoint(
+    project_id: UUID,
+    proposal_id: UUID,
+    index: int,
+    tenant_id: TenantMemberDep,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    actor: AuditActorDep,
+    settings: SettingsDep,
+) -> ImageJobResponse:
+    job = await _persist(
+        session,
+        start_action(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            proposal_id=proposal_id,
+            index=index,
+            author_user_id=current_user.user.id,
+            actor=actor,
+            settings=settings,
+        ),
+    )
+    job, assets = await get_image_job(
+        session, tenant_id=tenant_id, project_id=project_id, job_id=job.id
+    )
+    return job_response(job, assets)
 
 
 def turn_response(

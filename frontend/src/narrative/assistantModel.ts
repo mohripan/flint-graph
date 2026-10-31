@@ -46,12 +46,12 @@ export function isAction(operation: StoryOperation): operation is AssistantActio
 }
 /** One line per suggested image job, and whether it can start against the saved story. */
 export function proposalActions(story: Pick<StoryDraft, "characters"> | null, operations: StoryOperation[]):
-  Array<{ action: AssistantAction; label: string; ready: boolean }> {
-  return operations.filter(isAction).map(action => action.op === "generate_backgrounds"
-    ? { action, label: `Generate backgrounds: ${action.description}`, ready: true }
-    : { action, ready: Boolean(story?.characters[action.character]),
+  Array<{ index: number; action: AssistantAction; label: string; ready: boolean }> {
+  return operations.flatMap((action, index) => !isAction(action) ? [] : [action.op === "generate_backgrounds"
+    ? { index, action, label: `Generate backgrounds: ${action.description}`, ready: true }
+    : { index, action, ready: Boolean(story?.characters[action.character]),
         label: `Generate ${action.transparent ? "transparent sprites" : action.framing === "full_body" ? "full-body portraits" : "portraits"}`
-          + ` for ${story?.characters[action.character]?.name ?? action.character}: ${action.appearance}` });
+          + ` for ${story?.characters[action.character]?.name ?? action.character}: ${action.appearance}` }]);
 }
 export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" | "variables"> | null,
   operations: StoryOperation[]): ProposalChange[] {

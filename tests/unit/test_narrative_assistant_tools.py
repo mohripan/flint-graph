@@ -26,6 +26,19 @@ def sha(seed: str) -> str:
     return (seed * 64)[:64]
 
 
+def test_assistant_sprites_default_to_high_resolution_and_allow_an_explicit_opt_out():
+    action = {
+        "op": "generate_character_images",
+        "character": "ren",
+        "appearance": "white hair",
+        "character_type": "boy",
+        "transparent": True,
+    }
+    assert GenerateCharacterImages.model_validate(action).hires is True
+    assert GenerateCharacterImages.model_validate({**action, "hires": False}).hires is False
+    assert GenerateCharacterImages.model_validate({**action, "transparent": False}).hires is False
+
+
 def story() -> dict:
     return {
         "schema_version": "2",

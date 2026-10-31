@@ -49,6 +49,13 @@ explicit and budgeted. Read `docs/reports/2026-10-31-assistant-live-turns.md`.
 On format 2 the assistant (prompt v2) edits sprites, framing, colours, stage nodes,
 expressions and the theme, uses library files by ID, and suggests image jobs that
 the creator starts with Generate: `docs/reports/2026-10-31-assistant-v2-tools.md`.
+Prompt v3 asks for missing character names, outfits and image intent before proposing;
+transparent sprites default to high resolution. Accepted image suggestions now resolve
+to durable server jobs by proposal ID and original operation index. Assets discovers
+background jobs across views, and inherited stage image pickers show their effective
+images. Read `docs/reports/2026-10-31-assistant-image-actions.md`; no migration or runtime
+bump is involved. Existing owned API/assistant processes need an owner-managed reload
+to use the new endpoints/prompt; never restart another session's processes.
 Expressions (ADR 0041 slice A, migration 0026) repaint only the face of an approved
 base sprite as `character_expression` image jobs, so expressions swap on stage without
 jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) and

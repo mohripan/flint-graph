@@ -96,7 +96,11 @@ def test_prompt_identity_covers_template_schema_and_version_and_is_pinned():
     assert prompt_sha256() == expected
     # Changing the prompt or schema needs a new version and a deliberate new pin.
     assert PINNED_PROMPTS[PROMPT_VERSION] == expected
-    assert PROMPT_VERSION == "narrative-assistant/v2"
+    assert PROMPT_VERSION == "narrative-assistant/v3"
+    assert (
+        PINNED_PROMPTS["narrative-assistant/v2"]
+        == "99d7090be56e40f350e2e681c7fb59c47a49ce956ef2bfcd29d6be82d814ee8f"
+    )
 
 
 def test_response_schema_requires_reply_and_nullable_proposal():

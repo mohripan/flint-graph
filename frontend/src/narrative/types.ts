@@ -130,7 +130,7 @@ export type StoryOperation =
 // Suggested image jobs (story format 2): never applied with the proposal, started by the creator.
 export type AssistantAction =
   | { op: "generate_character_images"; character: string; appearance: string;
-      character_type: "girl" | "boy" | "woman" | "man" | "other"; framing: "portrait" | "full_body"; transparent: boolean }
+      character_type: "girl" | "boy" | "woman" | "man" | "other"; framing: "portrait" | "full_body"; transparent: boolean; hires?: boolean }
   | { op: "generate_backgrounds"; description: string };
 export interface AssistantProposal extends AssistantProposalSummary {
   turn_id: string; thread_id: string; base_revision_id: string; operations: StoryOperation[];

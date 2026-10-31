@@ -9,6 +9,13 @@ async function load(name) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText + `\n//# sourceURL=${name}.js`).toString("base64")}`);
 }
 const stage = await load("stageModel");
+test("inherited image choices show the effective asset without making a scene change", () => {
+  assert.deepEqual(stage.stageImageChoice(undefined, "courtyard"), { key: "courtyard", label: "From earlier scenes: courtyard" });
+  assert.deepEqual(stage.stageImageChoice(undefined, "?"), { key: null, label: "Varies by path" });
+  assert.deepEqual(stage.stageImageChoice(undefined, null), { key: null, label: "None from earlier scenes" });
+  assert.deepEqual(stage.stageImageChoice(null, "courtyard"), { key: null, label: "None" });
+  assert.deepEqual(stage.stageImageChoice("train", "courtyard"), { key: "train", label: "train" });
+});
 const cgs = JSON.parse(await readFile(new URL("../../tests/fixtures/narrative/event_cgs.json", import.meta.url), "utf8"));
 
 test("CGs share the player contract: first-use catalogue, carried state, explicit clear and asset retention", () => {

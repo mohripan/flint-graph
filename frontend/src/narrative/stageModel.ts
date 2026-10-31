@@ -4,6 +4,12 @@
 import type { CharacterFraming, StagePosition, StageShow, StoryDraft, StoryNode, StoryTheme } from "./types";
 
 type StageNode = Extract<StoryNode, { type: "stage" }>;
+/** Describe the effective image without writing inherited state into the story. */
+export function stageImageChoice(value: string | null | undefined, inherited: string | null | undefined): { key: string | null; label: string } {
+  if (value !== undefined) return { key: value, label: value ?? "None" };
+  if (inherited === "?") return { key: null, label: "Varies by path" };
+  return { key: inherited ?? null, label: inherited ? `From earlier scenes: ${inherited}` : "None from earlier scenes" };
+}
 export const POSITIONS: StagePosition[] = ["left", "center", "right"];
 const ID = /^[a-z][a-z0-9_-]{0,63}$/;
 const RESERVED = new Set(["con", "prn", "aux", "nul",

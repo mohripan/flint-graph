@@ -4,6 +4,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from flint_graph.api.narrative_character_schemas import ImageJobResponse
+
+
+class AssistantImageActionResponse(BaseModel):
+    index: int
+    job: ImageJobResponse | None
+
 
 class AssistantThreadCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")

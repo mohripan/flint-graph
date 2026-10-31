@@ -7,6 +7,7 @@ import type { AssetFilter, UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
 import { refreshLibrary, useAssetFont } from "./libraryAssets";
 import { isActive, jobStatus } from "./characterModel";
+import { imageJobStarted, useBackgroundJobs } from "./imageJobs";
 import { Viewer } from "./CharacterStudio";
 import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
@@ -23,7 +24,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
   const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [viewing, setViewing] = useState<NarrativeImage | null>(null);
-  const [jobs, setJobs] = useState<ImageJob[]>([]);
+  const { jobs, failed: jobsFailed, put } = useBackgroundJobs(tenantId, projectId);
   const active = jobs.find(isActive) ?? null;
 
   const load = useCallback(async (before?: string) => {
@@ -34,21 +35,10 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
     } catch (error) { setNotice(message(error, "Could not load assets.")); setAssets(current => current ?? []); }
   }, [tenantId, projectId, filter]);
   useEffect(() => { setAssets(null); void load(); }, [load]);
+  const completedJobs = jobs.filter(job => job.status === "completed").map(job => job.id).sort().join(",");
   useEffect(() => {
-    api.listBackgroundJobs(tenantId, projectId).then(listed => setJobs(listed.jobs)).catch(() => undefined);
-  }, [tenantId, projectId]);
-  // Poll only a running background job; reload the grid when it finishes.
-  const activeId = active?.id;
-  useEffect(() => {
-    if (!activeId) return;
-    const timer = window.setInterval(() => {
-      api.getImageJob(tenantId, projectId, activeId).then(job => {
-        setJobs(current => current.map(item => item.id === job.id ? job : item));
-        if (!isActive(job)) void load();
-      }).catch(() => undefined);
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [activeId, tenantId, projectId, load]);
+    if (completedJobs) { void load(); refreshLibrary(); }
+  }, [completedJobs, load]);
 
   const replace = (asset: NarrativeImage) => setAssets(current => current?.map(item => item.id === asset.id ? asset : item) ?? null);
   async function act(run: () => Promise<void>, fallback: string) {
@@ -61,15 +51,24 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
       {canWrite && <button type="button" className="studio-primary" onClick={() => setUploading(true)}>Upload</button>}</div>
     <p className="studio-hint">Backgrounds, character sprites, CGs and fonts for this story. Uploads keep transparency; generated images wait here for your approval.</p>
     {canWrite && filter !== "image" && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
-      onStarted={job => { setJobs(current => [job, ...current]); setFilter("candidates"); }}
+      onStarted={job => { imageJobStarted(tenantId, projectId, job); setFilter("candidates"); }}
       onCancel={job => void act(async () => {
         const next = await api.cancelImageJob(tenantId, projectId, job.id);
-        setJobs(current => current.map(item => item.id === next.id ? next : item));
+        put(next);
       }, "Could not cancel.")} />}
     <div className="studio-asset-filters" role="group" aria-label="Show">
       {FILTERS.map(([id, label]) => <button type="button" key={id} aria-pressed={filter === id}
         className={filter === id ? "selected" : ""} onClick={() => setFilter(id)}>{label}</button>)}
     </div>
+    {jobsFailed && <p className="studio-notice" role="status">Image status could not be refreshed. Retrying…</p>}
+    {jobs.filter(isActive).map(job => <section key={job.id} className="studio-asset-generate" aria-label="Background generation">
+      <strong>Generating backgrounds</strong>
+      <p role="status">{jobStatus(job)}</p>
+      <progress max={job.count} value={job.progress} aria-label="Generated backgrounds" />
+      {canWrite && !job.cancel_requested && <button type="button" className="studio-link" onClick={() => void act(async () => {
+        put(await api.cancelImageJob(tenantId, projectId, job.id));
+      }, "Could not cancel.")}>Cancel background generation</button>}
+    </section>)}
     {filter === "image" && <section className="studio-asset-generate" aria-label="CGs">
       <div className="studio-section-heading"><h3>Event CGs</h3>
         {canWrite && <button type="button" className="studio-secondary" onClick={() => setUploading(true)}>Upload CG</button>}</div>

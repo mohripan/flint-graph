@@ -7,6 +7,23 @@ const source = await readFile(new URL("../src/lib/api.ts", import.meta.url), "ut
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2021 } });
 const { api, setAccessTokenProvider } = await import(`data:text/javascript;base64,${Buffer.from(outputText + "\n//# sourceURL=assistant-api-test.js").toString("base64")}`);
 
+test("suggested image starts have a server identity and resume from server job status", async () => {
+  const original = globalThis.fetch, calls = [];
+  globalThis.fetch = async (path, init) => { calls.push({ path, init }); return new Response("[]"); };
+  try {
+    const signal = new AbortController().signal;
+    await api.listAssistantImageActions("workspace", "project", "proposal", signal);
+    await api.startAssistantImageAction("workspace", "project", "proposal", 2, signal);
+    assert.deepEqual(calls.map(c => [c.path, c.init.method ?? "GET"]), [
+      ["/v1/narrative/projects/project/assistant/proposals/proposal/image-actions", "GET"],
+      ["/v1/narrative/projects/project/assistant/proposals/proposal/image-actions/2", "POST"],
+    ]);
+    assert.equal(calls[0].init.cache, "no-store");
+    assert.equal(calls[1].init.body, undefined, "the accepted server proposal supplies all image parameters");
+    assert.ok(calls.every(c => c.init.signal === signal && c.init.headers["X-Tenant-ID"] === "workspace"));
+  } finally { globalThis.fetch = original; }
+});
+
 test("assistant calls are project scoped, authenticated, abortable and uncached when polled", async () => {
   const original = globalThis.fetch, calls = [];
   setAccessTokenProvider(async () => "fixture-access-token");

@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { AssetThumb, IMAGE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
-import { POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage } from "./stageModel";
+import { POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage, stageImageChoice } from "./stageModel";
 import type { StageEdit, StageSnapshot } from "./stageModel";
 import type { StagePosition, StoryDraft } from "./types";
 
@@ -32,8 +32,10 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
     try { onChange(setSceneStage(base, head, next), `${head}:stage`); } catch (error) { onError(message(error)); }
   };
   const backgrounds = (assets ?? []).filter(asset => IMAGE_KINDS.has(asset.kind) && asset.media_type === "image/png");
-  const current = typeof edit.background === "string" ? story.assets[edit.background] : undefined;
-  const cg = typeof edit.cg === "string" ? story.assets[edit.cg] : undefined;
+  const backgroundChoice = stageImageChoice(edit.background, inherited?.background);
+  const cgChoice = stageImageChoice(edit.cg, inherited?.cg);
+  const current = backgroundChoice.key ? story.assets[backgroundChoice.key] : undefined;
+  const cg = cgChoice.key ? story.assets[cgChoice.key] : undefined;
   const snapshot = applyStageNode(inherited ?? { background: null, cg: null, characters: {} }, story.nodes[head]);
   const leaving = Object.keys(inherited?.characters ?? {});
   const free = POSITIONS.find(position => !edit.show.some(entry => entry.position === position));
@@ -47,7 +49,8 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
       <div className="studio-stage-background">
         <span className="studio-stage-label">Background</span>
         <AssetThumb tenantId={tenantId} projectId={projectId} asset={libraryAsset(assets, current?.sha256)}
-          label={edit.background === undefined ? "Unchanged" : edit.background === null ? "None" : edit.background} />
+          label={backgroundChoice.label} />
+        <span className="studio-hint">{backgroundChoice.label}</span>
         <div className="studio-actions">
           <button type="button" className="studio-secondary" onClick={() => setPicking(value => value === "background" ? null : "background")}>
             {picking === "background" ? "Done" : "Choose…"}</button>
@@ -60,7 +63,8 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
       <div className="studio-stage-background">
         <span className="studio-stage-label">Event CG</span>
         <AssetThumb tenantId={tenantId} projectId={projectId} asset={libraryAsset(assets, cg?.sha256)}
-          label={edit.cg === undefined ? "Unchanged" : edit.cg === null ? "None" : edit.cg} />
+          label={cgChoice.label} />
+        <span className="studio-hint">{cgChoice.label}</span>
         <div className="studio-actions">
           <button type="button" className="studio-secondary" onClick={() => setPicking(value => value === "cg" ? null : "cg")}>
             {picking === "cg" ? "Done" : "Choose CG…"}</button>

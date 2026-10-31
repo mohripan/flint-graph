@@ -101,13 +101,14 @@ class GenerateCharacterImages(_Operation):
     character_type: Literal["girl", "boy", "woman", "man", "other"]
     framing: Literal["portrait", "full_body"] = "full_body"
     transparent: bool = False
+    hires: bool = False
 
     @model_validator(mode="before")
     @classmethod
     def _cutout_is_full_body(cls, data: Any) -> Any:
         # A transparent cut-out is a stage sprite, and those are always full-body.
         if isinstance(data, dict) and data.get("transparent") is True:
-            return {**data, "framing": "full_body"}
+            return {**data, "framing": "full_body", "hires": data.get("hires", True)}
         return data
 
 

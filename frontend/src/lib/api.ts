@@ -48,6 +48,7 @@ export interface ImageJob {
   // High resolution: width × height is the base render, upscaled to the output size.
   hires: { scale: number; strength: number } | null; output_width: number; output_height: number;
 }
+export interface AssistantImageActionStatus { index: number; job: ImageJob | null }
 import type {
   AnswerProvenance,
   Conversation,
@@ -502,7 +503,7 @@ export const api = {
   },
 
   listBackgroundJobs(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ jobs: ImageJob[] }> {
-    return jsonRequest(`${projectPath(projectId)}/assets/background-jobs`, {
+    return jsonRequest(`${projectPath(projectId)}/assets/background-jobs?limit=50`, {
       headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
   },
@@ -512,6 +513,20 @@ export const api = {
   } = {}): Promise<AssistantThread[]> {
     return jsonRequest(`${assistantPath(projectId)}/threads?${narrativePage(options)}`, {
       headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  listAssistantImageActions(tenantId: string, projectId: string, proposalId: string,
+    signal?: AbortSignal): Promise<AssistantImageActionStatus[]> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/image-actions`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  startAssistantImageAction(tenantId: string, projectId: string, proposalId: string, index: number,
+    signal?: AbortSignal): Promise<ImageJob> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/image-actions/${index}`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
     });
   },
 

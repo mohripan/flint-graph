@@ -24,6 +24,18 @@ recover access. Archive/restore remains available through the admin API.
 
 ## Start everything
 
+The scene stage panel shows effective background/CG thumbnails. **From earlier
+scenes: …** means the image is inherited and stays visible; it does not mean the
+background is empty. **None from earlier scenes** means no image is carried,
+and **Varies by path** means incoming routes disagree. Choosing **No background**
+or **Clear CG** explicitly clears that layer; **Keep earlier** removes the local
+override. Merely inspecting a scene does not copy inherited state into its nodes.
+
+Background generation started in Assistant also appears in Assets, with progress
+visible under every asset filter. Returning to Assistant restores the same server
+job instead of offering a duplicate generation. See the
+[assistant image-action report](../reports/2026-10-31-assistant-image-actions.md).
+
 ```bash
 uv run python tools/narrative/studio.py
 ```
