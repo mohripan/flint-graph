@@ -22,6 +22,34 @@ Only selected workspace/project IDs are stored locally. Authorization failures c
 displayed studio content and invalidate pending requests. Reload workspaces to
 recover access. Archive/restore remains available through the admin API.
 
+## Start everything
+
+```bash
+uv run python tools/narrative/studio.py
+```
+
+The launcher reads `studio.local.env` at the repository root, a git-ignored copy of
+[`tools/narrative/studio.env.example`](../../tools/narrative/studio.env.example)
+that documents every line. `FLINT_GRAPH_*` lines are the app's settings and go only
+to the API and workers. `STUDIO_*` lines choose the services, ports, Docker
+containers and playtest build. In order, it:
+
+1. starts the listed Docker containers that are stopped (PostgreSQL, MinIO,
+   Temporal), then waits for them and, when the assistant or image worker runs, for
+   Ollama;
+2. refuses to start when a port is taken, `frontend/node_modules` is missing, or the
+   playtest build was made for another frontend origin or Godot runtime version
+   (rebuild it as below);
+3. applies `alembic upgrade head` (`--no-migrate` skips it);
+4. runs the API, the release worker and relay, the assistant and image workers, the
+   playtest server and the frontend, prefixing each line of output with its name,
+   and prints `ready` once the API, playtest and frontend answer.
+
+Ctrl+C stops every process it started. Closing the window or killing the launcher
+ends them too. `check` runs steps 1 and 2 only. `STUDIO_SERVICES` runs a subset,
+for example `api,preview,frontend` without the GPU and model workers. After editing
+the image content policy or settings, restart the launcher.
+
 ## Build the trusted preview explicitly
 
 Use the verified official Godot 4.7.2 engine/templates from the

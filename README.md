@@ -14,7 +14,8 @@ saves. See the [player contract](docs/architecture/godot-player-contract.md) and
 [engine guide](docs/runbooks/godot-toolchain.md).
 [Real browser qualification](docs/reports/2026-10-27-narrative-web.md) passed;
 [author/export/play locally](docs/runbooks/narrative-web-play.md).
-The authoring editor remains pending.
+The Studio (scene editor, story assistant, character and background generation,
+playtests and release builds) runs locally; see [Run the narrative Studio](#run-the-narrative-studio).
 Workspace-scoped [project/revision APIs](docs/architecture/narrative-project-contract.md)
 now preserve immutable source and recoverable concurrent edits; see
 [M31 progress](docs/milestones/31-authored-narrative-studio.md).
@@ -44,6 +45,24 @@ The early milestones establish durable identities, tenant boundaries, version se
 - `uv`
 - Python 3.12
 - Node.js 20.19+ or 22.12+ for the frontend
+
+## Run the narrative Studio
+
+One command starts the whole local Studio: it starts its Docker containers, waits
+for PostgreSQL, MinIO, Temporal and Ollama, applies migrations, then runs the API,
+the release, relay, assistant and image workers, the playtest server and the
+frontend until Ctrl+C.
+
+```bash
+uv run python tools/narrative/studio.py
+```
+
+Copy `tools/narrative/studio.env.example` to `studio.local.env` (git ignores it) and
+fill it in first; `uv run python tools/narrative/studio.py check` runs the checks
+without starting anything. Then open `http://localhost:5173`. See the
+[Studio runbook](docs/runbooks/narrative-studio.md#start-everything).
+
+`docker compose up --build` below starts the GraphRAG document stack, not the Studio.
 
 ## Run locally with Docker
 

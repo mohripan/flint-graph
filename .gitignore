@@ -10,4 +10,6 @@ notes/
 # Virtual environments
 .venv
 .env
+# Local Studio launcher settings (tools/narrative/studio.py); holds credentials.
+studio.local.env
 .superpowers/*

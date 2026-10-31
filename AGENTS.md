@@ -82,7 +82,12 @@ flag now defaults on and new projects start on v2. Read
 `docs/reports/2026-10-31-vn-studio-editors.md`; editor logic is in
 `frontend/src/narrative/stageModel.ts`. Runtime 0.4.0 adds stage framing (character size and
 top, free horizontal placement); read `docs/reports/2026-10-31-stage-framing.md`. Owned playtests need
-`VITE_FLINT_GRAPH_PREVIEW_ORIGIN` on the frontend dev server. The owned PostgreSQL, MinIO and Temporal
+`VITE_FLINT_GRAPH_PREVIEW_ORIGIN` on the frontend dev server.
+The whole local Studio now starts with `uv run python tools/narrative/studio.py`
+(API, four workers, playtest server, frontend), configured by the git-ignored
+`studio.local.env` (template `tools/narrative/studio.env.example`; this machine's copy
+holds the owned fixture settings, so never print it). It replaces the
+`notes/narrative_owned_process.py` and `notes/serve-main-studio-api.py` starts. The owned PostgreSQL, MinIO and Temporal
 fixtures now use Docker volumes with fixed ports
 (`notes/persist-narrative-fixtures.py`). The earlier tmpfs fixtures lost all data on
 a Docker restart.
