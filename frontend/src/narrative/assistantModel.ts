@@ -1,4 +1,4 @@
-import type { AssistantTurn, ProposalStatus, StoryDraft, StoryOperation, TurnWrite } from "./types";
+import type { AssistantAction, AssistantTurn, ProposalStatus, StoryDraft, StoryOperation, TurnWrite } from "./types";
 
 export interface TurnIntent extends TurnWrite {}
 // A lost acknowledgement resends the same key; any change to the message is a new turn.
@@ -41,10 +41,22 @@ export interface ProposalChange {
 function text(value: unknown): string | undefined {
   return value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : undefined;
 }
+export function isAction(operation: StoryOperation): operation is AssistantAction {
+  return operation.op === "generate_character_images" || operation.op === "generate_backgrounds";
+}
+/** One line per suggested image job, and whether it can start against the saved story. */
+export function proposalActions(story: Pick<StoryDraft, "characters"> | null, operations: StoryOperation[]):
+  Array<{ action: AssistantAction; label: string; ready: boolean }> {
+  return operations.filter(isAction).map(action => action.op === "generate_backgrounds"
+    ? { action, label: `Generate backgrounds: ${action.description}`, ready: true }
+    : { action, ready: Boolean(story?.characters[action.character]),
+        label: `Generate ${action.transparent ? "transparent sprites" : action.framing === "full_body" ? "full-body portraits" : "portraits"}`
+          + ` for ${story?.characters[action.character]?.name ?? action.character}: ${action.appearance}` });
+}
 export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" | "variables"> | null,
   operations: StoryOperation[]): ProposalChange[] {
   if (!story) return [];
-  return operations.map((operation): ProposalChange => {
+  return operations.filter(operation => !isAction(operation)).map((operation): ProposalChange => {
     switch (operation.op) {
       case "upsert_node": {
         const before = story.nodes[operation.id];
@@ -69,6 +81,15 @@ export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" |
         return { kind: "changed", target: "entry", label: `Start scene → ${operation.id}` };
       case "set_title":
         return { kind: "changed", target: "title", label: `Title → ${operation.title}` };
+      case "set_theme":
+        return { kind: operation.theme ? "changed" : "removed", target: "theme", label: "Look (theme)" };
+      case "add_asset":
+        return { kind: "added", target: `assets.${operation.id}`, label: `${operation.asset.kind === "font" ? "Font" : "Image"} ${operation.id} from the library` };
+      default: {
+        // A newer server may send an operation this Studio doesn't know yet.
+        const op = (operation as { op: string }).op;
+        return { kind: "changed", target: op, label: op };
+      }
     }
   });
 }

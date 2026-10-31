@@ -120,9 +120,18 @@ export interface AssistantTurn {
 export type StoryOperation =
   | { op: "upsert_node"; id: string; node: Partial<StoryNode> & { type: StoryNode["type"] } }
   | { op: "delete_node" | "delete_character" | "delete_variable" | "set_entry"; id: string }
-  | { op: "upsert_character"; id: string; name: string }
+  | { op: "upsert_character"; id: string; name: string; color?: string | null;
+      sprites?: Record<string, string> | null; stage?: CharacterFraming | null }
   | { op: "upsert_variable"; id: string; declaration: VariableDeclaration }
-  | { op: "set_title"; title: string };
+  | { op: "set_title"; title: string }
+  | { op: "set_theme"; theme: StoryTheme | null }
+  | { op: "add_asset"; id: string; asset: { kind: "image" | "font"; path: string; sha256: string } }
+  | AssistantAction;
+// Suggested image jobs (story format 2): never applied with the proposal, started by the creator.
+export type AssistantAction =
+  | { op: "generate_character_images"; character: string; appearance: string;
+      character_type: "girl" | "boy" | "woman" | "man" | "other"; framing: "portrait" | "full_body"; transparent: boolean }
+  | { op: "generate_backgrounds"; description: string };
 export interface AssistantProposal extends AssistantProposalSummary {
   turn_id: string; thread_id: string; base_revision_id: string; operations: StoryOperation[];
   diagnostics: Array<{ code: string; location: string }>; warnings: Array<{ code: string; location: string }>;

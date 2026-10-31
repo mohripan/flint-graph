@@ -8,7 +8,7 @@ Audit metadata and outbox payloads carry identifiers, never story or chat text.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
@@ -45,6 +45,16 @@ from flint_graph.infrastructure.db.models import (
     Tenant,
 )
 from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
+from flint_graph.infrastructure.db.narrative_character_models import (
+    NarrativeAsset,
+    NarrativeCharacterProfile,
+)
+from flint_graph.narrative.assistant.assets import (
+    LIBRARY_LIMIT,
+    LibraryEntry,
+    LibraryRow,
+    library_entries,
+)
 from flint_graph.narrative.assistant.context import HistoryTurn
 from flint_graph.narrative.assistant.operations import Proposal, check_proposal
 from flint_graph.narrative.assistant.turn import TurnResult
@@ -73,6 +83,10 @@ class TurnWork:
     request: str
     focus: str | None
     history: tuple[HistoryTurn, ...]
+    # Story format 2: approved library files under story-ready IDs, and each
+    # character's described looks (editor metadata the model may reuse).
+    library: tuple[LibraryEntry, ...] = ()
+    profiles: dict[str, str] = field(default_factory=dict)
 
 
 async def create_thread(
@@ -709,15 +723,42 @@ async def claim_turn(
         history.append(HistoryTurn("user", previous.request))
         if previous.reply:
             history.append(HistoryTurn("assistant", previous.reply))
+    story = json.loads(base.story_json)
+    library: tuple[LibraryEntry, ...] = ()
+    profiles: dict[str, str] = {}
+    if story.get("schema_version") == "2":
+        rows = await session.scalars(
+            select(NarrativeAsset)
+            .where(
+                NarrativeAsset.tenant_id == turn.tenant_id,
+                NarrativeAsset.project_id == turn.project_id,
+                NarrativeAsset.status == "approved",
+            )
+            .order_by(NarrativeAsset.created_at.desc(), NarrativeAsset.id)
+            .limit(4 * LIBRARY_LIMIT)
+        )
+        library = library_entries(
+            story,
+            (LibraryRow(row.name, row.kind, row.media_type, row.sha256) for row in rows),
+        )
+    looks = await session.scalars(
+        select(NarrativeCharacterProfile).where(
+            NarrativeCharacterProfile.tenant_id == turn.tenant_id,
+            NarrativeCharacterProfile.project_id == turn.project_id,
+        )
+    )
+    profiles = {row.character_id: row.appearance for row in looks if row.appearance}
     await session.flush()
     return TurnWork(
         tenant_id=turn.tenant_id,
         project_id=turn.project_id,
         turn_id=turn.id,
-        story=json.loads(base.story_json),
+        story=story,
         request=turn.request,
         focus=turn.focus_node,
         history=tuple(history),
+        library=library,
+        profiles=profiles,
     )
 
 

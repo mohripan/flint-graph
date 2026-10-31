@@ -70,6 +70,33 @@ test("proposal changes are described against the saved story in plain language",
   assert.deepEqual(model.proposalChanges(null, []), []);
 });
 
+test("format 2 changes are described and image actions are listed apart", () => {
+  const operations = [
+    { op: "upsert_character", id: "ren", name: "Ren", color: "#c0392bcc", sprites: { neutral: "ren_neutral" } },
+    { op: "set_theme", theme: { textbox: { position: "bottom" } } },
+    { op: "add_asset", id: "harbor_night", asset: { kind: "image", path: "assets/harbor_night.png", sha256: "a".repeat(64) } },
+    { op: "generate_character_images", character: "ren", appearance: "white hair, red eyes", character_type: "boy", framing: "full_body", transparent: true },
+    { op: "generate_character_images", character: "oren", appearance: "grey beard", character_type: "man", framing: "portrait", transparent: false },
+    { op: "generate_backgrounds", description: "a harbor at night" },
+  ];
+  assert.deepEqual(model.proposalChanges(story, operations).map(row => [row.kind, row.target, row.label]), [
+    ["added", "characters.ren", "Character Ren"],
+    ["changed", "theme", "Look (theme)"],
+    ["added", "assets.harbor_night", "Image harbor_night from the library"],
+  ]);
+  assert.equal(model.proposalChanges(story, [{ op: "set_theme", theme: null }])[0].kind, "removed");
+  assert.deepEqual(model.proposalActions(story, operations).map(row => [row.label, row.ready]), [
+    ["Generate transparent sprites for ren: white hair, red eyes", false],
+    ["Generate portraits for Oren: grey beard", true],
+    ["Generate backgrounds: a harbor at night", true],
+  ]);
+  const accepted = { ...story, characters: { ...story.characters, ren: { name: "Ren" } } };
+  assert.equal(model.proposalActions(accepted, operations)[0].label, "Generate transparent sprites for Ren: white hair, red eyes");
+  assert.equal(model.proposalActions(accepted, operations)[0].ready, true);
+  assert.equal(model.isAction(operations[0]), false);
+  assert.equal(model.isAction(operations[5]), true);
+});
+
 test("turn and failure copy is human and never shows raw codes", () => {
   assert.equal(model.turnStatus({ status: "queued", cancel_requested: false }), "Waiting for the assistant…");
   assert.equal(model.turnStatus({ status: "running", cancel_requested: false }), "Writing a reply…");

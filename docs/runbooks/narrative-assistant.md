@@ -98,6 +98,20 @@ thinking and the reply text as they are produced. Finished replies collapse to
 - The open conversation is in the link (`?project=…&thread=…`), and its ID shows
   next to the title (click to copy). A link opens that project and conversation;
   quote the thread ID when reporting a problem with a reply.
+- On story format 2 (prompt `narrative-assistant/v2`) the assistant also sets a
+  character's name colour, expression sprites and stage framing, writes stage
+  nodes and line expressions, changes the theme, and uses approved library files by
+  ID. The server adds each library file it uses to the story's assets and pins it by
+  SHA-256. The model sees up to 120 approved library files and each character's
+  saved appearance.
+- Image generation is suggested, never run by the assistant. A proposal can carry
+  "Suggested pictures" (character portraits, full-body or transparent sprites, or
+  backgrounds). Accepting applies only the story changes. Each suggestion then has
+  its own **Generate** button that starts a normal image job with the creator's
+  access, and the results wait for approval in Characters or Assets. A suggestion
+  for a character the proposal adds stays disabled until the proposal is accepted.
+  A transparent sprite is always full-body. The assistant cannot change the
+  expression of an existing picture yet: it suggests one sprite job per expression.
 
 ## Troubleshooting
 

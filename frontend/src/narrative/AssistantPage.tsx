@@ -7,6 +7,7 @@ import {
 } from "./assistantModel";
 import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnIntent } from "./assistantModel";
 import { followTurnEvents, listTurnEvents, streamTurnEvents } from "./assistantStream";
+import { ProposalActions } from "./ProposalActions";
 import { releaseErrorMessage, useReleaseRequests } from "./releaseRequests";
 import type { AssistantProposal, AssistantThread, AssistantTurn, NarrativeRevision, StoryDraft } from "./types";
 import "./assistant.css";
@@ -382,6 +383,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                         {change.after && <q>{change.after.slice(0, 240)}</q>}
                         {!change.after && change.before && <q className="studio-change-before">{change.before.slice(0, 240)}</q>}
                       </li>)}</ul>
+                    <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite} />
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules
                       ({detail.diagnostics.slice(0, 3).map(item => `${item.code.replaceAll("_", " ")} at ${item.location}`).join("; ")}).
                       Ask again or rephrase.</p>}

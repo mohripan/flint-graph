@@ -8,10 +8,11 @@ Story text is data: it is delimited and escaped so it cannot close the delimiter
 
 import json
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from flint_graph.narrative.assistant.assets import LibraryEntry
 from flint_graph.narrative.assistant.prompts import SYSTEM_PROMPT
 
 HISTORY_TURNS = 8
@@ -56,12 +57,14 @@ def build_turn_messages(
     focus: str | None = None,
     history: Sequence[HistoryTurn] = (),
     budget: int = 32000,
+    library: Sequence[LibraryEntry] = (),
+    profiles: Mapping[str, str] | None = None,
 ) -> tuple[list[dict[str, str]], ContextStats]:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     recent = list(history)[-HISTORY_TURNS:]
     for turn in recent:
         messages.append({"role": turn.role, "content": turn.content[:HISTORY_CHARS]})
-    context, outlined, shown = _render(story, focus, budget)
+    context, outlined, shown = _render(story, focus, budget, library, profiles or {})
     messages.append(
         {
             "role": "user",
@@ -146,25 +149,60 @@ def render_story(story: dict[str, Any], focus: str | None, budget: int) -> str:
     return _render(story, focus, budget)[0]
 
 
-def _render(story: dict[str, Any], focus: str | None, budget: int) -> tuple[str, int, str | None]:
+def _character(key: str, item: dict[str, Any], looks: str | None) -> str:
+    details = []
+    if item.get("sprites"):
+        details.append(
+            "expressions: "
+            + ", ".join(f"{name}={asset}" for name, asset in item["sprites"].items())
+        )
+    if item.get("color"):
+        details.append(f"color {item['color']}")
+    if item.get("stage"):
+        details.append("framing " + json.dumps(item["stage"], separators=(",", ":")))
+    if looks:
+        details.append("looks: " + _quote(looks[:200]))
+    return f"  {key}: {_quote(item.get('name'))}" + (f" ({'; '.join(details)})" if details else "")
+
+
+def _render(
+    story: dict[str, Any],
+    focus: str | None,
+    budget: int,
+    library: Sequence[LibraryEntry] = (),
+    profiles: Mapping[str, str] | None = None,
+) -> tuple[str, int, str | None]:
     """Return the context text, the number of outlined scenes and the shown focus scene."""
     nodes: dict[str, Any] = story["nodes"]
+    staged = story.get("schema_version") == "2"
+    looks = profiles or {}
     header = [
         f"title: {_quote(story['title'])}",
         f"language: {story['language']}",
+        f"format: {story.get('schema_version')}"
+        + (" (stage, expressions, sprites and theme)" if staged else " (text only)"),
         f"entry: {story['entry']}",
         "characters:",
-        *(
-            f"  {key}: {_quote(item.get('name'))}"
-            + (f" (expressions: {', '.join(item['sprites'])})" if item.get("sprites") else "")
-            for key, item in story["characters"].items()
-        ),
+        *(_character(key, item, looks.get(key)) for key, item in story["characters"].items()),
         "variables:",
     ]
     for key, declaration in story["variables"].items():
         kind = declaration.get("type")
         values = f" [{', '.join(declaration.get('values', []))}]" if kind == "enum" else ""
         header.append(f"  {key}: {kind}{values} = {_quote(declaration.get('initial'))}")
+    if staged:
+        header.append("story assets:")
+        header += [f"  {key}: {item.get('kind', 'image')}" for key, item in story["assets"].items()]
+        if library:
+            header.append("library (approved files; use an ID and it is added to the story):")
+            header += [
+                f"  {entry.key}: {entry.library_kind} {_quote(entry.name[:40])}"
+                for entry in library
+            ]
+        if story.get("theme"):
+            header.append(
+                "theme: " + json.dumps(story["theme"], ensure_ascii=False, separators=(",", ":"))
+            )
     head = _safe("\n".join(header)) + "\nscenes (id | type | text -> next):"
 
     adjacent: dict[str, set[str]] = {key: set() for key in nodes}

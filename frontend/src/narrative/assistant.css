@@ -80,6 +80,11 @@
 .studio-change.is-added { background:#e0efe5; color:#22593a; }
 .studio-change.is-changed { background:#dce8f0; color:#26445a; }
 .studio-change.is-removed { background:#fbe3e5; color:#862d37; }
+.assistant-actions { display:flex; flex-direction:column; gap:8px; border-top:1px solid #dbe4ea; padding-top:10px; }
+.assistant-actions ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.assistant-actions li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; align-items:center; font-size:13px; }
+.assistant-actions li > span { overflow-wrap:anywhere; }
+.assistant-actions li > small { grid-column:1 / -1; }
 @keyframes assistant-spin { to { transform:rotate(360deg); } }
 @keyframes assistant-blink { to { visibility:hidden; } }
 @media (prefers-reduced-motion:reduce) {
