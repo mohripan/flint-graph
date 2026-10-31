@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import type { VoiceReference } from "../lib/api";
 import { MAX_SECONDS, encodeWav, referenceProblem, toReferenceSamples } from "./referenceAudio";
 
@@ -100,9 +100,10 @@ export function VoiceReferences({ tenantId, projectId, canWrite, onChange }: {
   const [transcript, setTranscript] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   if (!canWrite) return <p className="studio-hint">Only members of this workspace can hear voice references.</p>;
   const problem = pending ? referenceProblem(pending.samples) : null;
-  const preview = (picked: Pending) => { setPending(picked); setNotice(null); };
+  const preview = (picked: Pending) => { setPending(picked); setNotice(null); setFailure(null); };
   async function upload(file: File) {
     try { preview({ samples: await toReferenceSamples(await file.arrayBuffer()), source: "upload", label: file.name }); }
     catch { setNotice("This file could not be read as audio."); }
@@ -111,6 +112,7 @@ export function VoiceReferences({ tenantId, projectId, canWrite, onChange }: {
     event.preventDefault();
     if (!pending || problem || !confirmed || !speaker.trim() || busy) return;
     setBusy(true);
+    setFailure(null);
     try {
       await api.uploadVoiceReference(tenantId, projectId, {
         file: new Blob([encodeWav(pending.samples)], { type: "audio/wav" }), name: name.trim(), speaker_name: speaker.trim(),
@@ -119,7 +121,12 @@ export function VoiceReferences({ tenantId, projectId, canWrite, onChange }: {
       setPending(null); setConfirmed(false); setTranscript(""); setName("");
       setNotice("Reference saved. Choose it for a character in Characters → Voice.");
       reload();
-    } catch (error) { setNotice(message(error, "Could not save the reference.")); }
+    } catch (error) {
+      // An API started before voice references existed answers 404 until it is restarted.
+      setFailure(error instanceof ApiError && error.status === 404
+        ? "This server does not offer voice references yet. Restart the Studio to load the update, then save again."
+        : message(error, "Could not save the reference."));
+    }
     finally { setBusy(false); }
   }
   return <section className="studio-references" aria-label="Voice references">
@@ -148,6 +155,7 @@ export function VoiceReferences({ tenantId, projectId, canWrite, onChange }: {
         {consent === "self" ? " I confirm this recording is my own voice and I agree to it being cloned for this project."
           : " I confirm the speaker named above gave me permission to clone their voice for this project."}</label>
       <p className="studio-hint">Your declaration is recorded with your name and the time; FlintGraph does not verify it.</p>
+      {failure && <p className="studio-notice" role="alert">{failure}</p>}
       <div className="studio-actions">
         <button type="submit" className="studio-primary" disabled={Boolean(problem) || !confirmed || !speaker.trim() || busy}>
           {busy ? "Saving…" : "Save reference"}</button>
