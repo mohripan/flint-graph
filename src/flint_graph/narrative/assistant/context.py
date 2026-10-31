@@ -103,6 +103,11 @@ def _outline(key: str, node: dict[str, Any]) -> str:
     kind = node.get("type")
     if kind == "line":
         expression = f" ({node['expression']})" if "expression" in node else ""
+        voice = node.get("voice")
+        if isinstance(voice, dict):
+            # Voices are set in the Studio (ADR 0043); rewording a line keeps its voice.
+            sound = f" {_quote(voice.get('text'))}" if voice.get("mode") == "vocalization" else ""
+            expression += f" [voice: {voice.get('mode')}{sound}]"
         speaker = f" {node['speaker']}{expression} |" if "speaker" in node else ""
         return f"{key} | line |{speaker} {_snippet(node.get('text'))} -> {node.get('next')}"
     if kind == "stage":

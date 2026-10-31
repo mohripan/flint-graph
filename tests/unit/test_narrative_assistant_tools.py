@@ -294,3 +294,39 @@ async def test_a_turn_resolves_library_assets_before_checking():
     assert result.diagnostics == () and model.calls == 1
     assert result.story is not None and "harbor_fog" in result.story["assets"]
     assert any(item.op == "add_asset" for item in result.proposal.operations)
+
+
+def test_rewording_a_voiced_line_keeps_its_voice_for_the_same_speaker():
+    voiced = {
+        "schema_version": "2",
+        "id": "voices",
+        "title": "Voices",
+        "language": "en",
+        "entry": "hello",
+        "characters": {"mira": {"name": "Mira"}, "quen": {"name": "Quen"}},
+        "variables": {},
+        "assets": {},
+        "nodes": {
+            "hello": {
+                "type": "line",
+                "text_id": "hello",
+                "text": "Hi.",
+                "speaker": "mira",
+                "voice": {"mode": "vocalization", "text": "fufu"},
+                "next": "end",
+            },
+            "end": {"type": "end", "text_id": "end", "text": "Fin.", "ending": "done"},
+        },
+    }
+    line = {"type": "line", "text": "Hello there.", "speaker": "mira", "next": "end"}
+    kept = apply_operations(
+        voiced, proposal({"op": "upsert_node", "id": "hello", "node": line}).operations
+    )
+    assert kept.story["nodes"]["hello"]["voice"] == {"mode": "vocalization", "text": "fufu"}
+    other = apply_operations(
+        voiced,
+        proposal(
+            {"op": "upsert_node", "id": "hello", "node": {**line, "speaker": "quen"}}
+        ).operations,
+    )
+    assert "voice" not in other.story["nodes"]["hello"]

@@ -13,7 +13,7 @@ export function LibraryRail({ index, names, view, onView, canWrite, onCreate }: 
   const groups = index ? railGroups(index, names) : null;
   const item = (entry: RailItem, depth = 0) => <li key={JSON.stringify(entry.view)}>
     <button type="button" aria-current={sameView(entry.view, view) ? "true" : undefined}
-      className={sameView(entry.view, view) ? "selected" : ""} style={depth ? { paddingLeft: 10 + depth * 14 } : undefined}
+      aria-label={`${entry.label}, ${entry.count}`} className={sameView(entry.view, view) ? "selected" : ""} style={depth ? { paddingLeft: 10 + depth * 14 } : undefined}
       onClick={() => onView(entry.view)}><span>{entry.label}</span><small>{entry.count}</small></button></li>;
   return <nav className="studio-library-rail" aria-label="Asset groups">
     <ul>{(groups?.library ?? [{ view: { type: "all" }, label: "All assets", count: 0 }]).map(entry => item(entry))}</ul>

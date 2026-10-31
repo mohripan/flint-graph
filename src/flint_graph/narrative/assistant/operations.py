@@ -200,6 +200,7 @@ def apply_operations(story: dict[str, Any], operations: Sequence[Operation]) -> 
         if isinstance(operation, UpsertNode):
             node = copy.deepcopy(operation.node)
             _inherit_text_ids(node, result["nodes"].get(operation.id))
+            _keep_voice(node, result["nodes"].get(operation.id))
             result["nodes"][operation.id] = node
             written.append((operation.id, node))
         elif isinstance(operation, UpsertCharacter):
@@ -248,6 +249,20 @@ def check_proposal(
     if diagnostics:
         return ProposalCheck(None, diagnostics, (), edit.touched)
     return ProposalCheck(edit.story, (), warnings, edit.touched)
+
+
+def _keep_voice(node: Any, previous: Any) -> None:
+    """Rewording a voiced line keeps its voice (ADR 0043); the assistant cannot set voices
+    yet, so a line rewritten for the same speaker without ``voice`` keeps the old one."""
+    if (
+        isinstance(node, dict)
+        and isinstance(previous, dict)
+        and node.get("type") == previous.get("type") == "line"
+        and "voice" not in node
+        and "voice" in previous
+        and node.get("speaker") == previous.get("speaker")
+    ):
+        node["voice"] = copy.deepcopy(previous["voice"])
 
 
 def _inherit_text_ids(node: dict[str, Any], previous: Any) -> None:

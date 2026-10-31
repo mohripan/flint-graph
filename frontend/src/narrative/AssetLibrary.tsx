@@ -193,7 +193,7 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
   const image = asset.media_type === "image/png";
   const url = useNarrativeImage(tenantId, projectId, image ? asset.id : null, "thumbnail");
   return <figure className={`studio-asset ${asset.status === "candidate" ? "candidate" : ""} ${selected ? "selected" : ""}`}>
-    {canWrite && <label className="studio-asset-select"><input type="checkbox" checked={selected} onChange={onSelect} />
+    {canWrite && <label className="studio-asset-select"><input type="checkbox" aria-label={`Select ${asset.name}`} checked={selected} onChange={onSelect} />
       <span className="studio-visually-hidden">Select {asset.name}</span></label>}
     {image ? <button type="button" className={`studio-asset-preview ${asset.kind}`} onClick={onView} aria-label={`View ${asset.name}`}>
       {url ? <img src={url} alt="" /> : <span>Loading…</span>}</button>
