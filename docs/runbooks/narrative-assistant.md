@@ -95,6 +95,9 @@ thinking and the reply text as they are produced. Finished replies collapse to
 - Live progress is bounded per turn: at most 64,000 thinking and 16,000 reply
   characters per attempt and 1,500 rows, with the last 100 rows kept for steps and
   the final status. Longer thinking is marked as cut in the step list.
+- The open conversation is in the link (`?project=…&thread=…`), and its ID shows
+  next to the title (click to copy). A link opens that project and conversation;
+  quote the thread ID when reporting a problem with a reply.
 
 ## Troubleshooting
 
@@ -106,6 +109,7 @@ thinking and the reply text as they are produced. Finished replies collapse to
 | Turn stays "Waiting for the assistant…" | Worker process running, Temporal reachable, same task queue on API-side relay and worker |
 | A long pause before "Thinking" appears | The model is loading; a different `num_ctx` (for example with thinking on) makes Ollama reload it |
 | Steps appear but no text streams | A proxy is buffering `text/event-stream`; the page still shows the stored reply when the turn ends |
+| "unsupported schema at schema_version" on a format 2 story | The assistant worker predates story format 2; restart it so it validates with the current code |
 
 On Windows, if the Vite dev server serves an old stylesheet after edits, touch the
 file or restart Vite; production builds are unaffected.

@@ -37,6 +37,15 @@ function readSelection(key: string): string | null {
 function writeSelection(key: string, id: string | null): void {
   try { if (id) localStorage.setItem(key, id); else localStorage.removeItem(key); } catch { /* IDs are optional convenience. */ }
 }
+/** Keeps ?project= (and ?thread= while that project's conversation is open) in the link. */
+function linkProject(projectId: string | null, keepThread: boolean): void {
+  try {
+    const url = new URL(location.href);
+    if (projectId) url.searchParams.set("project", projectId); else url.searchParams.delete("project");
+    if (!projectId || !keepThread) url.searchParams.delete("thread");
+    history.replaceState(history.state, "", url);
+  } catch { /* The link is a convenience. */ }
+}
 function parsedStory(source: string): StoryDraft | null {
   try {
     const value = JSON.parse(source) as StoryDraft;
@@ -87,8 +96,14 @@ export function StudioPage({ onDirtyChange }: {
   // on every path that changes project, collection or access.
   const assistantScope = useRef<(() => void) | null>(null), hierarchyScope = useRef<(() => void) | null>(null);
   const viewKey = `flintgraph.studio.view.${tenantId}`;
-  const [view, setView] = useState<"editor" | "assistant">(() => readSelection(viewKey) === "assistant" ? "assistant" : "editor");
-  const chooseView = (next: "editor" | "assistant") => { setView(next); writeSelection(viewKey, next === "assistant" ? next : null); };
+  // A link with ?project=…&thread=… opens that project's conversation (shared or reported by ID).
+  const linked = useRef(new URLSearchParams(location.search));
+  const [view, setView] = useState<"editor" | "assistant">(() =>
+    linked.current.get("thread") || readSelection(viewKey) === "assistant" ? "assistant" : "editor");
+  const chooseView = (next: "editor" | "assistant") => {
+    setView(next); writeSelection(viewKey, next === "assistant" ? next : null);
+    if (next === "editor" && stateRef.current.project) linkProject(stateRef.current.project.id, false);
+  };
   const endReleases = useCallback(() => {
     releaseScope.current?.(); assistantScope.current?.(); hierarchyScope.current?.(); setReleasesOpen(false);
   }, []);
@@ -196,6 +211,7 @@ export function StudioPage({ onDirtyChange }: {
       dispatch({ type: "loaded", generation, project, revision });
       setSceneId(parsedStory(revision.story_json)?.entry ?? "");
       writeSelection(storageKey, id); void refreshHistory(id, generation);
+      linkProject(id, new URLSearchParams(location.search).get("project") === id);
     } catch (error) {
       if (mounted.current && epoch.current === generation && error instanceof ApiError && error.status === 404) writeSelection(storageKey, null);
       failure(error, generation);
@@ -204,7 +220,7 @@ export function StudioPage({ onDirtyChange }: {
 
   useEffect(() => {
     mounted.current = true;
-    const selected = readSelection(storageKey);
+    const selected = linked.current.get("project") ?? readSelection(storageKey);
     if (selected) void loadProject(selected);
     void refreshProjects();
     return () => { mounted.current = false; epoch.current += 1; listEpoch.current += 1;
@@ -322,6 +338,7 @@ export function StudioPage({ onDirtyChange }: {
     if (!confirmLeave()) return;
     abortAll(); epoch.current += 1; pendingSave.current = null; saving.current = false;
     history.current.clear(); setPeek(null); setPreview(null); endReleases(); setHistoryRows([]); setRawMode(false); writeSelection(storageKey, null);
+    linkProject(null, false);
     dispatch({ type: "clear", generation: epoch.current }); void refreshProjects();
   }
   function choosePanel(next: Panel) {
