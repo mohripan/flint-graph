@@ -72,6 +72,7 @@ async def test_cloned_clips_come_back_at_the_models_sample_rate(model_id, rate):
     assert (first.sample_rate, first.device) == (rate, "cuda")
     assert validate_wav(first.data, "x").sample_rate == rate and first.duration_ms == 100
     assert result.runtime["engine"] in ("chatterbox", "indextts")
+    assert result.runtime["peak_vram_mib"] == "1234"
 
 
 @pytest.mark.anyio

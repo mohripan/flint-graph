@@ -4,25 +4,31 @@ version = "0.1.0"
 description = "Isolated local Chatterbox voice child for FlintGraph narrative assets (ADR 0044)"
 requires-python = "==3.11.*"
 dependencies = [
-    "chatterbox-tts==0.1.7",
+    "chatterbox-tts",
     "resemble-perth==1.0.1",
     "torch==2.8.0",
     "torchaudio==2.8.0",
     "numpy<2",
     "nvidia-ml-py==13.615.71",
+    # Perth 1.0.1 (the watermarker) still imports pkg_resources.
+    "setuptools<81",
 ]
 
 [tool.uv]
 package = false
 environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
 # Chatterbox pins torch 2.6, which has no CUDA 12.8 (Blackwell) build; the web demo is never used.
+# Its master branch takes Perth from git; the released 1.0.1 is the same MIT package.
 override-dependencies = [
     "torch==2.8.0",
     "torchaudio==2.8.0",
+    "resemble-perth==1.0.1",
     "gradio; sys_platform == 'never'",
 ]
 
 [tool.uv.sources]
+# MIT. The 0.1.7 release hard-codes Multilingual V2; this commit loads the pinned V3.
+chatterbox-tts = { git = "https://github.com/resemble-ai/chatterbox", rev = "5de7a54aa4e5e2baadb0182dde554908b48b85c2" }
 torch = { index = "pytorch-cu128" }
 torchaudio = { index = "pytorch-cu128" }
 

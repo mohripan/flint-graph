@@ -13,6 +13,7 @@ supported-markers = [
 [manifest]
 overrides = [
     { name = "gradio", marker = "sys_platform == 'never'" },
+    { name = "resemble-perth", specifier = "==1.0.1" },
     { name = "torch", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" },
 ]
@@ -139,7 +140,7 @@ wheels = [
 [[package]]
 name = "chatterbox-tts"
 version = "0.1.7"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/resemble-ai/chatterbox?rev=5de7a54aa4e5e2baadb0182dde554908b48b85c2#5de7a54aa4e5e2baadb0182dde554908b48b85c2" }
 dependencies = [
     { name = "conformer" },
     { name = "diffusers" },
@@ -155,10 +156,6 @@ dependencies = [
     { name = "torch" },
     { name = "torchaudio" },
     { name = "transformers" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/b1/8f1203e868111a45b566a79a4f56cd7843c420dfda709b81cebee55afa10/chatterbox_tts-0.1.7.tar.gz", hash = "sha256:ed8afae83819b40a25927c2ef3bcc67f928bdfcf434c1376c972e6039252a187", size = 84802, upload-time = "2026-03-26T08:43:47.912Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/37/11a7f06983bfd5ebba71eb2caa6660941b17b31f3c49d4a5fe9e1e804d31/chatterbox_tts-0.1.7-py3-none-any.whl", hash = "sha256:83782500e3ad4e7c919132e9d7eb8755f29f57c5bde5ec48c655ca23a4eb113c", size = 108543, upload-time = "2026-03-26T08:43:46.803Z" },
 ]
 
 [[package]]
@@ -277,16 +274,18 @@ dependencies = [
     { name = "numpy" },
     { name = "nvidia-ml-py" },
     { name = "resemble-perth" },
+    { name = "setuptools" },
     { name = "torch" },
     { name = "torchaudio" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "chatterbox-tts", specifier = "==0.1.7" },
+    { name = "chatterbox-tts", git = "https://github.com/resemble-ai/chatterbox?rev=5de7a54aa4e5e2baadb0182dde554908b48b85c2" },
     { name = "numpy", specifier = "<2" },
     { name = "nvidia-ml-py", specifier = "==13.615.71" },
     { name = "resemble-perth", specifier = "==1.0.1" },
+    { name = "setuptools", specifier = "<81" },
     { name = "torch", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" },
 ]
@@ -1077,11 +1076,11 @@ wheels = [
 
 [[package]]
 name = "setuptools"
-version = "84.2.1"
+version = "80.10.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/70/b3/c19426f783614d625699a4b247faf628ea9ab1db228674491767b417f9e1/setuptools-84.2.1.tar.gz", hash = "sha256:3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc", size = 1230289, upload-time = "2026-10-20T19:01:37.742Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/95/faf61eb8363f26aa7e1d762267a8d602a1b26d4f3a1e758e92cb3cb8b054/setuptools-80.10.2.tar.gz", hash = "sha256:8b0e9d10c784bf7d262c4e5ec5d4ec94127ce206e8738f29a437945fbc219b70", size = 1200343, upload-time = "2026-01-25T22:38:17.252Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/55/6dc6d6bb953bdfc52519a0059592c52b6e3b8ad51cf8256dffceb55b0610/setuptools-84.2.1-py3-none-any.whl", hash = "sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2", size = 876263, upload-time = "2026-10-20T19:01:35.678Z" },
+    { url = "https://files.pythonhosted.org/packages/94/b8/f1f62a5e3c0ad2ff1d189590bfa4c46b4f3b6e49cef6f26c6ee4e575394d/setuptools-80.10.2-py3-none-any.whl", hash = "sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173", size = 1064234, upload-time = "2026-01-25T22:38:15.216Z" },
 ]
 
 [[package]]

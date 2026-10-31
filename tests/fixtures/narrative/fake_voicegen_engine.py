@@ -59,4 +59,4 @@ for index, item in enumerate(request["items"]):
     )
     if mode == "controls":
         print(json.dumps(item["controls"]), file=sys.stderr)
-emit("done")
+emit("done", peak_vram_mib=0 if mode == "nopeak" else 1234)

@@ -461,6 +461,7 @@ class LocalEngineVoiceGenerator(LocalVoiceGenerator):
         loaded: dict[str, Any] | None = None
         samples: list[tuple[int, str]] = []
         done = False
+        self._peak: int | None = None
         rate = self.spec.sample_rate
         for _ in range(len(request.items) + 3):
             try:
@@ -495,7 +496,10 @@ class LocalEngineVoiceGenerator(LocalVoiceGenerator):
                 samples.append((count, event["device"]))
                 await on_progress(len(samples))
             elif kind == "done" and len(samples) == len(request.items):
-                done = True
+                peak = event.get("peak_vram_mib")
+                if type(peak) is not int or not 0 <= peak <= 2**20:
+                    raise VoiceGenerationError("invalid_output")
+                self._peak, done = peak, True
             else:
                 raise VoiceGenerationError("invalid_output")
         else:
@@ -539,7 +543,10 @@ class LocalEngineVoiceGenerator(LocalVoiceGenerator):
             or not all(isinstance(value, str) and len(value) <= 120 for value in runtime.values())
         ):
             raise VoiceGenerationError("invalid_output")
-        return VoiceResult(clips=tuple(clips), runtime={k: str(v) for k, v in runtime.items()})
+        measured = {k: str(v) for k, v in runtime.items()}
+        # What this child reserved on the GPU at its peak, for the shared-card budget.
+        measured["peak_vram_mib"] = str(self._peak or 0)
+        return VoiceResult(clips=tuple(clips), runtime=measured)
 
 
 def engine_spec(model_id: str) -> VoiceModelSpec:

@@ -237,7 +237,9 @@ def main() -> int:
                 sample_rate=SAMPLE_RATE,
                 device=device,
             )
-        emit("done")
+        # This child's own peak of reserved GPU memory (other processes not counted).
+        peak = torch.cuda.max_memory_reserved() // 2**20 if torch.cuda.is_available() else 0
+        emit("done", peak_vram_mib=int(peak))
         return 0
     except ChildError as error:
         emit("error", code=error.code)
