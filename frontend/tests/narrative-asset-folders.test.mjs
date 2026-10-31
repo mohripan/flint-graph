@@ -61,3 +61,10 @@ test("folder names are checked before sending", () => {
   assert.match(model.folderNameProblem("x".repeat(81), folders, null), /80/);
   assert.equal(model.folderNameProblem("Cast", folders, null, "f-cast"), null, "Renaming to its own name is fine");
 });
+
+test("uploads start in the kind the creator is viewing", () => {
+  assert.equal(model.uploadKindForView({ type: "kind", kind: "image" }), "image");
+  assert.equal(model.uploadKindForView({ type: "kind", kind: "voice" }), "voice");
+  assert.equal(model.uploadKindForView({ type: "kind", kind: "character_portrait" }), "background");
+  assert.equal(model.uploadKindForView({ type: "folder", id: "f-cast" }), "background");
+});
