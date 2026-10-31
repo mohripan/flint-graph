@@ -1,4 +1,4 @@
-"""Voice activity edge (ADR 0043/0044): texts, references and clips stay here.
+"""Voice activity edge (ADR 0043/0045): texts, references and clips stay here.
 
 Temporal history gets IDs and status only. Each catalog model has its own local
 generator; a cloned voice's reference audio is read from private storage, verified
@@ -41,6 +41,7 @@ from flint_graph.infrastructure.narrative_artifact_store import (
     asset_object_key,
     voice_reference_object_key,
 )
+from flint_graph.infrastructure.narrative_imagegen import GpuReleaser
 from flint_graph.infrastructure.narrative_voicegen import (
     GeneratedClip,
     ReferenceInput,
@@ -53,6 +54,9 @@ from flint_graph.narrative.voice_models import DEFAULT_MODEL
 from flint_graph.narrative.wav import AUDIO_LIMIT
 from flint_graph.worker.activities.narrative_image import ImageStore
 
+# A busy GPU may free up (image jobs or the assistant's model finish); other failures
+# would repeat identically.
+_TRANSIENT = {"gpu_busy"}
 _TERMINAL = ("completed", "failed", "cancelled")
 
 
@@ -79,8 +83,11 @@ class NarrativeVoiceActivities:
         generator: VoiceGenerator | None,
         store: ImageStore,
         generators: Mapping[str, VoiceGenerator] | None = None,
+        releaser: GpuReleaser | None = None,
+        max_attempts: int = 3,
     ) -> None:
         self.factory, self.generator, self.store = factory, generator, store
+        self.releaser, self.max_attempts = releaser, max_attempts
         # Kokoro (the default) plus every other installed catalog model by ID.
         self.generators: dict[str, VoiceGenerator] = dict(generators or {})
         if generator is not None:
@@ -127,7 +134,16 @@ class NarrativeVoiceActivities:
             if not keep:
                 raise _CancelRequested
 
-        return await generator.generate(request, on_progress=progress)
+        try:
+            return await generator.generate(request, on_progress=progress)
+        except VoiceGenerationError as error:
+            if error.code != "gpu_busy" or self.releaser is None:
+                raise
+            try:
+                await self.releaser.release()
+            except Exception:
+                raise error from None
+            return await generator.generate(request, on_progress=progress)
 
     async def _request(self, work: VoiceWork) -> VoiceRequest:
         if work.reference is None:
@@ -195,6 +211,9 @@ class NarrativeVoiceActivities:
             result = await self._generate(generator, request, job_id, token)
             stored = await self._store(work.tenant_id, work.project_id, result.clips)
         except VoiceGenerationError as error:
+            if error.code in _TRANSIENT and attempt < self.max_attempts:
+                # The job stays running; the next attempt of this run replaces the token.
+                raise ApplicationError(error.code, type=error.code) from None
             return await self._fail(job_id, token, error.code)
         except _CancelRequested:
             return await self._fail(job_id, token, "cancelled")

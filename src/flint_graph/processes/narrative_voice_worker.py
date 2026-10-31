@@ -25,6 +25,7 @@ from flint_graph.application.services.narrative_voice_relay import (
 from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_image_temporal import TemporalImageDispatcher
+from flint_graph.infrastructure.narrative_imagegen import OllamaGpuReleaser
 from flint_graph.infrastructure.narrative_voicegen import (
     LocalEngineVoiceGenerator,
     LocalVoiceGenerator,
@@ -126,6 +127,13 @@ async def run_worker(settings: Settings | None = None) -> None:
     assert generator.cuda_cache is not None
     engines = await asyncio.to_thread(build_engines, configured, generator.cuda_cache)
     logger.info("voice models verified: %d", 1 + len(engines))
+    releaser = (
+        OllamaGpuReleaser(
+            configured.ollama_base_url, configured.narrative_voice_release_ollama_model
+        )
+        if configured.narrative_voice_release_ollama_model
+        else None
+    )
     # No generic tracing interceptor: workflow headers/memo stay closed, IDs-only.
     temporal = await Client.connect(
         configured.temporal_address, namespace=configured.temporal_namespace
@@ -139,7 +147,7 @@ async def run_worker(settings: Settings | None = None) -> None:
     client = create_s3_client(configured, max_attempts=3)
     store = S3NarrativeArtifactStore(client, bucket=configured.object_store_bucket)
     activities = NarrativeVoiceActivities(
-        factory=factory, generator=generator, store=store, generators=engines
+        factory=factory, generator=generator, store=store, generators=engines, releaser=releaser
     )
     try:
         async with Worker(

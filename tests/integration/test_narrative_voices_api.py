@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
+from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 from test_narrative_asset_library_api import upload
 from test_narrative_package_v2_api import configure, head, save, v2  # noqa: F401
@@ -53,7 +54,15 @@ class FakeVoices:
         return VoiceResult(clips=tuple(clips), runtime=RUNTIME)
 
 
-async def run_voice_job(factory, store, payload, generator=None, generators=None):
+class Releaser:
+    def __init__(self):
+        self.calls = 0
+
+    async def release(self):
+        self.calls += 1
+
+
+async def registered_run(factory, payload):
     run_id = uuid4()
     async with factory() as session:
         await register_voice_workflow(
@@ -63,6 +72,13 @@ async def run_voice_job(factory, store, payload, generator=None, generators=None
             workflow_run_id=run_id,
         )
         await session.commit()
+    return run_id
+
+
+async def run_voice_job(
+    factory, store, payload, generator=None, generators=None, attempt=1, releaser=None, run_id=None
+):
+    run_id = run_id or await registered_run(factory, payload)
     env = ActivityEnvironment()
     env.info = replace(
         env.info,
@@ -70,13 +86,14 @@ async def run_voice_job(factory, store, payload, generator=None, generators=None
         workflow_id=voice_job_workflow_id(payload),
         workflow_type=VOICE_WORKFLOW,
         workflow_run_id=str(run_id),
-        attempt=1,
+        attempt=attempt,
     )
     work = NarrativeVoiceActivities(
         factory=factory,
         generator=generator or FakeVoices(),
         store=store,
         generators=generators or {},
+        releaser=releaser,
     )
     return await env.run(work.run, payload)
 
@@ -242,6 +259,49 @@ async def test_voice_jobs_fail_safely_and_respect_availability(v2):  # noqa: F81
     ).json()
     cancelled = await client.post(f"{base}/voice-jobs/{queued['id']}/cancel", headers=headers)
     assert cancelled.json()["status"] == "cancelled"
+
+
+@pytest.mark.anyio
+async def test_a_busy_gpu_retries_frees_the_assistant_model_and_fails_safely(v2):  # noqa: F811
+    client, factory, store, headers, project = v2
+    configure(narrative_voice_generation_enabled=True)
+    base, _ = await project("Busy", schema="2")
+    assert (await choose(client, headers, base, "quen", "af_bella")).status_code == 200
+    line = {"mode": "full", "text": "Hello."}
+
+    async def queued():
+        job = (
+            await client.post(
+                f"{base}/characters/quen/voice-jobs", headers=headers, json=job_body(line)
+            )
+        ).json()
+        return job["id"], ImageJobPayload(
+            schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=job["id"]
+        )
+
+    async def row(job_id):
+        async with factory() as session:
+            return await session.get(NarrativeVoiceJob, UUID(job_id), populate_existing=True)
+
+    # Without a releaser the job stays running and the run retries, then fails safely.
+    job_id, payload = await queued()
+    run_id = await registered_run(factory, payload)
+    with pytest.raises(ApplicationError) as raised:
+        await run_voice_job(factory, store, payload, FakeVoices("gpu_busy"), run_id=run_id)
+    assert raised.value.type == "gpu_busy" and not raised.value.non_retryable
+    assert (await row(job_id)).status == "running"
+    failed = await run_voice_job(
+        factory, store, payload, FakeVoices("gpu_busy"), attempt=3, run_id=run_id
+    )
+    assert failed["status"] == "failed"
+    assert ((await row(job_id)).status, (await row(job_id)).error_code) == ("failed", "gpu_busy")
+
+    # With one, the worker asks Ollama to unload its model and tries once more at once.
+    job_id, payload = await queued()
+    releaser, generator = Releaser(), FakeVoices("gpu_busy")
+    outcome = await run_voice_job(factory, store, payload, generator, releaser=releaser)
+    assert outcome["status"] == "completed"
+    assert releaser.calls == 1 and len(generator.requests) == 2
 
 
 @pytest.mark.anyio
