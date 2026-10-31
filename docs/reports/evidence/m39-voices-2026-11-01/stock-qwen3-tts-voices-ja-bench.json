@@ -1,0 +1,30 @@
+{
+  "model": "qwen3-tts-voices",
+  "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice@0c0e3051f131929182e2c023b9537f8b1c68adfe",
+  "language": "ja",
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "engine": "qwen-tts 0.1.1",
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "peak_vram_mib": "4236"
+  },
+  "devices": [
+    "cuda"
+  ],
+  "lines": 1,
+  "first_clip_seconds": 31.06,
+  "seconds_per_later_line": null,
+  "total_seconds": 32.54,
+  "audio_seconds": 6.0,
+  "real_time_factor": null,
+  "child_peak_reserved_mib": 4236,
+  "gpu_baseline_mib": 0,
+  "gpu_peak_above_baseline_mib": 4424,
+  "clips": [
+    {
+      "file": "qwen3-tts-voices-ja.wav",
+      "delivery": "ja",
+      "seconds": 6.0
+    }
+  ]
+}

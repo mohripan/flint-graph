@@ -1,0 +1,70 @@
+{
+  "model": "chatterbox-turbo",
+  "repo": "ResembleAI/chatterbox-turbo@749d1c1a46eb10492095d68fbcf55691ccf137cd",
+  "language": "en",
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "engine": "chatterbox-tts 0.1.7",
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "peak_vram_mib": "3226"
+  },
+  "devices": [
+    "cuda"
+  ],
+  "lines": 9,
+  "first_clip_seconds": 57.93,
+  "seconds_per_later_line": 1.21,
+  "total_seconds": 69.52,
+  "audio_seconds": 32.0,
+  "real_time_factor": 0.414,
+  "child_peak_reserved_mib": 3226,
+  "gpu_baseline_mib": 0,
+  "gpu_peak_above_baseline_mib": 3424,
+  "clips": [
+    {
+      "file": "chatterbox-turbo-neutral.wav",
+      "delivery": "neutral",
+      "seconds": 4.0
+    },
+    {
+      "file": "chatterbox-turbo-happy.wav",
+      "delivery": "happy",
+      "seconds": 3.64
+    },
+    {
+      "file": "chatterbox-turbo-angry.wav",
+      "delivery": "angry",
+      "seconds": 3.88
+    },
+    {
+      "file": "chatterbox-turbo-sad.wav",
+      "delivery": "sad",
+      "seconds": 4.0
+    },
+    {
+      "file": "chatterbox-turbo-afraid.wav",
+      "delivery": "afraid",
+      "seconds": 3.28
+    },
+    {
+      "file": "chatterbox-turbo-surprised.wav",
+      "delivery": "surprised",
+      "seconds": 3.4
+    },
+    {
+      "file": "chatterbox-turbo-whisper.wav",
+      "delivery": "whisper",
+      "seconds": 3.76
+    },
+    {
+      "file": "chatterbox-turbo-dramatic.wav",
+      "delivery": "dramatic",
+      "seconds": 4.32
+    },
+    {
+      "file": "chatterbox-turbo-vocalization.wav",
+      "delivery": "vocalization",
+      "seconds": 1.72
+    }
+  ]
+}

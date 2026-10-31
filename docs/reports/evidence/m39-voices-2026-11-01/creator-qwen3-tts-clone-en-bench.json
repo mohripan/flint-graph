@@ -1,0 +1,35 @@
+{
+  "model": "qwen3-tts-clone",
+  "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base@fd4b254389122332181a7c3db7f27e918eec64e3",
+  "language": "en",
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "engine": "qwen-tts 0.1.1",
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "peak_vram_mib": "4284"
+  },
+  "devices": [
+    "cuda"
+  ],
+  "lines": 2,
+  "first_clip_seconds": 63.55,
+  "seconds_per_later_line": 2.09,
+  "total_seconds": 67.37,
+  "audio_seconds": 6.56,
+  "real_time_factor": 3.976,
+  "child_peak_reserved_mib": 4284,
+  "gpu_baseline_mib": 1824,
+  "gpu_peak_above_baseline_mib": 5879,
+  "clips": [
+    {
+      "file": "qwen3-tts-clone-neutral.wav",
+      "delivery": "neutral",
+      "seconds": 5.6
+    },
+    {
+      "file": "qwen3-tts-clone-vocalization.wav",
+      "delivery": "vocalization",
+      "seconds": 0.96
+    }
+  ]
+}

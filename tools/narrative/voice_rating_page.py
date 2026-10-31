@@ -86,16 +86,17 @@ def select(model: str, key: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--runs", required=True, type=Path)
+    parser.add_argument("--runs", required=True, type=Path, action="append")
     parser.add_argument("--reference", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
-    benches = [json.loads(path.read_text()) for path in sorted(args.runs.glob("*-bench.json"))]
-    models = sorted({bench["model"] for bench in benches})
+    found = [(runs, path) for runs in args.runs for path in sorted(runs.glob("*-bench.json"))]
+    benches = [(runs, json.loads(path.read_text())) for runs, path in found]
+    models = sorted({bench["model"] for _, bench in benches})
     clips: dict[tuple[str, str], Path] = {}
-    for bench in benches:
+    for runs, bench in benches:
         for clip in bench["clips"]:
-            clips[(bench["model"], clip["delivery"])] = args.runs / clip["file"]
+            clips[(bench["model"], clip["delivery"])] = runs / clip["file"]
     heads = "".join(f"<th>{html.escape(model)}</th>" for model in models)
     similarity = "".join(f"<td>{select(model, 'similarity')}</td>" for model in models)
     rows = []

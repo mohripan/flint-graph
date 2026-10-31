@@ -1,6 +1,6 @@
 # Godot authored player
 
-M30 / #120, trusted runtime **0.6.0** (story format 2 with CGs/gallery, ADR 0042, and voiced lines, ADR 0043), qualified with Godot
+M30 / #120, trusted runtime **0.7.0** (story format 2 with CGs/gallery, ADR 0042, voiced lines, ADR 0043, and player license terms, ADR 0044), qualified with Godot
 `4.7.2.stable.official.ed1daf0bf` on Windows x86-64. The exported source runs
 without the backend, a model, credentials or an account. The compiler supplies a
 strictly validated immutable package; arbitrary creator scripts are not inputs.
@@ -73,6 +73,17 @@ stays silent), starts the clip one frame after the line settles, stops it on the
 screen and replays it after Load or Restart. The toolbar's Voice slider (0–100 %,
 steps of 10) is stored in `user://flint_graph/settings.json`; Studio playtests keep it
 in memory. See [ADR 0043](../adr/0043-asset-folders-and-line-voices.md).
+
+Runtime 0.7.0 shows player terms that a voice model license requires (ADR 0044). The
+server writes them into NOTICES after the generated asset-notices marker, between the
+lines `=== Player terms (shown once to players by the game) ===` and
+`=== End of player terms ===`, which must end the file; `runtime/player_terms.gd`
+parses them like the Python reference, the preview validator (which refuses a
+malformed block) and the Studio. When terms exist the stage opens on a license
+screen that holds the story, its voice and the toolbar until "I agree", stores the
+terms' SHA-256 in `user://flint_graph/terms-<story id>.json` (changed terms ask
+again) and adds License to the toolbar to reread them. Studio playtests always ask
+and never write `user://`. See [ADR 0044](../adr/0044-expressive-and-cloned-character-voices.md).
 
 ## Local saves and stale input
 

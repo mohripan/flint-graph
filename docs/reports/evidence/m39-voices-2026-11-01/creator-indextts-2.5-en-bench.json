@@ -1,0 +1,75 @@
+{
+  "model": "indextts-2.5",
+  "repo": "IndexTeam/IndexTTS-2.5@c39ce5ba981572cb187443877ff559dfb246ce63",
+  "language": "en",
+  "runtime": {
+    "torch": "2.8.0+cu128",
+    "engine": "indextts 2.5",
+    "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "peak_vram_mib": "5828"
+  },
+  "devices": [
+    "cuda"
+  ],
+  "lines": 10,
+  "first_clip_seconds": 114.35,
+  "seconds_per_later_line": 3.64,
+  "total_seconds": 149.53,
+  "audio_seconds": 42.14,
+  "real_time_factor": 0.955,
+  "child_peak_reserved_mib": 5828,
+  "gpu_baseline_mib": 0,
+  "gpu_peak_above_baseline_mib": 6026,
+  "clips": [
+    {
+      "file": "indextts-2.5-neutral.wav",
+      "delivery": "neutral",
+      "seconds": 5.306
+    },
+    {
+      "file": "indextts-2.5-happy.wav",
+      "delivery": "happy",
+      "seconds": 3.471
+    },
+    {
+      "file": "indextts-2.5-angry.wav",
+      "delivery": "angry",
+      "seconds": 5.271
+    },
+    {
+      "file": "indextts-2.5-sad.wav",
+      "delivery": "sad",
+      "seconds": 4.911
+    },
+    {
+      "file": "indextts-2.5-afraid.wav",
+      "delivery": "afraid",
+      "seconds": 4.551
+    },
+    {
+      "file": "indextts-2.5-surprised.wav",
+      "delivery": "surprised",
+      "seconds": 4.272
+    },
+    {
+      "file": "indextts-2.5-shout.wav",
+      "delivery": "shout",
+      "seconds": 3.669
+    },
+    {
+      "file": "indextts-2.5-dramatic.wav",
+      "delivery": "dramatic",
+      "seconds": 6.269
+    },
+    {
+      "file": "indextts-2.5-tender.wav",
+      "delivery": "tender",
+      "seconds": 2.914
+    },
+    {
+      "file": "indextts-2.5-vocalization.wav",
+      "delivery": "vocalization",
+      "seconds": 1.509
+    }
+  ]
+}

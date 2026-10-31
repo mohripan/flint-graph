@@ -188,6 +188,12 @@ allow use in released games. A model whose license puts duties on generated audi
 accepts its license; releases then carry its notices and a player license screen.
 No paid or remote voice service is required.
 
+Delivered on 2026-11-01 ([ADR 0044](../adr/0044-expressive-and-cloned-character-voices.md),
+[report](../reports/2026-11-01-expressive-and-cloned-voices.md)): six catalog models in
+isolated runtimes, private references with consent, cloned voices, per-line delivery,
+license acceptance with NOTICES duties and runtime 0.7.0's player license screen.
+IndexTTS-2.5 replaces IndexTTS2, whose pipeline needs non-commercial MaskGCT weights.
+
 ## M40: consistent characters across poses, outfits and scenes
 
 [Milestone](https://github.com/mohripan/flint-graph/milestone/27) ·
