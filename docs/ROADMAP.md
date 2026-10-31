@@ -12,8 +12,8 @@ Read [the product direction](product/narrative-game-studio.md),
 [the first focused implementation design](superpowers/specs/2026-10-27-portable-story-runtime-design.md).
 The written M30 design was approved for implementation on 2026-10-27.
 The [GitHub delivery queue](product/narrative-game-backlog.md) links milestones
-30–39 and issues #112–#167 and #173–#178, including shared conversation additions,
-focused acceptance and live verification. The new #133–#167 and #173–#178 work is
+30–40 and issues #112–#167 and #173–#186, including shared conversation additions,
+focused acceptance and live verification. The new #133–#167 and #173–#186 work is
 planned, not delivered.
 
 | Planned milestone | Outcome | Dependency |
@@ -28,6 +28,7 @@ planned, not delivered.
 | 37 | Reviewed opt-in memory, branch summaries and accepted character knowledge | Context planning, canon and conversation branches |
 | 38 | Package v2 characters/backgrounds/staging/audio, player controls and real parity | #124 releases, #128 assets, #157 written v2 contract |
 | 39 | Consented voice references, cloned character voices and per-line emotional delivery | ADR 0043 line voices; #174 model choice first |
+| 40 | Characters that keep face, hair and clothes across poses, expressions and CGs (CCIP, LoRA, references) | ADR 0041 image path; #180 scores first |
 
 Use the approved narrative track as the next delivery order. Milestones 15–29
 below retain historical plans/progress and deferred issues; their old sequential

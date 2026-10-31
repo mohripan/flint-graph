@@ -3,8 +3,8 @@
 Created: 2026-10-27; dependency review updated 2026-10-30. The original five
 milestones contained 21 issues. The user added #133–#167 across four further
 milestones and shared conversation work. On 2026-10-31 the user added M39
-(#173–#178) for voice references and expressive delivery. These additions are
-planned, not delivered.
+(#173–#178) for voice references and expressive delivery, and M40 (#179–#186) for
+character consistency research. These additions are planned, not delivered.
 
 The [product brief](narrative-game-studio.md) explains the direction. Review the
 [M30 written contract](../superpowers/specs/2026-10-27-portable-story-runtime-design.md)
@@ -187,6 +187,26 @@ allow use in released games. A model whose license puts duties on generated audi
 (IndexTTS2 treats its output as a derivative work) is offered only after the creator
 accepts its license; releases then carry its notices and a player license screen.
 No paid or remote voice service is required.
+
+## M40: consistent characters across poses, outfits and scenes
+
+[Milestone](https://github.com/mohripan/flint-graph/milestone/27) ·
+[Tracking issue #179](https://github.com/mohripan/flint-graph/issues/179)
+
+| Issue | Deliverable | Dependency/order |
+| --- | --- | --- |
+| [#180](https://github.com/mohripan/flint-graph/issues/180) | Identity (CCIP) and outfit-drift scores, calibrated, offline and pinned | First |
+| [#186](https://github.com/mohripan/flint-graph/issues/186) | Experiment bench: method matrix, contact sheets, scored comparisons | #180 |
+| [#181](https://github.com/mohripan/flint-graph/issues/181) | Locked look: appearance and outfit tags from the approved image | #180 |
+| [#182](https://github.com/mohripan/flint-graph/issues/182) | Pose methods compared; ADR for ADR 0041 slice B | #180, #186; #181 |
+| [#184](https://github.com/mohripan/flint-graph/issues/184) | Character and style LoRAs trained locally | #180, #186 |
+| [#185](https://github.com/mohripan/flint-graph/issues/185) | More references and context: sheets, multi-reference, edit models | #180, #186 |
+| [#183](https://github.com/mohripan/flint-graph/issues/183) | Generation flags and ranks drifting candidates | #180, #182 |
+
+Research inputs from the user: [deepghs/ccip](https://huggingface.co/deepghs/ccip),
+[deepghs/imgutils](https://github.com/deepghs/imgutils), LoRA fine-tuning and richer
+references. CCIP recognizes a character across outfits, so clothes need their own
+check. Scores advise and never approve; LoRAs and references never ship in games.
 
 ## Current sequencing
 
