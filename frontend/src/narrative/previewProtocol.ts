@@ -8,7 +8,7 @@ export function previewOrigin(value: string, parent: string): string {
   return child.origin;
 }
 // Story format 2 (ADR 0040): playtests carry the revision's image and font bytes.
-export const ASSET_CAPS = { image: 10485760, font: 8388608 } as const;
+export const ASSET_CAPS = { image: 10485760, font: 8388608, audio: 10485760 } as const;
 export const ASSET_TOTAL = 104857600;
 export interface StoryAssetRef { kind: string; path: string; sha256: string }
 export type Digest = (data: ArrayBuffer) => Promise<string>;

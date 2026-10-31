@@ -233,7 +233,7 @@ SHOW_MIRA = {"character": "mira", "sprite": "neutral", "position": "left"}
         (lambda s: s["theme"]["font"].update(asset="dusk"), "invalid_asset_kind"),
         (lambda s: s["theme"]["font"].update(size=49), "invalid_value"),
         (lambda s: s["assets"]["old_type"].update(path="assets/old_type.png"), "unsafe_path"),
-        (lambda s: s["assets"]["dusk"].update(kind="audio"), "invalid_value"),
+        (lambda s: s["assets"]["dusk"].update(kind="video"), "invalid_value"),
         (lambda s: s["assets"]["dusk"].pop("kind"), "missing_field"),
     ],
 )

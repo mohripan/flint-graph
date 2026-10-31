@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Dynamic previews have the same bounded v1 and v2 semantics as the Python loader.
 # v2 (ADR 0040) adds typed assets, sprites, a closed theme, stage nodes and expressions;
+# ADR 0043 adds audio assets and line voices;
 # asset bytes arrive separately and must match the story's hashes exactly.
 extends RefCounted
 const StrictJson = preload("res://runtime/strict_json.gd")
@@ -92,8 +93,19 @@ static func _assets_v2(assets: Variant) -> bool:
 				if asset["path"] != "assets/" + key + ".png": return false
 			"font":
 				if not asset["path"] in ["assets/" + key + ".ttf", "assets/" + key + ".otf"]: return false
+			"audio":
+				if asset["path"] != "assets/" + key + ".wav": return false
 			_: return false
 	return true
+
+# A spoken line or a short vocalization (ADR 0043); without audio it stays silent.
+static func _voice(node: Dictionary, assets: Dictionary) -> bool:
+	var voice: Variant = node["voice"]
+	if not _fields(voice, ["mode"], ["text", "audio"]): return false
+	if not voice["mode"] in ["full", "vocalization"] or not node.has("speaker"): return false
+	if (voice["mode"] == "vocalization") != voice.has("text"): return false
+	if voice.has("text") and (not _text(voice["text"]) or voice["text"].length() > 40): return false
+	return not voice.has("audio") or _asset(voice["audio"], assets, "audio")
 
 static func _theme(theme: Variant, assets: Dictionary) -> bool:
 	if not _fields(theme, [], ["textbox", "name", "choices", "font"]): return false
@@ -192,11 +204,12 @@ static func _story(story: Variant) -> bool:
 		if not node is Dictionary: return false
 		match node.get("type"):
 			"line":
-				if not _fields(node, ["type", "text_id", "text", "next"], ["speaker", "expression"] if v2 else ["speaker", "background", "portrait"]): return false
+				if not _fields(node, ["type", "text_id", "text", "next"], ["speaker", "expression", "voice"] if v2 else ["speaker", "background", "portrait"]): return false
 				if not _display(node, text_ids) or not _ref(node["next"], nodes): return false
 				if node.has("speaker") and not _ref(node["speaker"], characters): return false
 				if node.has("background") or node.has("portrait"): return false
 				if node.has("expression") and (not node.has("speaker") or not _ref(node["expression"], characters[node["speaker"]].get("sprites", {}))): return false
+				if node.has("voice") and not _voice(node, assets): return false
 			"stage":
 				if not v2 or not _stage(node, characters, assets, nodes): return false
 			"end":

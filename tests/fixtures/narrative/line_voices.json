@@ -1,0 +1,52 @@
+{
+  "story": {
+    "schema_version": "2", "id": "line_voices", "title": "Lantern voices", "language": "en", "entry": "opening",
+    "characters": {
+      "mira": {"name": "Mira", "sprites": {"neutral": "actor"}},
+      "quen": {"name": "Quen"}
+    },
+    "variables": {},
+    "assets": {
+      "background": {"kind": "image", "path": "assets/background.png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      "actor": {"kind": "image", "path": "assets/actor.png", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+      "hello": {"kind": "audio", "path": "assets/hello.wav", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+      "fufu": {"kind": "audio", "path": "assets/fufu.wav", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
+    },
+    "nodes": {
+      "opening": {"type": "stage", "background": "background", "show": [{"character": "mira", "sprite": "neutral", "position": "left"}], "next": "hello"},
+      "hello": {"type": "line", "text_id": "hello", "text": "The lanterns are lit again.", "speaker": "mira", "voice": {"mode": "full", "audio": "hello"}, "next": "laugh"},
+      "laugh": {"type": "line", "text_id": "laugh", "text": "Or someone never left.", "speaker": "quen", "voice": {"mode": "vocalization", "text": "fufu", "audio": "fufu"}, "next": "pending"},
+      "pending": {"type": "line", "text_id": "pending", "text": "Not voiced yet.", "speaker": "mira", "voice": {"mode": "full"}, "next": "silent"},
+      "silent": {"type": "line", "text_id": "silent", "text": "The tide comes in.", "next": "again"},
+      "again": {"type": "choice", "text_id": "again", "text": "Listen again?", "options": [
+        {"id": "replay", "text_id": "replay", "text": "Again", "target": "hello"},
+        {"id": "finish", "text_id": "finish", "text": "Finish", "target": "end"}
+      ]},
+      "end": {"type": "end", "text_id": "end", "text": "Fin.", "ending": "done"}
+    }
+  },
+  "actions": ["advance", "advance", "advance", "advance", "choose:replay", "advance", "advance", "advance", "advance", "choose:finish"],
+  "screens": ["hello", "laugh", "pending", "silent", "again", "hello", "laugh", "pending", "silent", "again", "end"],
+  "voices": ["hello", "fufu", null, null, null, "hello", "fufu", null, null, null, null],
+  "invalid": [
+    {"node": "laugh", "set": {"voice": "fufu"}, "code": "invalid_object", "location": "nodes.laugh.voice"},
+    {"node": "laugh", "set": {"voice": {"audio": "fufu"}}, "code": "missing_field", "location": "nodes.laugh.voice"},
+    {"node": "laugh", "set": {"voice": {"mode": "full", "volume": 3}}, "code": "unknown_field", "location": "nodes.laugh.voice"},
+    {"node": "laugh", "set": {"voice": {"mode": "whisper"}}, "code": "invalid_value", "location": "nodes.laugh.voice.mode"},
+    {"node": "laugh", "drop": ["speaker"], "code": "invalid_voice", "location": "nodes.laugh.voice"},
+    {"node": "laugh", "set": {"voice": {"mode": "full", "text": "fufu"}}, "code": "invalid_voice", "location": "nodes.laugh.voice"},
+    {"node": "laugh", "set": {"voice": {"mode": "vocalization"}}, "code": "invalid_voice", "location": "nodes.laugh.voice"},
+    {"node": "laugh", "set": {"voice": {"mode": "vocalization", "text": "   "}}, "code": "invalid_text", "location": "nodes.laugh.voice.text"},
+    {"node": "laugh", "set": {"voice": {"mode": "vocalization", "text": "fufufufufufufufufufufufufufufufufufufufuf"}}, "code": "invalid_text", "location": "nodes.laugh.voice.text"},
+    {"node": "laugh", "set": {"voice": {"mode": "full", "audio": "missing"}}, "code": "unknown_reference", "location": "nodes.laugh.voice.audio"},
+    {"node": "laugh", "set": {"voice": {"mode": "full", "audio": "actor"}}, "code": "invalid_asset_kind", "location": "nodes.laugh.voice.audio"},
+    {"node": "laugh", "set": {"voice": {"mode": "full", "audio": "Bad"}}, "code": "invalid_id", "location": "nodes.laugh.voice.audio"},
+    {"node": "opening", "set": {"background": "hello"}, "code": "invalid_asset_kind", "location": "nodes.opening.background"},
+    {"node": "again", "set": {"voice": {"mode": "full", "audio": "hello"}}, "code": "unknown_field", "location": "nodes.again"}
+  ],
+  "invalid_assets": [
+    {"key": "hello", "asset": {"kind": "audio", "path": "assets/hello.ogg", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "unsafe_path", "location": "assets.hello"},
+    {"key": "hello", "asset": {"kind": "audio", "path": "assets/hello.png", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "unsafe_path", "location": "assets.hello"},
+    {"key": "hello", "asset": {"kind": "music", "path": "assets/hello.wav", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "invalid_value", "location": "assets.hello.kind"}
+  ]
+}

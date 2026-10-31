@@ -69,6 +69,42 @@ func _initialize() -> void:
 		print("UI_RESULT:" + JSON.stringify({"node_id": stage._player.state["node_id"], "gallery_open": stage._gallery_panel.visible}))
 		quit(0)
 		return
+	if config["case"] in ["voice", "voice_preview"]:
+		# Voiced lines (ADR 0043): what plays on each screen, the volume and its storage.
+		var view_script: GDScript = load("res://preview/vn_view.gd" if config["case"] == "voice_preview" else "res://runtime/vn_view.gd")
+		var parsed: Array = []
+		for encoded: String in config.get("wav_cases", []):
+			var stream: AudioStreamWAV = view_script.wav_stream(Marshalls.base64_to_raw(encoded))
+			parsed.append(null if stream == null else {"rate": stream.mix_rate, "stereo": stream.stereo, "bytes": stream.data.size()})
+		var stage: Control = view_script.new()
+		root.add_child(stage)
+		stage.size = Vector2(1280, 720)
+		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		await process_frame
+		await process_frame
+		var clips: Array = [stage.current_voice()]
+		var playing: Array = [stage._voice_player.playing]
+		for step in range(3):
+			_find(stage, "Continue").pressed.emit()
+			await process_frame
+			clips.append(stage.current_voice())
+			playing.append(stage._voice_player.playing)
+		stage._volume_slider.value = 30
+		await process_frame
+		var db: float = stage._voice_player.volume_db
+		stage._toolbar("Restart")
+		await process_frame
+		var restarted: Variant = stage.current_voice()
+		stage._toolbar("Gallery")
+		await process_frame
+		var gallery_open: bool = stage._gallery_panel.visible
+		stage._close_gallery()
+		print("UI_RESULT:" + JSON.stringify({"parsed": parsed, "clips": clips, "playing": playing,
+			"volume": stage._voice_volume, "volume_db": db, "restarted": restarted, "gallery_open": gallery_open,
+			"stored": FileAccess.file_exists("user://flint_graph/settings.json"),
+			"stored_volume": load("res://runtime/save_store.gd").read_voice_volume()}))
+		quit(0)
+		return
 	if config["case"] in ["cg_gallery", "cg_preview"]:
 		var preview: bool = config["case"] == "cg_preview"
 		var script: GDScript = load("res://preview/vn_view.gd" if preview else "res://runtime/vn_view.gd")

@@ -187,6 +187,7 @@ class Player:
                 "speaker_name": None,
                 "speaker_color": None,
                 "stage": self._stage_copy(),
+                "voice": None,
                 "options": [],
             }
         speaker = node.get("speaker") if node["type"] == "line" else None
@@ -199,6 +200,8 @@ class Player:
             "speaker_name": character["name"] if character else None,
             "speaker_color": character.get("color") if character else None,
             "stage": self._stage_copy(),
+            # The settled line's voice clip (ADR 0043); a voice without audio is silent.
+            "voice": node.get("voice", {}).get("audio") if node["type"] == "line" else None,
             "options": [
                 {"id": option["id"], "text_id": option["text_id"], "text": option["text"]}
                 for option in self._options()
@@ -219,6 +222,7 @@ class Player:
         }
         if self._v2:
             frame["stage"] = self._stage_copy()
+            frame["voice"] = self.view["voice"]
         return frame
 
     def save(self) -> bytes:

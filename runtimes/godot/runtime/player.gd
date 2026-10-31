@@ -73,7 +73,7 @@ func _view_v2() -> Dictionary:
 	if _status == "fault":
 		return {"type": "fault", "text_id": null, "text": "The game cannot continue.",
 			"speaker": null, "speaker_name": null, "speaker_color": null,
-			"stage": _stage.duplicate(true), "options": []}
+			"stage": _stage.duplicate(true), "voice": null, "options": []}
 	var node: Dictionary = _story["nodes"][_node_id]
 	var speaker: Variant = node.get("speaker") if node["type"] == "line" else null
 	var character: Variant = _story["characters"][speaker] if speaker != null else null
@@ -84,7 +84,14 @@ func _view_v2() -> Dictionary:
 		"speaker": speaker,
 		"speaker_name": character["name"] if character != null else null,
 		"speaker_color": character.get("color") if character != null else null,
-		"stage": _stage.duplicate(true), "options": options}
+		"stage": _stage.duplicate(true), "voice": _voice(node), "options": options}
+
+
+func _voice(node: Dictionary) -> Variant:
+	# The settled line's clip (ADR 0043); a voice without audio stays silent.
+	if node["type"] != "line" or not node.get("voice") is Dictionary:
+		return null
+	return node["voice"].get("audio")
 
 
 func _init(source: Dictionary, content_hash: String, unlocked: Array = []) -> void:
@@ -287,6 +294,7 @@ func frame(action: Variant = null) -> Dictionary:
 		"status": _status, "ending": _ending, "fault": _fault}
 	if _v2:
 		result["stage"] = _stage.duplicate(true)
+		result["voice"] = current["voice"]
 	return result
 
 

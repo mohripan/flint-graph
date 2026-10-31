@@ -366,7 +366,7 @@ async def test_v2_release_input_resolves_bound_assets_and_rechecks_notices(v2):
             json={"revision_id": revision["id"], "idempotency_key": str(uuid4())},
         )
     ).json()
-    assert release["build_identity"]["runtime_version"] == "0.5.0"
+    assert release["build_identity"]["runtime_version"] == "0.6.0"
     scope = {
         "tenant_id": UUID(headers["X-Tenant-ID"]),
         "release_id": UUID(release["id"]),

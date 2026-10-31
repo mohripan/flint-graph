@@ -55,8 +55,13 @@ CONTENT_FILES = frozenset(
 )
 # Story assets (ADR 0040): exactly the package manifest's files, each with the fixed
 # "keep" remap that lets the runtime read its verified bytes from the pack.
-ASSET_FILE = re.compile(r"content/assets/[a-z][a-z0-9_-]{0,63}\.(png|ttf|otf)\Z")
-ASSET_CAPS = {"png": 10 * 1024 * 1024, "ttf": 8 * 1024 * 1024, "otf": 8 * 1024 * 1024}
+ASSET_FILE = re.compile(r"content/assets/[a-z][a-z0-9_-]{0,63}\.(png|ttf|otf|wav)\Z")
+ASSET_CAPS = {
+    "png": 10 * 1024 * 1024,
+    "ttf": 8 * 1024 * 1024,
+    "otf": 8 * 1024 * 1024,
+    "wav": 10 * 1024 * 1024,
+}
 INPUT_LIMIT = 112 * 1024 * 1024
 OUTPUT_FILE_LIMIT = 64 * 1024 * 1024
 OUTPUT_LIMIT = 96 * 1024 * 1024
@@ -106,7 +111,7 @@ def _inputs(source: Path, trusted: Mapping[str, str]) -> dict[str, bytes]:
     if (
         manifest["schema_version"] != "1"
         or manifest["compiler_version"] != "0.1.0"
-        or manifest["runtime_version"] != "0.5.0"
+        or manifest["runtime_version"] != "0.6.0"
         or manifest["godot_version"] != "4.7.2.stable"
         or not isinstance(manifest["package_hash"], str)
         or not re.fullmatch(r"[0-9a-f]{64}", manifest["package_hash"])

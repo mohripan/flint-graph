@@ -46,6 +46,13 @@ var _gallery_entries: VBoxContainer
 var _gallery_saved: Array = []
 var _gallery_disabled: Dictionary = {}
 var _advance_key: int = 0
+# Voice clips (ADR 0043): played when a line settles, stopped on the next screen.
+var _voice_player: AudioStreamPlayer
+var _voice_streams: Dictionary = {}
+var _voice_generation := -1
+var _voice_session: RefCounted
+var _voice_volume := 100
+var _volume_slider: HSlider
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> void:
@@ -55,6 +62,7 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> 
 	_theme = _merged(source.get("theme", {}))
 	_font = _story_font()
 	_gallery_saved = _read_gallery()
+	_voice_volume = _read_volume()
 	_player = PlayerScript.new(source, package_hash, _gallery_saved)
 	_build()
 	resized.connect(_layout)
@@ -194,6 +202,26 @@ func _build() -> void:
 		var button := _small_button(item)
 		button.pressed.connect(_toolbar.bind(item))
 		_menu.add_child(button)
+	var voice_label := Label.new()
+	voice_label.text = "Voice"
+	voice_label.add_theme_color_override("font_color", PAPER)
+	voice_label.add_theme_color_override("font_outline_color", INK)
+	voice_label.add_theme_constant_override("outline_size", 4)
+	voice_label.add_theme_font_size_override("font_size", 14)
+	_menu.add_child(voice_label)
+	_volume_slider = HSlider.new()
+	_volume_slider.min_value = 0
+	_volume_slider.max_value = 100
+	_volume_slider.step = 10
+	_volume_slider.value = _voice_volume
+	_volume_slider.custom_minimum_size = Vector2(96, 0)
+	_volume_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_volume_slider.focus_mode = Control.FOCUS_ALL
+	_volume_slider.tooltip_text = "Voice volume"
+	_volume_slider.value_changed.connect(_set_volume)
+	_menu.add_child(_volume_slider)
+	_voice_player = AudioStreamPlayer.new()
+	add_child(_voice_player)
 	_notice = Label.new()
 	_anchored(_notice, 0.55, 1.0, 0.0, 0.0)
 	_notice.offset_right = -12
@@ -238,9 +266,10 @@ func _open_gallery() -> void:
 	if _gallery_panel.visible:
 		return
 	# Disable underlying focus targets as well as guarding queued action signals.
-	for button: Button in _menu.get_children() + _buttons:
-		_gallery_disabled[button] = button.disabled
-		button.disabled = true
+	for button: Node in _menu.get_children() + _buttons:
+		if button is Button:
+			_gallery_disabled[button] = button.disabled
+			button.disabled = true
 	for child in _gallery_entries.get_children():
 		_gallery_entries.remove_child(child)
 		child.queue_free()
@@ -298,6 +327,90 @@ func _persist_gallery() -> void:
 			_notice.text = "CGs unlocked for this session. This device could not keep the gallery."
 
 
+func _read_volume() -> int:
+	return SaveStore.read_voice_volume()
+
+
+func _persist_volume() -> void:
+	if SaveStore.write_voice_volume(_voice_volume) != "":
+		_notice.text = "Voice volume set for this session. This device could not keep it."
+
+
+func _set_volume(value: float) -> void:
+	_voice_volume = clampi(int(round(value)), 0, 100)
+	_apply_volume()
+	_persist_volume()
+	_publish_qa.call_deferred()
+
+
+func _apply_volume() -> void:
+	_voice_player.volume_db = linear_to_db(_voice_volume / 100.0) if _voice_volume > 0 else -80.0
+
+
+static func wav_stream(data: PackedByteArray) -> AudioStreamWAV:
+	# The canonical form only (ADR 0043): RIFF/WAVE, a 16-byte PCM fmt chunk, 1-2
+	# channels, a common rate, 16 bits, then one data chunk that ends the file.
+	if data.size() < 46 or data.size() > 10485760:
+		return null
+	if data.slice(0, 4).get_string_from_ascii() != "RIFF" or data.decode_u32(4) != data.size() - 8:
+		return null
+	if data.slice(8, 16).get_string_from_ascii() != "WAVEfmt " or data.decode_u32(16) != 16:
+		return null
+	var channels := data.decode_u16(22)
+	var rate := data.decode_u32(24)
+	if data.decode_u16(20) != 1 or not channels in [1, 2] or not rate in [16000, 22050, 24000, 32000, 44100, 48000]:
+		return null
+	if data.decode_u16(34) != 16 or data.decode_u16(32) != channels * 2 or data.decode_u32(28) != rate * channels * 2:
+		return null
+	var size := data.decode_u32(40)
+	if data.slice(36, 40).get_string_from_ascii() != "data" or size != data.size() - 44 or size == 0:
+		return null
+	if size % (channels * 2) != 0 or size / (channels * 2) > rate * 60:
+		return null
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = channels == 2
+	stream.data = data.slice(44)
+	return stream
+
+
+func _voice_stream(id: String) -> AudioStreamWAV:
+	if not _voice_streams.has(id):
+		_voice_streams[id] = wav_stream(_assets[id]) if _assets.has(id) else null
+	return _voice_streams[id]
+
+
+func _play_voice(current: Dictionary) -> void:
+	# A new screen stops the previous clip; a settled voiced line plays its own once.
+	if _player.generation == _voice_generation and _player == _voice_session:
+		return
+	_voice_generation = _player.generation
+	_voice_session = _player
+	_voice_player.stop()
+	_voice_player.stream = null
+	var id: Variant = current.get("voice")
+	if id is String:
+		var stream := _voice_stream(id)
+		if stream != null:
+			_voice_player.stream = stream
+			_apply_volume()
+			# Started on the next frame: the first line settles while the stage is built.
+			_start_voice.call_deferred(_voice_generation, _voice_session)
+
+
+func _start_voice(generation: int, session: RefCounted) -> void:
+	if generation == _voice_generation and session == _voice_session and _voice_player.stream != null:
+		_voice_player.play()
+
+
+func current_voice() -> Variant:
+	var id: Variant = _player.view.get("voice")
+	if id is String and _voice_player.stream != null and _voice_player.stream == _voice_streams.get(id):
+		return id
+	return null
+
+
 func _texture(id: Variant) -> Texture2D:
 	if id == null or not _assets.has(id):
 		return null
@@ -312,6 +425,7 @@ func _texture(id: Variant) -> Texture2D:
 func _render() -> void:
 	var current: Dictionary = _player.view
 	var stage: Dictionary = current["stage"]
+	_play_voice(current)
 	var in_use := {}
 	_cg.texture = _texture(stage["cg"])
 	if stage["cg"] != null:
@@ -597,8 +711,9 @@ func _publish_qa() -> void:
 	for id: String in _sprites:
 		figures.append(_rect(_sprites[id]).merged({"id": id, "loaded": _sprites[id].texture != null}))
 	var toolbar: Array = []
-	for button: Button in _menu.get_children():
-		toolbar.append(_rect(button).merged({"label": button.text, "disabled": button.disabled}))
+	for button: Node in _menu.get_children():
+		if button is Button:
+			toolbar.append(_rect(button).merged({"label": button.text, "disabled": button.disabled}))
 	var gallery_controls: Array = []
 	if _gallery_panel.visible:
 		var close: Button = _gallery_panel.get_child(0).get_child(0)
@@ -613,7 +728,9 @@ func _publish_qa() -> void:
 		"textbox": _rect(_box), "name_visible": _name_box.visible, "figures": figures,
 		"background_loaded": _background.texture != null, "custom_font": _font != DisplayFont,
 		"cg_loaded": _cg.texture != null, "gallery": _player.gallery, "gallery_open": _gallery_panel.visible,
-		"toolbar": toolbar, "gallery_controls": gallery_controls, "gallery_image_loaded": _gallery_image.texture != null}
+		"toolbar": toolbar, "gallery_controls": gallery_controls, "gallery_image_loaded": _gallery_image.texture != null,
+		"voice_volume": _voice_volume, "voice_clip": current_voice(), "voice_playing": _voice_player.playing,
+		"volume_slider": _rect(_volume_slider)}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")
 	if browser != null and json != null:

@@ -18,6 +18,12 @@ func _toolbar(action: String) -> void:
 func _read_gallery() -> Array:
 	return []
 
+func _read_volume() -> int:
+	return 100
+
+func _persist_volume() -> void:
+	pass  # The voice volume lasts only as long as this playtest.
+
 func _persist_gallery() -> void:
 	pass  # Includes gallery unlocks: never touch user:// during a Studio playtest.
 

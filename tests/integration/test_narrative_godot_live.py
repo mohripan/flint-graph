@@ -556,17 +556,21 @@ def test_native_bootstrap_verifies_font_assets(tmp_path: Path) -> None:
     assert "asset_hash_mismatch" in rejected.stderr
 
 
-def native_ui_probe(tmp_path: Path, case: str, package: StoryPackage | None = None) -> dict:
+def native_ui_probe(
+    tmp_path: Path, case: str, package: StoryPackage | None = None, extra: dict | None = None
+) -> dict:
     project = tmp_path / "game"
     export_godot(package or load_package(FIXTURE), project)
-    if case == "cg_preview":
+    if case.endswith("_preview"):
         preview = project / "preview"
         preview.mkdir()
         (preview / "vn_view.gd").write_bytes(
             (Path(__file__).parents[2] / "runtimes/godot/preview/vn_view.gd").read_bytes()
         )
     (project / "qualification.gd").write_bytes((FIXTURE.parent / "godot_ui_probe.gd").read_bytes())
-    (project / "qualification.json").write_text(json.dumps({"case": case}), encoding="utf-8")
+    (project / "qualification.json").write_text(
+        json.dumps({"case": case, **(extra or {})}), encoding="utf-8"
+    )
     environment = native_environment(tmp_path)
     imported = run_engine(project, environment, "--editor", "--import")
     assert imported.returncode == 0, imported.stderr

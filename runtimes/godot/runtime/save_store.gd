@@ -86,6 +86,31 @@ static func write_gallery(story_id: String, seen: Array) -> String:
 	return _write_verified(gallery_path(story_id), data, 32768)
 
 
+# Player settings on this device (ADR 0043): voice volume in percent, 0 to 100.
+const SETTINGS_PATH := "user://flint_graph/settings.json"
+
+
+static func read_voice_volume() -> int:
+	var saved := LocalIO.new().read(SETTINGS_PATH, 4096)
+	if saved.get("error", "") != "":
+		return 100
+	var decoded: Dictionary = preload("res://runtime/strict_json.gd").decode(saved["data"], 4096)
+	if not decoded.get("ok", false) or not decoded["value"] is Dictionary:
+		return 100
+	var value: Dictionary = decoded["value"]
+	var volume: Variant = value.get("voice_volume")
+	if value.size() != 2 or value.get("schema_version") != "1" or not volume is int or volume < 0 or volume > 100:
+		return 100
+	return volume
+
+
+static func write_voice_volume(volume: int) -> String:
+	if volume < 0 or volume > 100:
+		return "invalid_save"
+	var data := JSON.stringify({"schema_version": "1", "voice_volume": volume}).to_utf8_buffer()
+	return _write_verified(SETTINGS_PATH, data, 4096)
+
+
 static func _write_verified(path: String, data: PackedByteArray, limit: int, storage: RefCounted = null) -> String:
 	if path == "":
 		return "invalid_save_path"

@@ -5,9 +5,10 @@
   const nonce = location.hash.slice(1);
   const validNonce = /^[0-9a-f]{64}$/.test(nonce);
   const status = document.getElementById("status");
-  // Story format 2 (ADR 0040) brings image and font bytes as transferred ArrayBuffers.
+  // Story format 2 (ADR 0040) brings image, font and voice clip (ADR 0043) bytes as
+  // transferred ArrayBuffers.
   const STAGED = "/tmp/flint-preview-asset";
-  const CAPS = { image: 10485760, font: 8388608 };
+  const CAPS = { image: 10485760, font: 8388608, audio: 10485760 };
   const TOTAL = 104857600;
   let phase = "starting", callback = null, identity = null, engine = null, buffers = [];
   let galleryOpen = false;

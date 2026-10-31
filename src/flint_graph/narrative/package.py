@@ -11,6 +11,7 @@ from flint_graph.narrative.json_format import parse_json
 from flint_graph.narrative.png import validate_png
 from flint_graph.narrative.validation import validate_story
 from flint_graph.narrative.values import Asset, PackageError, StoryPackage, canonical_json
+from flint_graph.narrative.wav import validate_wav
 
 STORY_LIMIT = 5 * 1024 * 1024
 ASSET_LIMIT = 10 * 1024 * 1024
@@ -55,6 +56,8 @@ def _checked_asset(kind: str, path: str, data: bytes, location: str) -> None:
         flavor = validate_font(data, location)
         if not path.endswith("." + flavor):
             raise PackageError("unsafe_path", location)
+    elif kind == "audio":
+        validate_wav(data, location)
     else:
         validate_png(data, location)
 

@@ -26,6 +26,7 @@ from flint_graph.narrative.release_artifacts import (
     make_artifact_zip,
 )
 from flint_graph.narrative.values import PackageError
+from flint_graph.narrative.wav import canonical_wav
 
 ROOT = Path(__file__).parents[2]
 MIB = 1024 * 1024
@@ -61,6 +62,7 @@ def font():
 
 
 DUSK, MIRA, TYPE = png(8, 4), png(3, 6), font()
+HI = canonical_wav(1, 24000, struct.pack("<h", 16) * 2400)  # A voice clip (ADR 0043).
 
 
 def sha(data):
@@ -80,6 +82,7 @@ def story():
             "dusk": {"kind": "image", "path": "assets/dusk.png", "sha256": sha(DUSK)},
             "mira": {"kind": "image", "path": "assets/mira.png", "sha256": sha(MIRA)},
             "type": {"kind": "font", "path": "assets/type.ttf", "sha256": sha(TYPE)},
+            "hi": {"kind": "audio", "path": "assets/hi.wav", "sha256": sha(HI)},
         },
         "theme": {"font": {"asset": "type", "size": 24}},
         "nodes": {
@@ -89,13 +92,20 @@ def story():
                 "show": [{"character": "mira", "sprite": "neutral", "position": "left"}],
                 "next": "l1",
             },
-            "l1": {"type": "line", "speaker": "mira", "text_id": "l1", "text": "Hi.", "next": "e"},
+            "l1": {
+                "type": "line",
+                "speaker": "mira",
+                "text_id": "l1",
+                "text": "Hi.",
+                "voice": {"mode": "full", "audio": "hi"},
+                "next": "e",
+            },
             "e": {"type": "end", "text_id": "e", "text": "Fin", "ending": "quiet"},
         },
     }
 
 
-BYTES = {"dusk": DUSK, "mira": MIRA, "type": TYPE}
+BYTES = {"dusk": DUSK, "mira": MIRA, "type": TYPE, "hi": HI}
 
 
 def referencing(value=None):
@@ -138,8 +148,11 @@ def test_v2_export_ships_fonts_and_images_with_keep_remaps(tmp_path):
     assert "runtime/vn_view.gd" in TEMPLATE_FILES and RUNTIME_FILES == set(TEMPLATE_FILES)
     presets = (game / "export_presets.cfg").read_text()
     assert "content/assets/*.ttf" in presets and "content/assets/*.otf" in presets
+    assert "content/assets/*.wav" in presets
+    assert (game / "content/assets/hi.wav").read_bytes() == HI
+    assert 'importer="keep"' in (game / "content/assets/hi.wav.import").read_text()
     manifest = json.loads((game / "build-manifest.json").read_bytes())
-    assert manifest["runtime_version"] == "0.5.0"
+    assert manifest["runtime_version"] == "0.6.0"
     assert {"content/assets/dusk.png", "content/assets/type.ttf.import"} <= set(manifest["files"])
     with pytest.raises(Exception, match="asset_unavailable"):
         export_godot(referencing(), tmp_path / "unattached")
@@ -159,9 +172,9 @@ def test_wheels_bundle_every_runtime_template_file():
 
 def test_runtime_version_is_pinned_consistently():
     toolchain = json.loads((ROOT / "runtimes/godot/toolchain.json").read_bytes())
-    assert toolchain["runtime_version"] == "0.5.0"
-    assert BuildIdentity("sha256:" + "a" * 64, "b" * 64).runtime_version == "0.5.0"
-    assert "runtime 0.5.0" in (ROOT / "runtimes/godot/README.txt").read_text()
+    assert toolchain["runtime_version"] == "0.6.0"
+    assert BuildIdentity("sha256:" + "a" * 64, "b" * 64).runtime_version == "0.6.0"
+    assert "runtime 0.6.0" in (ROOT / "runtimes/godot/README.txt").read_text()
 
 
 def child_fixture(tmp_path):
@@ -198,6 +211,8 @@ def test_child_copies_exactly_the_package_assets_into_the_project(tmp_path):
     project = scratch / "project"
     assert (project / "content/assets/dusk.png").read_bytes() == DUSK
     assert (project / "content/assets/type.ttf.import").exists()
+    assert (project / "content/assets/hi.wav").read_bytes() == HI
+    assert (project / "content/assets/hi.wav.import").exists()
 
 
 @pytest.mark.parametrize(
@@ -235,7 +250,7 @@ def test_child_refuses_the_previous_runtime_version(tmp_path):
     source, scratch, trusted, command = child_fixture(tmp_path)
     path = source / "build-manifest.json"
     manifest = json.loads(path.read_bytes())
-    manifest["runtime_version"] = "0.3.0"
+    manifest["runtime_version"] = "0.5.0"
     path.write_text(json.dumps(manifest), encoding="utf-8")
     assert run_build(source, scratch, trusted, engine_command=command)["code"] == "input_integrity"
 

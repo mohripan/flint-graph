@@ -11,6 +11,8 @@ from flint_graph.narrative.values import Diagnostic, PackageError
 ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 COLOR = re.compile(r"#[0-9a-f]{6}(?:[0-9a-f]{2})?\Z")
 POSITIONS = ("left", "center", "right")
+VOICE_MODES = ("full", "vocalization")
+VOCALIZATION_LIMIT = 40
 INT_MIN = -(2**31)
 INT_MAX = 2**31 - 1
 _T = TypeVar("_T")
@@ -228,6 +230,9 @@ def _assets_v2(value: Any) -> dict[str, Any]:
             paths = {f"assets/{key}.png"}
         elif asset["kind"] == "font":
             paths = {f"assets/{key}.ttf", f"assets/{key}.otf"}
+        elif asset["kind"] == "audio":
+            # Canonical 16-bit PCM WAV voice clips (ADR 0043).
+            paths = {f"assets/{key}.wav"}
         else:
             raise PackageError("invalid_value", location + ".kind")
         if asset["path"] not in paths:
@@ -395,6 +400,22 @@ class _Nodes:
         self.text_ids.add(key)
         text(item["text"], location + ".text")
 
+    def voice(self, node: dict[str, Any], location: str) -> None:
+        """A spoken line or a short vocalization (ADR 0043); without audio it is silent."""
+        voice = fields(node["voice"], {"mode"}, {"text", "audio"}, location)
+        if voice["mode"] not in VOICE_MODES:
+            raise PackageError("invalid_value", location + ".mode")
+        if "speaker" not in node:
+            raise PackageError("invalid_voice", location)
+        if (voice["mode"] == "vocalization") != ("text" in voice):
+            raise PackageError("invalid_voice", location)
+        if "text" in voice:
+            text(voice["text"], location + ".text")
+            if len(voice["text"]) > VOCALIZATION_LIMIT:
+                raise PackageError("invalid_text", location + ".text")
+        if "audio" in voice:
+            asset_of(voice["audio"], self.assets, "audio", location + ".audio")
+
     def check(self, key: str, node: Any) -> None:
         characters, variables, assets, nodes = (
             self.characters,
@@ -411,7 +432,12 @@ class _Nodes:
         kind = node.get("type")
         targets: list[str] = []
         if kind == "line" and self.v2:
-            fields(node, {"type", "text_id", "text", "next"}, {"speaker", "expression"}, location)
+            fields(
+                node,
+                {"type", "text_id", "text", "next"},
+                {"speaker", "expression", "voice"},
+                location,
+            )
             display(node, location)
             if "speaker" in node:
                 speaker = reference(node["speaker"], characters, location + ".speaker")
@@ -420,6 +446,8 @@ class _Nodes:
                     raise PackageError("invalid_expression", location + ".expression")
                 sprites = characters[speaker].get("sprites", {})
                 reference(node["expression"], sprites, location + ".expression")
+            if "voice" in node:
+                self.voice(node, location + ".voice")
             targets.append(reference(node["next"], nodes, location + ".next"))
         elif kind == "line":
             fields(
