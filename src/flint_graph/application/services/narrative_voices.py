@@ -1,4 +1,4 @@
-"""Character voices and local voice jobs (ADR 0043, ADR 0044).
+"""Character voices and local voice jobs (ADR 0043, ADR 0045).
 
 A character's profile names a catalog voice model (Kokoro-82M by default) and either
 one of its stock voices or a private voice reference to clone (#176). API requests

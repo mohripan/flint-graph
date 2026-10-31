@@ -1,4 +1,4 @@
-"""The voice models FlintGraph knows, their licenses and what each can do (ADR 0044).
+"""The voice models FlintGraph knows, their licenses and what each can do (ADR 0045).
 
 This registry is code, not configuration: an operator only says which of these
 models are installed (a pinned directory and runtime per model), so a catalog entry,
@@ -91,7 +91,7 @@ class VoiceModelSpec:
     tags: tuple[str, ...] = ()
     watermark: str | None = None
     # Free dedicated GPU memory the child needs before it uses the card: the measured
-    # peak it reserves on the shared 12 GB card plus headroom (ADR 0044).
+    # peak it reserves on the shared 12 GB card plus headroom (ADR 0045).
     min_free_gib: float = 1.0
     # Whether a job may finish on the CPU when the card is busy (otherwise it refuses).
     cpu_fallback: bool = True

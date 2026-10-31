@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import type { VoiceReference } from "../lib/api";
 import { MAX_SECONDS, encodeWav, referenceProblem, toReferenceSamples } from "./referenceAudio";
 
-// Private voice references (#175, ADR 0044): a sample of your own voice, or of a speaker
+// Private voice references (#175, ADR 0045): a sample of your own voice, or of a speaker
 // who gave you permission, that a character voice can be cloned from. References stay
 // in this project: they never go into stories, playtests, releases or NOTICES.
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;

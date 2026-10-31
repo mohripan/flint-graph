@@ -1,4 +1,4 @@
-"""Trusted parents for the isolated local voice children (ADR 0043, ADR 0044).
+"""Trusted parents for the isolated local voice children (ADR 0043, ADR 0045).
 
 Kokoro speaks protocol 1; the catalog models (Chatterbox, Qwen3-TTS, IndexTTS-2.5)
 speak protocol 2, which adds the model, a reference sample written into the child's
@@ -65,7 +65,7 @@ class VoiceGenerationError(Exception):
 class VoiceItem:
     text: str
     mode: str  # "full" or "vocalization"
-    # How to say it (ADR 0044); ``None`` is a neutral delivery.
+    # How to say it (ADR 0045); ``None`` is a neutral delivery.
     delivery: Delivery | None = None
 
 

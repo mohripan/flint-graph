@@ -5,7 +5,7 @@ of the same tenant and project that a member approved at some point; discarding 
 asset later only hides it from pickers and never breaks a saved binding. The
 "Asset notices" section of NOTICES is rebuilt by the server from immutable asset
 fields (story asset ID, kind, SHA-256, licence, notice, source), never from names.
-A generated clip whose model license puts duties on its audio (ADR 0044) also adds
+A generated clip whose model license puts duties on its audio (ADR 0045) also adds
 that license's text and, when the license requires it, the player terms block every
 runtime shows before play; both come from the code registry by license hash.
 """

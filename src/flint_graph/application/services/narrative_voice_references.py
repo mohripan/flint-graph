@@ -1,4 +1,4 @@
-"""Private voice references and their consent records (#175, ADR 0044).
+"""Private voice references and their consent records (#175, ADR 0045).
 
 Members record or upload a 5 to 30 s sample and declare whose voice it is: their own,
 or a named speaker who gave permission to clone it. The declaration is recorded with

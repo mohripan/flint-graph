@@ -1,7 +1,7 @@
 # Expressive and cloned character voices (M39, #173)
 
 Date: 2026-11-01. Branch `claude/m39-voices`. Decision:
-[ADR 0044](../adr/0044-expressive-and-cloned-character-voices.md). Operations:
+[ADR 0045](../adr/0045-expressive-and-cloned-character-voices.md). Operations:
 [runbook](../runbooks/narrative-voice-generation.md). Evidence:
 [`evidence/m39-voices-2026-11-01/`](evidence/m39-voices-2026-11-01/).
 

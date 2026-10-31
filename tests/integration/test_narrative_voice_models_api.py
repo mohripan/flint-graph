@@ -1,4 +1,4 @@
-"""Voice model catalog, license acceptance and cloned voices (#176, #177, #178, ADR 0044)."""
+"""Voice model catalog, license acceptance and cloned voices (#176, #177, #178, ADR 0045)."""
 
 import hashlib
 import json

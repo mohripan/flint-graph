@@ -1,4 +1,4 @@
-"""How a delivery becomes a model's own controls (#177, ADR 0044).
+"""How a delivery becomes a model's own controls (#177, ADR 0045).
 
 The Studio speaks one bounded vocabulary (``voice_models.DELIVERIES`` with an
 intensity in [0, 1]); each engine has different knobs. This fixed table turns a

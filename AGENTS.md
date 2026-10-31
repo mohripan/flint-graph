@@ -124,7 +124,7 @@ Kokoro voice per character profile), or from WAV uploads. Read
 `docs/reports/2026-10-31-asset-folders-and-line-voices.md` and
 `docs/runbooks/narrative-voice-generation.md`; the launcher's `voice` service needs the
 voice settings in `studio.local.env`.
-[ADR 0044](docs/adr/0044-expressive-and-cloned-character-voices.md) (M39, #173–#178) adds
+[ADR 0045](docs/adr/0045-expressive-and-cloned-character-voices.md) (M39, #173–#178) adds
 cloned and expressive voices: a code catalog of Chatterbox (English, Turbo, Multilingual V3;
 MIT, PerTh watermark), Qwen3-TTS 1.7B (cloning, stock voices; Apache-2.0) and IndexTTS-2.5
 (bilibili license with duties on audio; IndexTTS2 is excluded for its CC-BY-NC MaskGCT codec)
@@ -135,7 +135,7 @@ a model plus stock voice or reference per character, per-line delivery defaultin
 expression (editor metadata, not story format), per-workspace license acceptance by hash
 (migration 0032), NOTICES with license texts and a player-terms block, and runtime 0.7.0's
 one-time player license screen. Read `docs/reports/2026-11-01-expressive-and-cloned-voices.md`
-and the runbook's ADR 0044 section; weights live under ignored `notes/models/`.
+and the runbook's ADR 0045 section; weights live under ignored `notes/models/`.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

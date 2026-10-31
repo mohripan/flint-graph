@@ -1,4 +1,4 @@
-# ADR 0044: Expressive and cloned character voices
+# ADR 0045: Expressive and cloned character voices
 
 Date: 2026-11-01. Status: accepted and delivered (M39, tracking #173: #174–#178).
 Builds on [ADR 0043](0043-asset-folders-and-line-voices.md).

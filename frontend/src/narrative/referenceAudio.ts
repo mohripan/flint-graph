@@ -1,4 +1,4 @@
-// Voice reference audio in the browser (#175, ADR 0044): recordings and uploads become
+// Voice reference audio in the browser (#175, ADR 0045): recordings and uploads become
 // 24 kHz mono 16-bit WAV before they are sent, the form the server stores. The server
 // checks length, clipping and silence again and decides.
 

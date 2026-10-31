@@ -1,7 +1,7 @@
 """Explicit opt-in voice worker: dispatch, local speech and recovery (ADR 0043).
 
 It consumes only voice outbox topics and runs on its own task queue, one job at a
-time. The Kokoro directory and every other installed catalog model (ADR 0044) are
+time. The Kokoro directory and every other installed catalog model (ADR 0045) are
 verified against their pinned manifests before any job runs. Logs carry counts,
 never the spoken text.
 """

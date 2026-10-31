@@ -46,7 +46,7 @@ _DEPLOYED_OPTIONAL_DEPENDENCIES: list[str] = ["embedding_provider", "answer_prov
 
 
 class NarrativeVoiceModelInstall(BaseModel):
-    """Where an installed catalog voice model and its isolated runtime live (ADR 0044)."""
+    """Where an installed catalog voice model and its isolated runtime live (ADR 0045)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -310,7 +310,7 @@ class Settings(BaseSettings):
     narrative_voice_max_active_jobs_per_workspace: int = Field(default=4, ge=1, le=20)
     narrative_voice_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
     narrative_voice_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
-    # Catalog models installed beside Kokoro (ADR 0044), as JSON keyed by model ID, e.g.
+    # Catalog models installed beside Kokoro (ADR 0045), as JSON keyed by model ID, e.g.
     # {"chatterbox": {"model_dir": ..., "manifest_sha256": ..., "runtime_dir": ...}}.
     # Only these are offered to creators; licenses and capabilities come from code.
     narrative_voice_models: dict[str, NarrativeVoiceModelInstall] = Field(default_factory=dict)

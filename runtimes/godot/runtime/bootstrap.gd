@@ -80,7 +80,7 @@ func _ready() -> void:
 	game.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(game)
 	if game is VnView:
-		# Story format 2 may carry player terms in NOTICES (ADR 0044).
+		# Story format 2 may carry player terms in NOTICES (ADR 0045).
 		game.configure(checked["story"], checked["package_hash"], checked["assets"], checked["notices"])
 	else:
 		game.configure(checked["story"], checked["package_hash"], checked["assets"])

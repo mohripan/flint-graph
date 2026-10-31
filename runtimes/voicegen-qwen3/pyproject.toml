@@ -1,7 +1,7 @@
 [project]
 name = "flint-graph-voicegen-qwen3"
 version = "0.1.0"
-description = "Isolated local Qwen3-TTS voice child for FlintGraph narrative assets (ADR 0044)"
+description = "Isolated local Qwen3-TTS voice child for FlintGraph narrative assets (ADR 0045)"
 requires-python = "==3.11.*"
 dependencies = [
     "qwen-tts==0.1.1",

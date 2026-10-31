@@ -1,4 +1,4 @@
-"""Build a local page to rate voice-model samples (#174, ADR 0044).
+"""Build a local page to rate voice-model samples (#174, ADR 0045).
 
     uv run python tools/narrative/voice_rating_page.py --runs notes/voice-eval/user \
         --reference voice_recording.wav --out notes/voice-eval/rate.html

@@ -1,4 +1,4 @@
-"""Voice reference samples: the audio a cloned voice is made from (#175, ADR 0044).
+"""Voice reference samples: the audio a cloned voice is made from (#175, ADR 0045).
 
 A reference is private project data, never a story asset. It is stored in the same
 canonical 16-bit PCM WAV form as voice clips (ADR 0043) so the hash names exactly the

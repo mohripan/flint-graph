@@ -1,4 +1,4 @@
-"""Isolated local IndexTTS-2.5 voice child for FlintGraph narrative assets (ADR 0044).
+"""Isolated local IndexTTS-2.5 voice child for FlintGraph narrative assets (ADR 0045).
 
 The trusted parent starts this with ``python -I generate.py`` from the locked runtime,
 inside a private temporary folder, writes one JSON request to stdin and reads JSON

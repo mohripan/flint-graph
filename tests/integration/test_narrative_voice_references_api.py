@@ -1,4 +1,4 @@
-"""Private voice references with a consent declaration (#175, ADR 0044)."""
+"""Private voice references with a consent declaration (#175, ADR 0045)."""
 
 import hashlib
 import math

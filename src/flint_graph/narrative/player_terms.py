@@ -1,4 +1,4 @@
-"""Player terms in a package's NOTICES (#178, ADR 0044, runtime 0.7.0).
+"""Player terms in a package's NOTICES (#178, ADR 0045, runtime 0.7.0).
 
 Some voice model licenses require a game to put terms on its players. The server
 writes those terms into the generated part of NOTICES, between two fixed marker

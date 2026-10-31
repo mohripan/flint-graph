@@ -305,7 +305,7 @@
 .studio-scene-voices { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; margin:0 0 12px; }
 .studio-character-voice { display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 14px; margin:4px 0 8px; }
 .studio-character-voice .studio-field { margin:0; }
-/* Cloned and expressive voices (ADR 0044): line delivery, references and license duties. */
+/* Cloned and expressive voices (ADR 0045): line delivery, references and license duties. */
 .studio-line-delivery { display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
 .studio-line-delivery select { min-height:30px; border:1px solid #c2d0d8; border-radius:6px; padding:0 6px; font:inherit; background:#fff; max-width:200px; }
 .studio-line-delivery input[type=range] { width:90px; }

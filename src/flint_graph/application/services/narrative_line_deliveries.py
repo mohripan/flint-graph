@@ -1,4 +1,4 @@
-"""Per-line delivery overrides: editor metadata for voice generation (#177, ADR 0044).
+"""Per-line delivery overrides: editor metadata for voice generation (#177, ADR 0045).
 
 A line's delivery defaults in the Studio from its sprite expression; an override is
 stored here, outside the story, because the runtimes play clips and never speak.

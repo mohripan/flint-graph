@@ -365,7 +365,7 @@ class NarrativeVoiceJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     idempotency_key: Mapped[UUID]
     request_hash: Mapped[str] = mapped_column(String(64))
-    # A catalog model (ADR 0044) and either its stock voice or a voice reference, whose
+    # A catalog model (ADR 0045) and either its stock voice or a voice reference, whose
     # hash and consent record are copied here when the job is queued.
     voice_model: Mapped[str] = mapped_column(String(64), default="kokoro-82m")
     voice: Mapped[str | None] = mapped_column(String(32))

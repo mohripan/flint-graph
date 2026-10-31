@@ -77,7 +77,7 @@ func _initialize() -> void:
 		quit(0)
 		return
 	if config["case"] == "terms_parse":
-		# The shared player-terms cases (ADR 0044), parsed by the runtime's own script.
+		# The shared player-terms cases (ADR 0045), parsed by the runtime's own script.
 		var terms_script: GDScript = load("res://runtime/player_terms.gd")
 		var parsed_terms: Array = []
 		for notices: String in config["notices"]:
@@ -86,7 +86,7 @@ func _initialize() -> void:
 		quit(0)
 		return
 	if config["case"] in ["terms", "terms_preview"]:
-		# Player terms (ADR 0044): a screen before play that holds the story and its voice
+		# Player terms (ADR 0045): a screen before play that holds the story and its voice
 		# until accepted, kept on the device (never in playtests) and rereadable.
 		var view: GDScript = load("res://preview/vn_view.gd" if config["case"] == "terms_preview" else "res://runtime/vn_view.gd")
 		var notices: String = FileAccess.get_file_as_string("res://content/NOTICES.txt")

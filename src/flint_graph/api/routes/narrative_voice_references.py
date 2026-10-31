@@ -1,4 +1,4 @@
-"""Private voice references with a consent declaration (#175, ADR 0044).
+"""Private voice references with a consent declaration (#175, ADR 0045).
 
 Only workspace members (not viewers) list, hear, add or delete references, because
 a reference is a person's voice. Bytes are checked and stored create-only and

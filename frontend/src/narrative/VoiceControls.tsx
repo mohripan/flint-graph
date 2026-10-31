@@ -303,7 +303,7 @@ export function useVoiceCatalog(tenantId: string, projectId: string) {
       catalogs.set(key, pending);
       pending.catch(() => catalogs.delete(key));
     }
-    // A server from before ADR 0044 sends no models: offer none until it is restarted.
+    // A server from before ADR 0045 sends no models: offer none until it is restarted.
     pending.then(found => setCatalog({ ...found, models: found.models ?? [] }), () => undefined);
   }, [tenantId, projectId]);
   useEffect(() => { load(); }, [load]);

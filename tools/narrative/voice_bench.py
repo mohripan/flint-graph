@@ -1,4 +1,4 @@
-"""Measure a local voice model through the real parent and child (#174, ADR 0044).
+"""Measure a local voice model through the real parent and child (#174, ADR 0045).
 
     uv run python tools/narrative/voice_bench.py --model chatterbox-turbo \
         --model-dir notes/models/chatterbox-turbo --runtime runtimes/voicegen-chatterbox \

@@ -1,4 +1,4 @@
-"""Private voice references with a consent declaration (#175, ADR 0044).
+"""Private voice references with a consent declaration (#175, ADR 0045).
 
 Revision ID: 0031_narrative_voice_references
 Revises: 0030_narrative_scene_art

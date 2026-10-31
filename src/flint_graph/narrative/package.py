@@ -46,7 +46,7 @@ def load_text_package(
         raise PackageError("invalid_text", "NOTICES.txt") from None
     if "\x00" in notice_text:
         raise PackageError("invalid_text", "NOTICES.txt")
-    player_terms(notice_text)  # A malformed terms block is refused everywhere (ADR 0044).
+    player_terms(notice_text)  # A malformed terms block is refused everywhere (ADR 0045).
     canonical = canonical_json(story)
     if len(canonical) > STORY_LIMIT:
         raise PackageError("size_limit", "story.json")

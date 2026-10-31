@@ -1,4 +1,4 @@
-"""Trusted parent for the protocol 2 voice children (ADR 0044), against a scripted child."""
+"""Trusted parent for the protocol 2 voice children (ADR 0045), against a scripted child."""
 
 import hashlib
 import json

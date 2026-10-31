@@ -1,4 +1,4 @@
-"""Opt-in real Godot qualification of the player license screen (ADR 0044, runtime 0.7.0)."""
+"""Opt-in real Godot qualification of the player license screen (ADR 0045, runtime 0.7.0)."""
 
 import base64
 import json

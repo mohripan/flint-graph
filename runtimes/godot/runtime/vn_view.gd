@@ -57,7 +57,7 @@ var _volume_slider: HSlider
 # Browsers keep sound off until the first click or key press. Where a page may not
 # start sound yet, that input opens a start screen instead of skipping the first line.
 var _sound_gate: Control
-# Terms a voice model license puts on players (ADR 0044): shown once before play and
+# Terms a voice model license puts on players (ADR 0045): shown once before play and
 # again from the menu. Until they are accepted the story does not start or speak.
 var _terms: Variant = null
 var _terms_panel: PanelContainer

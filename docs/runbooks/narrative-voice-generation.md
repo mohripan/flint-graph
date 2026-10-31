@@ -102,7 +102,7 @@ hashing; float, 8/24-bit, compressed and MP3/Ogg files are refused.
   "Click or press any key to start" screen for stories with voice clips; that input
   starts the first line's clip instead of skipping the line.
 
-## Cloned and expressive voices (ADR 0044)
+## Cloned and expressive voices (ADR 0045)
 
 Beside Kokoro, an operator may install catalog models that clone a voice from a
 private reference sample or steer each line's delivery. The catalog, each model's

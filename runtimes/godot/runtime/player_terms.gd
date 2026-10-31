@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Player terms in NOTICES (ADR 0044, runtime 0.7.0): the same rules as the Python
+# Player terms in NOTICES (ADR 0045, runtime 0.7.0): the same rules as the Python
 # reference, the preview validator and the Studio. Terms sit between two fixed marker
 # lines after the generated asset-notices marker, where creator text cannot reach.
 extends RefCounted

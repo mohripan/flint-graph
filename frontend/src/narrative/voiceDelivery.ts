@@ -1,4 +1,4 @@
-// Line delivery for generated voices (ADR 0044, #177): a bounded vocabulary with an
+// Line delivery for generated voices (ADR 0045, #177): a bounded vocabulary with an
 // intensity, defaulting from the line's sprite expression. Delivery is a generation
 // input, never part of the story: the runtimes play clips and never speak. Mirrors
 // the server's narrative/voice_models.py; the server checks every request again.

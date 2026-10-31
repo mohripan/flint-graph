@@ -86,7 +86,7 @@ static func write_gallery(story_id: String, seen: Array) -> String:
 	return _write_verified(gallery_path(story_id), data, 32768)
 
 
-# Player terms accepted on this device (ADR 0044): the SHA-256 of the terms text, so
+# Player terms accepted on this device (ADR 0045): the SHA-256 of the terms text, so
 # changed terms ask again. Kept per story outside save slots, like gallery unlocks.
 static func terms_path(story_id: String) -> String:
 	if RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}$").search(story_id) == null:
