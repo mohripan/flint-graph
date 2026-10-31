@@ -70,7 +70,8 @@ uv run python -m flint_graph.processes.narrative_assistant_worker
 ```
 
 Start the API with the same provider settings so it accepts turns. In the Studio,
-open a project and choose **Assistant** in the header (Editor/Assistant switch). The
+open a project and choose **Assistant** under Studio in the left sidebar (on phones,
+the Editor/Assistant switch in the header). The
 page lists the project's conversations on the left (a drawer on phones) with
 **New chat**, and the chat in the middle. Enter sends, Shift + Enter adds a line.
 Save edits before sending; the assistant works from saved revisions.

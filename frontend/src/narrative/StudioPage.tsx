@@ -1,4 +1,5 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ApiError, api } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { draftReducer, initialDraftState, prepareSave } from "./draftState";
@@ -23,13 +24,11 @@ import { PreviewDialog } from "./PreviewDialog";
 import { ReleasesDialog } from "./ReleasesDialog";
 import { AssistantPage } from "./AssistantPage";
 import { releaseIntents } from "./releaseModel";
+import { StudioNavSlot, StudioSideNav } from "./StudioNav";
+import { PANELS as panels, currentSection } from "./studioSections";
+import type { Panel } from "./studioSections";
 import type { NarrativeProject, NarrativeRevision, RevisionSummary, RevisionWrite, StoryDraft, StoryNode } from "./types";
 import "./studio.css";
-
-type Panel = "write" | "scenes" | "map" | "characters" | "assets" | "look" | "state" | "story" | "history" | "source";
-const panels: Array<[Panel, string]> = [["write", "Write"], ["scenes", "Scenes"], ["map", "Map"],
-  ["characters", "Characters"], ["assets", "Assets"], ["look", "Look"], ["state", "State"], ["story", "Details"],
-  ["history", "History"], ["source", "Source"]];
 
 function readSelection(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -64,6 +63,7 @@ export function StudioPage({ onDirtyChange }: {
   if (!workspace) throw new Error("A workspace is required.");
   const tenantId = workspace.id, storageKey = `flintgraph.studio.project.${tenantId}`;
   const canWrite = workspace.role !== "viewer";
+  const navSlot = useContext(StudioNavSlot);
   const [state, dispatch] = useReducer(draftReducer, undefined, () => initialDraftState());
   const stateRef = useRef(state); stateRef.current = state;
   const [projects, setProjects] = useState<NarrativeProject[]>([]);
@@ -403,18 +403,21 @@ export function StudioPage({ onDirtyChange }: {
 
   return <SceneOptionsContext.Provider value={sceneOptions}>
   <CharacterProfilesProvider tenantId={tenantId} projectId={state.project?.id ?? ""}>
-  <div className={`narrative-studio ${assistantView ? "is-assistant" : ""}`} role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
+  <div className={`narrative-studio ${assistantView ? "is-assistant" : ""} ${navSlot ? "has-side-nav" : ""}`} role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
     {releasesOpen && state.project && state.revision && <ReleasesDialog key={`${tenantId}:${state.project.id}`}
       tenantId={tenantId} projectId={state.project.id} headId={state.project.head_revision_id} revision={state.revision}
       history={historyRows} canWrite={canWrite} dirty={dirty} saving={state.saving} onSave={save}
       intents={releaseIntentStore.current} scopeRef={releaseScope}
       onInspect={id => void inspectRevision(id)} onClose={closeReleases} onAccessLost={releaseAccessLost} />}
     {preview && <PreviewDialog key={preview.id} revision={preview} onClose={closePreview} />}
+    {navSlot && state.project && createPortal(<StudioSideNav projectName={state.project.name}
+      current={currentSection(assistantView, panel)} assistantReady={Boolean(state.revision)} onProjects={collection}
+      onAssistant={() => chooseView("assistant")} onPanel={next => { chooseView("editor"); choosePanel(next); }} />, navSlot)}
     <header className="studio-heading"><div><p className="studio-eyebrow">Narrative studio</p>
       <h1>{state.project?.name ?? "Your stories"}</h1>
       <p>{state.project ? `Revision ${state.revision?.revision_number ?? "…"} · ${state.saving ? "Saving…" : state.conflict ? "Conflict copy saved" : dirty ? "Unsaved changes" : "Saved"}` : "Write a branching story. Shape its choices. Play what you authored."}</p></div>
       {state.project && <div className="studio-actions">
-        <button type="button" className="studio-secondary" onClick={collection}>Projects</button>
+        <button type="button" className="studio-secondary studio-projects-button" onClick={collection}>Projects</button>
         <div className="studio-view-switch" role="group" aria-label="Studio view">
           <button type="button" aria-pressed={!assistantView} onClick={() => chooseView("editor")}>Editor</button>
           <button type="button" aria-pressed={assistantView} disabled={!state.revision} onClick={() => chooseView("assistant")}>Assistant</button></div>

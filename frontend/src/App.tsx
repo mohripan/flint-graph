@@ -5,6 +5,7 @@ import { useWorkspace } from "./lib/workspace";
 import { AuthGate, WorkspaceGate, Logo } from "./components/WorkspaceGate";
 import { SetupPage } from "./pages/SetupPage";
 import { StudioPage } from "./narrative/StudioPage";
+import { StudioNavSlot } from "./narrative/StudioNav";
 
 // The GraphRAG Ask and Documents pages are hidden from the studio shell (#169); their
 // code and API remain for project lore sources and story questions later (#125, #171).
@@ -16,6 +17,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("studio");
   const [studioDirty, setStudioDirty] = useState(false);
   const [healthy, setHealthy] = useState<boolean | null>(null);
+  const [studioNav, setStudioNav] = useState<HTMLElement | null>(null);
   const mayLeave = () => !studioDirty || window.confirm("Leave this draft without saving? Your last saved revision will remain available.");
   const navigate = (next: Tab) => { if (next !== tab && mayLeave()) setTab(next); };
 
@@ -88,13 +90,16 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav aria-label="Workspace pages" className="flex w-full shrink-0 gap-1 border-b border-slate-200 bg-white p-3 md:w-52 md:flex-col md:border-r md:border-b-0">
+        <nav aria-label="Workspace pages" className="flex w-full shrink-0 gap-1 border-b border-slate-200 bg-white p-3 md:w-52 md:flex-col md:overflow-y-auto md:border-r md:border-b-0">
           <NavItem active={tab === "studio"} onClick={() => navigate("studio")} label="Studio" icon={<DocIcon />} />
+          {tab === "studio" && <div ref={setStudioNav} className="hidden md:block" />}
           <NavItem active={tab === "setup"} onClick={() => navigate("setup")} label="Setup" icon={<SetupIcon />} />
         </nav>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
-          {tab === "studio" ? <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} /> : <SetupPage key={workspace.id} />}
+          {tab === "studio" ? <StudioNavSlot.Provider value={studioNav}>
+            <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} />
+          </StudioNavSlot.Provider> : <SetupPage key={workspace.id} />}
         </main>
       </div>
     </div>

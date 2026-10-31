@@ -5,6 +5,14 @@ from #122; member or higher can create and save, viewer can inspect saved source
 and playtest. Ask, Documents and Setup remain available. The API status indicator
 reports process reachability; search readiness still gates the document Ask flow.
 
+On wide screens an open project's sections are listed in the left sidebar under
+**Studio**: the project name (back to all projects), **Assistant**, then Writing
+(Write, Map), Cast & art (Characters, Assets, Look), Story setup (State, Details)
+and Advanced (History, Source). The page header keeps the actions: Undo, Redo,
+Playtest, Releases and Save revision. Phones keep the Projects button, the
+Editor/Assistant switch and the tab row in the page, including Scenes, which is the
+Write rail on wide screens. Section logic is in `frontend/src/narrative/studioSections.ts`.
+
 Create a story, edit scenes/characters/state, connect destinations and save a
 revision. The scene list and forms are alternatives to the route map. Map display
 is bounded to 250 scenes/1,000 connections with notices; list filtering/pagination

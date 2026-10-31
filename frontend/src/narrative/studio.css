@@ -41,6 +41,11 @@
 .studio-tabs button.selected,.studio-tabs button.wide-selected { color:#182635; border-bottom-color:#9d7330; font-weight:700; }
 /* Wide screens always show the scene list beside Write; the Scenes tab is for phones. */
 .studio-tabs .studio-tab-scenes { display:none; }
+/* Wide screens list the sections in the app sidebar under Studio (StudioNav). */
+@media(min-width:768px) {
+  .narrative-studio.has-side-nav .studio-tabs,.narrative-studio.has-side-nav .studio-view-switch,
+  .narrative-studio.has-side-nav .studio-projects-button { display:none; }
+}
 .studio-desk { display:grid; grid-template-columns:minmax(260px,320px) minmax(0,1fr); gap:24px; align-items:start; }
 .studio-rail { min-width:0; position:sticky; top:0; }
 .studio-scene-list { display:flex; flex-direction:column; gap:8px; }
