@@ -111,6 +111,9 @@ reference; [qualification.json](evidence/scene-art-cgs-2026-10-31/qualification.
 - **Identity measure.** CLIP ViT-H similarity to the reference is 0.70 for the
   text-only render and 0.69–0.77 for the adapter renders. The scene dominates that
   number, so recognizability was judged by eye; the outfit is the clearest tell.
+  Calibrated identity (CCIP) and outfit-drift scores are planned in M40
+  ([#180](https://github.com/mohripan/flint-graph/issues/180)) and would turn this
+  judgment into a measurement.
 
 **GPU end to end through the worker: passed.** The opt-in live test
 `test_real_gpu_scene_art_draws_the_referenced_character` ran this branch: API job,
@@ -151,8 +154,9 @@ One render of seven kept both identities. The others swapped or merged hair colo
 and outfits, because the text tags apply to the whole image
 ([sheet](evidence/scene-art-cgs-2026-10-31/07-probe-two-characters.png)). That is not
 good enough to offer, so a CG shows one referenced character, as ADR 0041 planned.
-Two characters need regional prompting or a second inpainting pass per character; a
-follow-up can extend `characters` to two without changing the API's shape.
+Two characters need regional prompting or a second inpainting pass per character;
+M40's multi-reference work ([#185](https://github.com/mohripan/flint-graph/issues/185))
+is the natural place. `characters` can then take two entries without a new shape.
 
 ## Limits
 
@@ -169,9 +173,11 @@ follow-up can extend `characters` to two without changing the API's shape.
 
 ## Checks
 
-On branch `claude/scene-art-cgs`, based on master 0116894:
+On branch `claude/scene-art-cgs`, rebased onto master 77cb2c8 (runtime 0.6.1). The
+Studio QA above ran on the branch before the rebase, with the runtime 0.6.0 playtest
+build; scene art does not touch the runtime.
 
-- `uv run pytest`: 1818 passed, 105 skipped (SQLite). The scene-art and character
+- `uv run pytest`: 1818 passed, 107 skipped (SQLite). The scene-art and character
   image suites also passed on PostgreSQL (`FLINT_GRAPH_NARRATIVE_PG_URL`, a throwaway
   schema migrated to 0030): 16 passed.
 - `uv run ruff check .` and `uv run mypy`: clean.
@@ -180,7 +186,7 @@ On branch `claude/scene-art-cgs`, based on master 0116894:
 - `docker compose config`: valid.
 - Child (`runtimes/imagegen`, `python -I -m unittest discover`): 29 tests, 1 skipped
   (the real segmenter, which needs its model path).
-- Frontend: `npm run typecheck`, `npm test` (108 passed) and `npm run build`.
+- Frontend: `npm run typecheck`, `npm test` (111 passed) and `npm run build`.
 - Live: `test_real_gpu_scene_art_draws_the_referenced_character` passed on the GPU.
 - Skipped: the deterministic RAG eval gate (`flint-graph-eval`), which this change
   does not touch.
