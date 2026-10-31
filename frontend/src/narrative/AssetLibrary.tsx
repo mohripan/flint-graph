@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError, api } from "../lib/api";
 import type { ImageJob, NarrativeImage } from "../lib/api";
-import { FILTERS, KIND_LABELS, UPLOAD_KINDS, filterQuery, kindForFile, suggestName, uploadKindForFilter, uploadProblem } from "./assetModel";
-import type { AssetFilter, UploadKind } from "./assetModel";
+import { FolderActions, LibraryRail, MoveBar } from "./LibraryRail";
+import { folderPath, folderRows, uploadKindForView, viewQuery, viewTitle } from "./assetFolders";
+import type { LibraryIndex, LibraryView } from "./assetFolders";
+import { KIND_LABELS, UPLOAD_KINDS, kindForFile, suggestName, uploadProblem } from "./assetModel";
+import type { UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
 import { refreshLibrary, useAssetFont } from "./libraryAssets";
 import { isActive, jobStatus } from "./characterModel";
@@ -15,51 +18,84 @@ import { StudioDialog } from "./StudioDialog";
 const PAGE = 48;
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
 
-// The project's art and fonts: uploads with a rights declaration and generated
-// backgrounds. Only approved assets can be used by the story.
-export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: string; projectId: string; canWrite: boolean }) {
-  const [filter, setFilter] = useState<AssetFilter>("all");
+// The project's art, fonts and voice clips: uploads with a rights declaration and
+// generated items. Only approved assets can be used by the story. Folders and the
+// automatic groups only organize the library (ADR 0043).
+export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {} }: {
+  tenantId: string; projectId: string; canWrite: boolean; characterNames?: Record<string, string>;
+}) {
+  const [view, setView] = useState<LibraryView>({ type: "all" });
+  const [index, setIndex] = useState<LibraryIndex | null>(null);
   const [assets, setAssets] = useState<NarrativeImage[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [viewing, setViewing] = useState<NarrativeImage | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const { jobs, failed: jobsFailed, put } = useBackgroundJobs(tenantId, projectId);
   const active = jobs.find(isActive) ?? null;
 
+  const reindex = useCallback(() => {
+    api.getAssetIndex(tenantId, projectId).then(setIndex).catch(() => undefined);
+  }, [tenantId, projectId]);
   const load = useCallback(async (before?: string) => {
     try {
-      const page = await api.listNarrativeAssets(tenantId, projectId, { ...filterQuery(filter), limit: PAGE, before });
+      const page = await api.listNarrativeAssets(tenantId, projectId, { ...viewQuery(view), limit: PAGE, before });
       setAssets(current => before && current ? [...current, ...page.assets] : page.assets);
       setNext(page.next_before);
     } catch (error) { setNotice(message(error, "Could not load assets.")); setAssets(current => current ?? []); }
-  }, [tenantId, projectId, filter]);
-  useEffect(() => { setAssets(null); void load(); }, [load]);
+  }, [tenantId, projectId, view]);
+  useEffect(() => { setAssets(null); setSelected(new Set()); void load(); }, [load]);
+  useEffect(() => { reindex(); }, [reindex]);
+  // Background jobs are shared with the assistant; reload the grid when one finishes.
   const completedJobs = jobs.filter(job => job.status === "completed").map(job => job.id).sort().join(",");
   useEffect(() => {
-    if (completedJobs) { void load(); refreshLibrary(); }
-  }, [completedJobs, load]);
+    if (completedJobs) { void load(); refreshLibrary(); reindex(); }
+  }, [completedJobs, load, reindex]);
 
   const replace = (asset: NarrativeImage) => setAssets(current => current?.map(item => item.id === asset.id ? asset : item) ?? null);
   async function act(run: () => Promise<void>, fallback: string) {
     setNotice(null);
-    try { await run(); refreshLibrary(); } catch (error) { setNotice(message(error, fallback)); }
+    try { await run(); refreshLibrary(); reindex(); } catch (error) { setNotice(message(error, fallback)); }
   }
+  async function folderChange(run: () => Promise<unknown>, fallback: string): Promise<boolean> {
+    setNotice(null);
+    try { await run(); reindex(); return true; } catch (error) { setNotice(message(error, fallback)); return false; }
+  }
+  const cgs = view.type === "kind" && view.kind === "image";
+  const folders = index?.folders ?? [];
+  const openFolder = view.type === "folder" ? folders.find(item => item.id === view.id) : undefined;
+  const depth = openFolder ? folderRows(folders).find(row => row.folder.id === openFolder.id)?.depth ?? 0 : 0;
+  const create = (name: string, parent: string | null) => folderChange(async () => {
+    const made = await api.createAssetFolder(tenantId, projectId, name, parent);
+    setView({ type: "folder", id: made.id });
+  }, "Could not create the folder.");
+  const toggle = (id: string) => setSelected(current => {
+    const updated = new Set(current);
+    if (updated.has(id)) updated.delete(id); else updated.add(id);
+    return updated;
+  });
+  const move = (folder: string | null) => void act(async () => {
+    const moved = await api.moveNarrativeAssets(tenantId, projectId, [...selected], folder);
+    // Assets that no longer belong to the open folder or Unsorted leave the grid.
+    const still = (asset: NarrativeImage) => view.type === "folder" ? asset.folder_id === view.id
+      : view.type === "unfiled" ? !asset.folder_id : true;
+    const changed = new Map(moved.assets.map(asset => [asset.id, asset]));
+    setAssets(current => current?.map(item => changed.get(item.id) ?? item).filter(still) ?? null);
+    setSelected(new Set());
+    setNotice(`Moved ${moved.assets.length} ${moved.assets.length === 1 ? "asset" : "assets"}.`);
+  }, "Could not move the assets.");
 
   return <section className="studio-assets" aria-label="Assets">
     <div className="studio-section-heading"><h2>Assets</h2>
       {canWrite && <button type="button" className="studio-primary" onClick={() => setUploading(true)}>Upload</button>}</div>
-    <p className="studio-hint">Backgrounds, character sprites, CGs and fonts for this story. Uploads keep transparency; generated images wait here for your approval.</p>
-    {canWrite && filter !== "image" && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
-      onStarted={job => { imageJobStarted(tenantId, projectId, job); setFilter("candidates"); }}
+    <p className="studio-hint">Backgrounds, character sprites, CGs, fonts and voice clips for this story. Uploads keep transparency; generated items wait here for your approval. Folders only organize the library: stories and games stay the same.</p>
+    {canWrite && !cgs && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
+      onStarted={job => { imageJobStarted(tenantId, projectId, job); setView({ type: "review" }); }}
       onCancel={job => void act(async () => {
         const next = await api.cancelImageJob(tenantId, projectId, job.id);
         put(next);
       }, "Could not cancel.")} />}
-    <div className="studio-asset-filters" role="group" aria-label="Show">
-      {FILTERS.map(([id, label]) => <button type="button" key={id} aria-pressed={filter === id}
-        className={filter === id ? "selected" : ""} onClick={() => setFilter(id)}>{label}</button>)}
-    </div>
     {jobsFailed && <p className="studio-notice" role="status">Image status could not be refreshed. Retrying…</p>}
     {jobs.filter(isActive).map(job => <section key={job.id} className="studio-asset-generate" aria-label="Background generation">
       <strong>Generating backgrounds</strong>
@@ -69,32 +105,50 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
         put(await api.cancelImageJob(tenantId, projectId, job.id));
       }, "Could not cancel.")}>Cancel background generation</button>}
     </section>)}
-    {filter === "image" && <section className="studio-asset-generate" aria-label="CGs">
-      <div className="studio-section-heading"><h3>Event CGs</h3>
-        {canWrite && <button type="button" className="studio-secondary" onClick={() => setUploading(true)}>Upload CG</button>}</div>
-      <p className="studio-hint">Full-scene illustrations cover the stage while dialogue continues.
-        Choose an approved image in Write → Stage → Event CG. Other image uploads also appear here.</p>
-    </section>}
-    {notice && <p className="studio-notice" role="status">{notice}</p>}
-    {assets === null ? <p className="studio-hint">Loading assets…</p>
-      : !assets.length ? <p className="studio-empty">{filter === "candidates" ? "Nothing waiting for review." : filter === "image" ? "No CGs here yet." : "No assets here yet."}</p>
-      : <div className="studio-asset-grid">{assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
-          projectId={projectId} asset={asset} canWrite={canWrite} onView={() => setViewing(asset)}
-          onRename={name => act(async () => replace(await api.renameNarrativeAsset(tenantId, projectId, asset.id, name)), "Could not rename.")}
-          onApprove={() => act(async () => {
-            const approved = await api.approveNarrativeAsset(tenantId, projectId, asset.id);
-            // Under "To review" an approved asset leaves the list; elsewhere it updates in place.
-            if (filter === "candidates") setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
-            else replace(approved);
-          }, "Could not approve.")}
-          onDiscard={() => act(async () => {
-            await api.discardNarrativeImage(tenantId, projectId, asset.id);
-            setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
-          }, "Could not discard.")} />)}</div>}
-    {next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
-    {uploading && <UploadDialog tenantId={tenantId} projectId={projectId} initialKind={uploadKindForFilter(filter)} onClose={() => setUploading(false)}
-      onUploaded={asset => { setUploading(false); setNotice(`Added “${asset.name}”.`); refreshLibrary();
-        setAssets(current => filter === "all" || filter === asset.kind ? [asset, ...(current ?? [])] : current); }} />}
+    <div className="studio-library">
+      <LibraryRail index={index} names={characterNames} view={view} onView={setView} canWrite={canWrite} onCreate={create} />
+      <div className="studio-library-main">
+        <div className="studio-library-head"><h3>{viewTitle(view, index, characterNames)}</h3>
+          {canWrite && openFolder && <FolderActions folder={openFolder} folders={folders} depth={depth} onCreate={create}
+            onRename={name => folderChange(() => api.updateAssetFolder(tenantId, projectId, openFolder.id, { name }), "Could not rename the folder.")}
+            onDelete={() => {
+              if (!window.confirm(`Delete the folder “${openFolder.name}”? Its assets and folders move up one level.`)) return;
+              void folderChange(async () => {
+                await api.deleteAssetFolder(tenantId, projectId, openFolder.id);
+                setView(openFolder.parent_id ? { type: "folder", id: openFolder.parent_id } : { type: "all" });
+              }, "Could not delete the folder.");
+            }} />}</div>
+        {cgs && <section className="studio-asset-generate" aria-label="CGs">
+          <div className="studio-section-heading"><h3>Event CGs</h3>
+            {canWrite && <button type="button" className="studio-secondary" onClick={() => setUploading(true)}>Upload CG</button>}</div>
+          <p className="studio-hint">Full-scene illustrations cover the stage while dialogue continues.
+            Choose an approved image in Write → Stage → Event CG. Other image uploads also appear here.</p>
+        </section>}
+        {canWrite && selected.size > 0 && <MoveBar count={selected.size} folders={folders}
+          onClear={() => setSelected(new Set())} onMove={move} />}
+        {notice && <p className="studio-notice" role="status">{notice}</p>}
+        {assets === null ? <p className="studio-hint">Loading assets…</p>
+          : !assets.length ? <p className="studio-empty">{view.type === "review" ? "Nothing waiting for review." : cgs ? "No CGs here yet." : "No assets here yet."}</p>
+          : <div className="studio-asset-grid">{assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
+              projectId={projectId} asset={asset} canWrite={canWrite} onView={() => setViewing(asset)}
+              selected={selected.has(asset.id)} onSelect={() => toggle(asset.id)}
+              folder={asset.folder_id ? folderPath(folders, asset.folder_id) : ""}
+              onRename={name => act(async () => replace(await api.renameNarrativeAsset(tenantId, projectId, asset.id, name)), "Could not rename.")}
+              onApprove={() => act(async () => {
+                const approved = await api.approveNarrativeAsset(tenantId, projectId, asset.id);
+                // Under "To review" an approved asset leaves the list; elsewhere it updates in place.
+                if (view.type === "review") setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
+                else replace(approved);
+              }, "Could not approve.")}
+              onDiscard={() => act(async () => {
+                await api.discardNarrativeImage(tenantId, projectId, asset.id);
+                setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
+              }, "Could not discard.")} />)}</div>}
+        {next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
+      </div>
+    </div>
+    {uploading && <UploadDialog tenantId={tenantId} projectId={projectId} initialKind={uploadKindForView(view)} onClose={() => setUploading(false)}
+      onUploaded={asset => { setUploading(false); setNotice(`Added “${asset.name}”.`); refreshLibrary(); reindex(); void load(); }} />}
     {viewing && viewing.media_type === "image/png" && <Viewer tenantId={tenantId} projectId={projectId}
       asset={viewing} onClose={() => setViewing(null)} />}
   </section>;
@@ -129,14 +183,17 @@ function BackgroundGenerator({ tenantId, projectId, active, onStarted, onCancel 
   </form>;
 }
 
-function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onApprove, onDiscard }: {
+function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onApprove, onDiscard, selected, onSelect, folder }: {
   tenantId: string; projectId: string; asset: NarrativeImage; canWrite: boolean;
   onView: () => void; onRename: (name: string) => Promise<void>; onApprove: () => Promise<void>; onDiscard: () => Promise<void>;
+  selected: boolean; onSelect: () => void; folder: string;
 }) {
   const [editing, setEditing] = useState(false);
   const image = asset.media_type === "image/png";
   const url = useNarrativeImage(tenantId, projectId, image ? asset.id : null, "thumbnail");
-  return <figure className={`studio-asset ${asset.status === "candidate" ? "candidate" : ""}`}>
+  return <figure className={`studio-asset ${asset.status === "candidate" ? "candidate" : ""} ${selected ? "selected" : ""}`}>
+    {canWrite && <label className="studio-asset-select"><input type="checkbox" checked={selected} onChange={onSelect} />
+      <span className="studio-visually-hidden">Select {asset.name}</span></label>}
     {image ? <button type="button" className={`studio-asset-preview ${asset.kind}`} onClick={onView} aria-label={`View ${asset.name}`}>
       {url ? <img src={url} alt="" /> : <span>Loading…</span>}</button>
       : <FontSample tenantId={tenantId} projectId={projectId} asset={asset} />}
@@ -148,6 +205,7 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
         }} onBlur={event => { if (event.currentTarget.value.trim() !== asset.name) void onRename(event.currentTarget.value); setEditing(false); }} />
         : <strong title={asset.name} onDoubleClick={() => canWrite && setEditing(true)}>{asset.name}</strong>}
       <small>{KIND_LABELS[asset.kind] ?? asset.kind}{asset.width ? ` · ${asset.width}×${asset.height}` : ""} · {asset.license}</small>
+      {folder && <small title={folder}>In {folder}</small>}
       {asset.status === "candidate" && <span className="studio-asset-badge">To review</span>}
       {canWrite && <span className="studio-asset-actions">
         {asset.status === "candidate" && <button type="button" className="studio-secondary" onClick={() => void onApprove()}>Approve</button>}

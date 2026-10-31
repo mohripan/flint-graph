@@ -20,7 +20,10 @@ from flint_graph.api.dependencies import (
     TenantMemberDep,
 )
 from flint_graph.api.narrative_character_schemas import (
+    CHARACTER_ID,
     AssetListResponse,
+    AssetMove,
+    AssetMoveResponse,
     AssetRename,
     AssetResponse,
     BackgroundJobCreate,
@@ -29,6 +32,7 @@ from flint_graph.api.narrative_character_schemas import (
 )
 from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
+from flint_graph.application.services.narrative_asset_folders import move_assets
 from flint_graph.application.services.narrative_asset_library import (
     approve_asset,
     check_uploadable,
@@ -70,6 +74,8 @@ async def list_assets_endpoint(
     status: Literal["candidate", "approved", "discarded"] | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     before: UUID | None = None,
+    folder: UUID | Literal["none"] | None = None,
+    character_id: Annotated[str | None, Query(pattern=CHARACTER_ID)] = None,
 ) -> AssetListResponse:
     rows = await list_assets(
         session,
@@ -79,6 +85,8 @@ async def list_assets_endpoint(
         status=status,
         limit=limit,
         before=before,
+        folder=folder,
+        character_id=character_id,
     )
     return AssetListResponse(
         assets=[AssetResponse.model_validate(row) for row in rows],
@@ -161,6 +169,27 @@ async def upload_asset_endpoint(
         ),
     )
     return AssetResponse.model_validate(asset)
+
+
+@router.post("/move", response_model=AssetMoveResponse)
+async def move_assets_endpoint(
+    project_id: UUID,
+    payload: AssetMove,
+    tenant_id: TenantMemberDep,
+    session: SessionDep,
+) -> AssetMoveResponse:
+    """File assets into a folder (or none); bytes, hashes and stories are untouched."""
+    assets = await _persist(
+        session,
+        move_assets(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            asset_ids=payload.asset_ids,
+            folder_id=payload.folder_id,
+        ),
+    )
+    return AssetMoveResponse(assets=[AssetResponse.model_validate(asset) for asset in assets])
 
 
 @router.patch("/{asset_id}", response_model=AssetResponse)

@@ -71,6 +71,7 @@ class AssetResponse(BaseModel):
     source: str
     name: str
     status: str
+    folder_id: UUID | None = None
     media_type: str
     width: int | None
     height: int | None
@@ -97,6 +98,47 @@ class AssetRename(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(max_length=120)
+
+
+class FolderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(max_length=400)
+    parent_id: UUID | None = None
+
+
+class FolderUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=400)
+    parent_id: UUID | None = None
+
+
+class FolderResponse(BaseModel):
+    id: UUID
+    parent_id: UUID | None
+    name: str
+    asset_count: int = 0
+
+
+class LibraryIndexResponse(BaseModel):
+    folders: list[FolderResponse]
+    unfiled: int
+    to_review: int
+    total: int
+    kinds: dict[str, int]
+    characters: dict[str, int]
+
+
+class AssetMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_ids: list[UUID] = Field(min_length=1, max_length=100)
+    folder_id: UUID | None
+
+
+class AssetMoveResponse(BaseModel):
+    assets: list[AssetResponse]
 
 
 class BackgroundJobCreate(BaseModel):

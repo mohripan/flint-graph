@@ -12,6 +12,7 @@ import type {
   AssistantTurn,
   TurnWrite,
 } from "../narrative/types";
+import type { AssetFolder, LibraryIndex } from "../narrative/assetFolders";
 import type { LayoutItem } from "../narrative/sceneTree";
 
 export interface SceneLayout { project_id: string; version: number; items: LayoutItem[] }
@@ -20,6 +21,7 @@ export type CharacterFraming = "portrait" | "full_body";
 export interface NarrativeImage {
   id: string; character_id: string | null; kind: string; source: "generated" | "uploaded"; name: string;
   status: "candidate" | "approved" | "discarded"; media_type: "image/png" | "font/ttf" | "font/otf";
+  folder_id?: string | null;
   width: number | null; height: number | null; sha256: string; size_bytes: number;
   thumbnail_width: number | null; thumbnail_height: number | null; seed: number | null; job_id: string | null;
   license: string; notice: string | null; provenance: Record<string, unknown>; created_at: string;
@@ -455,7 +457,7 @@ export const api = {
 
   // Asset library (ADR 0040): uploads with a rights declaration, generated backgrounds.
   listNarrativeAssets(tenantId: string, projectId: string, query: {
-    kind?: string; status?: string; limit?: number; before?: string;
+    kind?: string; status?: string; limit?: number; before?: string; folder?: string; character_id?: string;
   } = {}, signal?: AbortSignal): Promise<{ assets: NarrativeImage[]; next_before: string | null }> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
@@ -484,6 +486,38 @@ export const api = {
     Promise<NarrativeImage> {
     return jsonRequest(`${projectPath(projectId)}/assets/${encodeURIComponent(assetId)}`, {
       method: "PATCH", headers: tenantHeaders(tenantId), signal, json: { name },
+    });
+  },
+
+  // Asset folders (ADR 0043): editor-only organization; bytes and stories never change.
+  getAssetIndex(tenantId: string, projectId: string, signal?: AbortSignal): Promise<LibraryIndex> {
+    return jsonRequest(`${projectPath(projectId)}/asset-folders`, { headers: tenantHeaders(tenantId), signal, cache: "no-store" });
+  },
+
+  createAssetFolder(tenantId: string, projectId: string, name: string, parentId: string | null,
+    signal?: AbortSignal): Promise<AssetFolder> {
+    return jsonRequest(`${projectPath(projectId)}/asset-folders`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: { name, parent_id: parentId },
+    });
+  },
+
+  updateAssetFolder(tenantId: string, projectId: string, folderId: string,
+    changes: { name?: string; parent_id?: string | null }, signal?: AbortSignal): Promise<AssetFolder> {
+    return jsonRequest(`${projectPath(projectId)}/asset-folders/${encodeURIComponent(folderId)}`, {
+      method: "PATCH", headers: tenantHeaders(tenantId), signal, json: changes,
+    });
+  },
+
+  deleteAssetFolder(tenantId: string, projectId: string, folderId: string, signal?: AbortSignal): Promise<void> {
+    return jsonRequest(`${projectPath(projectId)}/asset-folders/${encodeURIComponent(folderId)}`, {
+      method: "DELETE", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
+  moveNarrativeAssets(tenantId: string, projectId: string, assetIds: string[], folderId: string | null,
+    signal?: AbortSignal): Promise<{ assets: NarrativeImage[] }> {
+    return jsonRequest(`${projectPath(projectId)}/assets/move`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: { asset_ids: assetIds, folder_id: folderId },
     });
   },
 

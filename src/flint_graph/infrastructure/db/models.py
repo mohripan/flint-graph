@@ -74,6 +74,9 @@ from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeAsset as NarrativeAsset,
 )
 from flint_graph.infrastructure.db.narrative_character_models import (
+    NarrativeAssetFolder as NarrativeAssetFolder,
+)
+from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeCharacterProfile as NarrativeCharacterProfile,
 )
 from flint_graph.infrastructure.db.narrative_character_models import (

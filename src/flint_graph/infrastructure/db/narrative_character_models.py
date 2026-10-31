@@ -206,6 +206,19 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_narrative_asset_rights_user",
             ondelete="RESTRICT",
         ),
+        # Folders are editor organization only (ADR 0043); bytes and bindings never change.
+        ForeignKeyConstraint(
+            ["folder_id", "project_id", "tenant_id"],
+            [
+                "narrative_asset_folders.id",
+                "narrative_asset_folders.project_id",
+                "narrative_asset_folders.tenant_id",
+            ],
+            name="fk_narrative_asset_folder",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        Index("ix_narrative_assets_folder", "project_id", "folder_id"),
         Index("ix_narrative_assets_project", "project_id", "created_at", "id"),
         Index("ix_narrative_assets_project_kind", "project_id", "kind", "created_at"),
         # One live row per file per project, so story bindings by SHA-256 are unambiguous.
@@ -227,6 +240,7 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     job_id: Mapped[UUID | None]
     job_index: Mapped[int | None]
     character_id: Mapped[str | None] = mapped_column(String(64))
+    folder_id: Mapped[UUID | None]
     media_type: Mapped[str] = mapped_column(String(32), default="image/png")
     sha256: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int] = mapped_column(Integer)
@@ -249,6 +263,41 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT")
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NarrativeAssetFolder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A named folder in a project's asset library; up to three levels deep."""
+
+    __tablename__ = "narrative_asset_folders"
+    __table_args__ = (
+        UniqueConstraint("id", "project_id", "tenant_id", name="uq_narrative_asset_folder_scope"),
+        ForeignKeyConstraint(
+            ["project_id", "tenant_id"],
+            ["narrative_projects.id", "narrative_projects.tenant_id"],
+            name="fk_narrative_asset_folder_project",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["parent_id", "project_id", "tenant_id"],
+            [
+                "narrative_asset_folders.id",
+                "narrative_asset_folders.project_id",
+                "narrative_asset_folders.tenant_id",
+            ],
+            name="fk_narrative_asset_folder_parent",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("length(name) BETWEEN 1 AND 80", name="ck_narrative_asset_folder_name"),
+        CheckConstraint(
+            "parent_id IS NULL OR parent_id <> id", name="ck_narrative_asset_folder_self"
+        ),
+        Index("ix_narrative_asset_folders_project", "project_id", "parent_id"),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    parent_id: Mapped[UUID | None]
+    name: Mapped[str] = mapped_column(String(80))
+    created_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
 
 
 class NarrativeCharacterProfile(TimestampMixin, Base):

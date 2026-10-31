@@ -11,6 +11,7 @@ import struct
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -172,11 +173,19 @@ async def list_assets(
     status: str | None,
     limit: int,
     before: UUID | None,
+    folder: UUID | Literal["none"] | None = None,
+    character_id: str | None = None,
 ) -> list[NarrativeAsset]:
     await get_project(session, tenant_id=tenant_id, project_id=project_id)
     scope = [NarrativeAsset.tenant_id == tenant_id, NarrativeAsset.project_id == project_id]
     if kind is not None:
         scope.append(NarrativeAsset.kind == kind)
+    if folder == "none":
+        scope.append(NarrativeAsset.folder_id.is_(None))
+    elif folder is not None:
+        scope.append(NarrativeAsset.folder_id == folder)
+    if character_id is not None:
+        scope.append(NarrativeAsset.character_id == character_id)
     scope.append(
         NarrativeAsset.status == status
         if status is not None

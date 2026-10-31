@@ -481,7 +481,8 @@ export function StudioPage({ onDirtyChange }: {
               onClick={() => void refreshHistory(state.project!.id, epoch.current, historyRows[historyRows.length - 1]?.id)}>Load older revisions</button>}
           </div> : common ? panel === "map" ? <RouteMap story={common.story} selected={sceneId} onSelect={id => { setSceneId(id); setPanel("write"); }} />
             : panel === "characters" ? <CharacterStudio {...common} onUpgrade={canWrite ? () => void upgradeStory() : undefined} />
-            : panel === "assets" && state.project ? <AssetLibrary tenantId={tenantId} projectId={state.project.id} canWrite={canWrite} />
+            : panel === "assets" && state.project ? <AssetLibrary tenantId={tenantId} projectId={state.project.id} canWrite={canWrite}
+              characterNames={Object.fromEntries(Object.entries(common.story.characters).map(([id, character]) => [id, character.name]))} />
             : panel === "look" ? <LookPanel {...common} onUpgrade={() => void upgradeStory()} />
             : panel === "state" ? <StatePanel {...common} />
             : panel === "story" ? <><StoryPanel {...common} /><Field label="Content notices"><textarea rows={5} value={state.notices} disabled={readOnly}
