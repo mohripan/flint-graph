@@ -10,6 +10,27 @@ func _small_button(label: String) -> Button:
 	return button
 
 func _toolbar(action: String) -> void:
-	if action == "Restart":
+	if action in ["Restart", "Gallery"]:
 		super._toolbar(action)
-		_notice.text = "Playtest restarted. Progress stays in memory."
+		if action == "Restart":
+			_notice.text = "Playtest restarted. Progress stays in memory."
+
+func _read_gallery() -> Array:
+	return []
+
+func _persist_gallery() -> void:
+	pass  # Includes gallery unlocks: never touch user:// during a Studio playtest.
+
+func _gallery_bridge(open: bool) -> void:
+	if OS.has_feature("web"):
+		var bridge: Variant = JavaScriptBridge.get_interface("FlintPreview")
+		if bridge != null:
+			bridge.gallery(open)
+
+func _open_gallery() -> void:
+	super._open_gallery()
+	_gallery_bridge(true)
+
+func _close_gallery() -> void:
+	super._close_gallery()
+	_gallery_bridge(false)

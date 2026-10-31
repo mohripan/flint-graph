@@ -36,8 +36,18 @@ test("the trusted child accepts one bounded snapshot only from its configured pa
   assert.equal(sent.length, 2);
   assert.equal(sent[1].value.type, "loaded");
   assert.equal(status.hidden, true);
+  const escaped = () => {
+    let prevented = false;
+    listeners.get("keydown")({ key: "Escape", preventDefault() { prevented = true; }, stopImmediatePropagation() {} });
+    return prevented;
+  };
+  child.FlintPreview.gallery(true);
+  assert.equal(escaped(), false, "Escape reaches the engine while the in-memory gallery is open");
+  child.FlintPreview.gallery(false);
+  assert.equal(escaped(), true);
+  assert.equal(sent.at(-1).value.type, "close");
   child.FlintPreview.failed(payload.revision_id, payload.content_hash);
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
 });
 
 test("story format 2 snapshots bring bounded transferred assets that the engine pulls once each", () => {
@@ -50,7 +60,8 @@ test("story format 2 snapshots bring bounded transferred assets that the engine 
   vm.runInNewContext(source.replace("__TRUSTED_PARENT_ORIGIN__", JSON.stringify(origin)), context);
   const delivered = [];
   child.FlintPreview.install(value => delivered.push(JSON.parse(value)));
-  const story = JSON.stringify({ schema_version: "2", assets: { dusk: { kind: "image" }, type: { kind: "font" } } });
+  const story = JSON.stringify({ schema_version: "2", assets: { dusk: { kind: "image" }, type: { kind: "font" } },
+    nodes: { scene: { type: "stage", cg: "dusk", next: "line" } } });
   // Structured clone creates the message objects in the child's own realm.
   const assets = sizes => vm.runInContext(`({ type: new ArrayBuffer(${sizes[1]}), dusk: new ArrayBuffer(${sizes[0]}) })`, context);
   const payload = { protocol: "flint-preview", version: 2, nonce, type: "load-snapshot",

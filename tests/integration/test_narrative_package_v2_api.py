@@ -313,7 +313,9 @@ async def bound_story(client, headers, base):
         "type": {"kind": "font", "path": "assets/type.ttf", "sha256": font["sha256"]},
     }
     story["theme"] = {"font": {"asset": "type"}}
-    story["nodes"]["stage0"] = {"type": "stage", "background": "dusk", "next": story["entry"]}
+    story["nodes"]["stage0"] = {
+        "type": "stage", "background": "dusk", "cg": "dusk", "next": story["entry"]
+    }
     story["entry"] = "stage0"
     saved = await save(client, headers, base, story, "Story by me.")
     assert saved.status_code == 201, saved.text
@@ -364,7 +366,7 @@ async def test_v2_release_input_resolves_bound_assets_and_rechecks_notices(v2):
             json={"revision_id": revision["id"], "idempotency_key": str(uuid4())},
         )
     ).json()
-    assert release["build_identity"]["runtime_version"] == "0.4.0"
+    assert release["build_identity"]["runtime_version"] == "0.5.0"
     scope = {
         "tenant_id": UUID(headers["X-Tenant-ID"]),
         "release_id": UUID(release["id"]),

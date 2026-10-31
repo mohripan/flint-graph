@@ -22,7 +22,7 @@ export type StagePosition = "left" | "center" | "right";
 export interface StageShow { character: string; sprite: string; position: StagePosition; x?: number }
 export type StoryNode =
   | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string })
-  | { type: "stage"; next: string; background?: string | null; show?: StageShow[]; hide?: string[] }
+  | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[] }
   | (Display & { type: "choice"; options: ChoiceOption[] })
   | { type: "set"; next: string; operations: Array<{ op: "set" | "increment"; variable: string; value: Scalar }> }
   | { type: "branch"; condition: Condition; if_true: string; if_false: string }

@@ -2,7 +2,7 @@
   "schema_version": "1",
   "godot_version": "4.7.2.stable",
   "release_tag": "4.7.2-stable",
-  "runtime_version": "0.4.0",
+  "runtime_version": "0.5.0",
   "upstream": "https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable",
   "artifacts": {
     "windows_x86_64": {

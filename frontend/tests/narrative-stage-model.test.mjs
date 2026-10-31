@@ -9,6 +9,34 @@ async function load(name) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText + `\n//# sourceURL=${name}.js`).toString("base64")}`);
 }
 const stage = await load("stageModel");
+const cgs = JSON.parse(await readFile(new URL("../../tests/fixtures/narrative/event_cgs.json", import.meta.url), "utf8"));
+
+test("CGs share the player contract: first-use catalogue, carried state, explicit clear and asset retention", () => {
+  const value = structuredClone(cgs.story);
+  assert.deepEqual(stage.cgGalleryAssets(value), cgs.gallery);
+  const before = stage.stageBefore(value);
+  for (let index = 0; index < cgs.screens.length; index++) {
+    // after merges the clear from both paths; the stage retains its cast.
+    assert.equal(before.get(cgs.screens[index]).cg, cgs.cgs[index]);
+    assert.equal(before.get(cgs.screens[index]).characters.mira.position, "left");
+  }
+  assert.ok(stage.usedAssets(value).has("z_train"));
+  assert.ok(stage.pruneAssets(value).assets.unused_route);
+  const edit = { cg: "z_train", show: [], hide: [] };
+  const staged = stage.setSceneStage(value, "before", edit);
+  assert.deepEqual(stage.sceneStage(staged, "before"), edit);
+  assert.equal(staged.nodes.before.type, "stage");
+  const cleared = stage.setSceneStage(staged, "before", { ...edit, cg: null });
+  assert.equal(cleared.nodes.before.cg, null, "clear alone is a valid stage effect");
+  for (const invalid of cgs.invalid) {
+    assert.throws(() => stage.setSceneStage(value, "before", { ...edit, cg: invalid.value }),
+      new RegExp(invalid.code));
+  }
+  assert.throws(() => stage.setSceneStage({ ...value, schema_version: "1" }, "before", edit), /unknown_field/);
+  const varying = structuredClone(value);
+  varying.nodes.selection.options[1].target = "after";
+  assert.equal(stage.stageBefore(varying).get("after").cg, "?");
+});
 
 const sha = seed => seed.repeat(64).slice(0, 64);
 const line = (text, next, extra = {}) => ({ type: "line", text_id: `${text.length}_${next}`, text, next, ...extra });

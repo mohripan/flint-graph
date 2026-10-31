@@ -59,6 +59,7 @@ func _initialize() -> void:
 		return
 	var player: RefCounted = load("res://runtime/player.gd").new(checked["story"], checked["package_hash"])
 	var frames: Array = [player.frame()]
+	var galleries: Array = [player.gallery] if config.get("gallery", false) else []
 	var saved := ""
 	var restore_error := ""
 	var restore_preserved := true
@@ -85,6 +86,8 @@ func _initialize() -> void:
 			quit(1)
 			return
 		frames.append(frame)
+		if config.get("gallery", false):
+			galleries.append(player.gallery)
 		if config.get("save_after", -1) == index + 1:
 			saved = player.save().get_string_from_utf8()
 			restore_error = player.load_save(saved.to_utf8_buffer())
@@ -92,6 +95,6 @@ func _initialize() -> void:
 		var before: Dictionary = player.state
 		restore_error = player.load_save(config["restore"].to_utf8_buffer())
 		restore_preserved = player.state == before
-	print("PROBE_RESULT:" + JSON.stringify({"frames": frames, "state": player.state,
+	print("PROBE_RESULT:" + JSON.stringify({"frames": frames, "galleries": galleries, "state": player.state,
 		"save": saved, "restore_error": restore_error, "restore_preserved": restore_preserved}))
 	quit(0)

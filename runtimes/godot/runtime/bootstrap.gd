@@ -5,6 +5,7 @@ extends Control
 const StrictJson = preload("res://runtime/strict_json.gd")
 const GameView = preload("res://runtime/game_view.gd")
 const VnView = preload("res://runtime/vn_view.gd")
+# CGs use these same verified image bytes; gallery unlocks are separate local state.
 # Images up to 10 MiB and fonts up to 8 MiB; story format 2 adds fonts (ADR 0040).
 const ASSET_CAPS := {"png": 10485760, "ttf": 8388608, "otf": 8388608}
 

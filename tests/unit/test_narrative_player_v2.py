@@ -31,13 +31,14 @@ def test_stage_persists_across_lines_choices_and_endings():
     # s1 showed Oren at Mira's position, so Mira left the stage.
     assert player.view["stage"] == {
         "background": "dusk",
+        "cg": None,
         "characters": [{"id": "oren", "sprite": "neutral", "position": "left"}],
     }
 
     player.act("choose:go")
     assert player.state["status"] == "ended"
-    assert player.view["stage"] == {"background": None, "characters": []}
-    assert player.frame()["stage"] == {"background": None, "characters": []}
+    assert player.view["stage"] == {"background": None, "cg": None, "characters": []}
+    assert player.frame()["stage"] == {"background": None, "cg": None, "characters": []}
 
 
 def test_moves_replacements_and_canonical_order():

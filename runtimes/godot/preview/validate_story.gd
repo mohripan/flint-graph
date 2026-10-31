@@ -124,8 +124,9 @@ static func _theme(theme: Variant, assets: Dictionary) -> bool:
 	return true
 
 static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary, nodes: Dictionary) -> bool:
-	if not _fields(node, ["type", "next"], ["background", "show", "hide"]): return false
-	if not node.has("background") and not node.has("show") and not node.has("hide"): return false
+	if not _fields(node, ["type", "next"], ["background", "cg", "show", "hide"]): return false
+	if not node.has("background") and not node.has("cg") and not node.has("show") and not node.has("hide"): return false
+	if node.has("cg") and node["cg"] != null and not _asset(node["cg"], assets, "image"): return false
 	if node.has("background") and node["background"] != null and not _asset(node["background"], assets, "image"): return false
 	var hidden := {}
 	if node.has("hide"):

@@ -46,6 +46,73 @@ func _initialize() -> void:
 	var checked: Dictionary = bootstrap.verify_content()
 	bootstrap.free()
 	var config: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://qualification.json"))
+	if config["case"] in ["cg_keyboard", "cg_keyboard_gallery"]:
+		var stage: Control = load("res://runtime/vn_view.gd").new()
+		root.add_child(stage)
+		stage.size = Vector2(1280, 720)
+		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		await process_frame
+		await process_frame
+		if config["case"] == "cg_keyboard_gallery":
+			_find(stage, "Gallery").grab_focus()
+		var down := InputEventKey.new()
+		down.keycode = KEY_ENTER
+		down.pressed = true
+		Input.parse_input_event(down)
+		await process_frame
+		var up := InputEventKey.new()
+		up.keycode = KEY_ENTER
+		up.pressed = false
+		Input.parse_input_event(up)
+		await process_frame
+		await process_frame
+		print("UI_RESULT:" + JSON.stringify({"node_id": stage._player.state["node_id"], "gallery_open": stage._gallery_panel.visible}))
+		quit(0)
+		return
+	if config["case"] in ["cg_gallery", "cg_preview"]:
+		var preview: bool = config["case"] == "cg_preview"
+		var script: GDScript = load("res://preview/vn_view.gd" if preview else "res://runtime/vn_view.gd")
+		var stage: Control = script.new()
+		root.add_child(stage)
+		stage.size = Vector2(1280, 720)
+		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		stage._toolbar("Save")  # Save before seeing a CG.
+		_find(stage, "Continue").pressed.emit()
+		await process_frame
+		var overlay: bool = stage._cg.texture != null and stage._cg.size == Vector2(1280, 720)
+		var above: bool = stage._cg.get_index() > stage._figures.get_index() and stage._box.get_index() > stage._cg.get_index()
+		_find(stage, "Gallery").pressed.emit()
+		var locked: Button = _find(stage._gallery_panel, "CG 2 · Locked")
+		var disabled: bool = locked != null and locked.disabled
+		var before: Dictionary = stage._player.state
+		stage._action("advance", stage._player.generation, stage._player)
+		stage._toolbar("Restart")
+		stage._toolbar("Load")
+		var pauses: bool = stage._player.state == before
+		pauses = pauses and _find(stage, "Restart").disabled and _find(stage, "Continue").disabled
+		_find(stage._gallery_panel, "CG 1").pressed.emit()
+		var viewed: bool = stage._gallery_image.texture != null
+		_find(stage._gallery_panel, "Close gallery").pressed.emit()
+		stage._toolbar("Load")
+		var retained_load: bool = stage._player.gallery[0]["unlocked"]
+		stage._toolbar("Restart")
+		var retained: bool = stage._player.gallery[0]["unlocked"]
+		var disk: bool = FileAccess.file_exists(stage._gallery_path())
+		var fresh: Control = script.new()
+		root.add_child(fresh)
+		fresh.size = Vector2(1280, 720)
+		fresh.configure(checked["story"], checked["package_hash"], checked["assets"])
+		var unlocked: bool = fresh._player.gallery[0]["unlocked"]
+		for action: String in ["advance", "advance", "choose:stay"]:
+			stage._action(action, stage._player.generation, stage._player)
+		var cleared: bool = stage._cg.texture == null and stage._background.texture != null and not stage._sprites.is_empty()
+		print("UI_RESULT:" + JSON.stringify({"overlay": overlay, "dialogue_above": above,
+			"cover": stage._cg.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_COVERED,
+			"locked_disabled": disabled, "gallery_pauses": pauses, "view_unlocked": viewed,
+			"retained_on_restart": retained, "retained_on_load": retained_load, "disk_exists": disk,
+			"fresh_unlocked": unlocked, "cleared": cleared}))
+		quit(0)
+		return
 	if config["case"] == "stage_layout":
 		# The headless window keeps its own size, so the view is sized explicitly.
 		var stage: Control = load("res://runtime/vn_view.gd").new()

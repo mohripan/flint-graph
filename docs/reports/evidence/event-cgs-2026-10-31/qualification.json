@@ -1,0 +1,594 @@
+{
+  "runtime_version": "0.5.0",
+  "engine": "Godot 4.7.2",
+  "builder": {
+    "image": "sha256:40f759774ab3f467811bc77f20b3c460fa3e7b1e2d3bea52b3f5fdb389b87f22",
+    "toolchain_sha256": "1cc5e00d921058f5eb8fbc8713af59fa30438a0d5b0c7bd04fc58604fa5a7c9a"
+  },
+  "release": {
+    "image": "sha256:40f759774ab3f467811bc77f20b3c460fa3e7b1e2d3bea52b3f5fdb389b87f22",
+    "package_hash": "b2418520c71804a0418fb18dba058623cc8c587bae5674a79ba70c672f166838",
+    "source_sha256": "11e2ce99a6a586a32d707a3046170a7eda32bee84677c304a0526c896e013f82",
+    "toolchain": "1cc5e00d921058f5eb8fbc8713af59fa30438a0d5b0c7bd04fc58604fa5a7c9a",
+    "web_sha256": "ad3d5689935921f23f991bf09d2765e5ba50c6244f4d5a991ce899b2606c9b1b"
+  },
+  "release_browser": {
+    "passed": true,
+    "events": [
+      {
+        "step": "01-cg-dialogue",
+        "background_loaded": true,
+        "cg_loaded": true,
+        "controls": [
+          {
+            "height": 32,
+            "label": "Continue",
+            "width": 86,
+            "x": 1120.19995117188,
+            "y": 650
+          }
+        ],
+        "custom_font": false,
+        "ending": null,
+        "fault": null,
+        "figures": [
+          {
+            "height": 259.199981689453,
+            "id": "mira",
+            "loaded": true,
+            "width": 460.800018310547,
+            "x": 153.600006103516,
+            "y": 460.800018310547
+          }
+        ],
+        "gallery": [
+          {
+            "id": "z_train",
+            "unlocked": true
+          },
+          {
+            "id": "a_platform",
+            "unlocked": false
+          },
+          {
+            "id": "unused_route",
+            "unlocked": false
+          }
+        ],
+        "gallery_controls": [],
+        "gallery_image_loaded": false,
+        "gallery_open": false,
+        "has_save": true,
+        "layout": "stage",
+        "name_visible": true,
+        "node_id": "during",
+        "notice": "",
+        "status": "playing",
+        "textbox": {
+          "height": 137,
+          "width": 1177.59997558594,
+          "x": 51.1999969482422,
+          "y": 559
+        },
+        "toolbar": [
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Save",
+            "width": 56,
+            "x": 991,
+            "y": 12
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Load",
+            "width": 57,
+            "x": 1053,
+            "y": 12
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Restart",
+            "width": 74,
+            "x": 1116,
+            "y": 12
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Gallery",
+            "width": 72,
+            "x": 1196,
+            "y": 12
+          }
+        ],
+        "view": {
+          "options": [],
+          "speaker": "mira",
+          "speaker_color": null,
+          "speaker_name": "Mira",
+          "stage": {
+            "background": "background",
+            "cg": "z_train",
+            "characters": [
+              {
+                "id": "mira",
+                "position": "left",
+                "sprite": "happy",
+                "x": 30
+              }
+            ]
+          },
+          "text": "The carriage glows.",
+          "text_id": "during",
+          "type": "line"
+        },
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "step": "02-gallery-locked",
+        "background_loaded": true,
+        "cg_loaded": true,
+        "controls": [
+          {
+            "height": 28,
+            "label": "Continue",
+            "width": 70,
+            "x": 1136.19995117188,
+            "y": 654
+          }
+        ],
+        "custom_font": false,
+        "ending": null,
+        "fault": null,
+        "figures": [
+          {
+            "height": 259.199981689453,
+            "id": "mira",
+            "loaded": true,
+            "width": 460.800018310547,
+            "x": 153.600006103516,
+            "y": 460.800018310547
+          }
+        ],
+        "gallery": [
+          {
+            "id": "z_train",
+            "unlocked": true
+          },
+          {
+            "id": "a_platform",
+            "unlocked": false
+          },
+          {
+            "id": "unused_route",
+            "unlocked": false
+          }
+        ],
+        "gallery_controls": [
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Close gallery",
+            "width": 1236,
+            "x": 22,
+            "y": 14
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "CG 1",
+            "width": 1236,
+            "x": 22,
+            "y": 58
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "CG 2 \u00b7 Locked",
+            "width": 1236,
+            "x": 22,
+            "y": 94
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "CG 3 \u00b7 Locked",
+            "width": 1236,
+            "x": 22,
+            "y": 126
+          }
+        ],
+        "gallery_image_loaded": true,
+        "gallery_open": true,
+        "has_save": true,
+        "layout": "stage",
+        "name_visible": true,
+        "node_id": "during",
+        "notice": "",
+        "status": "playing",
+        "textbox": {
+          "height": 133,
+          "width": 1177.59997558594,
+          "x": 51.1999969482422,
+          "y": 563
+        },
+        "toolbar": [
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Save",
+            "width": 40,
+            "x": 1055,
+            "y": 12
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Load",
+            "width": 41,
+            "x": 1101,
+            "y": 12
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Restart",
+            "width": 58,
+            "x": 1148,
+            "y": 12
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Gallery",
+            "width": 56,
+            "x": 1212,
+            "y": 12
+          }
+        ],
+        "view": {
+          "options": [],
+          "speaker": "mira",
+          "speaker_color": null,
+          "speaker_name": "Mira",
+          "stage": {
+            "background": "background",
+            "cg": "z_train",
+            "characters": [
+              {
+                "id": "mira",
+                "position": "left",
+                "sprite": "happy",
+                "x": 30
+              }
+            ]
+          },
+          "text": "The carriage glows.",
+          "text_id": "during",
+          "type": "line"
+        },
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "step": "03-cleared",
+        "background_loaded": true,
+        "cg_loaded": false,
+        "controls": [
+          {
+            "height": 32,
+            "label": "Continue",
+            "width": 86,
+            "x": 1120.19995117188,
+            "y": 650
+          }
+        ],
+        "custom_font": false,
+        "ending": null,
+        "fault": null,
+        "figures": [
+          {
+            "height": 259.199981689453,
+            "id": "mira",
+            "loaded": true,
+            "width": 460.800018310547,
+            "x": 153.600006103516,
+            "y": 460.800018310547
+          }
+        ],
+        "gallery": [
+          {
+            "id": "z_train",
+            "unlocked": true
+          },
+          {
+            "id": "a_platform",
+            "unlocked": true
+          },
+          {
+            "id": "unused_route",
+            "unlocked": false
+          }
+        ],
+        "gallery_controls": [],
+        "gallery_image_loaded": false,
+        "gallery_open": false,
+        "has_save": true,
+        "layout": "stage",
+        "name_visible": false,
+        "node_id": "after",
+        "notice": "",
+        "status": "playing",
+        "textbox": {
+          "height": 98,
+          "width": 1177.59997558594,
+          "x": 51.1999969482422,
+          "y": 598
+        },
+        "toolbar": [
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Save",
+            "width": 56,
+            "x": 991,
+            "y": 12
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Load",
+            "width": 57,
+            "x": 1053,
+            "y": 12
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Restart",
+            "width": 74,
+            "x": 1116,
+            "y": 12
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Gallery",
+            "width": 72,
+            "x": 1196,
+            "y": 12
+          }
+        ],
+        "view": {
+          "options": [],
+          "speaker": null,
+          "speaker_color": null,
+          "speaker_name": null,
+          "stage": {
+            "background": "a_platform",
+            "cg": null,
+            "characters": [
+              {
+                "id": "mira",
+                "position": "left",
+                "sprite": "happy",
+                "x": 30
+              }
+            ]
+          },
+          "text": "Back on stage.",
+          "text_id": "after",
+          "type": "line"
+        },
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "step": "04-mobile-gallery",
+        "background_loaded": true,
+        "cg_loaded": false,
+        "controls": [
+          {
+            "height": 28,
+            "label": "Continue",
+            "width": 70,
+            "x": 281.600006103516,
+            "y": 787.599975585938
+          }
+        ],
+        "custom_font": false,
+        "ending": null,
+        "fault": null,
+        "figures": [
+          {
+            "height": 78.9749755859375,
+            "id": "mira",
+            "loaded": true,
+            "width": 140.399993896484,
+            "x": 46.8000030517578,
+            "y": 765.025024414062
+          }
+        ],
+        "gallery": [
+          {
+            "id": "z_train",
+            "unlocked": true
+          },
+          {
+            "id": "a_platform",
+            "unlocked": true
+          },
+          {
+            "id": "unused_route",
+            "unlocked": false
+          }
+        ],
+        "gallery_controls": [
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "Close gallery",
+            "width": 346,
+            "x": 22,
+            "y": 14
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "CG 1",
+            "width": 346,
+            "x": 22,
+            "y": 58
+          },
+          {
+            "disabled": false,
+            "height": 32,
+            "label": "CG 2",
+            "width": 346,
+            "x": 22,
+            "y": 94
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "CG 3 \u00b7 Locked",
+            "width": 346,
+            "x": 22,
+            "y": 130
+          }
+        ],
+        "gallery_image_loaded": true,
+        "gallery_open": true,
+        "has_save": true,
+        "layout": "stage",
+        "name_visible": false,
+        "node_id": "before",
+        "notice": "Saved game loaded.",
+        "status": "playing",
+        "textbox": {
+          "height": 82,
+          "width": 358.799987792969,
+          "x": 15.5999994277954,
+          "y": 747.599975585938
+        },
+        "toolbar": [
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Save",
+            "width": 40,
+            "x": 165,
+            "y": 12
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Load",
+            "width": 41,
+            "x": 211,
+            "y": 12
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Restart",
+            "width": 58,
+            "x": 258,
+            "y": 12
+          },
+          {
+            "disabled": true,
+            "height": 28,
+            "label": "Gallery",
+            "width": 56,
+            "x": 322,
+            "y": 12
+          }
+        ],
+        "view": {
+          "options": [],
+          "speaker": null,
+          "speaker_color": null,
+          "speaker_name": null,
+          "stage": {
+            "background": "background",
+            "cg": null,
+            "characters": [
+              {
+                "id": "mira",
+                "position": "left",
+                "sprite": "neutral",
+                "x": 30
+              }
+            ]
+          },
+          "text": "The train arrives.",
+          "text_id": "before",
+          "type": "line"
+        },
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      }
+    ]
+  },
+  "preview_browser": {
+    "passed": true,
+    "loaded": true,
+    "escape_gallery_then_preview": true,
+    "fresh_iframe_screenshot": "06-preview-fresh-locked.png"
+  },
+  "isolation": {
+    "worktree": "C:/Projects/flint-graph-codex-cg",
+    "editor_port": 5273,
+    "preview_port": 5296,
+    "release_port": 5297,
+    "fixtures": "Synthetic CC0 images and a disposable database; no real Studio projects"
+  },
+  "screenshots": {
+    "01-cg-dialogue.png": "bdf8c9ec5c8e491376844e05b370e2812731a673e569cb719c205fe7fe75c826",
+    "02-gallery-locked.png": "7d46cd87cfa34f38501a202a356bc2f43af19434e6de170df8bfdb4b546bdbb3",
+    "03-cleared.png": "fb082793ae36c557e1a271328e6cdc0540d74c9232b578c17d4609dda0d0a649",
+    "04-mobile-gallery.png": "c38eda26fd89e23efef3a3c60561b1382044369c2ccb42348bd737c98bee82a2",
+    "05-preview-gallery.png": "a847e2296c9ba9af94d10843f3ca741a401ed200e5a9dfb7641832a234df5c61",
+    "06-preview-fresh-locked.png": "071980b925fd88379348096fa60df1fc2948f66204bacf0e6e67fbe7e5dc2176"
+  },
+  "post_rebase_verification": {
+    "base_commit": "a2fa1d445056559f02670a7f59bc3dff29b7d7d9",
+    "pytest": {
+      "passed": 1733,
+      "skipped": 97
+    },
+    "godot_preview_and_release": {
+      "passed": 34
+    },
+    "narrative_postgres_selection": {
+      "passed": 266,
+      "skipped": 10,
+      "deselected": 440
+    },
+    "frontend": {
+      "passed": 89
+    },
+    "gates_passed": [
+      "ruff",
+      "mypy",
+      "offline alembic SQL through 0026",
+      "docker compose config",
+      "deterministic evaluation",
+      "frontend typecheck",
+      "frontend production build"
+    ]
+  }
+}

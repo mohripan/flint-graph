@@ -26,6 +26,7 @@ var _theme: Dictionary
 var _font: Font
 var _player: RefCounted
 var _background: TextureRect
+var _cg: TextureRect
 var _figures: Control
 var _sprites: Dictionary = {}
 var _textures: Dictionary = {}
@@ -39,6 +40,12 @@ var _menu: HBoxContainer
 var _notice: Label
 var _buttons: Array[Button] = []
 var _qa := false
+var _gallery_panel: PanelContainer
+var _gallery_image: TextureRect
+var _gallery_entries: VBoxContainer
+var _gallery_saved: Array = []
+var _gallery_disabled: Dictionary = {}
+var _advance_key: int = 0
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> void:
@@ -47,7 +54,8 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary) -> 
 	_assets = assets.duplicate()
 	_theme = _merged(source.get("theme", {}))
 	_font = _story_font()
-	_player = PlayerScript.new(source, package_hash)
+	_gallery_saved = _read_gallery()
+	_player = PlayerScript.new(source, package_hash, _gallery_saved)
 	_build()
 	resized.connect(_layout)
 	_render()
@@ -138,6 +146,12 @@ func _build() -> void:
 	_figures.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_figures.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_figures)
+	_cg = TextureRect.new()
+	_cg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_cg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_cg)  # Over the stage; text, choices and controls are drawn above it.
 	var box: Dictionary = _theme["textbox"]
 	_box = PanelContainer.new()
 	_box.mouse_filter = Control.MOUSE_FILTER_PASS  # A click on the text box advances too.
@@ -176,7 +190,7 @@ func _build() -> void:
 	_menu.offset_right = -12
 	_menu.offset_top = 12
 	add_child(_menu)
-	for item: String in ["Save", "Load", "Restart"]:
+	for item: String in ["Save", "Load", "Restart", "Gallery"]:
 		var button := _small_button(item)
 		button.pressed.connect(_toolbar.bind(item))
 		_menu.add_child(button)
@@ -191,6 +205,97 @@ func _build() -> void:
 	_notice.add_theme_constant_override("outline_size", 4)
 	_notice.add_theme_font_size_override("font_size", 14)
 	add_child(_notice)
+	_build_gallery()
+
+
+func _build_gallery() -> void:
+	_gallery_panel = PanelContainer.new()
+	_gallery_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_gallery_panel.add_theme_stylebox_override("panel", _style(INK, LAMP, 0))
+	_gallery_panel.hide()
+	add_child(_gallery_panel)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	_gallery_panel.add_child(column)
+	var close := _small_button("Close gallery")
+	close.pressed.connect(_close_gallery)
+	column.add_child(close)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(scroll)
+	_gallery_entries = VBoxContainer.new()
+	_gallery_entries.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_gallery_entries)
+	_gallery_image = TextureRect.new()
+	_gallery_image.custom_minimum_size.y = 180
+	_gallery_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_gallery_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_gallery_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	column.add_child(_gallery_image)
+
+
+func _open_gallery() -> void:
+	if _gallery_panel.visible:
+		return
+	# Disable underlying focus targets as well as guarding queued action signals.
+	for button: Button in _menu.get_children() + _buttons:
+		_gallery_disabled[button] = button.disabled
+		button.disabled = true
+	for child in _gallery_entries.get_children():
+		_gallery_entries.remove_child(child)
+		child.queue_free()
+	var entries: Array = _player.gallery
+	if entries.is_empty():
+		var empty := Label.new()
+		empty.text = "This story has no CGs."
+		_gallery_entries.add_child(empty)
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		var button := _small_button("CG %d" % (index + 1) + ("" if entry["unlocked"] else " · Locked"))
+		button.disabled = not entry["unlocked"]
+		button.pressed.connect(_show_gallery_image.bind(entry["id"]))
+		_gallery_entries.add_child(button)
+	_gallery_panel.show()
+	_gallery_panel.get_child(0).get_child(0).grab_focus()
+	_publish_qa.call_deferred()
+
+
+func _show_gallery_image(id: String) -> void:
+	# Recheck even if an old queued button signal is delivered later.
+	if _gallery_panel.visible and id in _player.seen_cgs:
+		var image := Image.new()
+		if image.load_png_from_buffer(_assets[id]) == OK:
+			_gallery_image.texture = ImageTexture.create_from_image(image)
+	_publish_qa.call_deferred()
+
+
+func _close_gallery() -> void:
+	_gallery_panel.hide()
+	_gallery_image.texture = null
+	for button: Button in _gallery_disabled:
+		if is_instance_valid(button):
+			button.disabled = _gallery_disabled[button]
+	_gallery_disabled.clear()
+	if not _buttons.is_empty():
+		_buttons[0].grab_focus()
+	_publish_qa.call_deferred()
+
+
+func _gallery_path() -> String:
+	return SaveStore.gallery_path(_source["id"])
+
+
+func _read_gallery() -> Array:
+	return SaveStore.read_gallery(_source["id"])
+
+
+func _persist_gallery() -> void:
+	var seen: Array = _player.seen_cgs
+	if seen != _gallery_saved:
+		if SaveStore.write_gallery(_source["id"], seen) == "":
+			_gallery_saved = seen
+		else:
+			_notice.text = "CGs unlocked for this session. This device could not keep the gallery."
 
 
 func _texture(id: Variant) -> Texture2D:
@@ -208,6 +313,9 @@ func _render() -> void:
 	var current: Dictionary = _player.view
 	var stage: Dictionary = current["stage"]
 	var in_use := {}
+	_cg.texture = _texture(stage["cg"])
+	if stage["cg"] != null:
+		in_use[stage["cg"]] = true
 	_background.texture = _texture(stage["background"])
 	if stage["background"] != null:
 		in_use[stage["background"]] = true
@@ -272,6 +380,7 @@ func _render() -> void:
 	if not _buttons.is_empty():
 		_buttons[0].call_deferred("grab_focus")
 	_publish_qa.call_deferred()
+	_persist_gallery()
 
 
 func _choice_button(label: String) -> Button:
@@ -376,7 +485,7 @@ func _layout() -> void:
 
 
 func _action(action: String, generation: int, session: RefCounted) -> void:
-	if session == _player and _player.act(action, generation) == "":
+	if not _gallery_panel.visible and session == _player and _player.act(action, generation) == "":
 		_notice.text = ""
 		_render()
 
@@ -386,8 +495,13 @@ func _save_path() -> String:
 
 
 func _toolbar(action: String) -> void:
-	if action == "Restart":
-		_player = PlayerScript.new(_source, _hash)
+	if _gallery_panel.visible:
+		return
+	if action == "Gallery":
+		_open_gallery()
+	elif action == "Restart":
+		_close_gallery()
+		_player = PlayerScript.new(_source, _hash, _player.seen_cgs)
 		_notice.text = "Started over. Your saved game is still available."
 		_render()
 	elif action == "Save":
@@ -416,19 +530,47 @@ func _toolbar(action: String) -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	# Clicking or tapping the stage advances a line, as in most visual novels.
+	if _gallery_panel.visible:
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if _player.view["type"] == "line":
 			_action("advance", _player.generation, _player)
 			accept_event()
 
 
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.keycode in [KEY_ENTER, KEY_SPACE]:
+		return
+	# Claim the entire keystroke before GUI dispatch: the focused Continue button
+	# otherwise activates on release after key-down already settled the next line.
+	if _advance_key == event.keycode:
+		if not event.pressed:
+			_advance_key = 0
+		get_viewport().set_input_as_handled()
+		return
+	if _player == null or _gallery_panel.visible or not event.pressed or event.echo or event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+		return
+	var focused := get_viewport().gui_get_focus_owner()
+	if _player.view["type"] == "line" and (focused == null or focused == _continue):
+		_advance_key = event.keycode
+		_action("advance", _player.generation, _player)
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo or event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+		return
+	if _gallery_panel.visible:
+		if event.keycode == KEY_ESCAPE:
+			_close_gallery()
+		get_viewport().set_input_as_handled()
 		return
 	var current: Dictionary = _player.view
 	var action := ""
 	if current["type"] == "line" and event.keycode in [KEY_ENTER, KEY_SPACE]:
-		action = "advance"
+		var focused := get_viewport().gui_get_focus_owner()
+		if focused == null or focused == _continue:
+			action = "advance"
 	elif current["type"] == "choice" and event.keycode >= KEY_1 and event.keycode <= KEY_9:
 		var index: int = event.keycode - KEY_1
 		if index < current["options"].size():
@@ -454,12 +596,24 @@ func _publish_qa() -> void:
 	var figures: Array = []
 	for id: String in _sprites:
 		figures.append(_rect(_sprites[id]).merged({"id": id, "loaded": _sprites[id].texture != null}))
+	var toolbar: Array = []
+	for button: Button in _menu.get_children():
+		toolbar.append(_rect(button).merged({"label": button.text, "disabled": button.disabled}))
+	var gallery_controls: Array = []
+	if _gallery_panel.visible:
+		var close: Button = _gallery_panel.get_child(0).get_child(0)
+		gallery_controls.append(_rect(close).merged({"label": close.text, "disabled": close.disabled}))
+		for button: Node in _gallery_entries.get_children():
+			if button is Button:
+				gallery_controls.append(_rect(button).merged({"label": button.text, "disabled": button.disabled}))
 	var snapshot := {"node_id": _player.state["node_id"], "status": _player.state["status"],
 		"ending": _player.state["ending"], "fault": _player.state["fault"], "view": _player.view,
 		"has_save": FileAccess.file_exists(_save_path()), "viewport": {"width": size.x, "height": size.y},
 		"controls": controls, "notice": _notice.text, "layout": "stage",
 		"textbox": _rect(_box), "name_visible": _name_box.visible, "figures": figures,
-		"background_loaded": _background.texture != null, "custom_font": _font != DisplayFont}
+		"background_loaded": _background.texture != null, "custom_font": _font != DisplayFont,
+		"cg_loaded": _cg.texture != null, "gallery": _player.gallery, "gallery_open": _gallery_panel.visible,
+		"toolbar": toolbar, "gallery_controls": gallery_controls, "gallery_image_loaded": _gallery_image.texture != null}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")
 	if browser != null and json != null:

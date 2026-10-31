@@ -1,4 +1,4 @@
-FlintGraph editable Godot source export, runtime 0.4.0.
+FlintGraph editable Godot source export, runtime 0.5.0.
 
 Use the qualified Godot 4.7.2 stable GDScript engine. No AI service or platform
 account is required by this project. Install matching engine export templates

@@ -52,6 +52,7 @@ export function usedAssets(story: StoryDraft): Set<string> {
   const used = new Set<string>();
   for (const node of Object.values(story.nodes)) {
     if (node.type === "stage" && typeof node.background === "string") used.add(node.background);
+    if (node.type === "stage" && typeof node.cg === "string") used.add(node.cg);
   }
   for (const character of Object.values(story.characters)) {
     for (const key of Object.values(character.sprites ?? {})) used.add(key);
@@ -121,11 +122,11 @@ export function inkOn(color: string): string {
 
 // ---- What is on stage when each node is reached -------------------------------------------
 
-export type Placed = { position: StagePosition; sprite: string };
-export interface StageSnapshot { background: string | null | "?"; characters: Record<string, Placed | "?"> }
-const EMPTY: StageSnapshot = { background: null, characters: {} };
+export type Placed = { position: StagePosition; sprite: string; x?: number };
+export interface StageSnapshot { background: string | null | "?"; cg: string | null | "?"; characters: Record<string, Placed | "?"> }
+const EMPTY: StageSnapshot = { background: null, cg: null, characters: {} };
 
-function applyNode(state: StageSnapshot, node: StoryNode): StageSnapshot {
+export function applyStageNode(state: StageSnapshot, node: StoryNode): StageSnapshot {
   if (node.type === "stage") {
     const characters: Record<string, Placed | "?"> = {};
     for (const [id, value] of Object.entries(state.characters)) if (!node.hide?.includes(id)) characters[id] = value;
@@ -133,9 +134,10 @@ function applyNode(state: StageSnapshot, node: StoryNode): StageSnapshot {
       for (const [id, value] of Object.entries(characters)) {
         if (value !== "?" && value.position === entry.position && id !== entry.character) delete characters[id];
       }
-      characters[entry.character] = { position: entry.position, sprite: entry.sprite };
+      characters[entry.character] = { position: entry.position, sprite: entry.sprite, ...(entry.x !== undefined ? { x: entry.x } : {}) };
     }
-    return { background: node.background !== undefined ? node.background : state.background, characters };
+    return { background: node.background !== undefined ? node.background : state.background,
+      cg: node.cg !== undefined ? node.cg : state.cg, characters };
   }
   if (node.type === "line" && node.expression && node.speaker) {
     const placed = state.characters[node.speaker];
@@ -152,7 +154,8 @@ function join(left: StageSnapshot, right: StageSnapshot): StageSnapshot {
     const a = left.characters[id], b = right.characters[id];
     characters[id] = a && b && JSON.stringify(a) === JSON.stringify(b) ? a : "?";
   }
-  return { background: left.background === right.background ? left.background : "?", characters };
+  return { background: left.background === right.background ? left.background : "?",
+    cg: left.cg === right.cg ? left.cg : "?", characters };
 }
 
 function targets(node: StoryNode): string[] {
@@ -162,6 +165,23 @@ function targets(node: StoryNode): string[] {
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
   }
+}
+
+/** Stable first-use order across canonical JSON: entry-first DFS, then orphan node IDs. */
+export function cgGalleryAssets(story: StoryDraft): string[] {
+  if (story.schema_version !== "2") return [];
+  const pending = [...Object.keys(story.nodes).sort().reverse(), story.entry];
+  const visited = new Set<string>(), assets = new Set<string>();
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const node = story.nodes[id];
+    if (!node) continue;
+    if (node.type === "stage" && typeof node.cg === "string") assets.add(node.cg);
+    pending.push(...targets(node).reverse());
+  }
+  return [...assets];
 }
 
 /** The stage as each reachable node begins; paths that disagree give "?" (varies). */
@@ -175,7 +195,7 @@ export function stageBefore(story: StoryDraft): Map<string, StageSnapshot> {
     const id = pending.shift()!;
     const node = story.nodes[id];
     if (!node) continue;
-    const after = applyNode(states.get(id)!, node);
+    const after = applyStageNode(states.get(id)!, node);
     for (const target of targets(node)) {
       if (!has(story.nodes, target)) continue;
       const previous = states.get(target);
@@ -194,6 +214,7 @@ export function describeSnapshot(story: StoryDraft, snapshot: StageSnapshot | un
   const name = (id: string) => story.characters[id]?.name || id;
   const parts = [snapshot.background === "?" ? "Background varies by path"
     : snapshot.background === null ? "No background" : `Background ${snapshot.background}`];
+  if (snapshot.cg !== null) parts.push(snapshot.cg === "?" ? "CG varies by path" : `CG ${snapshot.cg}`);
   const placed = Object.entries(snapshot.characters).sort(([, a], [, b]) =>
     (a === "?" ? 3 : POSITIONS.indexOf(a.position)) - (b === "?" ? 3 : POSITIONS.indexOf(b.position)));
   for (const [id, value] of placed) {
@@ -204,12 +225,13 @@ export function describeSnapshot(story: StoryDraft, snapshot: StageSnapshot | un
 
 // ---- A scene's opening stage step --------------------------------------------------------
 
-export interface StageEdit { background?: string | null; show: StageShow[]; hide: string[] }
+export interface StageEdit { background?: string | null; cg?: string | null; show: StageShow[]; hide: string[] }
 
 export function sceneStage(story: StoryDraft, head: string): StageEdit {
   const node = story.nodes[head];
   if (node?.type !== "stage") return { show: [], hide: [] };
   return { ...(node.background !== undefined ? { background: node.background } : {}),
+    ...(node.cg !== undefined ? { cg: node.cg } : {}),
     show: node.show ?? [], hide: node.hide ?? [] };
 }
 
@@ -236,13 +258,22 @@ function retarget(story: StoryDraft, from: string, to: string): StoryDraft {
 
 /** Write (or remove) the stage step that opens a scene, keeping the scene's ID and routes. */
 export function setSceneStage(story: StoryDraft, head: string, edit: StageEdit): StoryDraft {
+  if (edit.cg !== undefined) {
+    if (story.schema_version !== "2") throw new Error("unknown_field: cg needs story format 2.");
+    if (edit.cg !== null) {
+      if (typeof edit.cg !== "string" || !ID.test(edit.cg)) throw new Error("invalid_id: cg");
+      if (!has(story.assets, edit.cg)) throw new Error("unknown_reference: cg");
+      if (story.assets[edit.cg].kind !== "image") throw new Error("invalid_asset_kind: cg");
+    }
+  }
   const problem = stageProblem(edit);
   if (problem) throw new Error(problem);
   const current = story.nodes[head];
   if (!current) throw new Error("Scene no longer exists.");
-  const effect = edit.background !== undefined || edit.show.length > 0 || edit.hide.length > 0;
+  const effect = edit.background !== undefined || edit.cg !== undefined || edit.show.length > 0 || edit.hide.length > 0;
   const step = (next: string): StageNode => ({ type: "stage",
     ...(edit.background !== undefined ? { background: edit.background } : {}),
+    ...(edit.cg !== undefined ? { cg: edit.cg } : {}),
     ...(edit.hide.length ? { hide: edit.hide } : {}), ...(edit.show.length ? { show: edit.show } : {}), next });
   if (current.type === "stage") {
     if (effect) return pruneAssets({ ...story, nodes: { ...story.nodes, [head]: step(current.next) } });

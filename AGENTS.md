@@ -86,6 +86,13 @@ top, free horizontal placement); read `docs/reports/2026-10-31-stage-framing.md`
 fixtures now use Docker volumes with fixed ports
 (`notes/persist-narrative-fixtures.py`). The earlier tmpfs fixtures lost all data on
 a Docker restart.
+Runtime 0.5.0 adds event CG overlays and an independent local gallery (#161 presentation,
+[ADR 0042](docs/adr/0042-event-cgs-and-gallery.md)). Format 2 stage nodes use optional
+`cg` (image ID, null clears); saves missing it load null. Gallery unlocks persist by
+story ID outside slots in exports and stay in memory in playtests. The Studio stage
+panel picks CGs and previews the overlay. See
+`docs/reports/2026-10-31-event-cgs.md` for parity, private builder/preview and real
+release qualification. Art generation from character references remains separate work.
 M31 #122 adds authorized immutable text revisions
 with recoverable conflicts; read `docs/milestones/31-authored-narrative-studio.md`
 and the M30 report for actual progress before claiming a complete authoring product.

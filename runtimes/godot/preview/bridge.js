@@ -10,6 +10,7 @@
   const CAPS = { image: 10485760, font: 8388608 };
   const TOTAL = 104857600;
   let phase = "starting", callback = null, identity = null, engine = null, buffers = [];
+  let galleryOpen = false;
   const base = type => ({ protocol: "flint-preview", version: 1, nonce, type });
   const send = (type, extra = {}) => {
     if (validNonce && window.parent !== window) window.parent.postMessage({ ...base(type), ...extra }, parentOrigin);
@@ -55,9 +56,13 @@
     callback = null;
   });
   window.addEventListener("keydown", event => {
-    if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); send("close"); }
+    // Let the engine close its gallery first. The next Escape closes the playtest.
+    if (event.key === "Escape" && !galleryOpen) { event.preventDefault(); event.stopImmediatePropagation(); send("close"); }
   }, true);
   window.FlintPreview = Object.freeze({
+    gallery(open) {
+      if (phase === "loaded" && typeof open === "boolean") galleryOpen = open;
+    },
     install(fn) {
       if (phase !== "starting" || !validNonce || window.parent === window) return;
       callback = fn; phase = "waiting"; status.textContent = "Waiting for a saved revision…"; send("ready");

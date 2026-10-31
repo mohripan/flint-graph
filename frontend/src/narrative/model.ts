@@ -175,6 +175,8 @@ export function deleteVariable(story: StoryDraft, id: string): StoryDraft {
 export function describeStage(story: StoryDraft, node: Extract<StoryNode, { type: "stage" }>): string {
   const name = (id: string) => story.characters[id]?.name || id;
   const parts: string[] = [];
+  if (node.cg === null) parts.push("Clear CG");
+  else if (node.cg !== undefined) parts.push(`CG ${node.cg}`);
   if (node.background === null) parts.push("Clear background");
   else if (node.background !== undefined) parts.push(`Background ${node.background}`);
   for (const id of node.hide ?? []) parts.push(`${name(id)} leaves`);

@@ -15,7 +15,24 @@ var _ending: Variant = null
 var _fault: Variant = null
 var _generation := 0
 var _v2 := false
-var _stage: Dictionary = {"background": null, "characters": []}
+var _stage: Dictionary = {"background": null, "cg": null, "characters": []}
+var _cg_assets: Array = []
+var _seen_cgs: Dictionary = {}
+
+var gallery: Array:
+	get:
+		var entries: Array = []
+		for id: String in _cg_assets:
+			entries.append({"id": id, "unlocked": _seen_cgs.has(id)})
+		return entries
+
+var seen_cgs: Array:
+	get:
+		var ids: Array = []
+		for id: String in _cg_assets:
+			if _seen_cgs.has(id):
+				ids.append(id)
+		return ids
 
 var generation: int:
 	get:
@@ -70,13 +87,53 @@ func _view_v2() -> Dictionary:
 		"stage": _stage.duplicate(true), "options": options}
 
 
-func _init(source: Dictionary, content_hash: String) -> void:
+func _init(source: Dictionary, content_hash: String, unlocked: Array = []) -> void:
 	_story = source.duplicate(true)
 	_package_hash = content_hash
 	_v2 = _story["schema_version"] == "2"
+	_cg_assets = cg_gallery_assets(_story)
+	for id: Variant in unlocked:
+		if id is String and id in _cg_assets:
+			_seen_cgs[id] = true
 	for key: String in _story["variables"]:
 		_variables[key] = _story["variables"][key]["initial"]
 	_settle(_story["entry"])
+	_unlock_cg()
+
+
+static func cg_gallery_assets(story: Dictionary) -> Array:
+	if story["schema_version"] != "2":
+		return []
+	var nodes: Dictionary = story["nodes"]
+	var pending: Array = nodes.keys()
+	pending.sort()
+	pending.reverse()
+	pending.append(story["entry"])
+	var visited := {}
+	var assets: Array = []
+	while not pending.is_empty():
+		var key: String = pending.pop_back()
+		if visited.has(key):
+			continue
+		visited[key] = true
+		var node: Dictionary = nodes[key]
+		if node["type"] == "stage" and node.get("cg") != null and not node["cg"] in assets:
+			assets.append(node["cg"])
+		var targets: Array = []
+		match node["type"]:
+			"line", "stage", "set": targets.append(node["next"])
+			"choice":
+				for option: Dictionary in node["options"]:
+					targets.append(option["target"])
+			"branch": targets = [node["if_true"], node["if_false"]]
+		targets.reverse()
+		pending.append_array(targets)
+	return assets
+
+
+func _unlock_cg() -> void:
+	if _stage["cg"] in _cg_assets:
+		_seen_cgs[_stage["cg"]] = true
 
 
 func _staged(node: Dictionary) -> Dictionary:
@@ -100,7 +157,7 @@ func _staged(node: Dictionary) -> Dictionary:
 		for item: Dictionary in present.values():
 			if item["position"] == position:
 				ordered.append(item)
-	return {"background": background, "characters": ordered}
+	return {"background": background, "cg": node.get("cg", _stage["cg"]), "characters": ordered}
 
 
 func _expressed(speaker: String, expression: String) -> Dictionary:
@@ -215,6 +272,7 @@ func act(action: Variant, expected_generation: Variant = null) -> String:
 	if target == "":
 		return "invalid_action"
 	_settle(target)
+	_unlock_cg()
 	_generation += 1
 	return ""
 
@@ -240,10 +298,13 @@ func save() -> PackedByteArray:
 
 func _checked_stage(value: Variant) -> Variant:
 	# A saved stage: known image background and characters in canonical slots.
-	if not value is Dictionary or value.size() != 2 or not value.has("background") or not value.has("characters"):
+	if not value is Dictionary or value.size() != (3 if value.has("cg") else 2) or not value.has("background") or not value.has("characters"):
 		return null
 	var background: Variant = value["background"]
 	var assets: Dictionary = _story["assets"]
+	var cg: Variant = value.get("cg")
+	if cg != null and (not cg is String or not assets.has(cg) or assets[cg]["kind"] != "image"):
+		return null
 	if background != null and (not background is String or not assets.has(background) or assets[background]["kind"] != "image"):
 		return null
 	var characters: Variant = value["characters"]
@@ -266,7 +327,9 @@ func _checked_stage(value: Variant) -> Variant:
 			return null  # Unique positions, left to right.
 		seen[item["id"]] = true
 		last = index
-	return value.duplicate(true)
+	var normalized: Dictionary = value.duplicate(true)
+	normalized["cg"] = cg  # Saves from runtime <= 0.4.0 omit it.
+	return normalized
 
 
 func _typed(value: Variant, declaration: Dictionary) -> bool:
@@ -327,5 +390,6 @@ func load_save(data: PackedByteArray) -> String:
 	_fault = saved["fault"]
 	if _v2:
 		_stage = stage
+		_unlock_cg()
 	_generation += 1
 	return ""

@@ -67,6 +67,7 @@ def test_dynamic_preview_validates_text_semantics_and_package_identity(tmp_path:
     prototype["entry"] = "constructor"
     add(prototype, True)
     for change in [
+        lambda s: s["nodes"][s["entry"]].update(cg=None),
         lambda s: s.update(extra=True),
         lambda s: s.update(schema_version=1),
         lambda s: s.update(entry="missing"),

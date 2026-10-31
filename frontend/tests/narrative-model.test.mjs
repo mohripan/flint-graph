@@ -9,6 +9,11 @@ const { outputText } = ts.transpileModule(source, {
 });
 const model = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
+test("script summaries name CG-only steps and explicit clears", () => {
+  assert.equal(model.describeStage(originalStory(), { type: "stage", cg: "train", next: "finish" }), "CG train");
+  assert.equal(model.describeStage(originalStory(), { type: "stage", cg: null, next: "finish" }), "Clear CG");
+});
+
 function originalStory() {
   return {
     schema_version: "1", id: "original", title: "An original mystery", language: "en",

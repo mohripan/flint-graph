@@ -1,6 +1,6 @@
 # Godot authored player
 
-M30 / #120, trusted runtime **0.4.0** (story format 2 with stage framing, ADR 0040), qualified with Godot
+M30 / #120, trusted runtime **0.5.0** (story format 2 with CGs/gallery, ADR 0042), qualified with Godot
 `4.7.2.stable.official.ed1daf0bf` on Windows x86-64. The exported source runs
 without the backend, a model, credentials or an account. The compiler supplies a
 strictly validated immutable package; arbitrary creator scripts are not inputs.
@@ -57,6 +57,13 @@ Runtime 0.4.0 adds framing. A character's optional `stage` framing sets the draw
 without framing a sprite fits its slot as before. A placement's optional `x` (0–100)
 is its horizontal centre and is part of the stage state and saves; the slot still
 decides who replaces whom.
+
+Runtime 0.5.0 adds the optional stage `cg` image overlay above the background and
+characters and below dialogue/choices. Null clears it; omission keeps it. Saves
+carry it, with absent fields in older saves loading as null. Gallery lists every
+CG in stable structural first-use order; seen entries unlock outside slot saves
+in `user://flint_graph/gallery-<story id>.json`. Studio playtests override both
+gallery persistence hooks to keep unlocks in memory. See [ADR 0042](../adr/0042-event-cgs-and-gallery.md).
 
 ## Local saves and stale input
 

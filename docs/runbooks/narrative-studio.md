@@ -102,6 +102,17 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
   routes disagree. The scene keeps its ID, folder and routes.
 - **Lines:** when the speaker has expressions, an expression picker sits under the
   speaker; it changes their sprite from that line on.
+- **Write → Stage → Event CG:** choose an existing story image or an approved library
+  image. It fills the stage over the background and characters, while dialogue and
+  choices keep running. **Clear CG** reveals the stage underneath; **Keep earlier CG**
+  leaves the previous overlay alone. The scene preview shows the same layering.
+  Source stage steps use `"cg": "image_id"` or `"cg": null`; only format 2 accepts it.
+- **Player → Gallery:** every CG is listed in stable first-use order. Seen CGs unlock;
+  other entries show Locked. Gallery pauses the story until closed. Exports retain
+  unlocks locally across Restart, Load and reopening, independently of save slots,
+  in `user://flint_graph/gallery-<story id>.json`. Old slot saves remain valid and
+  restore without a CG. Playtest unlocks stay in memory until it closes. Escape
+  closes its gallery before closing the playtest.
 - **Look:** text box position, width, colours and corner radius; the name box;
   choice colours (text box, name box and choice backgrounds have an opacity slider);
   and the font (built-in Lora or an uploaded static TTF/OTF) and its

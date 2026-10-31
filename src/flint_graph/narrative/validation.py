@@ -406,6 +406,8 @@ class _Nodes:
         location = f"nodes.{key}"
         if type(node) is not dict:
             raise PackageError("invalid_node", location)
+        if not self.v2 and "cg" in node:
+            raise PackageError("unknown_field", location + ".cg")
         kind = node.get("type")
         targets: list[str] = []
         if kind == "line" and self.v2:
@@ -434,8 +436,12 @@ class _Nodes:
                     reference(node[slot], assets, location + "." + slot)
             targets.append(reference(node["next"], nodes, location + ".next"))
         elif kind == "stage" and self.v2:
-            fields(node, {"type", "next"}, {"background", "show", "hide"}, location)
+            fields(node, {"type", "next"}, {"background", "cg", "show", "hide"}, location)
             effect = False
+            if "cg" in node:
+                effect = True
+                if node["cg"] is not None:
+                    asset_of(node["cg"], assets, "image", location + ".cg")
             if "background" in node:
                 effect = True
                 if node["background"] is not None:

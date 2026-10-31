@@ -1,0 +1,42 @@
+{
+  "story": {
+    "schema_version": "2", "id": "event_cgs", "title": "Train lights", "language": "en", "entry": "opening",
+    "characters": {"mira": {"name": "Mira", "sprites": {"neutral": "actor", "happy": "actor"}}},
+    "variables": {},
+    "assets": {
+      "background": {"kind": "image", "path": "assets/background.png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      "actor": {"kind": "image", "path": "assets/actor.png", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+      "z_train": {"kind": "image", "path": "assets/z_train.png", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+      "a_platform": {"kind": "image", "path": "assets/a_platform.png", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+      "unused_route": {"kind": "image", "path": "assets/unused_route.png", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+      "font": {"kind": "font", "path": "assets/font.ttf", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
+    },
+    "nodes": {
+      "opening": {"type": "stage", "background": "background", "show": [{"character": "mira", "sprite": "neutral", "position": "left", "x": 30}], "next": "before"},
+      "before": {"type": "line", "text_id": "before", "text": "The train arrives.", "next": "train"},
+      "train": {"type": "stage", "cg": "z_train", "next": "during"},
+      "during": {"type": "line", "text_id": "during", "text": "The carriage glows.", "speaker": "mira", "expression": "happy", "next": "selection"},
+      "selection": {"type": "choice", "text_id": "selection", "text": "Stay?", "options": [
+        {"id": "leave", "text_id": "leave", "text": "Leave", "target": "platform"},
+        {"id": "stay", "text_id": "stay", "text": "Stay", "target": "clear"}
+      ]},
+      "platform": {"type": "stage", "cg": "a_platform", "background": "a_platform", "next": "outside"},
+      "outside": {"type": "line", "text_id": "outside", "text": "On the platform.", "next": "clear"},
+      "clear": {"type": "stage", "cg": null, "next": "after"},
+      "after": {"type": "line", "text_id": "after", "text": "Back on stage.", "next": "end"},
+      "end": {"type": "end", "text_id": "end", "text": "Fin.", "ending": "done"},
+      "unreachable": {"type": "stage", "cg": "unused_route", "next": "train"}
+    }
+  },
+  "gallery": ["z_train", "a_platform", "unused_route"],
+  "actions": ["advance", "advance", "choose:leave", "advance", "advance"],
+  "screens": ["before", "during", "selection", "outside", "after", "end"],
+  "cgs": [null, "z_train", "z_train", "a_platform", null, null],
+  "invalid": [
+    {"value": "missing", "code": "unknown_reference"},
+    {"value": "font", "code": "invalid_asset_kind"},
+    {"value": 1, "code": "invalid_id"},
+    {"value": false, "code": "invalid_id"},
+    {"value": [], "code": "invalid_id"}
+  ]
+}

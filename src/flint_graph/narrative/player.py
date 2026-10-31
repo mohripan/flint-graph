@@ -1,5 +1,6 @@
 """Deterministic reference execution for a validated authored game."""
 
+from collections.abc import Iterable
 from typing import Any
 
 from flint_graph.narrative.json_format import parse_json
@@ -47,16 +48,52 @@ def evaluate_condition(condition: dict[str, Any], variables: dict[str, Any]) -> 
     return bool(left >= right)  # ge; the package boundary rejects unknown operations.
 
 
+def cg_gallery_assets(story: dict[str, Any]) -> list[str]:
+    """First structural use: entry-first DFS, declared target order, then orphan IDs.
+
+    JSON object order is not semantic (packages canonicalize it). Visit each node
+    once, including loops and both branches, and include unreachable CGs as locked.
+    """
+    if story["schema_version"] != "2":
+        return []
+    nodes = story["nodes"]
+    pending = [*reversed(sorted(nodes)), story["entry"]]
+    visited: set[str] = set()
+    assets: dict[str, None] = {}
+    while pending:
+        key = pending.pop()
+        if key in visited:
+            continue
+        visited.add(key)
+        node = nodes[key]
+        if node["type"] == "stage" and node.get("cg") is not None:
+            assets[node["cg"]] = None
+        kind = node["type"]
+        targets = (
+            [node["next"]]
+            if kind in ("line", "stage", "set")
+            else [item["target"] for item in node["options"]]
+            if kind == "choice"
+            else [node["if_true"], node["if_false"]]
+            if kind == "branch"
+            else []
+        )
+        pending.extend(reversed(targets))
+    return list(assets)
+
+
 class Player:
     """One local session; public state is a defensive snapshot."""
 
-    def __init__(self, package: StoryPackage) -> None:
+    def __init__(self, package: StoryPackage, *, seen_cgs: Iterable[str] = ()) -> None:
         self._package = package
         self._package_hash = package.content_hash
         self._story = package.story
         # v2 (ADR 0040): the stage persists across screens and is part of every save.
         self._v2 = self._story["schema_version"] == "2"
-        self._stage: dict[str, Any] = {"background": None, "characters": []}
+        self._stage: dict[str, Any] = {"background": None, "cg": None, "characters": []}
+        self._cg_assets = cg_gallery_assets(self._story)
+        self._seen_cgs = {key for key in seen_cgs if type(key) is str and key in self._cg_assets}
         self._variables = {key: value["initial"] for key, value in self._story["variables"].items()}
         self._node_id = self._story["entry"]
         self._status = "playing"
@@ -64,6 +101,7 @@ class Player:
         self._fault: str | None = None
         self._generation = 0
         self._settle(self._node_id)
+        self._unlock_cg()
 
     @property
     def package(self) -> StoryPackage:
@@ -72,6 +110,18 @@ class Player:
     @property
     def generation(self) -> int:
         return self._generation
+
+    @property
+    def gallery(self) -> list[dict[str, Any]]:
+        return [{"id": key, "unlocked": key in self._seen_cgs} for key in self._cg_assets]
+
+    @property
+    def seen_cgs(self) -> list[str]:
+        return [key for key in self._cg_assets if key in self._seen_cgs]
+
+    def _unlock_cg(self) -> None:
+        if self._stage["cg"] in self._cg_assets:
+            self._seen_cgs.add(self._stage["cg"])
 
     @property
     def state(self) -> dict[str, Any]:
@@ -90,6 +140,7 @@ class Player:
     def _stage_copy(self) -> dict[str, Any]:
         return {
             "background": self._stage["background"],
+            "cg": self._stage["cg"],
             "characters": [dict(item) for item in self._stage["characters"]],
         }
 
@@ -240,12 +291,16 @@ class Player:
         self._status, self._ending, self._fault = status, saved["ending"], saved["fault"]
         if stage is not None:
             self._stage = stage
+            self._unlock_cg()
         self._generation += 1
         return self.state
 
     def _checked_stage(self, value: Any) -> dict[str, Any]:
         """A saved stage: known image background and characters in canonical slots."""
-        stage = fields(value, {"background", "characters"}, set(), "save.stage")
+        stage = fields(value, {"background", "characters"}, {"cg"}, "save.stage")
+        cg = stage.get("cg")
+        if cg is not None:
+            asset_of(cg, self._story["assets"], "image", "save.stage.cg")
         background = stage["background"]
         if background is not None:
             asset_of(background, self._story["assets"], "image", "save.stage")
@@ -270,7 +325,11 @@ class Player:
             order.append(POSITIONS.index(item["position"]))
         if order != sorted(set(order)):
             raise PackageError("invalid_save")  # Unique positions, left to right.
-        return {"background": background, "characters": [dict(item) for item in characters]}
+        return {
+            "background": background,
+            "cg": cg,
+            "characters": [dict(item) for item in characters],
+        }
 
     def _options(self) -> list[dict[str, Any]]:
         node = self._story["nodes"][self._node_id]
@@ -300,6 +359,7 @@ class Player:
         else:
             raise PlayerError("invalid_action")
         self._settle(target)
+        self._unlock_cg()
         self._generation += 1
         return self.state
 
@@ -325,7 +385,11 @@ class Player:
                 **({"x": entry["x"]} if "x" in entry else {}),
             }
         ordered = sorted(present.values(), key=lambda item: POSITIONS.index(item["position"]))
-        return {"background": background, "characters": ordered}
+        return {
+            "background": background,
+            "cg": node.get("cg", self._stage["cg"]),
+            "characters": ordered,
+        }
 
     def _expressed(self, speaker: str, expression: str) -> dict[str, Any]:
         stage = self._stage_copy()
