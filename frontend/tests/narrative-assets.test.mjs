@@ -18,6 +18,17 @@ test("filters map to library queries", () => {
     ["all", "background", "sprite", "image", "font", "character_portrait", "candidates"]);
 });
 
+test("CGs have a library section and upload as ordinary image assets", () => {
+  assert.deepEqual(model.FILTERS.find(([id]) => id === "image"), ["image", "CGs"]);
+  assert.deepEqual(model.filterQuery("image"), { kind: "image" });
+  assert.equal(model.uploadKindForFilter("image"), "image");
+  assert.equal(model.uploadKindForFilter("background"), "background");
+  assert.equal(model.uploadKindForFilter("sprite"), "sprite");
+  assert.equal(model.uploadKindForFilter("font"), "font");
+  assert.equal(model.uploadKindForFilter("all"), "background");
+  assert.equal(model.KIND_LABELS.image, "CG / image");
+});
+
 test("uploads are checked before sending", () => {
   const file = (name, size) => ({ name, size });
   assert.equal(model.uploadProblem(file("bg.png", 1000), "background"), null);

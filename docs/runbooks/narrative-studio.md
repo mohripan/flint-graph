@@ -116,6 +116,10 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
 - **Assets:** approve or upload backgrounds, sprites and fonts first. Pickers list
   approved assets only. Choosing one adds it to the story under an ID made from its
   name; files the story no longer uses are dropped from it.
+- **Assets → CGs:** browse full-scene illustrations and other image uploads. **Upload CG**
+  selects the CG / image kind; PNG files use the same rights declaration and approval
+  rules as other library files. Choose an approved image in **Write → Stage → Event CG**
+  to show it in the story. The CGs view keeps the background generator out of the way.
 - **Characters → On stage:** set a name colour (with opacity) and add expressions. Each expression
   is an approved sprite, image or portrait. Removing an expression the story still
   uses is refused, with a count of where it is used. **Size on stage** sets how tall

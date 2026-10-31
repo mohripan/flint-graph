@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError, api } from "../lib/api";
 import type { ImageJob, NarrativeImage } from "../lib/api";
-import { FILTERS, KIND_LABELS, UPLOAD_KINDS, filterQuery, kindForFile, suggestName, uploadProblem } from "./assetModel";
+import { FILTERS, KIND_LABELS, UPLOAD_KINDS, filterQuery, kindForFile, suggestName, uploadKindForFilter, uploadProblem } from "./assetModel";
 import type { AssetFilter, UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
 import { refreshLibrary, useAssetFont } from "./libraryAssets";
@@ -59,8 +59,8 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
   return <section className="studio-assets" aria-label="Assets">
     <div className="studio-section-heading"><h2>Assets</h2>
       {canWrite && <button type="button" className="studio-primary" onClick={() => setUploading(true)}>Upload</button>}</div>
-    <p className="studio-hint">Backgrounds, character sprites, images and fonts for this story. Uploads keep transparency; generated images wait here for your approval.</p>
-    {canWrite && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
+    <p className="studio-hint">Backgrounds, character sprites, CGs and fonts for this story. Uploads keep transparency; generated images wait here for your approval.</p>
+    {canWrite && filter !== "image" && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
       onStarted={job => { setJobs(current => [job, ...current]); setFilter("candidates"); }}
       onCancel={job => void act(async () => {
         const next = await api.cancelImageJob(tenantId, projectId, job.id);
@@ -70,9 +70,15 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
       {FILTERS.map(([id, label]) => <button type="button" key={id} aria-pressed={filter === id}
         className={filter === id ? "selected" : ""} onClick={() => setFilter(id)}>{label}</button>)}
     </div>
+    {filter === "image" && <section className="studio-asset-generate" aria-label="CGs">
+      <div className="studio-section-heading"><h3>Event CGs</h3>
+        {canWrite && <button type="button" className="studio-secondary" onClick={() => setUploading(true)}>Upload CG</button>}</div>
+      <p className="studio-hint">Full-scene illustrations cover the stage while dialogue continues.
+        Choose an approved image in Write → Stage → Event CG. Other image uploads also appear here.</p>
+    </section>}
     {notice && <p className="studio-notice" role="status">{notice}</p>}
     {assets === null ? <p className="studio-hint">Loading assets…</p>
-      : !assets.length ? <p className="studio-empty">{filter === "candidates" ? "Nothing waiting for review." : "No assets here yet."}</p>
+      : !assets.length ? <p className="studio-empty">{filter === "candidates" ? "Nothing waiting for review." : filter === "image" ? "No CGs here yet." : "No assets here yet."}</p>
       : <div className="studio-asset-grid">{assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
           projectId={projectId} asset={asset} canWrite={canWrite} onView={() => setViewing(asset)}
           onRename={name => act(async () => replace(await api.renameNarrativeAsset(tenantId, projectId, asset.id, name)), "Could not rename.")}
@@ -87,7 +93,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite }: { tenantId: stri
             setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
           }, "Could not discard.")} />)}</div>}
     {next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
-    {uploading && <UploadDialog tenantId={tenantId} projectId={projectId} onClose={() => setUploading(false)}
+    {uploading && <UploadDialog tenantId={tenantId} projectId={projectId} initialKind={uploadKindForFilter(filter)} onClose={() => setUploading(false)}
       onUploaded={asset => { setUploading(false); setNotice(`Added “${asset.name}”.`); refreshLibrary();
         setAssets(current => filter === "all" || filter === asset.kind ? [asset, ...(current ?? [])] : current); }} />}
     {viewing && viewing.media_type === "image/png" && <Viewer tenantId={tenantId} projectId={projectId}
@@ -160,11 +166,11 @@ function FontSample({ tenantId, projectId, asset }: { tenantId: string; projectI
   </div>;
 }
 
-function UploadDialog({ tenantId, projectId, onClose, onUploaded }: {
-  tenantId: string; projectId: string; onClose: () => void; onUploaded: (asset: NarrativeImage) => void;
+function UploadDialog({ tenantId, projectId, initialKind, onClose, onUploaded }: {
+  tenantId: string; projectId: string; initialKind: UploadKind; onClose: () => void; onUploaded: (asset: NarrativeImage) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
-  const [kind, setKind] = useState<UploadKind>("background");
+  const [kind, setKind] = useState<UploadKind>(initialKind);
   const [name, setName] = useState("");
   const [license, setLicense] = useState("Own work");
   const [notice, setNotice] = useState("");
@@ -182,16 +188,17 @@ function UploadDialog({ tenantId, projectId, onClose, onUploaded }: {
       setError(failure instanceof ApiError && failure.status === 413 ? "This file is too large." : message(failure, "Could not upload."));
     } finally { setBusy(false); }
   }
-  return <StudioDialog label="Upload an asset" onClose={onClose}>
+  const title = initialKind === "image" ? "Upload a CG" : "Upload an asset";
+  return <StudioDialog label={title} onClose={onClose}>
     <form className="studio-peek-body studio-form" onSubmit={event => void submit(event)}>
-      <div className="studio-section-heading"><h2>Upload an asset</h2>
+      <div className="studio-section-heading"><h2>{title}</h2>
         <button type="button" className="studio-secondary" onClick={onClose}>Close</button></div>
       <Field label="File" hint="PNG images up to 10 MB (transparency kept), or TTF/OTF fonts up to 8 MB.">
         <input type="file" accept=".png,.ttf,.otf,image/png,font/ttf,font/otf" onChange={event => {
           const chosen = event.target.files?.[0] ?? null;
           setFile(chosen);
           if (chosen) { setName(suggestName(chosen.name)); if (kindForFile(chosen.name) === "font") setKind("font");
-            else if (kind === "font") setKind("background"); }
+            else if (kind === "font") setKind(initialKind === "font" ? "image" : initialKind); }
         }} /></Field>
       <Field label="Kind"><select value={kind} onChange={event => setKind(event.target.value as UploadKind)}>
         {UPLOAD_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>

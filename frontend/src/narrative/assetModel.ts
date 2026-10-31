@@ -4,14 +4,14 @@ export type AssetFilter = "all" | "background" | "sprite" | "image" | "font" | "
 export type UploadKind = "background" | "sprite" | "image" | "font";
 
 export const FILTERS: Array<[AssetFilter, string]> = [
-  ["all", "All"], ["background", "Backgrounds"], ["sprite", "Sprites"], ["image", "Images"],
+  ["all", "All"], ["background", "Backgrounds"], ["sprite", "Sprites"], ["image", "CGs"],
   ["font", "Fonts"], ["character_portrait", "Portraits"], ["candidates", "To review"],
 ];
 export const UPLOAD_KINDS: Array<[UploadKind, string]> = [
-  ["background", "Background"], ["sprite", "Character sprite"], ["image", "Image / CG"], ["font", "Font"],
+  ["background", "Background"], ["sprite", "Character sprite"], ["image", "CG / image"], ["font", "Font"],
 ];
 export const KIND_LABELS: Record<string, string> = {
-  background: "Background", sprite: "Sprite", image: "Image", font: "Font", character_portrait: "Portrait",
+  background: "Background", sprite: "Sprite", image: "CG / image", font: "Font", character_portrait: "Portrait",
 };
 const MB = 1024 * 1024;
 
@@ -19,6 +19,11 @@ export function filterQuery(filter: AssetFilter): { kind?: string; status?: stri
   if (filter === "all") return {};
   if (filter === "candidates") return { status: "candidate" };
   return { kind: filter };
+}
+
+/** Upload into the library section the creator is viewing. */
+export function uploadKindForFilter(filter: AssetFilter): UploadKind {
+  return filter === "image" || filter === "sprite" || filter === "font" ? filter : "background";
 }
 
 // Mirrors the server's limits so creators hear about a wrong file before uploading.

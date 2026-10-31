@@ -562,7 +562,9 @@
     "03-cleared.png": "fb082793ae36c557e1a271328e6cdc0540d74c9232b578c17d4609dda0d0a649",
     "04-mobile-gallery.png": "c38eda26fd89e23efef3a3c60561b1382044369c2ccb42348bd737c98bee82a2",
     "05-preview-gallery.png": "a847e2296c9ba9af94d10843f3ca741a401ed200e5a9dfb7641832a234df5c61",
-    "06-preview-fresh-locked.png": "071980b925fd88379348096fa60df1fc2948f66204bacf0e6e67fbe7e5dc2176"
+    "06-preview-fresh-locked.png": "071980b925fd88379348096fa60df1fc2948f66204bacf0e6e67fbe7e5dc2176",
+    "07-assets-cgs.png": "a01a217730f998050a01328058f3a389e4593b7e96c761d876253a1742ccbf56",
+    "08-assets-cgs-mobile.png": "7f692ee34f5e016a0a8c6fb82ce2cb47c81288d46a3b23695ec112d262606c78"
   },
   "post_rebase_verification": {
     "base_commit": "a2fa1d445056559f02670a7f59bc3dff29b7d7d9",
@@ -590,5 +592,32 @@
       "frontend typecheck",
       "frontend production build"
     ]
+  },
+  "assets_library": {
+    "passed": true,
+    "filter_kind": "image",
+    "upload_kind": "image",
+    "mobile_width": 390,
+    "no_horizontal_overflow": true,
+    "viewer_upload_hidden": true,
+    "verification": {
+      "base_commit": "a087882",
+      "pytest": {
+        "passed": 1745,
+        "skipped": 98
+      },
+      "postgres_selection": {
+        "passed": 268,
+        "skipped": 10,
+        "deselected": 442
+      },
+      "godot_preview_and_release": {
+        "passed": 34
+      },
+      "frontend": {
+        "passed": 91
+      },
+      "other_gates": "ruff, mypy, offline Alembic SQL through 0027, Compose, deterministic eval, frontend typecheck/build passed"
+    }
   }
 }

@@ -97,7 +97,8 @@ Runtime 0.5.0 adds event CG overlays and an independent local gallery (#161 pres
 [ADR 0042](docs/adr/0042-event-cgs-and-gallery.md)). Format 2 stage nodes use optional
 `cg` (image ID, null clears); saves missing it load null. Gallery unlocks persist by
 story ID outside slots in exports and stay in memory in playtests. The Studio stage
-panel picks CGs and previews the overlay. See
+panel picks CGs and previews the overlay; Assets → CGs browses and uploads the image
+library with a dedicated CG panel. See
 `docs/reports/2026-10-31-event-cgs.md` for parity, private builder/preview and real
 release qualification. Art generation from character references remains separate work.
 M31 #122 adds authorized immutable text revisions
