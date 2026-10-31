@@ -1,14 +1,14 @@
 """Private voice references with a consent declaration (#175, ADR 0044).
 
-Revision ID: 0030_narrative_voice_references
-Revises: 0029_narrative_voice
+Revision ID: 0031_narrative_voice_references
+Revises: 0030_narrative_scene_art
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0030_narrative_voice_references"
-down_revision = "0029_narrative_voice"
+revision = "0031_narrative_voice_references"
+down_revision = "0030_narrative_scene_art"
 branch_labels = None
 depends_on = None
 

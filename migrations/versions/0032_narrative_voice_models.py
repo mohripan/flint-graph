@@ -7,15 +7,15 @@ with the license hash (#178). Per-line delivery overrides are editor metadata
 (#177). Existing Kokoro profiles and jobs keep their meaning: the model defaults to
 Kokoro-82M and the language to English.
 
-Revision ID: 0031_narrative_voice_models
-Revises: 0030_narrative_voice_references
+Revision ID: 0032_narrative_voice_models
+Revises: 0031_narrative_voice_references
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0031_narrative_voice_models"
-down_revision = "0030_narrative_voice_references"
+revision = "0032_narrative_voice_models"
+down_revision = "0031_narrative_voice_references"
 branch_labels = None
 depends_on = None
 
@@ -144,7 +144,7 @@ def downgrade() -> None:
             sa.text("SELECT count(*) FROM narrative_voice_jobs WHERE reference_id IS NOT NULL")
         )
         if cloned:
-            raise RuntimeError("Cloned-voice jobs exist; 0030 cannot represent them.")
+            raise RuntimeError("Cloned-voice jobs exist; 0031 cannot represent them.")
     op.drop_table("narrative_line_deliveries")
     op.drop_table("narrative_voice_license_acceptances")
     op.drop_constraint("ck_narrative_voice_job_one_voice", "narrative_voice_jobs", type_="check")

@@ -130,10 +130,10 @@ MIT, PerTh watermark), Qwen3-TTS 1.7B (cloning, stock voices; Apache-2.0) and In
 (bilibili license with duties on audio; IndexTTS2 is excluded for its CC-BY-NC MaskGCT codec)
 beside Kokoro, installed by `FLINT_GRAPH_NARRATIVE_VOICE_MODELS` with pinned manifests
 (`tools/narrative/fetch_model.py`) and run by isolated `runtimes/voicegen-{chatterbox,qwen3,indextts}`
-children (protocol 2). Private voice references with a consent declaration (migration 0030),
+children (protocol 2). Private voice references with a consent declaration (migration 0031),
 a model plus stock voice or reference per character, per-line delivery defaulting from the
 expression (editor metadata, not story format), per-workspace license acceptance by hash
-(migration 0031), NOTICES with license texts and a player-terms block, and runtime 0.7.0's
+(migration 0032), NOTICES with license texts and a player-terms block, and runtime 0.7.0's
 one-time player license screen. Read `docs/reports/2026-11-01-expressive-and-cloned-voices.md`
 and the runbook's ADR 0044 section; weights live under ignored `notes/models/`.
 M31 #122 adds authorized immutable text revisions

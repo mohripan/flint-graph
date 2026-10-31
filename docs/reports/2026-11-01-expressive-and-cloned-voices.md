@@ -16,11 +16,11 @@ Date: 2026-11-01. Branch `claude/m39-voices`. Decision:
   IndexTTS-2.5 is offered instead.
 - **#175 references.** Members record or upload a 5–30 s sample with a consent
   declaration; private table and object prefix; deletion removes audio and blocks jobs
-  (migration `0030_narrative_voice_references`).
+  (migration `0031_narrative_voice_references`).
 - **#176 cloned voices.** A character's voice is a model plus a stock voice or a
   reference; jobs snapshot model, reference hash and consent; provenance names model,
   license, reference, consent, watermark, delivery, language and device (migration
-  `0031_narrative_voice_models`).
+  `0032_narrative_voice_models`).
 - **#177 delivery.** Ten deliveries with intensity, a fixed per-engine mapping, sounds
   from each model's list, defaults from the line's expression, overrides as editor
   metadata, and plain notes where a model cannot do a delivery. Not in story format 2.
