@@ -17,6 +17,7 @@ import { Viewer } from "./CharacterStudio";
 import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
 import { ClipPlayButton } from "./VoiceControls";
+import { VoiceReferences, useVoiceReferences } from "./VoiceReferences";
 
 const PAGE = 48;
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
@@ -36,6 +37,8 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
   const [viewing, setViewing] = useState<NarrativeImage | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { jobs, failed: jobsFailed, put } = useBackgroundJobs(tenantId, projectId);
+  const { references } = useVoiceReferences(tenantId, projectId, canWrite);
+  const private_ = view.type === "references";
   const active = jobs.find(isActive) ?? null;
   // Event CGs of a character (ADR 0041 slice C) run as their own library jobs.
   const scenes = useLibraryJobs(tenantId, projectId, "scene_art");
@@ -52,7 +55,10 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
       setNext(page.next_before);
     } catch (error) { setNotice(message(error, "Could not load assets.")); setAssets(current => current ?? []); }
   }, [tenantId, projectId, view]);
-  useEffect(() => { setAssets(null); setSelected(new Set()); void load(); }, [load]);
+  useEffect(() => {
+    setAssets(null); setSelected(new Set());
+    if (view.type !== "references") void load();
+  }, [load, view.type]);
   useEffect(() => { reindex(); }, [reindex]);
   // Background jobs are shared with the assistant; reload the grid when one finishes.
   const completedJobs = [...jobs, ...scenes.jobs].filter(job => job.status === "completed").map(job => job.id).sort().join(",");
@@ -121,7 +127,8 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
       }, "Could not cancel.")}>Cancel CG generation</button>}
     </section>)}
     <div className="studio-library">
-      <LibraryRail index={index} names={characterNames} view={view} onView={setView} canWrite={canWrite} onCreate={create} />
+      <LibraryRail index={index} names={characterNames} view={view} onView={setView} canWrite={canWrite} onCreate={create}
+        references={references?.length} />
       <div className="studio-library-main">
         <div className="studio-library-head"><h3>{viewTitle(view, index, characterNames)}</h3>
           {canWrite && openFolder && <FolderActions folder={openFolder} folders={folders} depth={depth} onCreate={create}
@@ -146,10 +153,11 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
             onStarted={job => imageJobStarted(tenantId, projectId, job)}
             onCancel={job => void act(async () => { scenes.put(await api.cancelImageJob(tenantId, projectId, job.id)); }, "Could not cancel.")} />}
         </section>}
-        {canWrite && selected.size > 0 && <MoveBar count={selected.size} folders={folders}
+        {private_ && <VoiceReferences tenantId={tenantId} projectId={projectId} canWrite={canWrite} />}
+        {!private_ && canWrite && selected.size > 0 && <MoveBar count={selected.size} folders={folders}
           onClear={() => setSelected(new Set())} onMove={move} />}
         {notice && <p className="studio-notice" role="status">{notice}</p>}
-        {assets === null ? <p className="studio-hint">Loading assets…</p>
+        {private_ ? null : assets === null ? <p className="studio-hint">Loading assets…</p>
           : !assets.length ? <p className="studio-empty">{view.type === "review" ? "Nothing waiting for review." : cgs ? "No CGs here yet." : "No assets here yet."}</p>
           : <div className="studio-asset-grid">{assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
               projectId={projectId} asset={asset} canWrite={canWrite} onView={() => setViewing(asset)}
@@ -166,7 +174,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
                 await api.discardNarrativeImage(tenantId, projectId, asset.id);
                 setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
               }, "Could not discard.")} />)}</div>}
-        {next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
+        {!private_ && next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
       </div>
     </div>
     {uploading && <UploadDialog tenantId={tenantId} projectId={projectId} initialKind={uploadKindForView(view)} onClose={() => setUploading(false)}

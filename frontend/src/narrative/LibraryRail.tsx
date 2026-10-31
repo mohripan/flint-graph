@@ -5,10 +5,11 @@ import type { AssetFolder, LibraryIndex, LibraryView, RailItem } from "./assetFo
 
 // The Assets tab's side rail (ADR 0043): automatic groups by kind and character, plus
 // the creator's folders. Nothing here changes asset bytes or stories.
-export function LibraryRail({ index, names, view, onView, canWrite, onCreate }: {
+export function LibraryRail({ index, names, view, onView, canWrite, onCreate, references }: {
   index: LibraryIndex | null; names: Record<string, string>; view: LibraryView;
   onView: (view: LibraryView) => void; canWrite: boolean;
   onCreate: (name: string, parent: string | null) => Promise<boolean>;
+  references?: number;
 }) {
   const groups = index ? railGroups(index, names) : null;
   const item = (entry: RailItem, depth = 0) => <li key={JSON.stringify(entry.view)}>
@@ -19,6 +20,7 @@ export function LibraryRail({ index, names, view, onView, canWrite, onCreate }: 
     <ul>{(groups?.library ?? [{ view: { type: "all" }, label: "All assets", count: 0 }]).map(entry => item(entry))}</ul>
     {groups && groups.kinds.length > 0 && <><h3>By kind</h3><ul>{groups.kinds.map(entry => item(entry))}</ul></>}
     {groups && groups.characters.length > 0 && <><h3>By character</h3><ul>{groups.characters.map(entry => item(entry))}</ul></>}
+    {canWrite && <><h3>Private</h3><ul>{item({ view: { type: "references" }, label: "Voice references", count: references ?? 0 })}</ul></>}
     <h3>Folders</h3>
     <ul>{folderRows(index?.folders ?? []).map(({ folder, depth }) =>
       item({ view: { type: "folder", id: folder.id }, label: folder.name, count: folder.asset_count }, depth))}</ul>

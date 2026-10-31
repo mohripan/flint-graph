@@ -8,7 +8,9 @@ export interface LibraryIndex {
 }
 export type LibraryView =
   | { type: "all" } | { type: "review" } | { type: "unfiled" }
-  | { type: "kind"; kind: string } | { type: "character"; id: string } | { type: "folder"; id: string };
+  | { type: "kind"; kind: string } | { type: "character"; id: string } | { type: "folder"; id: string }
+  // Private voice references (#175): members only, never story assets.
+  | { type: "references" };
 export interface RailItem { view: LibraryView; label: string; count: number }
 
 export const MAX_DEPTH = 3;
@@ -33,6 +35,7 @@ export function viewQuery(view: LibraryView): { kind?: string; status?: string; 
     case "kind": return { kind: view.kind };
     case "character": return { character_id: view.id };
     case "folder": return { folder: view.id };
+    case "references": return {};
   }
 }
 
@@ -90,6 +93,7 @@ export function viewTitle(view: LibraryView, index: LibraryIndex | null, names: 
     case "kind": return KIND_ORDER.find(([kind]) => kind === view.kind)?.[1] ?? view.kind;
     case "character": return names[view.id] ?? view.id;
     case "folder": return folderPath(index?.folders ?? [], view.id) || "Folder";
+    case "references": return "Voice references";
   }
 }
 

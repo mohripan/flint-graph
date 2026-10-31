@@ -59,6 +59,23 @@ def asset_object_key(
     return f"tenants/{tenant_id}/narrative/projects/{project_id}/assets/{asset_id}/{name}"
 
 
+def voice_reference_object_key(
+    *, tenant_id: UUID | str, project_id: UUID | str, reference_id: UUID | str
+) -> str:
+    """Private reference audio (#175): outside ``assets/``, so nothing can bind or ship it."""
+    tenant, project, reference = (
+        UUID(str(value)) for value in (tenant_id, project_id, reference_id)
+    )
+    return (
+        f"tenants/{tenant}/narrative/projects/{project}/voice-references/{reference}/reference.wav"
+    )
+
+
+_REFERENCE_KEY = re.compile(
+    r"tenants/[0-9a-f-]{36}/narrative/projects/[0-9a-f-]{36}/voice-references/[0-9a-f-]{36}/reference\.wav"
+)
+
+
 class S3NarrativeArtifactStore:
     def __init__(self, client: Any, *, bucket: str) -> None:
         object_uri(bucket, "validate")
@@ -142,6 +159,18 @@ class S3NarrativeArtifactStore:
                 raise ArtifactStoreError("artifact_conflict") from None
             raise
         return ObjectReceipt(key, sha256, len(data))
+
+    def _delete(self, key: str) -> None:
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=key)
+        except Exception:
+            raise ArtifactStoreError("artifact_unavailable") from None
+
+    async def delete_reference(self, key: str) -> None:
+        """Remove deleted reference audio; every other artifact stays create-only."""
+        if not _REFERENCE_KEY.fullmatch(key):
+            raise ValueError("Only voice reference audio can be deleted")
+        await asyncio.to_thread(self._delete, key)
 
     async def put_once(
         self,

@@ -41,6 +41,17 @@ export interface VoiceJob {
   model: string | null; created_at: string; started_at: string | null; finished_at: string | null;
   assets: NarrativeImage[];
 }
+// Private voice references (#175): a sample to clone a character voice from.
+export interface VoiceReference {
+  id: string; name: string; speaker_name: string; consent: "self" | "permission";
+  consent_declared_by_user_id: string; consent_declared_at: string; transcript: string | null;
+  source: "upload" | "recording"; sha256: string; size_bytes: number; duration_ms: number;
+  sample_rate: number; channels: number; status: "active" | "deleted"; created_at: string; deleted_at: string | null;
+}
+export interface VoiceReferenceUpload {
+  file: Blob; name: string; speaker_name: string; consent: "self" | "permission"; transcript: string;
+  source: "upload" | "recording";
+}
 export interface CharacterProfile {
   character_id: string; appearance: string; character_type: CharacterType; framing: CharacterFraming;
   portrait: NarrativeImage | null; version: number; voice?: string | null;
@@ -485,6 +496,46 @@ export const api = {
     signal?: AbortSignal): Promise<VoiceJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/voice-jobs`, {
       method: "POST", headers: tenantHeaders(tenantId), signal, json: { items, idempotency_key: crypto.randomUUID() },
+    });
+  },
+
+  listVoiceReferences(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ references: VoiceReference[] }> {
+    return jsonRequest(`${projectPath(projectId)}/voice-references`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  async uploadVoiceReference(tenantId: string, projectId: string, upload: VoiceReferenceUpload, signal?: AbortSignal):
+    Promise<VoiceReference> {
+    const form = new FormData();
+    form.set("file", upload.file, "reference.wav");
+    form.set("name", upload.name);
+    form.set("speaker_name", upload.speaker_name);
+    form.set("consent", upload.consent);
+    form.set("consent_confirmed", "true");
+    form.set("transcript", upload.transcript);
+    form.set("source", upload.source);
+    const response = await fetch(`${BASE}${projectPath(projectId)}/voice-references`, {
+      method: "POST", body: form, signal, headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) },
+    });
+    if (!response.ok) throw await parseError(response);
+    return (await response.json()) as VoiceReference;
+  },
+
+  async getVoiceReferenceAudio(tenantId: string, projectId: string, referenceId: string, signal?: AbortSignal):
+    Promise<Blob> {
+    const response = await fetch(`${BASE}${projectPath(projectId)}/voice-references/${encodeURIComponent(referenceId)}/content`,
+      { headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error", cache: "no-store" });
+    if (!response.ok) throw await parseError(response);
+    const blob = await response.blob();
+    if (blob.type !== "audio/wav") throw new ApiError("The reference could not be loaded.", 502);
+    return blob;
+  },
+
+  deleteVoiceReference(tenantId: string, projectId: string, referenceId: string, signal?: AbortSignal):
+    Promise<VoiceReference> {
+    return jsonRequest(`${projectPath(projectId)}/voice-references/${encodeURIComponent(referenceId)}`, {
+      method: "DELETE", headers: tenantHeaders(tenantId), signal,
     });
   },
 

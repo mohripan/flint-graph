@@ -90,6 +90,10 @@ class MemoryStore:
         assert hashlib.sha256(data).hexdigest() == expected_sha256
         self.objects[key] = data
 
+    async def delete_reference(self, key):
+        assert "/voice-references/" in key
+        self.objects.pop(key, None)
+
     async def get_verified(self, key, *, expected_size, expected_sha256, max_bytes):
         data = self.objects.get(key)
         if data is None or hashlib.sha256(data).hexdigest() != expected_sha256:
