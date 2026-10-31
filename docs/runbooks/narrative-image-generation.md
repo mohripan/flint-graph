@@ -102,6 +102,27 @@ were made" in the character sheet).
 - CLIP reads 77 tokens. The longest negative measures 68. A long description is
   truncated, which the job records and the sheet reports.
 
+## Content policy
+
+What is kept out of images is data, not code: the versioned TOML file
+`src/flint_graph/narrative/image_content_policy.toml` (`version = 1`).
+
+- `negative` lists tags placed first in every negative prompt: portraits, sprites,
+  expressions and backgrounds. The default is `nsfw, explicit`. Animagine XL's rating
+  tags are safe, sensitive, nsfw and explicit. Each tag costs CLIP tokens and the
+  negative is cut at 77, so a long list pushes the later fixes (hair length, the
+  cut-out background) out of reach.
+- `blocked` lists words or phrases that refuse a description, an expression name or
+  a background before any job starts (HTTP 422 naming the word). Matching ignores case
+  and extra spaces and takes whole words: `sex` does not match "Sussex". This applies
+  to the assistant's suggested pictures too, when the creator clicks Generate.
+- Edit the shipped file, or set `FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY` to your own
+  copy. The API reads it once at startup and refuses to start on a missing or malformed
+  file, so restart the API after an edit. Workers do not read it.
+- Each job still stores its exact negative prompt, so a policy change never alters
+  what an earlier job recorded. When prompt management moves to Langfuse (M35, #134–#137),
+  this file is the natural locked fallback for a labelled policy.
+
 ## Operation
 
 - One generation runs at a time. A job of four 832×1216 portraits takes about 80 s

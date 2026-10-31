@@ -48,6 +48,7 @@ from flint_graph.infrastructure.narrative_artifact_store import (
     ArtifactStoreError,
     asset_object_key,
 )
+from flint_graph.narrative.imagegen import content_policy
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}/assets", tags=["narrative"])
 Kind = Literal["character_portrait", "background", "sprite", "image", "font"]
@@ -224,6 +225,7 @@ async def create_background_job_endpoint(
             actor=actor,
             available=settings.narrative_image_generation_enabled,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
+            policy=content_policy(settings.narrative_image_content_policy),
         ),
     )
     return job_response(job, [])

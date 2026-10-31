@@ -2,8 +2,10 @@
 
 The server owns the prompt so every stored job records exactly what the model saw.
 Tags follow Animagine XL 4.0's recommended order: subject, appearance, framing,
-rating and quality. The ``safe`` rating tag and explicit-content negative prompt
-steer output; creator review before approval remains the control.
+rating and quality. The ``safe`` rating tag and the content policy steer output:
+the policy's tags lead every negative prompt, and a description with a blocked word
+is refused before a job starts. The policy is a versioned file, not code; creator
+review before approval remains the control.
 
 Animagine is trained on Danbooru tags, so a fixed phrase map turns common
 natural-language looks ("shoulder-length", "face looks like a girl") into tags it
@@ -12,8 +14,12 @@ same recorded prompt. Text it does not recognize passes through unchanged.
 """
 
 import re
+import tomllib
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 MAX_APPEARANCE = 600
 CHARACTER_TYPES = {
@@ -32,11 +38,79 @@ GUIDANCE = 5.0
 QUALITY = (
     "looking at viewer, simple background, safe, masterpiece, high score, great score, absurdres"
 )
-NEGATIVE = (
-    "nsfw, explicit, lowres, bad anatomy, bad hands, text, error, missing finger, "
+QUALITY_NEGATIVE = (
+    "lowres, bad anatomy, bad hands, text, error, missing finger, "
     "extra digits, fewer digits, cropped, worst quality, low quality, low score, "
     "bad score, average score, signature, watermark, username, blurry"
 )
+# The shipped policy; FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY points at another copy.
+DEFAULT_POLICY_PATH = Path(__file__).with_name("image_content_policy.toml")
+POLICY_VERSION = 1
+MAX_POLICY_TERMS = 200
+MAX_POLICY_TERM = 60
+
+
+def _terms(values: Sequence[object]) -> list[str]:
+    terms: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            raise ValueError("Content policy entries are strings")
+        term = " ".join(value.lower().split())
+        if any(unicodedata.category(char) == "Cc" for char in value) or "," in term:
+            raise ValueError("Content policy entries are single tags or phrases")
+        if len(term) > MAX_POLICY_TERM:
+            raise ValueError(f"Content policy entries are at most {MAX_POLICY_TERM} characters")
+        if term and term not in terms:
+            terms.append(term)
+    if len(terms) > MAX_POLICY_TERMS:
+        raise ValueError(f"A content policy list has at most {MAX_POLICY_TERMS} entries")
+    return terms
+
+
+@dataclass(frozen=True)
+class ContentPolicy:
+    """Tags that lead every negative prompt and words that refuse a description."""
+
+    negative: str
+    blocked: tuple[str, ...]
+
+    @classmethod
+    def create(cls, negative: Sequence[object], blocked: Sequence[object]) -> "ContentPolicy":
+        return cls(", ".join(_terms(negative)), tuple(_terms(blocked)))
+
+    @classmethod
+    def load(cls, path: str | Path) -> "ContentPolicy":
+        try:
+            data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+            raise ValueError(f"Cannot read the image content policy: {error}") from None
+        if set(data) != {"version", "negative", "blocked"} or data["version"] != POLICY_VERSION:
+            raise ValueError("The image content policy has version = 1, negative and blocked")
+        if not isinstance(data["negative"], list) or not isinstance(data["blocked"], list):
+            raise ValueError("The image content policy's negative and blocked are lists")
+        return cls.create(data["negative"], data["blocked"])
+
+    def check(self, text: str) -> None:
+        folded = " ".join(text.lower().split())
+        for term in self.blocked:
+            if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", folded):
+                raise ValueError(f'"{term}" is blocked in image descriptions')
+
+
+DEFAULT_POLICY = ContentPolicy.load(DEFAULT_POLICY_PATH)
+
+
+@lru_cache(maxsize=4)
+def content_policy(path: str | None) -> ContentPolicy:
+    """The configured policy, read once per path; restart the API after editing it."""
+    return DEFAULT_POLICY if path is None else ContentPolicy.load(path)
+
+
+def _negative(policy: ContentPolicy) -> str:
+    return ", ".join(part for part in (policy.negative, QUALITY_NEGATIVE) if part)
+
+
+NEGATIVE = _negative(DEFAULT_POLICY)
 # Without these, a girl-leaning word or look in the description beats "1boy".
 # CLIP reads 77 tokens; the longest negative (boy or man, short hair) measures 68.
 TYPE_NEGATIVES = {
@@ -154,8 +228,10 @@ def appearance_tags(appearance: str, character_type: str) -> list[str]:
     return tags
 
 
-def _portrait_negative(tags: list[str], character_type: str, transparent: bool) -> str:
-    parts = [NEGATIVE, TYPE_NEGATIVES[character_type]]
+def _portrait_negative(
+    tags: list[str], character_type: str, transparent: bool, policy: ContentPolicy
+) -> str:
+    parts = [_negative(policy), TYPE_NEGATIVES[character_type]]
     lengths = {tag.lower() for tag in tags}
     if lengths.intersection(SHORT_LENGTHS) and not lengths.intersection(LONG_LENGTHS):
         parts.append(LONG_HAIR_NEGATIVE)
@@ -165,7 +241,12 @@ def _portrait_negative(tags: list[str], character_type: str, transparent: bool) 
 
 
 def portrait_request(
-    appearance: str, character_type: str, framing: str, *, transparent: bool = False
+    appearance: str,
+    character_type: str,
+    framing: str,
+    *,
+    transparent: bool = False,
+    policy: ContentPolicy = DEFAULT_POLICY,
 ) -> ImageRequest:
     if character_type not in CHARACTER_TYPES or framing not in FRAMINGS:
         raise ValueError("Unknown character type or framing")
@@ -176,6 +257,7 @@ def portrait_request(
     text = clean_appearance(appearance)
     if not text:
         raise ValueError("Describe the character's appearance")
+    policy.check(text)
     framing_tags, (width, height) = FRAMINGS[framing]
     # Tags come from the raw text so line breaks still separate them.
     tags = appearance_tags(appearance, character_type)
@@ -184,7 +266,7 @@ def portrait_request(
         parts.insert(parts.index(framing_tags) + 1, CUTOUT_TAGS)
     return ImageRequest(
         prompt=", ".join(part for part in parts if part),
-        negative_prompt=_portrait_negative(tags, character_type, transparent),
+        negative_prompt=_portrait_negative(tags, character_type, transparent, policy),
         width=width,
         height=height,
         steps=STEPS,
@@ -245,7 +327,11 @@ def expression_names(expressions: list[str]) -> list[str]:
 
 
 def expression_request(
-    appearance: str, character_type: str, expressions: list[str]
+    appearance: str,
+    character_type: str,
+    expressions: list[str],
+    *,
+    policy: ContentPolicy = DEFAULT_POLICY,
 ) -> ExpressionRequest:
     """One face-inpainting prompt per expression: subject, expression, then looks."""
     if character_type not in CHARACTER_TYPES:
@@ -253,6 +339,8 @@ def expression_request(
     if len(appearance) > MAX_APPEARANCE * 2:
         raise ValueError("Appearance is too long")
     names = expression_names(expressions)
+    for text in (clean_appearance(appearance), *names):
+        policy.check(text)
     ids = tuple(expression_id(name) for name in names)
     tags = appearance_tags(clean_appearance(appearance), character_type) if appearance else []
     prompts = tuple(
@@ -270,7 +358,7 @@ def expression_request(
         )
         for name in names
     )
-    negative = _portrait_negative(tags, character_type, False) + ", expressionless"
+    negative = _portrait_negative(tags, character_type, False, policy) + ", expressionless"
     return ExpressionRequest(
         ids, prompts, negative, STEPS, EXPRESSION_GUIDANCE, EXPRESSION_STRENGTH
     )
@@ -279,19 +367,20 @@ def expression_request(
 BACKGROUND_SIZE = (1344, 768)
 BACKGROUND_QUALITY = "safe, masterpiece, high score, great score, absurdres"
 # People in a background would be fixed into every scene that uses it.
-BACKGROUND_NEGATIVE = NEGATIVE + ", 1girl, 1boy, people, person, character, crowd"
+BACKGROUND_PEOPLE_NEGATIVE = "1girl, 1boy, people, person, character, crowd"
 
 
-def background_request(description: str) -> ImageRequest:
+def background_request(description: str, *, policy: ContentPolicy = DEFAULT_POLICY) -> ImageRequest:
     if len(description) > MAX_APPEARANCE * 2:
         raise ValueError("Description is too long")
     text = clean_appearance(description)
     if not text:
         raise ValueError("Describe the place")
+    policy.check(text)
     width, height = BACKGROUND_SIZE
     return ImageRequest(
         prompt=", ".join(("no humans", "scenery", text, BACKGROUND_QUALITY)),
-        negative_prompt=BACKGROUND_NEGATIVE,
+        negative_prompt=f"{_negative(policy)}, {BACKGROUND_PEOPLE_NEGATIVE}",
         width=width,
         height=height,
         steps=STEPS,

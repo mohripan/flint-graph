@@ -363,6 +363,36 @@ async def test_portrait_jobs_are_built_server_side_idempotent_and_bounded(studio
 
 
 @pytest.mark.anyio
+async def test_the_content_policy_file_refuses_blocked_words_and_leads_negatives(
+    studio, tmp_path
+):
+    client, _, _, headers, base, *_ = studio
+    jobs = f"{base}/characters/mira/portrait-jobs"
+    nude = job_body(appearance="silver hair, Nude")
+    refused = await client.post(jobs, headers=headers, json=nude)
+    assert refused.status_code == 422 and '"nude" is blocked' in refused.json()["detail"]
+    policy = tmp_path / "policy.toml"
+    policy.write_text('version = 1\nnegative = ["sensitive"]\nblocked = ["gore"]\n', "utf-8")
+    custom = app.dependency_overrides[get_settings]().model_copy(
+        update={"narrative_image_content_policy": str(policy)}
+    )
+    app.dependency_overrides[get_settings] = lambda: custom
+    gore = await client.post(jobs, headers=headers, json=job_body(appearance="silver hair, gore"))
+    assert gore.status_code == 422 and '"gore" is blocked' in gore.json()["detail"]
+    created = await client.post(jobs, headers=headers, json=job_body())
+    assert created.status_code == 202
+    assert created.json()["negative_prompt"].startswith("sensitive, lowres, ")
+    background = await client.post(
+        f"{base}/assets/background-jobs",
+        headers=headers,
+        json={"description": "a gore-free harbor", "count": 1, "idempotency_key": str(uuid4())},
+    )
+    assert background.status_code == 422 and '"gore" is blocked' in background.json()["detail"]
+    with pytest.raises(ValueError):
+        Settings(env="test", narrative_image_content_policy=str(tmp_path / "missing.toml"))
+
+
+@pytest.mark.anyio
 async def test_disabled_generation_refuses_jobs_but_profiles_still_work(studio):
     client, _, _, headers, base, *_ = studio
     disabled = app.dependency_overrides[get_settings]().model_copy(

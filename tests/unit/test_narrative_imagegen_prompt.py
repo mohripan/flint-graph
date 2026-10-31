@@ -5,10 +5,13 @@ import pytest
 from flint_graph.narrative.imagegen import (
     CHARACTER_TYPES,
     CUTOUT_TAGS,
+    DEFAULT_POLICY,
+    DEFAULT_POLICY_PATH,
     EXPRESSION_TAGS,
     FRAMINGS,
     MAX_APPEARANCE,
     NEGATIVE,
+    ContentPolicy,
     appearance_tags,
     background_request,
     expression_request,
@@ -236,3 +239,69 @@ def test_expressions_work_without_an_appearance_description():
         "solo, close-up, face, surprised, wide-eyed, open mouth, :o, raised eyebrows, "
         "white background, safe, masterpiece, high score, great score, absurdres",
     )
+
+
+def test_blocked_terms_refuse_descriptions_before_any_job():
+    for build in (
+        lambda: portrait_request("white hair, Nude", "boy", "full_body"),
+        lambda: background_request("a lewd poster on the wall"),
+        lambda: expression_request("white hair", "boy", ["happy", "naked"]),
+    ):
+        with pytest.raises(ValueError, match="blocked"):
+            build()
+    # Whole words and phrases only, so place names and longer words still work.
+    assert background_request("Sussex harbor, sextant on a desk").prompt
+    policy = ContentPolicy.create(["nsfw"], ["Sussex", "cat ears"])
+    with pytest.raises(ValueError, match='"cat ears"'):
+        portrait_request("white hair, CAT  EARS", "girl", "portrait", policy=policy)
+    assert portrait_request("white hair, nude", "girl", "portrait", policy=policy).prompt
+
+
+def test_the_safety_negative_leads_every_negative_prompt_and_can_be_changed():
+    assert DEFAULT_POLICY.negative == "nsfw, explicit" and NEGATIVE.startswith("nsfw, explicit, ")
+    policy = ContentPolicy.create(["nsfw", "explicit", "sensitive"], [])
+    for request in (
+        portrait_request("white hair", "girl", "portrait", policy=policy),
+        background_request("harbor", policy=policy),
+    ):
+        assert request.negative_prompt.startswith("nsfw, explicit, sensitive, lowres, ")
+    expression = expression_request("white hair", "girl", ["happy"], policy=policy)
+    assert expression.negative_prompt.startswith("nsfw, explicit, sensitive, lowres, ")
+    bare = portrait_request("white hair", "girl", "portrait", policy=ContentPolicy.create([], []))
+    assert bare.negative_prompt.startswith("lowres, ")
+    assert portrait_request("white hair", "girl", "portrait").negative_prompt.startswith(NEGATIVE)
+
+
+def test_policy_lists_are_trimmed_deduplicated_and_bounded():
+    policy = ContentPolicy.create([" nsfw ", "", "explicit"], [" Nude", "nude ", "BARE  chest"])
+    assert policy.negative == "nsfw, explicit"
+    assert policy.blocked == ("nude", "bare chest")
+    for negative, blocked in (
+        (["nsfw\x00"], []),
+        (["a, b"], []),
+        ([], ["x" * 61]),
+        ([], [str(n) for n in range(201)]),
+        ([1], []),
+    ):
+        with pytest.raises(ValueError):
+            ContentPolicy.create(negative, blocked)
+
+
+def test_the_policy_is_a_versioned_file_not_code(tmp_path):
+    shipped = ContentPolicy.load(DEFAULT_POLICY_PATH)
+    assert shipped == DEFAULT_POLICY and "nude" in shipped.blocked
+    custom = tmp_path / "policy.toml"
+    custom.write_text('version = 1\nnegative = ["nsfw"]\nblocked = ["gore"]\n', encoding="utf-8")
+    assert ContentPolicy.load(custom) == ContentPolicy.create(["nsfw"], ["gore"])
+    for text in (
+        "version = 2\nnegative = []\nblocked = []\n",
+        'version = 1\nnegative = "nsfw"\nblocked = []\n',
+        "version = 1\nnegative = []\n",
+        "version = 1\nnegative = []\nblocked = []\nextra = 1\n",
+        "not toml",
+    ):
+        custom.write_text(text, encoding="utf-8")
+        with pytest.raises(ValueError):
+            ContentPolicy.load(custom)
+    with pytest.raises(ValueError):
+        ContentPolicy.load(tmp_path / "missing.toml")

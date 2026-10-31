@@ -66,6 +66,7 @@ from flint_graph.infrastructure.narrative_artifact_store import (
 )
 from flint_graph.infrastructure.narrative_imagegen import IMAGE_LIMIT, THUMBNAIL_LIMIT
 from flint_graph.narrative.font import FONT_LIMIT
+from flint_graph.narrative.imagegen import content_policy
 from flint_graph.narrative.package import PACKAGE_LIMIT
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}", tags=["narrative"])
@@ -216,6 +217,7 @@ async def create_character_portrait_job(
             available=settings.narrative_image_generation_enabled,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
             transparent=payload.transparent,
+            policy=content_policy(settings.narrative_image_content_policy),
         ),
     )
     return job_response(job, [])
@@ -269,6 +271,7 @@ async def create_character_expression_job(
             actor=actor,
             available=settings.narrative_image_generation_enabled,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
+            policy=content_policy(settings.narrative_image_content_policy),
         ),
     )
     return job_response(job, [])

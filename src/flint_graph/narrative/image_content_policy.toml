@@ -1,0 +1,35 @@
+# Content kept out of generated images: character portraits and sprites,
+# expressions and backgrounds (ADR 0039).
+#
+# This file is the default policy. Edit it, or set
+# FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY to the path of your own copy, then
+# restart the API. A file that does not match this shape stops the API at startup.
+version = 1
+
+# Tags placed first in every image's negative prompt, steering the model away from
+# them. Animagine XL's rating tags are safe, sensitive, nsfw and explicit. Each tag
+# costs CLIP tokens: the negative prompt is cut at 77, so a long list pushes the
+# later fixes (hair length, the cut-out background) out of reach.
+negative = ["nsfw", "explicit"]
+
+# Words or phrases that refuse a description, expression or background before any
+# job starts. Matching ignores case and extra spaces, and takes whole words only:
+# "sex" does not match "Sussex" or "sextant". Use an empty list to block nothing.
+blocked = [
+  "nsfw",
+  "explicit",
+  "nude",
+  "naked",
+  "nudity",
+  "topless",
+  "bottomless",
+  "nipples",
+  "genitals",
+  "sex",
+  "sexual",
+  "porn",
+  "pornographic",
+  "hentai",
+  "lewd",
+  "erotic",
+]

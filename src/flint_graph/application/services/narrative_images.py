@@ -42,6 +42,8 @@ from flint_graph.infrastructure.narrative_imagegen import (
     ModelIdentity,
 )
 from flint_graph.narrative.imagegen import (
+    DEFAULT_POLICY,
+    ContentPolicy,
     ExpressionRequest,
     ImageRequest,
     background_request,
@@ -105,6 +107,7 @@ async def create_expression_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
+    policy: ContentPolicy = DEFAULT_POLICY,
 ) -> NarrativeImageJob:
     """Queue face repaints of one base image, one per expression (ADR 0041)."""
     base = await session.scalar(
@@ -153,7 +156,7 @@ async def create_expression_job(
         character_type=character_type,
         framing="face",
         transparent=False,
-        build=lambda: expression_request(appearance, character_type, expressions),
+        build=lambda: expression_request(appearance, character_type, expressions, policy=policy),
         count=len(expressions),
         idempotency_key=idempotency_key,
         actor=actor,
@@ -180,6 +183,7 @@ async def create_portrait_job(
     available: bool,
     max_active_jobs: int,
     transparent: bool = False,
+    policy: ContentPolicy = DEFAULT_POLICY,
 ) -> NarrativeImageJob:
     """Queue candidate portraits, or cut-out stage sprites when ``transparent``."""
     return await _queue_job(
@@ -194,7 +198,7 @@ async def create_portrait_job(
         framing=framing,
         transparent=transparent,
         build=lambda: portrait_request(
-            appearance, character_type, framing, transparent=transparent
+            appearance, character_type, framing, transparent=transparent, policy=policy
         ),
         count=count,
         idempotency_key=idempotency_key,
@@ -216,6 +220,7 @@ async def create_background_job(
     actor: AuditActor,
     available: bool,
     max_active_jobs: int,
+    policy: ContentPolicy = DEFAULT_POLICY,
 ) -> NarrativeImageJob:
     return await _queue_job(
         session,
@@ -228,7 +233,7 @@ async def create_background_job(
         character_type="other",
         framing="scenery",
         transparent=False,
-        build=lambda: background_request(description),
+        build=lambda: background_request(description, policy=policy),
         count=count,
         idempotency_key=idempotency_key,
         actor=actor,

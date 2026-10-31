@@ -268,6 +268,9 @@ class Settings(BaseSettings):
     narrative_image_release_ollama_model: str | None = Field(
         default=None, min_length=1, max_length=200
     )
+    # Content kept out of generated images: a versioned TOML file of negative-prompt
+    # tags and blocked words. Unset uses the shipped narrative/image_content_policy.toml.
+    narrative_image_content_policy: str | None = Field(default=None, min_length=1, max_length=2048)
 
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
@@ -344,6 +347,16 @@ class Settings(BaseSettings):
                     "with its pinned manifest"
                 )
         return self
+
+    @field_validator("narrative_image_content_policy", mode="after")
+    @classmethod
+    def _content_policy_loads(cls, value: str | None) -> str | None:
+        # Fail at startup rather than on the first image job.
+        if value is not None:
+            from flint_graph.narrative.imagegen import ContentPolicy
+
+            ContentPolicy.load(value)
+        return value
 
     @field_validator("active_retrieval_index_version_id", mode="before")
     @classmethod
