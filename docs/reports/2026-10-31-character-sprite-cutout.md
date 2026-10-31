@@ -94,21 +94,44 @@ figure colours (mean RGB about 130–180), not the background. Seen at full size
 hair strands fade into the dark background with no outline. A few red petals drawn
 as part of the art stay, because they are separate small regions of the figure.
 
-**GPU end to end: not done.** No transparent character has been generated on the
-GPU yet. At qualification time, a `vllm/vllm-openai` container from another local
-project (`ai-chatbot-playground-vllm-1`) held 9,962 of 12,227 MiB of dedicated GPU
-memory. The child needs 8 GB free, so a job would have been refused with
-`gpu_busy`. The user chose to keep that container running, so the run was skipped.
+**GPU end to end: one transparent full-body character, passed.** The first attempt
+was blocked: a `vllm/vllm-openai` container from another local project held 9,962
+of 12,227 MiB of GPU memory, and the child needs 8 GB free. The user stopped that
+container. A batch from the portrait-prompts session then finished and its image
+child exited. With 11,944 MiB free, no Ollama model loaded and no other image
+child, I ran the opt-in live test
+`test_real_gpu_transparent_job_stores_a_cut_out_sprite` once.
 
-The opt-in live test that does this step is
-`test_real_gpu_transparent_job_stores_a_cut_out_sprite` in
-`tests/integration/test_narrative_image_workflow_live.py`. It uses the owned
-Temporal, the real child and both pinned models, and generates one full-body
-transparent character. It then checks the stored sprite's alpha with the runtime's
-Pillow: all four corners 0, more than 10 % opaque and more than 20 % clear. It saves
-the sprite and its job record under the ignored `notes/`.
+That test lives in `tests/integration/test_narrative_image_workflow_live.py`. It
+runs this branch's code: API job, outbox relay, owned Temporal workflow and
+activity, the real child on the RTX 5070 Ti with both pinned models, then the
+stored, hash-verified content. It passed in 66 s. The job ran for 58 s, covering
+child start, model load, render and cutout.
 
-To run it later:
+| Check | Result |
+| --- | --- |
+| Job | `completed`, `transparent: true`, 1 asset of kind `sprite`, status `candidate`, named `mira sprite 1` |
+| Recorded cutout | `skytnt/anime-seg@493cb60893f47441b26ec4fb9a306bce9e342982`, SHA-256 `f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99` |
+| Runtime | torch 2.11.0+cu128, diffusers 0.42.1, CUDA 12.8, onnxruntime 1.31.1, RTX 5070 Ti Laptop GPU |
+| Prompt | `…, full body, standing, white background, looking at viewer, simple background, …` |
+| Sprite | 808×1212 8-bit RGBA, 991,613 bytes, crop box `[17, 4, 825, 1216]` in the 832×1216 render, seed 2704456433 |
+| Alpha | corners 0, 0, 0, 0; maximum on all four borders 0; 49.3 % opaque, 48.7 % clear, 2 % partial; 1,175 opaque pixels in the centre column |
+| Clear pixels | mean RGB 137, 134, 142: bled figure colours, not the white background |
+
+On a checkerboard, a dark backdrop and a green backdrop, the figure is cut out with
+no box of scenery. Hair, coat, ribbons and a loose ponytail strand keep soft edges
+with no light fringe. The evidence is in ignored
+`notes/sprite-cutout-qualification/gpu/`: the sprite, its job record
+`680d4c7f40d74d91.json`, `sprite-sheet.png` and `sprite-edges.png`.
+
+One finding for the later sprite slice: the figure fills render rows 20–1208 of
+1216, leaving only 7 px below the hem. The long robe hides the feet. Nothing is cut
+off here, but `feet out of frame` in the negative prompt does not guarantee
+headroom. A stage that anchors sprites at the bottom will place the hem at the
+bottom edge. If later poses need visible feet, the prompt or canvas needs more room
+below.
+
+To run it again:
 
 1. Free at least 8 GB of dedicated GPU memory (`nvidia-smi`).
 2. Run `uv sync --frozen` in `runtimes/imagegen`.
@@ -141,6 +164,8 @@ renders twice. If Ollama's assistant model holds the GPU, also set
   refusal, library approval, failure without cutout). 55 passed on SQLite and 17
   on the owned PostgreSQL. The PostgreSQL run applies migration 0025 in a
   throwaway schema.
+- Live on the owned Temporal with the real GPU: the transparent sprite test passed
+  (1 run, 66 s; see Qualification).
 - The child's own checks (`uv run --frozen python -I -m unittest discover -s . -p
   "test_*.py"` in `runtimes/imagegen`, with `FLINT_IMAGEGEN_CUTOUT_MODEL` set): 11
   passed. They cover mask-to-alpha on synthetic arrays (thresholds,
