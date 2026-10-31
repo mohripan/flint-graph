@@ -59,11 +59,11 @@ to use the new endpoints/prompt; never restart another session's processes.
 Expressions (ADR 0041 slice A, migration 0026) repaint only the face of an approved
 base sprite as `character_expression` image jobs, so expressions swap on stage without
 jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) are
-planned. Slice C (migration 0030) draws event CGs of one character from an approved
-image of them through a pinned IP-Adapter Plus (ViT-H): Assets → CGs → Generate CGs,
+planned. Slice C (migration 0030) draws event CGs of one or two characters from an approved
+image of each through a pinned IP-Adapter Plus (ViT-H): Assets → CGs → Generate CGs,
 `scene_art` image jobs, opaque 1344×768 candidates. The image worker needs the optional
 `FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_*` pin; read `docs/reports/2026-10-31-scene-art-cgs.md`.
-Two characters per CG are not supported (identities swapped in probes).
+Two characters keep both looks in about 7 of 12 renders and are marked less reliable.
 Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
 `notes/models/`; no generation pipeline exists yet. The Studio rail is now a

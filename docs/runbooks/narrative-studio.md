@@ -141,9 +141,10 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
   rules as other library files. Choose an approved image in **Write → Stage → Event CG**
   to show it in the story. The CGs view keeps the background generator out of the way.
   The CGs group stays in the rail while it is empty.
-- **Assets → CGs → Generate CGs:** draw four event CGs of one existing character from an
-  approved image of them ("Look from": its portraits, sprites and images, the chosen
-  portrait first) and a scene description. They arrive under **To review** like other
+- **Assets → CGs → Generate CGs:** draw four event CGs of one or two existing characters
+  from an approved image of each ("Look from": their portraits, sprites and images, the
+  chosen portrait first) and a scene description. **Add a second character** puts them
+  on the right; two characters are less reliable, so check both looks before approving. They arrive under **To review** like other
   generated art. Needs the image worker with the IP-Adapter configured
   ([image generation runbook](narrative-image-generation.md)).
 - **Characters → On stage:** set a name colour (with opacity) and add expressions. Each expression

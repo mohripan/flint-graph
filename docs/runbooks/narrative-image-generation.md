@@ -100,17 +100,18 @@ with `ip_adapter_unavailable`.
   expression's sprite. The worker fetches the base hash-verified from the store,
   and the child checks the hash again.
 - Event CGs of a character (ADR 0041 slice C): Assets → CGs → "Generate CGs"
-  (`POST /v1/narrative/projects/{id}/assets/scene-art-jobs`). Choose the character
-  and one of its approved portraits, sprites or images ("Look from"), and describe
-  the scene. The child cuts the figure out of that image, centres it on white and
+  (`POST /v1/narrative/projects/{id}/assets/scene-art-jobs`). Choose a character
+  and one of its approved portraits, sprites or images ("Look from"), optionally a
+  second character (it stands on the right), and describe the scene. The child cuts the figure out of that image, centres it on white and
   passes it to IP-Adapter Plus (ViT-H) at scale 0.5 while it renders a 1344×768 scene
   from the server-built prompt (type, `solo`, the scene as written, the character's
   appearance tags, quality tags). Results are opaque candidate images named
   `{character} CG {n}`; approve one and pick it in Write → Stage → Event CG. The
   job records `reference_assets`, `ip_adapter_scale` and `ip_adapter_model`, and
   each CG's provenance names its references by SHA-256. A plain reference works
-  best: effects or busy backdrops around the figure carry into the scene. One
-  character per CG; two references swapped their looks in most renders.
+  best: effects or busy backdrops around the figure carry into the scene. With two
+  characters each reference conditions its half of the image; both looks survive in
+  about 7 renders of 12, so check both faces, hair and outfits before approving.
 
 All of them use the same worker, queue and limits. Candidates wait in the library until a
 member approves them. Uploads (PNG images, static TTF/OTF fonts) need no worker.

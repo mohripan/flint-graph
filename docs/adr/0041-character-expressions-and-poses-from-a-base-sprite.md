@@ -31,8 +31,9 @@ same body and hair, different expressions, and sometimes different poses.
 4. **No face detector.** The Studio proposes a face box from the sprite's alpha, and
    the creator adjusts it.
 5. **Scene art (slice C)** makes event CGs: a 1344×768 text-to-image scene from a
-   description, with one approved image of the character as the IP-Adapter Plus
-   (ViT-H) identity reference at scale 0.5, no cutout. The image encoder runs once
+   description, with one approved image of each of one or two characters as the
+   IP-Adapter Plus (ViT-H) identity reference at scale 0.5, no cutout. With two,
+   attention masks give the first reference the left half and the second the right. The image encoder runs once
    before SDXL moves to the GPU and is released, so the peak stays at 8.0 GiB. The
    scene description and the character's own description pass the image content
    policy. Results are candidate library images (`scene_art` jobs, asked for from
@@ -51,9 +52,10 @@ same body and hair, different expressions, and sometimes different poses.
 - Free-text expressions are tags, so the quality of uncommon ones varies; presets
   carry tested tag sets.
 - Poses and scene art keep identity only approximately (outfit details can change),
-  so every result is a reviewed candidate. Scene art shows one referenced character
-  per image: with two references masked to the left and right halves, one render in
-  seven kept both identities, because text tags apply to the whole image.
+  so every result is a reviewed candidate. Two characters keep both looks in about 7
+  renders of 12 (looks swap because the tags in one prompt bind to the wrong person),
+  so the Studio marks them as less reliable. Regional prompting fused the two into
+  one figure, and repainting each half did not raise the rate, so neither is used.
 - Migration 0026 adds the base, box, strength, expressions and per-image prompts to
   image jobs, with checks that bind them to the new purpose. Migration 0030 adds the
   scene-art references (a checked JSON list, since library assets are never deleted),

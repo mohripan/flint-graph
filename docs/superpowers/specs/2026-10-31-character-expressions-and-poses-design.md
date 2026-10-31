@@ -169,9 +169,9 @@ again. Built before slice B; report:
 [scene art CGs](../../reports/2026-10-31-scene-art-cgs.md).
 
 - **Request.** `POST /v1/narrative/projects/{project}/assets/scene-art-jobs` (and `GET`
-  to list them) with `scene` (bounded free text), `characters` (exactly one
-  `{character_id, reference_asset_id}` for now), one to four images and an idempotency
-  key. The plan put the route under one character; it sits with the background jobs
+  to list them) with `scene` (bounded free text), `characters` (one or two different
+  `{character_id, reference_asset_id}`, the first on the left), one to four images and
+  an idempotency key. The plan put the route under one character; it sits with the background jobs
   instead because Assets → CGs starts and lists CG jobs for the whole project. The
   reference is an approved, non-discarded PNG sprite, image or portrait of the project,
   64–2560 px.
@@ -203,9 +203,14 @@ again. Built before slice B; report:
 - **Studio.** Assets → CGs → **Generate CGs**: character, "Look from" (the character's
   approved portraits, sprites and images, its chosen portrait first), scene, four
   candidates. The CGs group stays in the library rail when empty.
-- **Two characters (not built).** Two references masked to the left and right halves
-  kept both identities in one render of seven; text tags leak across the halves. It
-  needs regional prompting or a second inpainting pass per character.
+- **Two characters.** Both references go into one IP-Adapter with attention masks
+  (first left, second right); the prompt counts both people and lists both looks.
+  On 12 fixed seeds 7 keep both identities; the rest swap hair and outfits. Regional
+  prompting (one attention pass per prompt, blended by half) fused the two into one
+  figure, and repainting each half with only its character's prompt and reference
+  kept the rate at 7 of 12 while doubling the time, so neither ships. The Studio
+  marks two-character CGs as less reliable. Report:
+  [scene art CGs](../../reports/2026-10-31-scene-art-cgs.md#two-characters).
 - **Not in this slice.** The story format and runtime: the player's CG layer and
   gallery are ADR 0042 (runtime 0.5.0). Identity is close, not exact, so every result
   needs review.
@@ -213,5 +218,4 @@ again. Built before slice B; report:
 ## Out of scope
 
 Face detection models (the creator adjusts the box), automatic mouth or eye
-animation, and multi-character poses and scene art (one referenced character per
-image).
+animation, multi-character poses, and scene art with more than two characters.
