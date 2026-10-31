@@ -32,6 +32,18 @@ function readSelection(key: string): string | null {
 function writeSelection(key: string, id: string | null): void {
   try { if (id) localStorage.setItem(key, id); else localStorage.removeItem(key); } catch { /* Optional convenience. */ }
 }
+// The open conversation is part of the link, so it can be shared or reported by ID.
+export function linkedThread(): string | null {
+  try { return new URLSearchParams(location.search).get("thread"); } catch { return null; }
+}
+function linkThread(projectId: string, threadId: string | null): void {
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set("project", projectId);
+    if (threadId) url.searchParams.set("thread", threadId); else url.searchParams.delete("thread");
+    history.replaceState(history.state, "", url);
+  } catch { /* The link is a convenience; the conversation still opens. */ }
+}
 function shortDate(value: string): string {
   const date = new Date(value);
   return date.toDateString() === new Date().toDateString()
@@ -72,6 +84,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const [threads, setThreads] = useState<AssistantThread[]>([]);
   const [threadsMore, setThreadsMore] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const threadRef = useRef<string | null>(null);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const [proposals, setProposals] = useState<Record<string, AssistantProposal>>({});
@@ -114,18 +127,28 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
     if (threadRef.current) cancel("turns");
     threadRef.current = id; setThreadId(id); setTurns([]); setProposals({}); setActivities({}); setConflict(null);
     cursors.current.clear(); ended.current.clear(); requested.current.clear(); stick.current = true;
-    setDrawer(false); writeSelection(selectionKey, id);
+    setDrawer(false); writeSelection(selectionKey, id); linkThread(projectId, id);
     if (id) loadTurns(id);
-  }, [cancel, loadTurns, selectionKey]);
+  }, [cancel, loadTurns, selectionKey, projectId]);
   const loadThreads = useCallback((older?: string) => {
     void run("threads", signal => api.listAssistantThreads(tenantId, projectId, { beforeId: older, signal }), rows => {
       const own = rows.filter(row => row.project_id === projectId);
       setThreads(current => older ? [...current, ...own.filter(row => !current.some(item => item.id === row.id))] : own);
       setThreadsMore(rows.length === 25);
       if (older || threadRef.current) return;
-      const stored = readSelection(selectionKey);
+      // A conversation in the link wins, even one older than the first page of the list.
+      const linked = linkedThread();
+      if (linked && !own.some(row => row.id === linked)) {
+        void run("linked", signal => api.getAssistantThread(tenantId, projectId, linked, signal), row => {
+          if (row.project_id !== projectId || threadRef.current) return;
+          setThreads(current => current.some(item => item.id === row.id) ? current : [row, ...current]);
+          choose(row.id);
+        }, () => { if (!threadRef.current && own[0]) choose(own[0].id); });
+        return;
+      }
+      const stored = linked ?? readSelection(selectionKey);
       const initial = own.find(row => row.id === stored) ?? own[0];
-      if (initial) choose(initial.id);
+      if (initial) choose(initial.id); else linkThread(projectId, null);
     }, failure => setError(releaseErrorMessage(failure)));
   }, [run, tenantId, projectId, selectionKey, choose]);
   useEffect(() => { loadThreads(); }, [loadThreads]);
@@ -214,7 +237,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
     }, ({ id, turn }) => {
       intent.current = null; threadIntent.current = null; setText("");
       if (threadRef.current !== id) {
-        threadRef.current = id; setThreadId(id); writeSelection(selectionKey, id);
+        threadRef.current = id; setThreadId(id); writeSelection(selectionKey, id); linkThread(projectId, id);
         setThreads(current => current.some(row => row.id === id) ? current
           : [{ id, tenant_id: tenantId, project_id: projectId, title: threadTitle(message), archived_at: null,
             created_at: turn.created_at, updated_at: turn.created_at }, ...current]);
@@ -294,6 +317,12 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
         <button type="button" className="studio-secondary assistant-drawer-open" aria-expanded={drawer}
           onClick={() => setDrawer(true)}>Conversations</button>
         <h2>{thread?.title ?? "New chat"}</h2>
+        {threadId && <button type="button" className="assistant-thread-id" title={`Conversation ${threadId} · copy`}
+          aria-label="Copy this conversation's ID" onClick={() => {
+            void navigator.clipboard?.writeText(threadId).then(() => {
+              setCopied(true); window.setTimeout(() => setCopied(false), 1500);
+            }, () => undefined);
+          }}><code>{copied ? "Copied" : threadId.slice(0, 8)}</code></button>}
         <span className="studio-hint">Revision {revision.revision_number}{dirty ? " · unsaved edits" : ""}</span>
       </header>
       <div className="studio-visually-hidden" role="status">{announced ?? ""}</div>

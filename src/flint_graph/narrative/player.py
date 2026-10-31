@@ -255,7 +255,9 @@ class Player:
         seen: set[str] = set()
         order: list[int] = []
         for item in characters:
-            fields(item, {"id", "sprite", "position"}, set(), "save.stage")
+            fields(item, {"id", "sprite", "position"}, {"x"}, "save.stage")
+            if "x" in item and (type(item["x"]) is not int or not 0 <= item["x"] <= 100):
+                raise PackageError("invalid_save")
             character = reference(item["id"], self._story["characters"], "save.stage")
             reference(
                 item["sprite"],
@@ -319,6 +321,8 @@ class Player:
                 "id": entry["character"],
                 "sprite": entry["sprite"],
                 "position": entry["position"],
+                # An explicit horizontal place belongs to this placement only.
+                **({"x": entry["x"]} if "x" in entry else {}),
             }
         ordered = sorted(present.values(), key=lambda item: POSITIONS.index(item["position"]))
         return {"background": background, "characters": ordered}

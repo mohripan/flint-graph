@@ -1,9 +1,14 @@
 import { useState } from "react";
-import { AssetThumb, SPRITE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
+import type { NarrativeImage } from "../lib/api";
+import { useNarrativeImage } from "./characterImages";
+import { AssetThumb, SPRITE_KINDS, firstBackground, libraryAsset, useApprovedAssets } from "./libraryAssets";
 import { UpgradeNotice } from "./StageEditor";
 import { ExpressionStudio } from "./ExpressionStudio";
-import { bindAsset, expressionId, removeSprite, setCharacterColor, setSprite, spriteUses } from "./stageModel";
-import type { StoryDraft } from "./types";
+import {
+  DEFAULT_SCALE, bindAsset, expressionId, figureBox, joinColor, removeSprite, setCharacterColor, setCharacterFraming,
+  setSprite, splitColor, spriteUses,
+} from "./stageModel";
+import type { CharacterFraming, StoryDraft } from "./types";
 
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not change this character.";
 
@@ -40,11 +45,18 @@ export function CharacterSprites({ id, story, tenantId, projectId, readOnly, onC
     <fieldset className="studio-form" disabled={readOnly}>
       <div className="studio-look-color">
         <span className="studio-stage-label">Name colour</span>
-        <input type="color" aria-label="Name colour" value={character.color ?? "#d5ae68"}
-          onChange={event => run(() => setCharacterColor(story, id, event.target.value), `character:${id}:color`)} />
+        <input type="color" aria-label="Name colour" value={splitColor(character.color ?? "#d5ae68").rgb}
+          onChange={event => run(() => setCharacterColor(story, id,
+            joinColor(event.target.value, splitColor(character.color ?? "#d5ae68").alpha)), `character:${id}:color`)} />
+        <input type="range" min={0} max={100} aria-label="Name colour opacity"
+          value={Math.round(splitColor(character.color ?? "#d5ae68").alpha / 2.55)}
+          onChange={event => run(() => setCharacterColor(story, id,
+            joinColor(splitColor(character.color ?? "#d5ae68").rgb, Number(event.target.value) * 2.55)), `character:${id}:color`)} />
         <code>{character.color ?? "theme"}</code>
         {character.color && <button type="button" className="studio-link" onClick={() => run(() => setCharacterColor(story, id, null))}>Use the theme</button>}
       </div>
+      <Framing id={id} story={story} tenantId={tenantId} projectId={projectId} assets={assets}
+        onChange={(framing, group) => run(() => setCharacterFraming(story, id, framing), group)} />
       <p className="studio-hint">Expressions are the sprites this character shows on stage. Lines can switch between them.</p>
       {!sprites.length && <p className="studio-empty">No expressions yet. Add one to place this character on stage.</p>}
       <ul className="studio-sprite-list">
@@ -79,4 +91,40 @@ export function CharacterSprites({ id, story, tenantId, projectId, readOnly, onC
     </fieldset>
     <ExpressionStudio id={id} story={story} tenantId={tenantId} projectId={projectId} readOnly={readOnly} onChange={onChange} onError={onError} />
   </section>;
+}
+
+// How large the character appears on stage and where their head sits. Full-body sprites
+// drawn taller than the screen are cut off below it, as visual novels usually show them.
+function Framing({ id, story, tenantId, projectId, assets, onChange }: {
+  id: string; story: StoryDraft; tenantId: string; projectId: string; assets: NarrativeImage[] | null;
+  onChange: (framing: CharacterFraming | null, group?: string) => void;
+}) {
+  const character = story.characters[id];
+  const framing = character.stage;
+  const scale = framing?.scale ?? DEFAULT_SCALE;
+  const top = framing?.top ?? Math.max(0, 100 - scale);
+  const spriteKey = Object.values(character.sprites ?? {})[0];
+  const sprite = libraryAsset(assets, spriteKey ? story.assets[spriteKey]?.sha256 : undefined);
+  const spriteUrl = useNarrativeImage(tenantId, projectId, sprite?.id ?? null, "image");
+  const backdrop = useNarrativeImage(tenantId, projectId, libraryAsset(assets, firstBackground(story))?.id ?? null, "image");
+  const box = sprite?.width && sprite.height ? figureBox(sprite.width, sprite.height, framing, 50) : null;
+  return <div className="studio-framing">
+    <div className="studio-framing-controls">
+      <span className="studio-stage-label">Size on stage</span>
+      <label className="studio-stage-place"><span>Height {framing ? `${scale}%` : "fits the slot"}</span>
+        <input type="range" min={40} max={300} value={scale} aria-label="Size on stage"
+          onChange={event => onChange({ ...framing, scale: Number(event.target.value) }, `character:${id}:framing`)} /></label>
+      <label className="studio-stage-place"><span>Top edge {top}%</span>
+        <input type="range" min={-50} max={100} value={top} aria-label="Top edge"
+          onChange={event => onChange({ ...framing, scale, top: Number(event.target.value) }, `character:${id}:framing`)} /></label>
+      <p className="studio-hint">Above 100% the figure continues below the screen, for example from the thighs up at about 160%.</p>
+      {framing && <button type="button" className="studio-link" onClick={() => onChange(null)}>Fit to the slot</button>}
+    </div>
+    <div className="studio-framing-preview" role="img" aria-label="Preview of the character on stage"
+      style={backdrop ? { backgroundImage: `url(${backdrop})` } : undefined}>
+      {spriteUrl && box ? <img src={spriteUrl} alt="" style={{ left: `${box.left}%`, top: `${box.top}%`,
+        width: `${box.width}%`, height: `${box.height}%` }} />
+        : <span>Add an expression to preview the framing.</span>}
+    </div>
+  </div>;
 }

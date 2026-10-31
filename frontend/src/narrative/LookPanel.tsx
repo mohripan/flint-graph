@@ -2,9 +2,9 @@ import { useContext, useState } from "react";
 import type { CSSProperties } from "react";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { Field } from "./FormFields";
-import { libraryAsset, useApprovedAssets, useAssetFont } from "./libraryAssets";
+import { firstBackground, libraryAsset, useApprovedAssets, useAssetFont } from "./libraryAssets";
 import { UpgradeNotice } from "./StageEditor";
-import { bindAsset, inkOn, joinColor, resetTheme, resolvedTheme, setThemeValue, splitColor } from "./stageModel";
+import { SLOT_CENTERS, bindAsset, figureBox, inkOn, joinColor, resetTheme, resolvedTheme, setThemeValue, splitColor } from "./stageModel";
 import type { ResolvedTheme } from "./stageModel";
 import type { StoryDraft } from "./types";
 
@@ -61,11 +61,11 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
         <h3>Name box</h3>
         <label className="studio-check"><input type="checkbox" checked={theme.name.show}
           onChange={event => set("name", "show", event.target.checked)} /><span>Show the speaker's name</span></label>
-        {color("name", "background", "Background")}
+        {color("name", "background", "Background", true)}
         {color("name", "text", "Text")}
         <p className="studio-hint">A character with its own colour (Characters) fills the name box with it.</p>
         <h3>Choices</h3>
-        {color("choices", "background", "Background")}
+        {color("choices", "background", "Background", true)}
         {color("choices", "text", "Text")}
         {color("choices", "border", "Border")}
         <h3>Font</h3>
@@ -99,13 +99,6 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
   </section>;
 }
 
-function firstBackground(story: StoryDraft): string | undefined {
-  for (const node of Object.values(story.nodes)) {
-    if (node.type === "stage" && typeof node.background === "string") return story.assets[node.background]?.sha256;
-  }
-  return undefined;
-}
-
 function StagePreview({ story, theme, screen, tenantId, projectId, font, background }: {
   story: StoryDraft; theme: ResolvedTheme; screen: "line" | "choice"; tenantId: string; projectId: string;
   font: string | null | false; background: string | null;
@@ -114,8 +107,10 @@ function StagePreview({ story, theme, screen, tenantId, projectId, font, backgro
   const backdrop = useNarrativeImage(tenantId, projectId, background, "image");
   const cast = Object.entries(story.characters).find(([, character]) => Object.keys(character.sprites ?? {}).length);
   const spriteKey = cast ? Object.values(cast[1].sprites ?? {})[0] : undefined;
-  const sprite = useNarrativeImage(tenantId, projectId,
-    libraryAsset(assets, spriteKey ? story.assets[spriteKey]?.sha256 : undefined)?.id ?? null, "image");
+  const spriteAsset = libraryAsset(assets, spriteKey ? story.assets[spriteKey]?.sha256 : undefined);
+  const sprite = useNarrativeImage(tenantId, projectId, spriteAsset?.id ?? null, "image");
+  const figure = spriteAsset?.width && spriteAsset.height
+    ? figureBox(spriteAsset.width, spriteAsset.height, cast?.[1].stage, SLOT_CENTERS.left) : null;
   const speaker = cast?.[1] ?? Object.values(story.characters)[0];
   const box = theme.textbox, named = theme.name;
   const fill = speaker?.color ?? named.background;
@@ -132,7 +127,8 @@ function StagePreview({ story, theme, screen, tenantId, projectId, font, backgro
   const choiceTop = box.position === "bottom" ? "40%" : box.position === "top" ? "66%" : "82%";
   return <div className="studio-look-stage" style={backdrop ? { backgroundImage: `url(${backdrop})` } : undefined}
     aria-label="Preview of the game screen" role="img">
-    {sprite && <img className="studio-look-sprite" src={sprite} alt="" />}
+    {sprite && figure && <img className="studio-look-sprite" src={sprite} alt="" style={{ left: `${figure.left}%`,
+      top: `${figure.top}%`, width: `${figure.width}%`, height: `${figure.height}%` }} />}
     {screen === "choice" && <div className="studio-look-choices" style={{ top: choiceTop }}>
       {["Walk to the end of the pier", "Wait for the bell"].map(label => <span key={label} style={{
         background: theme.choices.background, color: theme.choices.text, border: `${scaled(2)} solid ${theme.choices.border}`,

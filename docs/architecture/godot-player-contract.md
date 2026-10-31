@@ -1,6 +1,6 @@
 # Godot authored player
 
-M30 / #120, trusted runtime **0.3.0** (0.2.0 plus story format 2, ADR 0040), qualified with Godot
+M30 / #120, trusted runtime **0.4.0** (story format 2 with stage framing, ADR 0040), qualified with Godot
 `4.7.2.stable.official.ed1daf0bf` on Windows x86-64. The exported source runs
 without the backend, a model, credentials or an account. The compiler supplies a
 strictly validated immutable package; arbitrary creator scripts are not inputs.
@@ -50,6 +50,13 @@ colours; Save, Load and Restart sit at the top right; end and fault screens offe
 Play again. Clicking the stage or text box, Enter or Space advance a line. A
 creator font loads as a `FontFile` from its verified package bytes, with Lora as
 fallback; text stays plain (BBCode off). Only on-screen images stay decoded.
+
+Runtime 0.4.0 adds framing. A character's optional `stage` framing sets the drawn height as
+% of the screen (40–300) and the top edge as % of its height (−50–100, default
+`max(0, 100 − scale)`). Taller figures continue below the screen, which clips them;
+without framing a sprite fits its slot as before. A placement's optional `x` (0–100)
+is its horizontal centre and is part of the stage state and saves; the slot still
+decides who replaces whom.
 
 ## Local saves and stale input
 

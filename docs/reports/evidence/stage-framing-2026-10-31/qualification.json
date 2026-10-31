@@ -1,0 +1,111 @@
+{
+  "schema_version": "1",
+  "date": "2026-10-31",
+  "browser": "headless Edge 156 over the DevTools protocol, 1366x900",
+  "studio_and_playtest": [
+    {
+      "name": "framing Quen",
+      "label": [
+        "Height 165%",
+        "Top edge 3%"
+      ],
+      "img": {
+        "left": "16.8584%",
+        "top": "3%",
+        "height": "165%"
+      }
+    },
+    {
+      "name": "framing Mira",
+      "label": [
+        "Height 150%",
+        "Top edge 6%"
+      ],
+      "img": {
+        "left": "35.6795%",
+        "top": "6%",
+        "height": "150%"
+      }
+    },
+    {
+      "name": "stage rows",
+      "placed": [
+        [
+          "quen",
+          "neutral",
+          "left"
+        ],
+        [
+          "mira",
+          "neutral",
+          "right"
+        ]
+      ]
+    },
+    {
+      "name": "place",
+      "labels": [
+        "Place 20%",
+        "Place 72%"
+      ]
+    },
+    {
+      "name": "saved",
+      "notice": "Saved revision 3.",
+      "diagnostics": []
+    },
+    {
+      "name": "playtest",
+      "node": "l1",
+      "viewport": {
+        "height": 729,
+        "width": 1272
+      },
+      "figures": [
+        {
+          "height": 1202.84997558594,
+          "id": "quen",
+          "loaded": true,
+          "width": 859.031127929688,
+          "x": -175.115570068359,
+          "y": 21.8700008392334
+        },
+        {
+          "height": 1093.5,
+          "id": "mira",
+          "loaded": true,
+          "width": 289.644653320312,
+          "x": 771.017700195312,
+          "y": 43.7400016784668
+        }
+      ],
+      "stage": {
+        "background": "harbor_fog",
+        "characters": [
+          {
+            "id": "quen",
+            "position": "left",
+            "sprite": "neutral"
+          },
+          {
+            "id": "mira",
+            "position": "right",
+            "sprite": "neutral",
+            "x": 72
+          }
+        ]
+      }
+    }
+  ],
+  "release": {
+    "runtime_version": "0.4.0",
+    "status": "completed",
+    "artifact_bytes": {
+      "source": 5063053,
+      "web": 15314922,
+      "manifest": 935
+    },
+    "builder_image": "sha256:0c54c0a7052a0a3d473e6582f33489e2931c850e0bd89703ceddcf44362edbf3",
+    "toolchain_sha256": "54e727112ec4eaae3404b5d1dae1bb41384be043c56d18e571881137ae4c4ea1"
+  }
+}

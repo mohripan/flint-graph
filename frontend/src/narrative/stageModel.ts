@@ -1,7 +1,7 @@
 // Editor operations for story format 2 (ADR 0040): library assets bound into the story,
 // the theme, a scene's opening stage step, line expressions and character sprites.
 // Everything edits the same story nodes the runtimes play; the server validates saves.
-import type { StagePosition, StageShow, StoryDraft, StoryNode, StoryTheme } from "./types";
+import type { CharacterFraming, StagePosition, StageShow, StoryDraft, StoryNode, StoryTheme } from "./types";
 
 type StageNode = Extract<StoryNode, { type: "stage" }>;
 export const POSITIONS: StagePosition[] = ["left", "center", "right"];
@@ -312,6 +312,44 @@ export function setCharacterColor(story: StoryDraft, character: string, color: s
   if (!current) throw new Error("Character no longer exists.");
   const { color: _, ...rest } = current;
   return { ...story, characters: { ...story.characters, [character]: color ? { ...rest, color: color.toLowerCase() } : rest } };
+}
+
+// ---- Framing on stage (runtime 0.4.0) -------------------------------------------------------
+
+export const SLOT_CENTERS: Record<StagePosition, number> = { left: 20, center: 50, right: 80 };
+export const DEFAULT_SCALE = 92;
+
+/** A character's size and top on stage; null restores the fit-to-slot default. */
+export function setCharacterFraming(story: StoryDraft, character: string, framing: CharacterFraming | null): StoryDraft {
+  const current = story.characters[character];
+  if (!current) throw new Error("Character no longer exists.");
+  const { stage: _, ...rest } = current;
+  if (framing?.scale !== undefined && (!Number.isInteger(framing.scale) || framing.scale < 40 || framing.scale > 300)) {
+    throw new Error("Size on stage must be between 40% and 300%.");
+  }
+  if (framing?.top !== undefined && (!Number.isInteger(framing.top) || framing.top < -50 || framing.top > 100)) {
+    throw new Error("The top edge must be between -50% and 100%.");
+  }
+  const kept = framing ? Object.fromEntries(Object.entries(framing).filter(([, value]) => value !== undefined)) : {};
+  return { ...story, characters: { ...story.characters,
+    [character]: Object.keys(kept).length ? { ...rest, stage: kept } : rest } };
+}
+
+/** Where a sprite is drawn, in % of a 16:9 stage, by the same rules as the Godot stage view. */
+export function figureBox(width: number, height: number, framing: CharacterFraming | undefined, center: number):
+  { left: number; top: number; width: number; height: number } {
+  const stageWidth = 1280, stageHeight = 720;
+  let drawnWidth: number, drawnHeight: number, top: number;
+  if (!framing || (framing.scale === undefined && framing.top === undefined)) {
+    const factor = Math.min(stageWidth * 0.36 / width, stageHeight * 0.92 / height);
+    drawnWidth = width * factor; drawnHeight = height * factor; top = stageHeight - drawnHeight;
+  } else {
+    const scale = framing.scale ?? DEFAULT_SCALE;
+    drawnHeight = stageHeight * scale / 100; drawnWidth = width * drawnHeight / height;
+    top = stageHeight * (framing.top ?? Math.max(0, 100 - scale)) / 100;
+  }
+  return { left: (center / 100 * stageWidth - drawnWidth / 2) / stageWidth * 100, top: top / stageHeight * 100,
+    width: drawnWidth / stageWidth * 100, height: drawnHeight / stageHeight * 100 };
 }
 
 /** Expression IDs a creator types, made valid and unique for the character. */

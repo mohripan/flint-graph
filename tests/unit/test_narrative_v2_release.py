@@ -139,7 +139,7 @@ def test_v2_export_ships_fonts_and_images_with_keep_remaps(tmp_path):
     presets = (game / "export_presets.cfg").read_text()
     assert "content/assets/*.ttf" in presets and "content/assets/*.otf" in presets
     manifest = json.loads((game / "build-manifest.json").read_bytes())
-    assert manifest["runtime_version"] == "0.3.0"
+    assert manifest["runtime_version"] == "0.4.0"
     assert {"content/assets/dusk.png", "content/assets/type.ttf.import"} <= set(manifest["files"])
     with pytest.raises(Exception, match="asset_unavailable"):
         export_godot(referencing(), tmp_path / "unattached")
@@ -159,9 +159,9 @@ def test_wheels_bundle_every_runtime_template_file():
 
 def test_runtime_version_is_pinned_consistently():
     toolchain = json.loads((ROOT / "runtimes/godot/toolchain.json").read_bytes())
-    assert toolchain["runtime_version"] == "0.3.0"
-    assert BuildIdentity("sha256:" + "a" * 64, "b" * 64).runtime_version == "0.3.0"
-    assert "runtime 0.3.0" in (ROOT / "runtimes/godot/README.txt").read_text()
+    assert toolchain["runtime_version"] == "0.4.0"
+    assert BuildIdentity("sha256:" + "a" * 64, "b" * 64).runtime_version == "0.4.0"
+    assert "runtime 0.4.0" in (ROOT / "runtimes/godot/README.txt").read_text()
 
 
 def child_fixture(tmp_path):
@@ -235,7 +235,7 @@ def test_child_refuses_the_previous_runtime_version(tmp_path):
     source, scratch, trusted, command = child_fixture(tmp_path)
     path = source / "build-manifest.json"
     manifest = json.loads(path.read_bytes())
-    manifest["runtime_version"] = "0.2.0"
+    manifest["runtime_version"] = "0.3.0"
     path.write_text(json.dumps(manifest), encoding="utf-8")
     assert run_build(source, scratch, trusted, engine_command=command)["code"] == "input_integrity"
 

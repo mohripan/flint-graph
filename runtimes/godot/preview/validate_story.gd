@@ -11,7 +11,6 @@ static var _ids := RegEx.create_from_string("^[a-z][a-z0-9_-]{0,63}\\z")
 static var _languages := RegEx.create_from_string("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*\\z")
 static var _hashes := RegEx.create_from_string("^[0-9a-f]{64}\\z")
 static var _colors := RegEx.create_from_string("^#[0-9a-f]{6}([0-9a-f]{2})?\\z")
-static var _opaque := RegEx.create_from_string("^#[0-9a-f]{6}\\z")
 
 static func _fields(value: Variant, required: Array, optional: Array = []) -> bool:
 	if not value is Dictionary: return false
@@ -139,7 +138,8 @@ static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary,
 		var shown := {}
 		var taken := {}
 		for entry: Variant in node["show"]:
-			if not _fields(entry, ["character", "sprite", "position"]) or not _ref(entry["character"], characters): return false
+			if not _fields(entry, ["character", "sprite", "position"], ["x"]) or not _ref(entry["character"], characters): return false
+			if entry.has("x") and not _within(entry["x"], 0, 100): return false
 			if not _ref(entry["sprite"], characters[entry["character"]].get("sprites", {})): return false
 			if not entry["position"] is String or not entry["position"] in POSITIONS: return false
 			if shown.has(entry["character"]) or hidden.has(entry["character"]) or taken.has(entry["position"]): return false
@@ -162,8 +162,13 @@ static func _story(story: Variant) -> bool:
 	var nodes: Dictionary = story["nodes"]
 	if not _ref(story["entry"], nodes): return false
 	for character: Variant in characters.values():
-		if not _fields(character, ["name"], ["color", "sprites"] if v2 else []) or not _text(character["name"]): return false
-		if character.has("color") and not _color(character["color"], _opaque): return false
+		if not _fields(character, ["name"], ["color", "sprites", "stage"] if v2 else []) or not _text(character["name"]): return false
+		if character.has("stage"):
+			var framing: Variant = character["stage"]
+			if not _fields(framing, [], ["scale", "top"]): return false
+			if framing.has("scale") and not _within(framing["scale"], 40, 300): return false
+			if framing.has("top") and not _within(framing["top"], -50, 100): return false
+		if character.has("color") and not _color(character["color"], _colors): return false
 		if character.has("sprites"):
 			if not _map(character["sprites"], 32): return false
 			for sprite: Variant in character["sprites"].values():

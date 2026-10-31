@@ -105,6 +105,8 @@ def test_complete_v2_story_validates_and_minimal_theme_fields_are_optional():
         lambda s: s.update(theme={"textbox": {"position": "top"}, "font": {"asset": None}})
     )
     assert validate_story(partial) == ()
+    translucent = changed(lambda s: s["characters"]["mira"].update(color="#d5ae68cc"))
+    assert validate_story(translucent) == ()
     no_sprites = changed(lambda s: s["characters"].update(oren={"name": "Oren"}))
     with pytest.raises(PackageError):
         validate_story(no_sprites)  # s1 shows oren with a sprite he no longer has

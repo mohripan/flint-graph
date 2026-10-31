@@ -134,6 +134,7 @@ func _build() -> void:
 	_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_background)
 	_figures = Control.new()
+	_figures.clip_contents = true  # Framed figures continue below the screen edge.
 	_figures.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_figures.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_figures)
@@ -224,6 +225,7 @@ func _render() -> void:
 			_sprites[id] = figure
 		_sprites[id].texture = _texture(asset)
 		_sprites[id].set_meta("position", item["position"])
+		_sprites[id].set_meta("x", item.get("x"))
 		shown[id] = true
 	for id: String in _sprites.keys():
 		if not shown.has(id):
@@ -344,7 +346,9 @@ func _layout() -> void:
 	_choices.offset_top = 0
 	_choices.offset_bottom = 0
 	_choices.grow_vertical = Control.GROW_DIRECTION_BOTH
-	# Characters keep their aspect, stand on the bottom edge and fill most of the height.
+	# Characters keep their aspect. Without framing they stand on the bottom edge and fill
+	# most of the height within their slot; a character's framing (runtime 0.4.0) sets the
+	# drawn height and the top edge instead, so tall figures are cut off below the screen.
 	var slot_width := size.x * 0.36
 	var slot_height := size.y * 0.92
 	for id: String in _sprites:
@@ -354,10 +358,19 @@ func _layout() -> void:
 			figure.size = Vector2.ZERO
 			continue
 		var natural := Vector2(texture.get_width(), texture.get_height())
-		var factor := minf(slot_width / natural.x, slot_height / natural.y)
-		var drawn := natural * factor
-		var center: float = SLOTS[figure.get_meta("position")] * size.x
-		figure.position = Vector2(center - drawn.x / 2.0, size.y - drawn.y)
+		var framing: Dictionary = _source["characters"][id].get("stage", {})
+		var drawn: Vector2
+		var top: float
+		if framing.is_empty():
+			drawn = natural * minf(slot_width / natural.x, slot_height / natural.y)
+			top = size.y - drawn.y
+		else:
+			var scale_percent: int = framing.get("scale", 92)
+			drawn = natural * (size.y * scale_percent / 100.0 / natural.y)
+			top = size.y * framing.get("top", maxi(0, 100 - scale_percent)) / 100.0
+		var place: Variant = figure.get_meta("x", null)  # set_meta(null) removes the key.
+		var center: float = (place / 100.0 if place != null else SLOTS[figure.get_meta("position")]) * size.x
+		figure.position = Vector2(center - drawn.x / 2.0, top)
 		figure.size = drawn
 	_publish_qa.call_deferred()
 

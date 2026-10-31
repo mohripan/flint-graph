@@ -134,3 +134,25 @@ test("speakers, expressions and sprites stay consistent", () => {
   assert.equal(value.characters.mira.color, "#d5ae68");
   assert.equal("color" in stage.setCharacterColor(value, "mira", null).characters.mira, false);
 });
+
+test("framing mirrors the runtime: fit to the slot by default, or sized from the top and cut off below", () => {
+  // A 1:2 sprite fits 92% of the height within 36% of the width, standing on the bottom.
+  const fit = stage.figureBox(300, 600, undefined, 20);
+  assert.ok(Math.abs(fit.height - 92) < 1e-9 && Math.abs(fit.top - 8) < 1e-9);
+  assert.ok(Math.abs(fit.left + fit.width / 2 - 20) < 1e-9);
+  // 160% tall from 4% down: the figure continues 64% below the screen.
+  const framed = stage.figureBox(300, 600, { scale: 160, top: 4 }, 30);
+  assert.equal(framed.height, 160);
+  assert.equal(framed.top, 4);
+  assert.ok(Math.abs(framed.width - (720 * 1.6 / 2) / 1280 * 100) < 1e-9);
+  assert.ok(Math.abs(framed.left + framed.width / 2 - 30) < 1e-9);
+  assert.equal(stage.figureBox(300, 600, { scale: 150 }, 50).top, 0, "large figures default to the top edge");
+  assert.equal(stage.figureBox(300, 600, { scale: 80 }, 50).top, 20, "small figures default to standing");
+  let value = stage.setCharacterFraming(story(), "mira", { scale: 160, top: undefined });
+  assert.deepEqual(value.characters.mira.stage, { scale: 160 });
+  value = stage.setCharacterFraming(value, "mira", null);
+  assert.equal("stage" in value.characters.mira, false);
+  assert.throws(() => stage.setCharacterFraming(story(), "mira", { scale: 301 }));
+  assert.throws(() => stage.setCharacterFraming(story(), "mira", { top: 12.5 }));
+  assert.deepEqual(stage.SLOT_CENTERS, { left: 20, center: 50, right: 80 });
+});

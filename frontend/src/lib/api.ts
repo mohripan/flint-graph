@@ -513,6 +513,13 @@ export const api = {
     });
   },
 
+  getAssistantThread(tenantId: string, projectId: string, threadId: string,
+    signal?: AbortSignal): Promise<AssistantThread> {
+    return jsonRequest(`${assistantPath(projectId)}/threads/${encodeURIComponent(threadId)}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
   createAssistantThread(tenantId: string, projectId: string, title: string, key: string,
     signal?: AbortSignal): Promise<AssistantThread> {
     return jsonRequest(`${assistantPath(projectId)}/threads`, { method: "POST",
