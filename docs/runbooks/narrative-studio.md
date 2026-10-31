@@ -103,7 +103,8 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
 - **Lines:** when the speaker has expressions, an expression picker sits under the
   speaker; it changes their sprite from that line on.
 - **Look:** text box position, width, colours and corner radius; the name box;
-  choice colours; and the font (built-in Lora or an uploaded static TTF/OTF) and its
+  choice colours (text box, name box and choice backgrounds have an opacity slider);
+  and the font (built-in Lora or an uploaded static TTF/OTF) and its
   size. The preview is drawn to scale with the runtime's rules. **Reset to defaults**
   removes the theme.
 
