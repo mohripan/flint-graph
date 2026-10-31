@@ -1,7 +1,7 @@
 # ADR 0041: Character expressions and poses from a base sprite
 
-Date: 2026-10-31. Status: accepted. Slice A (expressions) is implemented; slice B
-(poses) is planned. Design: [expressions and poses](../superpowers/specs/2026-10-31-character-expressions-and-poses-design.md).
+Date: 2026-10-31. Status: accepted. Slice A (expressions) is implemented; slices B
+(poses) and C (scene art) are planned. Design: [expressions and poses](../superpowers/specs/2026-10-31-character-expressions-and-poses-design.md).
 
 ## Context
 
@@ -30,6 +30,12 @@ same body and hair, different expressions, and sometimes different poses.
    the others.
 4. **No face detector.** The Studio proposes a face box from the sprite's alpha, and
    the creator adjusts it.
+5. **Scene art (slice C, after B)** makes event CGs: a 1344×768 text-to-image scene
+   from a description, with one approved image of the character as the IP-Adapter
+   identity reference (the same pinned models as poses), no cutout. The scene
+   description passes the image content policy like every other description. Results are
+   candidate library images (`scene_art` jobs) for the CG layer that the player adds
+   separately; scene art does not change the story format or runtime.
 
 ## Consequences
 
@@ -41,5 +47,8 @@ same body and hair, different expressions, and sometimes different poses.
   surprised.
 - Free-text expressions are tags, so the quality of uncommon ones varies; presets
   carry tested tag sets.
+- Poses and scene art keep identity only approximately (outfit details can change),
+  so every result is a reviewed candidate. Scene art shows one referenced character
+  per image.
 - Migration 0026 adds the base, box, strength, expressions and per-image prompts to
   image jobs, with checks that bind them to the new purpose.

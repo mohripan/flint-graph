@@ -13,6 +13,9 @@ one approved base sprite instead:
 - **Expressions (slice A):** repaint only the face; everything else stays identical.
 - **Poses (slice B):** redraw the figure in a new pose, keeping identity through the
   base image.
+- **Scene art (slice C):** a full 16:9 event illustration of the character in a
+  described scene, keeping identity through the same reference, for the CG layer
+  another branch adds to the player.
 
 ## Feasibility (2026-10-31, RTX 12 GB, Animagine XL 4.0)
 
@@ -157,7 +160,48 @@ seeds.
 - **Pins.** Model manifests are pinned like the others: one directory and manifest
   SHA-256 per model, and the job records each model's identity.
 
+## Slice C: scene art (planned, after B)
+
+The user asked for event CGs on 2026-10-31: a full illustration of an existing
+character in a scene, for example Quen Aldwinia from the "Stage & theme demo" project
+sitting on a couch. The character is referenced by an approved image, not described
+again.
+
+- **Request.** `POST /v1/narrative/projects/{project}/characters/{character}/scene-art-jobs`
+  with `reference_asset_id` (an approved, non-discarded PNG sprite, image or portrait
+  of the project), a `scene` description (bounded free text, for example "sitting on
+  a couch in a sunlit living room, reading a book"), one to four images and an
+  idempotency key.
+- **Generation.** Text-to-image SDXL from the pinned Animagine weights at 1344×768,
+  the SDXL 16:9 bucket that backgrounds already use. IP-Adapter Plus SDXL with the
+  ViT-H encoder, the models slice B pins, takes the reference composited on white
+  and cropped to the figure as the identity image. The server builds the prompt:
+  character type and `solo`, the scene tags, the character's appearance tags, then
+  quality tags. No ControlNet and no cutout: the output is an opaque RGB scene.
+- **Content policy.** The scene description goes through the image content policy
+  like every other image description (ADR 0039, `narrative/image_content_policy.toml`,
+  overridable with `FLINT_GRAPH_NARRATIVE_IMAGE_CONTENT_POLICY`). The route passes
+  `policy=content_policy(settings.narrative_image_content_policy)` into
+  `create_scene_art_job`. The request builder calls `policy.check()` on the scene
+  text, so a blocked word refuses the job with a 422 before anything is queued. The
+  negative prompt starts with `_negative(policy)`, then the character's own
+  negatives and `multiple girls`/`multiple boys`, within CLIP's 77 tokens. The IP-Adapter scale, about 0.6, is
+  tuned in qualification; too high copies the reference pose and framing.
+- **Storage.** The job is an image job (`scene_art`) on the same outbox, fenced
+  activity, isolated child and hash-checked storage. Results are candidate library
+  assets of kind `image`, named `{character} scene N`. Their provenance records the
+  reference asset, scene text, prompt, IP-Adapter scale and model identities. The
+  creator approves them in the library or the character sheet.
+- **Order.** It shares slice B's IP-Adapter pins, loader and memory work (CPU offload
+  if SDXL, IP-Adapter and ViT-H exceed 12 GB), so it follows B.
+- **Not in this slice.** The story format and runtime. Showing an approved image as a
+  full-screen CG and a gallery is the player side, built separately on branch
+  `codex/cg-presentation`: an optional stage-node `cg` field holding an ordinary
+  image asset ID, a CG layer and a gallery, runtime 0.5.0. Scene art only produces
+  approved images for it. Identity is close, not exact, so every result needs review.
+
 ## Out of scope
 
 Face detection models (the creator adjusts the box), automatic mouth or eye
-animation, and multi-character scenes.
+animation, and multi-character poses and scene art (one referenced character per
+image).
