@@ -1,5 +1,10 @@
 # ADR 0029: Deterministic agent trust and approval boundaries
 
+Prompt-management changes add a code-equivalent authoring/promotion path. See the
+[2026-11-01 addendum](../architecture/prompt-management-threat-model.md) and
+[ADR 0044](0044-langfuse-authoring-and-reviewed-prompt-locks.md) for its reviewed
+lock, identity, credential and privacy boundaries; implementation remains separate.
+
 - Status: accepted design baseline; runtime remediations are not all implemented
 - Date: 2026-10-11
 - Track: security / Milestone 29, #80; enforcement #81, budgets #82
