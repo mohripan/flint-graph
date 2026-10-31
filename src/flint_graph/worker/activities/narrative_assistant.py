@@ -120,6 +120,8 @@ class NarrativeAssistantActivities:
                 history=work.history,
                 budget=self.context_chars,
                 observer=events,
+                library=work.library,
+                profiles=work.profiles,
             )
             await events.flush()
         except AssistantModelError as error:

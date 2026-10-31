@@ -96,7 +96,7 @@ def test_prompt_identity_covers_template_schema_and_version_and_is_pinned():
     assert prompt_sha256() == expected
     # Changing the prompt or schema needs a new version and a deliberate new pin.
     assert PINNED_PROMPTS[PROMPT_VERSION] == expected
-    assert PROMPT_VERSION == "narrative-assistant/v1"
+    assert PROMPT_VERSION == "narrative-assistant/v2"
 
 
 def test_response_schema_requires_reply_and_nullable_proposal():
@@ -113,6 +113,9 @@ def test_response_schema_requires_reply_and_nullable_proposal():
         "delete_variable",
         "set_entry",
         "set_title",
+        "set_theme",
+        "generate_character_images",
+        "generate_backgrounds",
     ]
     json.dumps(RESPONSE_SCHEMA)
 
@@ -225,4 +228,4 @@ def test_v2_stage_steps_and_expressions_are_outlined_for_the_model():
     text = render_story(story, None, 10_000)
     assert "s | stage | background dusk; hide oren; show mira happy left -> l" in text
     assert 'l | line | mira (happy) | "Hi." -> e' in text
-    assert 'mira: "Mira" (expressions: happy)' in text
+    assert 'mira: "Mira" (expressions: happy=mira_happy)' in text

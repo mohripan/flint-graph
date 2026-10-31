@@ -17,6 +17,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from flint_graph.narrative.assistant.assets import LibraryEntry, add_library_assets
 from flint_graph.narrative.assistant.context import HistoryTurn, build_turn_messages
 from flint_graph.narrative.assistant.operations import Proposal, check_proposal
 from flint_graph.narrative.assistant.prompts import RESPONSE_SCHEMA, prompt_sha256
@@ -120,7 +121,8 @@ def _repair_request(diagnostics: Sequence[Diagnostic]) -> str:
         "Your previous answer could not be used. Diagnostics (code at location):\n"
         f"{lines}\n"
         "Return the complete corrected JSON object with the same intent, fixing exactly "
-        "these problems."
+        "these problems. The creator never saw that answer: write the reply as your first "
+        "answer to them, describing the change, with no apology or mention of problems."
     )
 
 
@@ -180,10 +182,18 @@ async def run_turn(
     budget: int = 24000,
     repairs: int = 2,
     observer: TurnObserver | None = None,
+    library: Sequence[LibraryEntry] = (),
+    profiles: Mapping[str, str] | None = None,
 ) -> TurnResult:
     watch = observer or _Silent()
     messages, stats = build_turn_messages(
-        story, request, focus=focus, history=history, budget=budget
+        story,
+        request,
+        focus=focus,
+        history=history,
+        budget=budget,
+        library=library,
+        profiles=profiles,
     )
     await watch.step(
         "context",
@@ -220,6 +230,8 @@ async def run_turn(
             if reply.startswith(stream.reply):
                 await stream.publish(reply[len(stream.reply) :])
         if parsed is not None:
+            # Library IDs the model used become explicit, stored asset additions.
+            parsed = add_library_assets(story, parsed, library)
             proposal = parsed
             check = check_proposal(story, parsed.operations)
             diagnostics = check.diagnostics

@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from flint_graph.narrative.package import STORY_LIMIT
 from flint_graph.narrative.validation import ID, collect_story_diagnostics
@@ -42,6 +42,10 @@ class UpsertCharacter(_Operation):
     op: Literal["upsert_character"]
     id: _Key
     name: _Text
+    # Story format 2 (ADR 0040): optional; fields left out keep their saved values.
+    color: str | None = None
+    sprites: dict[str, str] | None = None
+    stage: dict[str, int] | None = None
 
 
 class DeleteCharacter(_Operation):
@@ -70,6 +74,52 @@ class SetTitle(_Operation):
     title: _Text
 
 
+class SetTheme(_Operation):
+    """Replace the whole theme (story format 2); ``None`` removes it."""
+
+    op: Literal["set_theme"]
+    theme: dict[str, Any] | None
+
+
+class AddAsset(_Operation):
+    """A library file's story entry (kind, path, SHA-256); normally added by the worker."""
+
+    op: Literal["add_asset"]
+    id: _Key
+    asset: dict[str, str]
+
+
+_Appearance = Annotated[str, Field(min_length=1, max_length=600)]
+
+
+class GenerateCharacterImages(_Operation):
+    """An action, not an edit: the Studio offers it as a one-click portrait job."""
+
+    op: Literal["generate_character_images"]
+    character: _Key
+    appearance: _Appearance
+    character_type: Literal["girl", "boy", "woman", "man", "other"]
+    framing: Literal["portrait", "full_body"] = "full_body"
+    transparent: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _cutout_is_full_body(cls, data: Any) -> Any:
+        # A transparent cut-out is a stage sprite, and those are always full-body.
+        if isinstance(data, dict) and data.get("transparent") is True:
+            return {**data, "framing": "full_body"}
+        return data
+
+
+class GenerateBackgrounds(_Operation):
+    """An action, not an edit: the Studio offers it as a one-click background job."""
+
+    op: Literal["generate_backgrounds"]
+    description: _Appearance
+
+
+ACTIONS = (GenerateCharacterImages, GenerateBackgrounds)
+
 Operation = Annotated[
     UpsertNode
     | DeleteNode
@@ -78,7 +128,11 @@ Operation = Annotated[
     | UpsertVariable
     | DeleteVariable
     | SetEntry
-    | SetTitle,
+    | SetTitle
+    | SetTheme
+    | AddAsset
+    | GenerateCharacterImages
+    | GenerateBackgrounds,
     Field(discriminator="op"),
 ]
 
@@ -105,13 +159,21 @@ class ProposalCheck:
     touched: tuple[str, ...]
 
 
-def _target(operation: Operation) -> str:
+def _target(operation: Operation, index: int) -> str:
     if isinstance(operation, UpsertNode | DeleteNode):
         return "nodes." + operation.id
     if isinstance(operation, UpsertCharacter | DeleteCharacter):
         return "characters." + operation.id
     if isinstance(operation, UpsertVariable | DeleteVariable):
         return "variables." + operation.id
+    if isinstance(operation, AddAsset):
+        return "assets." + operation.id
+    if isinstance(operation, GenerateCharacterImages):
+        return f"actions.images.{operation.character}.{index}"
+    if isinstance(operation, GenerateBackgrounds):
+        return f"actions.backgrounds.{index}"
+    if isinstance(operation, SetTheme):
+        return "theme"
     return "entry" if isinstance(operation, SetEntry) else "title"
 
 
@@ -128,20 +190,34 @@ def apply_operations(story: dict[str, Any], operations: Sequence[Operation]) -> 
     written: list[tuple[str, dict[str, Any]]] = []
     for index, operation in enumerate(operations):
         location = f"operations.{index}"
-        target = _target(operation)
+        target = _target(operation, index)
         if target in touched:
             raise PackageError("duplicate_target", location)
         touched.add(target)
+        if isinstance(operation, ACTIONS):
+            continue  # Image jobs start only when the creator chooses to.
         if isinstance(operation, UpsertNode):
             node = copy.deepcopy(operation.node)
             _inherit_text_ids(node, result["nodes"].get(operation.id))
             result["nodes"][operation.id] = node
             written.append((operation.id, node))
         elif isinstance(operation, UpsertCharacter):
-            # Only the name changes; v2 sprites and colour (ADR 0040) are kept.
+            # Fields left out keep their saved values (v2 sprites, colour and framing).
             existing = result["characters"].get(operation.id)
             kept = dict(existing) if isinstance(existing, dict) else {}
-            result["characters"][operation.id] = {**kept, "name": operation.name}
+            changed = {
+                field: copy.deepcopy(value)
+                for field in ("color", "sprites", "stage")
+                if (value := getattr(operation, field)) is not None
+            }
+            result["characters"][operation.id] = {**kept, "name": operation.name, **changed}
+        elif isinstance(operation, SetTheme):
+            if operation.theme is None:
+                result.pop("theme", None)
+            else:
+                result["theme"] = copy.deepcopy(operation.theme)
+        elif isinstance(operation, AddAsset):
+            result.setdefault("assets", {})[operation.id] = dict(operation.asset)
         elif isinstance(operation, UpsertVariable):
             result["variables"][operation.id] = copy.deepcopy(operation.declaration)
         elif isinstance(operation, SetEntry):

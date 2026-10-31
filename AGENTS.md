@@ -46,6 +46,9 @@ only on acceptance. It runs as fenced Temporal jobs via the opt-in
 Studio view whose turns stream steps, thinking and reply text from durable
 PostgreSQL events (migration 0023, IDs-only Temporal history); Ollama `think` is now
 explicit and budgeted. Read `docs/reports/2026-10-31-assistant-live-turns.md`.
+On format 2 the assistant (prompt v2) edits sprites, framing, colours, stage nodes,
+expressions and the theme, uses library files by ID, and suggests image jobs that
+the creator starts with Generate: `docs/reports/2026-10-31-assistant-v2-tools.md`.
 Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
 `notes/models/`; no generation pipeline exists yet. The Studio rail is now a
