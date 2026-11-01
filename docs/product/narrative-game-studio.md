@@ -1,13 +1,13 @@
-# Narrative game studio: product direction
+# FlintGraph visual-novel Studio
 
-Date: 2026-10-27. Direction and first implementation contract approved in
-conversation. Delivery is tracked issue by issue; the complete studio is planned,
-not delivered. See milestone reports for implemented boundaries.
+Date: 2026-10-27. Product and first implementation contract approved in
+conversation. Delivery is tracked issue by issue; milestone reports distinguish
+implemented boundaries from remaining planned capabilities.
 
 ## Product and audience
 
-Build an AI-assisted authoring studio for independent developers making visual
-novels and choice-driven narrative games. A developer owns an editable project:
+FlintGraph is an AI-assisted authoring Studio for independent developers making
+visual novels and choice-driven narrative games. A developer owns an editable project:
 characters, world facts, scenes, choices, state, assets and releases. The product
 helps turn original writing into a playable game and maintain it through revisions.
 
@@ -19,7 +19,7 @@ Runtime-generated NPC dialogue is a later, separately designed capability.
 Success means a creator can build a 15–30 minute original game with at least three
 reachable endings, test it in a browser, export an editable Godot project, and
 reproduce the tested routes in that project. Duration is a human playtest target,
-not an inference from word count. The product name remains FlintGraph for now.
+not an inference from word count.
 
 ## Creator workflow
 
@@ -76,20 +76,20 @@ Original prose / world bible / creator edits
  Browser preview / downloadable editable Godot project
 ```
 
-Keep the existing modular monolith. Add explicit narrative domain modules rather
-than changing query-run records into game state. PostgreSQL remains authoritative;
-MinIO holds immutable packages, assets and build artifacts. Neo4j and OpenSearch
+Use a modular monolith with explicit narrative domain modules, separate from
+query-run records. PostgreSQL is authoritative; MinIO holds immutable packages,
+assets and build artifacts. Neo4j and OpenSearch
 can assist lore discovery after project-scoped retrieval is implemented; they are
 not required to play, edit a blank game, or evaluate a choice.
 
-Existing workspaces and OIDC membership are reusable authorization foundations,
+Workspaces and OIDC membership provide authorization foundations,
 but projects require their own workspace-consistent foreign keys and authorization
 tests. Documents attached to one project are not automatically available to
 another project in the same workspace. Explicit revision-scoped source attachments
 bound authoring retrieval. Source text, model output and tool output remain data,
 not instructions capable of granting access or approving changes.
 
-Reuse immutable storage, transactional outbox and Temporal for future authoring,
+Use immutable storage, transactional outbox and Temporal for authoring,
 art and export jobs, with job-specific state and bounded retries. Workflows carry
 authorized durable references; provider calls run in activities. Request-bound
 query SSE is not a durable authoring executor. LangGraph may implement bounded
@@ -179,27 +179,27 @@ acceptance, rather than being replaced with mock-only success.
 New nightly game checks use held-out routes and known state outcomes, invalid
 packages, cross-project attempts, stale proposals and save compatibility cases.
 Story/art quality uses creator rubrics and human review; LLM judges are supporting
-signals. Preserve the existing offline RAG gate during the additive transition.
+signals. Keep the offline retrieval evaluation gate for shared context services.
 
 Extend the existing agent threat model for unpublished IP, asset access, hostile
 imports, generated code, archive traversal, build workers, preview origins and
 cross-project memory. Reuse privacy-safe telemetry, correlate project/revision/
 job/release IDs, and track queue time, build time, failures, usage and budgets.
-Do not add an extra observability backend or switch inference servers to start
-this track. A narrative doctor should eventually report required engine/templates,
-storage and provider readiness separately; manual authoring must remain usable
+Do not add an extra observability backend or switch inference servers without a
+qualified requirement. A narrative doctor should eventually report required
+engine/templates, storage and provider readiness separately; manual authoring must remain usable
 when an optional provider is unavailable.
 
-## Transition from the existing roadmap
+## Shared-service scope and data protection
 
-Milestones 15–29 remain historical foundation and deferred backlog, with their
-actual delivery records intact. They are not prerequisites as a group. Select
-generic security, isolation, storage, job and observability work when a game
-milestone needs it. Financial-specific enhancements, broad research features,
+Milestones 15–29 document shared-service delivery and deferred backlog. They are
+not prerequisites as a group. Select generic security, isolation, storage, job
+and observability work when a game
+milestone needs it. Financial-analysis enhancements, broad research features,
 GraphQL, additional telemetry products, inference-server migration and generalized
-runtime AI are deferred until supported by the new product's needs.
+runtime AI need a demonstrated Studio requirement before scheduling.
 
-Do not delete financial/private documents, rename existing workspaces, reset
+Do not delete private documents, rename existing workspaces, reset
 volumes, repurpose existing conversations or bulk-close old GitHub issues.
 The uncommitted #109 trace-qualification work is preserved separately. No engine,
 model, paid endpoint or new corpus is downloaded by this planning change.

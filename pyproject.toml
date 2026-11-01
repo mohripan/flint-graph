@@ -1,7 +1,7 @@
 [project]
 name = "flint-graph"
 version = "0.1.0"
-description = "Production-grade GraphRAG platform"
+description = "AI-assisted visual-novel Studio with authored gameplay and Godot export"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 dependencies = [

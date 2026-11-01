@@ -1,24 +1,23 @@
 # ADR 0035: Authored narrative games with portable Godot export
 
-Date: 2026-10-27. Status: product direction and first implementation contract
+Date: 2026-10-27. Status: architecture and first implementation contract
 accepted. This ADR records intent, not delivered behavior.
 
 ## Context
 
-The user has chosen a developer-facing narrative game studio over financial
-document research or a roleplay chatbot. The intended output is an editable,
-playable game. The first release uses authored dialogue and branching choices,
-with AI supporting creation rather than being required during gameplay.
+FlintGraph is a developer-facing narrative game Studio whose output is an
+editable, playable game. The first release uses authored dialogue and branching
+choices, with AI supporting creation rather than being required during gameplay.
 
-The existing GraphRAG platform offers workspace authorization, immutable storage,
-provenance and durable ingestion primitives. It does not implement a narrative
-game runtime, visual authoring, game export or image generation. Request-bound
-query execution and factual answer faithfulness cannot serve as the authoring
-job lifecycle or the validity rule for creative fiction.
+Workspace authorization, immutable storage, provenance and durable ingestion are
+shared platform services. Game runtime, visual authoring, export and image
+generation require explicit narrative contracts. Request-bound query execution
+and factual answer faithfulness cannot serve as the authoring job lifecycle or
+the validity rule for creative fiction.
 
 ## Decision
 
-1. Build a narrative domain alongside current Q&A. Keep PostgreSQL authoritative,
+1. Use a narrative domain separate from source Q&A. Keep PostgreSQL authoritative,
    existing identities and workspace membership, and immutable MinIO artifacts.
    Use project/revision scopes in addition to workspace scope.
 2. Define a small engine-independent story package with typed deterministic
@@ -46,10 +45,10 @@ Arbitrary engine code generation would increase build safety and revision costs
 and is excluded. A chat-first product would not validate the chosen developer
 workflow or the promise of a usable export.
 
-Keep historical milestones and data intact. The new direction supersedes the old
-roadmap's automatic delivery order, not previously delivered security contracts.
-Do not bulk-close existing issues, remove financial/private corpora or mix the
-uncommitted #109 trace-probe changes into this work.
+Keep milestone evidence, data and delivered security contracts intact. Follow
+the Studio dependency order when selecting work. Do not bulk-close existing
+issues, remove private corpora or mix the uncommitted #109 trace-probe changes
+into this work.
 
 ## References
 

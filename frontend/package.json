@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Non-technical end-user UI for the FlintGraph GraphRAG platform (Ask + Documents).",
+  "description": "FlintGraph visual-novel Studio: authored stories, assets, playtests and Godot export.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node scripts/check-responsive.mjs",

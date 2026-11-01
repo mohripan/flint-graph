@@ -10,7 +10,7 @@ AI service or FlintGraph account.
 
 The local Studio, Godot player, browser playtests and release downloads are
 implemented. The project is under active development; the
-[roadmap](docs/ROADMAP.md#active-product-direction-narrative-game-studio) separates
+[roadmap](docs/ROADMAP.md#narrative-game-studio) separates
 completed work from the next milestones.
 
 ## Make a visual novel
@@ -128,26 +128,26 @@ npm --prefix frontend run build
 
 Default tests use deterministic offline model behavior. Real PostgreSQL, Godot,
 browser, worker and model qualification have additional fixtures and opt-in
-settings documented in the relevant runbooks and delivery reports. The historical
-retrieval evaluation gate is also retained:
+settings documented in the relevant runbooks and delivery reports. Shared
+retrieval services have an additional evaluation gate:
 
 ```powershell
 uv run flint-graph-eval run --dataset evals/datasets/acme-smoke --evaluations evals/reports/acme-smoke/deterministic-recorded.jsonl --experiment evals/experiments/acme-smoke.yaml --baseline evals/reports/acme-smoke/baselines.json --config-name deterministic
 ```
 
-## GraphRAG foundation
+## Shared platform services
 
-FlintGraph began as a document and citation platform. Its ingestion, extraction,
-knowledge graph, retrieval and grounded-answer APIs remain in the repository.
+FlintGraph includes ingestion, extraction, knowledge graph, retrieval and
+grounded-answer APIs for document and context workflows.
 PostgreSQL is the system of record; MinIO stores immutable artifacts; Temporal
-handles durable jobs. The Studio reuses workspace authorization, revision and job
-boundaries, storage and observability from that foundation.
+handles durable jobs. Workspace authorization, revision and job boundaries,
+storage and observability support the Studio and its shared services.
 
-`docker compose up --build` starts the document-platform stack; the Studio uses
+`docker compose up --build` starts the shared-service stack; the Studio uses
 the launcher above. For document workflows, use the
 [developer profiles](docs/runbooks/developer-profiles.md),
 [local Ollama RAG guide](docs/runbooks/local-ollama-rag.md), and
-[historical milestone documentation](docs/milestones/). Operational guidance
+[service milestone documentation](docs/milestones/). Operational guidance
 covers [observability, audit and usage](docs/runbooks/operations-observability.md)
 and [backup/restore](docs/runbooks/backup-restore.md).
 

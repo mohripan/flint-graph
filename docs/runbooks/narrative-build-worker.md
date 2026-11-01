@@ -51,7 +51,7 @@ OIDC/deployment settings continue to apply; do not change them to start these ro
 Narrative builds require no answer/extraction/embedding provider. For an isolated
 local role without provider credentials explicitly select the four deterministic
 provider settings, as in the qualified owned fixtures. That does not qualify
-deterministic providers for the separate GraphRAG answer product.
+deterministic providers for real-model source-answering workflows.
 
 ## Recovery and inspection
 

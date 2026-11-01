@@ -221,9 +221,9 @@ land #134 → #135 before #126, while independent canon (#125) and asset (#128)
 foundations can proceed. Context planning/manifests support assistant and memory
 work; #157 follows #124/#128 and pins v2 before presentation changes. Complete
 M38 parity before claiming the final #132 game. These are dependency priorities,
-not permission to call planned work complete or to resume the old financial queue.
+not permission to call planned work complete or to schedule unrelated backlog work.
 
 Platform work is embedded in #124/#131; engine/developer tooling is #119/#121/#131.
-The older platform milestones remain available for relevant reusable work, rather
-than requiring a new telemetry or inference stack for this pivot. Historical
-financial/research issues remain open with their previous evidence intact.
+Shared-platform milestones provide relevant reusable work without requiring
+another telemetry or inference stack. Financial-analysis and research issues
+retain their individual scope, status and evidence.

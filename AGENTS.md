@@ -1,15 +1,15 @@
 # Agent Handoff Guide
 
-## Active product direction (2026-10-27)
+## Studio architecture and delivery
 
-The user approved an authored narrative game studio with Godot/GDScript export
-first. Read `docs/product/narrative-game-studio.md`, ADR 0035 and the active section
-of `docs/ROADMAP.md` before selecting work. Milestones 30–38 supersede the older
-automatic research/financial queue; historical deliveries and security invariants
-remain valid. The M30 written spec was approved for implementation on 2026-10-27;
+FlintGraph is an authored visual-novel Studio with Godot/GDScript export.
+Read `docs/product/narrative-game-studio.md`, ADR 0035 and the Studio section
+of `docs/ROADMAP.md` before selecting work. Studio milestones define the delivery
+order; shared-service contracts and security invariants remain valid.
+The M30 written spec was approved for implementation on 2026-10-27;
 the user authorized one review sub-agent and autonomous continuation. Preserve
 the unrelated uncommitted #109 trace-probe work; do not stage, discard or resume it
-as part of the product pivot. M30 package loading, reference playback/saves and
+as part of Studio work. M30 package loading, reference playback/saves and
 Godot source export/player and real browser qualification are delivered.
 M31 #123 studio editor and isolated local Godot preview are live qualified with
 green CI/container smoke. #124 now has qualified ledger/lifecycle APIs, execution
@@ -67,7 +67,8 @@ Two-character CGs are experimental (7 of 12 seeds keep both looks; eight candida
 Generate); M40 #185 owns improving that baseline.
 Downloaded local generation models
 (Animagine XL 4.0, Kokoro-82M, ACE-Step 3.5B) are verified under ignored
-`notes/models/`; no generation pipeline exists yet. The Studio rail is now a
+`notes/models/`; runtime availability is qualified individually in the reports below.
+The Studio rail is a
 Godot-style scene hierarchy (#169): scenes are line chains projected from the node
 graph, folders live in an editor-only versioned layout (migration 0021), and a
 script editor edits a whole scene. Long-form limits (10k nodes / 5 MB) are #172;
@@ -76,14 +77,15 @@ slice, ADR 0039, migration 0022) generates portraits locally with Animagine XL 4
 through the opt-in `narrative_image_worker` and an isolated child in
 `runtimes/imagegen` (its own uv lock, CUDA 12.8); read
 `docs/reports/2026-10-31-character-creation.md` and
-`docs/runbooks/narrative-image-generation.md`. Portraits are editor metadata until
-the #128 export binding puts them in playtests and releases. The owned image worker
+`docs/runbooks/narrative-image-generation.md`. Portraits are editor metadata;
+binding approved images to story assets puts them in playtests and releases.
+The owned image worker
 receipt is `notes/narrative-image-owned.json`. ADR 0040 plans the visual novel stage,
 theme and story package v2 in four slices. Read the design's "Review changes"
 section before starting slices 2–4. Slice 1, the asset library (uploads with rights
 declarations and generated backgrounds, migration 0024), is delivered; read
 `docs/reports/2026-10-31-asset-library.md`. Slice 2, story package v2, is delivered
-behind `narrative_package_v2_enabled`, which is off: the format, reference player,
+with `narrative_package_v2_enabled`: the format, reference player,
 saves, asset binding by SHA-256, server-built NOTICES and the explicit upgrade. Read
 `docs/reports/2026-10-31-story-package-v2.md`. Slice 3 (runtime 0.3.0) plays v2
 everywhere: Godot `vn_view.gd`, playtests with transferred asset bytes and a revision
@@ -197,9 +199,9 @@ release work is delivered; #134/#135 precede #126, while #140 follows #126. Pack
 requires #124/#128/#157 and preserves existing v1 releases/saves. Planned issues
 are not delivered functionality; the final #132 game should exercise M38 parity.
 
-FlintGraph is an early GraphRAG platform. Through Milestone 13 it implements the ingestion control plane, a real Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, an OIDC-backed workspace access boundary for MVP use, and controlled-deployment public API hardening.
+FlintGraph is an AI-assisted visual-novel Studio. Its shared platform services include the ingestion control plane, a Temporal-backed content pipeline, provenance-rich staged extraction proposals, a resolved knowledge graph with reviewable reversible merges, rebuildable retrieval indexes, LangGraph-backed query orchestration with streamed, faithfulness-checked, citation-bearing answers and provenance APIs, real-model defaults outside tests, an offline evaluation quality gate, document lifecycle cleanup, OIDC workspace access, and controlled-deployment public API hardening. These services support document and context workflows; Studio feature status is recorded above and in the narrative delivery reports.
 
-Implemented path:
+Implemented document-context path:
 
 ```text
 API intake -> immutable raw object in MinIO

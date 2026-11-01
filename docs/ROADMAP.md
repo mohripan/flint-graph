@@ -1,11 +1,11 @@
 # FlintGraph roadmap
 
-## Active product direction: narrative game studio
+## Narrative game studio
 
-Updated: 2026-10-30. Product direction approved; M30 and M31 delivered.
-FlintGraph is moving toward an AI-assisted authoring studio for visual novels and
-branching narrative games, with authored gameplay and editable Godot/GDScript
-export first. AI assists creators; exported gameplay has no inference dependency.
+Updated: 2026-10-30. M30 and M31 delivered.
+FlintGraph is an AI-assisted authoring Studio for visual novels and branching
+narrative games, with authored gameplay and editable Godot/GDScript export.
+AI assists creators; exported gameplay has no inference dependency.
 
 Read [the product direction](product/narrative-game-studio.md),
 [ADR 0035](adr/0035-authored-narrative-games-and-portable-godot-export.md), and
@@ -30,10 +30,9 @@ planned, not delivered.
 | 39 | Consented voice references, cloned character voices and per-line emotional delivery | ADR 0043 line voices; #174 model choice first |
 | 40 | Characters that keep face, hair and clothes across poses, expressions and CGs (CCIP, LoRA, references) | ADR 0041 image path; #180 scores first |
 
-Use the approved narrative track as the next delivery order. Milestones 15–29
-below retain historical plans/progress and deferred issues; their old sequential
-queue is not the active product plan. Reuse generic platform/security work when
-needed rather than completing all old research/financial features first. Existing
+Use the Studio milestones as the delivery order. Milestones 15–29 below document
+shared-service plans, progress and deferred issues; they are not prerequisites as
+a group. Select platform/security work when a Studio milestone needs it. Existing
 data, API invariants and uncommitted #109 observability work remain intact.
 Milestone 30 is complete through #117–#121: package/reference playback, pinned
 editable Godot export, real player and native/browser qualification. Under
@@ -52,7 +51,7 @@ The added presentation track preserves v1 releases/saves and precedes the final
 would create a cycle because #140 consumes #126. See the delivery queue for the
 reviewed dependency order and shared #147–#149 conversation work.
 
-## Historical GraphRAG roadmap and foundation backlog
+## Shared-service delivery records and backlog
 
 Updated: 2026-10-10. Inspected baseline: `1c15820` (Milestone 14).
 
@@ -70,10 +69,10 @@ multi-report synthesis and ambiguous queries (#59/#60); deployment activation an
 human rubric review are pending. Live user PDF testing also exposed ingestion
 NUL normalization and deletion-race bugs (#57/#58), prioritized next.
 
-This roadmap turns the current GraphRAG platform into a useful, measurable,
-agent-driven product. Proposed features are not implemented merely because they
-appear here. Each milestone needs passing acceptance criteria, linked GitHub
-issues, and completed-behavior documentation under `docs/milestones/`.
+This section tracks document-context and research services. Proposed features
+are not implemented merely because they appear here. Each milestone needs passing
+acceptance criteria, linked GitHub issues, and completed-behavior documentation
+under `docs/milestones/`.
 
 ## Outcomes and delivery order
 
