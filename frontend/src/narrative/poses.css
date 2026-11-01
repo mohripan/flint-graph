@@ -10,3 +10,10 @@
 .pose-studio :focus-visible { outline:3px solid #8c672a; outline-offset:3px; }
 .pose-studio progress { max-width:100%; accent-color:#8c672a; }
 @media(max-width:640px){ .pose-workbench { grid-template-columns:1fr; } .pose-workbench .studio-look-image { max-width:230px; } }
+
+.pose-ref-picker { border-bottom:1px solid var(--studio-border,#d7dfe4); padding-bottom:16px; display:grid; gap:12px; }
+.pose-ref-picker .studio-look-image { max-width:180px; }
+.pose-source-list { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; }
+.pose-source-list figure { margin:0; flex:0 1 120px; min-width:0; }
+.pose-source-list img { width:100%; height:140px; object-fit:contain; background:#e6ebee; }
+.pose-source-list figcaption { font-size:12px; overflow-wrap:anywhere; }

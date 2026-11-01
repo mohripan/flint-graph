@@ -193,6 +193,12 @@ it and adds a named sprite to the character; select that sprite in a scene or li
 It does not place the character into every scene. Save the revision before playing.
 Changing the look or outfit later does not alter already admitted pose jobs.
 
+When the server supports it, **Additional approved view** adds one image of the
+same outfit, labelled front/side/back/detail. Confirm the image explicitly before
+generating. **References used** retains the chosen sources per job. The primary
+provides rendering guidance; a secondary view supplies missing details. Matching
+identity alone does not establish matching linework, shading or lighting.
+
 Check faces, clothes, hands, props and cutout edges yourself. The model can change
 fine details; a back view can invent details absent from the reference. No automatic
 identity pass/fail or trained character LoRA is claimed by this feature. Model

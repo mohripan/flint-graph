@@ -32,6 +32,20 @@ class PoseContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_request(json.dumps(self.request(**changes)).encode())
 
+    def test_two_view_protocol_is_closed_and_does_not_accept_source_paths(self):
+        value = self.request(schema_version=2)
+        value.pop("reference_sha256")
+        value["reference_sha256s"] = ["a" * 64, "b" * 64]
+        self.assertEqual(parse_request(json.dumps(value).encode())["schema_version"], 2)
+        for changes in (
+            {"reference_sha256s": []},
+            {"reference_sha256s": ["a" * 64] * 3},
+            {"reference_sha256s": ["a" * 64] * 2},
+            {"reference_paths": ["C:/private.png"]},
+        ):
+            with self.assertRaises(ValueError):
+                parse_request(json.dumps({**value, **changes}).encode())
+
     def test_model_manifest_rejects_invalid_entries_without_loading_ml(self):
         import hashlib
         import tempfile

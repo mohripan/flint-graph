@@ -5,9 +5,11 @@ import { LookImage, useCharacterLooks } from "./CharacterLooks";
 import { CandidateLookReview, useLookReviewFlags } from "./CandidateLookReview";
 import { isActive } from "./characterModel";
 import { Field } from "./FormFields";
-import { refreshLibrary } from "./libraryAssets";
+import { refreshLibrary, useApprovedAssets } from "./libraryAssets";
+import { lookReferences } from "./lookModel";
+import { useNarrativeImage } from "./characterImages";
 import { POSE_PRESETS, poseBody, poseStatus } from "./poseModel";
-import type { PoseHistory, PoseJob } from "./poseModel";
+import type { PoseHistory, PoseJob, PoseView, PoseReference } from "./poseModel";
 import { bindAsset, expressionId, setSprite } from "./stageModel";
 import type { StoryDraft } from "./types";
 import "./poses.css";
@@ -17,6 +19,13 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
   onChange:(story:StoryDraft,group?:string)=>void; onError:(message:string)=>void;
 }) {
   const looks=useCharacterLooks(tenantId,projectId,id);
+  const library=useApprovedAssets(tenantId,projectId);
+  const [extraId,setExtraId]=useState("");
+  const [view,setView]=useState<PoseView>("detail");
+  const [confirmed,setConfirmed]=useState(false);
+  useEffect(()=>{setExtraId("");setConfirmed(false);},[looks.look?.id]);
+  const choices=lookReferences(library.assets??[],id).filter(asset=>asset.sha256!==looks.look?.source_sha256);
+  const extra=choices.find(asset=>asset.id===extraId);
   const latest=useRef(story); latest.current=story;
   const [history,setHistory]=useState<PoseHistory|null>(null);
   const [notice,setNotice]=useState<string|null>(null);
@@ -47,10 +56,10 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
     if(busy||readOnly||active||failed||!history?.capabilities.available)return;
     setBusy(true);setNotice(null);
     try{
-      const signature=JSON.stringify([looks.look?.id,pose.trim(),count,transparent]);
+      const signature=JSON.stringify([looks.look?.id,pose.trim(),count,transparent,extra?.id,view,confirmed]);
       if(pending.current?.signature!==signature)pending.current={signature,key:crypto.randomUUID()};
       const next=await api.createPoseJob(tenantId,projectId,id,poseBody(looks.look,pose,count,
-        transparent&&history.capabilities.transparent,pending.current.key));
+        transparent&&history.capabilities.transparent,pending.current.key,extra?{asset:extra,view,confirmed}:undefined));
       pending.current=null;
       setHistory(current=>current?{...current,jobs:[next,...current.jobs]}:current);refresh();
     }catch(error){setNotice(error instanceof Error?error.message:"Could not start this pose.");}
@@ -94,17 +103,32 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
     {looks.error&&<p role="alert">{looks.error}</p>}
     {!looks.look&&looks.ready&&<p className="studio-hint">Lock and select a reviewed look above to generate poses.</p>}
     <div className="pose-workbench">
-      {looks.look&&<LookImage tenantId={tenantId} projectId={projectId} asset={looks.look.asset} label={`Reference: ${looks.look.name}`} />}
+      {looks.look&&<LookImage tenantId={tenantId} projectId={projectId} asset={looks.look.asset} label={`Primary look and rendering: ${looks.look.name}`} />}
       <fieldset disabled={readOnly||busy||!!active||!looks.look||looks.look.asset.status!=="approved"||!history?.capabilities.available||failed}>
-        <Field label="Pose"><textarea rows={3} maxLength={300} value={pose} onChange={event=>setPose(event.target.value)} /></Field>
+        {(history?.capabilities.max_references??1)>1&&<div className="pose-ref-picker">
+          <Field label="Additional approved view"><select value={extraId} onChange={event=>{setExtraId(event.target.value);setConfirmed(false);}}>
+            <option value="">None — use the primary image</option>{choices.map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
+          </select></Field>
+          {library.failed&&<p role="alert">Approved views could not be loaded.</p>}
+          {extra&&<>
+            <LookImage tenantId={tenantId} projectId={projectId} asset={extra} label="Additional view to review" />
+            <Field label="View shown"><select value={view} onChange={event=>setView(event.target.value as PoseView)}>
+              <option value="detail">Detail or closer view</option><option value="front">Front</option><option value="side">Side</option><option value="back">Back</option>
+            </select></Field>
+            <label className="pose-transparent"><input type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)} />I reviewed this as the same character and outfit</label>
+          </>}
+          <p className="studio-hint">The primary image guides linework, colors, shading and lighting. An extra view supplies missing shape and garment details. Check the result for style drift.</p>
+        </div>}
+        <Field label="Pose"><textarea rows={3} maxLength={300} value={active?.pose??pose} onChange={event=>setPose(event.target.value)} /></Field>
         <div className="pose-presets" role="group" aria-label="Pose ideas">{POSE_PRESETS.map(value=><button type="button" className="studio-link" key={value} onClick={()=>setPose(value)}>{value}</button>)}</div>
         <Field label="Candidates"><select value={count} onChange={event=>setCount(Number(event.target.value))}>{[1,2,3,4].map(n=><option key={n}>{n}</option>)}</select></Field>
         <label className="pose-transparent"><input type="checkbox" checked={transparent&&!!history?.capabilities.transparent} disabled={!history?.capabilities.transparent} onChange={event=>setTransparent(event.target.checked)} />Transparent stage sprite</label>
-        <button type="button" className="studio-primary" disabled={!pose.trim()} onClick={()=>void generate()}>{active?"Generating…":`Generate ${count===1?"pose":`${count} poses`}`}</button>
+        <button type="button" className="studio-primary" disabled={!pose.trim()||(!!extra&&!confirmed)} onClick={()=>void generate()}>{active?"Generating…":`Generate ${count===1?"pose":`${count} poses`}`}</button>
       </fieldset>
     </div>
     {active&&<div className="studio-job" role="status"><progress max={active.job.count} value={active.job.progress} aria-label="Pose generation progress" /><span>{poseStatus(active.job)}</span>
       {!readOnly&&!active.job.cancel_requested&&<button type="button" className="studio-link" disabled={busy} onClick={()=>void cancel(active)}>Cancel</button>}</div>}
+    {active?.references&&<p className="studio-hint" role="status">This job uses {active.references.map(reference=>`${reference.view}: ${reference.name}`).join("; ")}. Its references stay fixed while it runs.</p>}
     {jobs[0]&&!isActive(jobs[0].job)&&<p role="status">{poseStatus(jobs[0].job)}</p>}
     {notice&&<p role="status" className="studio-notice">{notice}</p>}
     {reviews.failed&&<p role="status">Some look feedback could not be loaded. Open Compare look to check a result.</p>}
@@ -112,6 +136,9 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
       const inUse=Object.values(story.characters[id]?.sprites??{}).some(key=>story.assets[key]?.sha256===asset.sha256);
       return <article className="pose-result" key={asset.id}>
         <LookImage tenantId={tenantId} projectId={projectId} asset={asset} label={item.pose} />
+        {!!item.references?.length&&<details><summary>References used</summary><div className="pose-source-list">
+          {item.references.map(reference=><FrozenReference key={reference.asset_id} tenantId={tenantId} projectId={projectId} reference={reference} />)}
+        </div></details>}
         <small>Look: {item.look.name} · seed {String(asset.provenance.seed??"—")}</small>
         <CandidateLookReview tenantId={tenantId} projectId={projectId} asset={asset} readOnly={readOnly} flags={reviews.flags} />
         <div className="studio-actions">
@@ -122,4 +149,11 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
       </article>;
     })}</div>}
   </section>;
+}
+
+
+function FrozenReference({tenantId,projectId,reference}:{tenantId:string;projectId:string;reference:PoseReference}){
+  const url=useNarrativeImage(tenantId,projectId,reference.asset_id,"thumbnail");
+  return <figure>{url?<img src={url} alt={`${reference.view}: ${reference.name}`} />:<span>Image unavailable</span>}
+    <figcaption>{reference.view}: {reference.name}</figcaption></figure>;
 }

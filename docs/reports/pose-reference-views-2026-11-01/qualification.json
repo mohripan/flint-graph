@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "fixture": "Two explicitly selected synthetic QA images; no creator project used",
+  "model": "black-forest-labs/FLUX.2-klein-4B@e7b7dc27f91deacad38e78976d1f2b499d76a294",
+  "references": [
+    {
+      "asset_id": "2c94113b-b18a-4065-a146-720d3a4bb953",
+      "sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "view": "primary",
+      "name": "Aster approved reference",
+      "size_bytes": 825847
+    },
+    {
+      "asset_id": "dbef35c9-33ca-4cd3-b369-ecd6c9c4a97f",
+      "sha256": "71bfed4e08cbd02963e1c776b44a1eb7803cb6cac43199812e01aef0f9faaa9f",
+      "view": "detail",
+      "name": "Aster approved detail view",
+      "size_bytes": 786859
+    }
+  ],
+  "result": {
+    "sha256": "5b1d4aef5108b125795b7b47ee1b711c31327b71e51cd5a93541da3a04234d9a",
+    "width": 665,
+    "height": 1137,
+    "runtime": {
+      "operation": "pose",
+      "torch": "2.11.0+cu128",
+      "diffusers": "0.42.1",
+      "cuda": "12.8",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+      "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "reference_sha256s": "[\"873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42\",\"71bfed4e08cbd02963e1c776b44a1eb7803cb6cac43199812e01aef0f9faaa9f\"]",
+      "reference_count": "2",
+      "additional_reference_preprocessing": "fit-512-lanczos-v1",
+      "reference_sizes": "[[832,1216],[334,512]]",
+      "pose_child_sha256": "92475917c9b1070f6dc6ec5a22f54a6c32eab69812c50f7f364ea5df11a8b5af",
+      "protocol_sha256": "677db1abc90183ac4e7f461c287f51c37f730e0af413a89177ed4fea6ab6fb5a",
+      "text_encoder_released_before_transformer": "true",
+      "peak_allocated_bytes": "9869238272",
+      "dedicated_used_bytes_after": "11297460224",
+      "host_available_at_start_bytes": "11049979904",
+      "direct_cuda_loading": "true",
+      "host_rss_bytes": "3096715264",
+      "seconds": "72.297",
+      "cutout_code_sha256": "fbe06761236bc588aa92a36ebbf2ce9b4f0a757c5fb6f048fb97a494724014db",
+      "onnxruntime": "1.31.1",
+      "references_sha256": "1ecbdee9723d9870186e03aed2bb976e85284315647755709a5b0e2d4fc2eb0d",
+      "look_sha256": "2e09f947739d6609ff607ff790eb397f493ef558294e3b7e47f6a54cab730750"
+    }
+  },
+  "execution": {
+    "http": true,
+    "postgresql": true,
+    "temporal_worker": true,
+    "minio_verified_download": true,
+    "browser_confirm_and_submit": true,
+    "browser_navigation_preserved_progress": true,
+    "browser_cancel": true,
+    "mobile_width": 390,
+    "mobile_scroll_width": 390,
+    "console_errors": 0,
+    "scoped_axe_violations": 0
+  },
+  "review": {
+    "kind": "agent QA observation, not creator rating",
+    "identity": "main white hair/red eyes retained",
+    "outfit": "main blue coat/gold trim/red scarf retained; fine details still vary",
+    "pose": "requested wave followed",
+    "rendering": "heavier outlines than primary; style/lighting lock is not established"
+  },
+  "limits": [
+    "No quantitative style/lighting accuracy claim",
+    "No trained LoRA",
+    "Single-character poses only; CG generation unchanged",
+    "Linux GPU execution not qualified"
+  ]
+}

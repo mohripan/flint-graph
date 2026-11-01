@@ -131,3 +131,22 @@ async def test_deadline_also_stops_descendants_of_the_owned_child(tmp_path):
         await generator(tmp_path, code, deadline=0.35).generate(request(), on_progress=update)
     await asyncio.sleep(1.1)
     assert not marker.exists(), "A cancelled model child left its descendant running"
+
+
+async def test_additional_view_is_transferred_with_ordered_hashes_and_private_files(tmp_path):
+    from dataclasses import replace
+
+    code = FAKE.replace(
+        "r=json.load(sys.stdin)",
+        "r=json.load(sys.stdin)\nassert r['schema_version']==2\n"
+        "assert len(r['reference_sha256s'])==2\n"
+        "assert Path('reference-0.png').is_file()\nassert Path('reference-1.png').is_file()",
+    )
+
+    async def update(_done):
+        pass
+
+    result = await generator(tmp_path, code).generate(
+        replace(request(), additional_references=(png(96, 128),)), on_progress=update
+    )
+    assert len(result.images) == 1

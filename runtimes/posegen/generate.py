@@ -43,13 +43,24 @@ def run(request):
         verify_model(Path(request["model_dir"]), request["model_manifest_sha256"])
     except ValueError:
         raise PoseFailure("model_invalid") from None
-    reference = Path("reference.png")
-    if (
-        reference.is_symlink()
-        or reference.stat().st_size > 16 * 1024 * 1024
-        or digest(reference) != request["reference_sha256"]
-    ):
-        raise PoseFailure("reference_unavailable")
+    hashes = (
+        [request["reference_sha256"]]
+        if request["schema_version"] == 1
+        else request["reference_sha256s"]
+    )
+    reference_paths = (
+        [Path("reference.png")]
+        if len(hashes) == 1
+        else [Path(f"reference-{i}.png") for i in range(2)]
+    )
+    for reference, expected in zip(reference_paths, hashes, strict=True):
+        if (
+            reference.is_symlink()
+            or not reference.is_file()
+            or reference.stat().st_size > 16 * 1024 * 1024
+            or digest(reference) != expected
+        ):
+            raise PoseFailure("reference_unavailable")
     import psutil
     import pynvml
 
@@ -71,11 +82,22 @@ def run(request):
         or not torch.cuda.is_bf16_supported()
     ):
         raise PoseFailure("unsupported_device")
-    with Image.open(reference) as original:
-        if original.format != "PNG" or not 64 <= min(original.size) or max(original.size) > 2560:
-            raise PoseFailure("reference_unavailable")
-        rgba = original.convert("RGBA")
-        source = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert("RGB")
+    sources = []
+    for index, reference in enumerate(reference_paths):
+        with Image.open(reference) as original:
+            if (
+                original.format != "PNG"
+                or not 64 <= min(original.size)
+                or max(original.size) > 2560
+            ):
+                raise PoseFailure("reference_unavailable")
+            rgba = original.convert("RGBA")
+            source = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert(
+                "RGB"
+            )
+            if index:
+                source.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            sources.append(source)
     segmenter, helper, helper_path = None, None, None
     if request["cutout"]:
         helper, helper_path = cutout_module()
@@ -125,7 +147,7 @@ def run(request):
     for index, seed in enumerate(request["seeds"]):
         torch.cuda.reset_peak_memory_stats()
         image = pipe(
-            image=source,
+            image=sources[0] if len(sources) == 1 else sources,
             prompt_embeds=embeddings.to("cuda"),
             width=WIDTH,
             height=HEIGHT,
@@ -162,7 +184,13 @@ def run(request):
         "cuda": str(torch.version.cuda),
         "gpu": torch.cuda.get_device_name(0),
         "model_manifest_sha256": request["model_manifest_sha256"],
-        "source_sha256": request["reference_sha256"],
+        "source_sha256": hashes[0],
+        "reference_sha256s": json.dumps(hashes, separators=(",", ":")),
+        "reference_count": str(len(hashes)),
+        "additional_reference_preprocessing": "fit-512-lanczos-v1",
+        "reference_sizes": json.dumps(
+            [list(image.size) for image in sources], separators=(",", ":")
+        ),
         "pose_child_sha256": digest(Path(__file__)),
         "protocol_sha256": digest(Path(__file__).with_name("contract.py")),
         "text_encoder_released_before_transformer": "true",

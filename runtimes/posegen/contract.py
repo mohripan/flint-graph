@@ -26,20 +26,31 @@ def parse_request(data):
         raise ValueError("invalid_request")
     try:
         request = json.loads(data, object_pairs_hook=_object)
-        if type(request) is not dict or set(request) != {
+        if type(request) is not dict or type(request.get("schema_version")) is not int:
+            raise ValueError
+        version = request["schema_version"]
+        common = {
             "schema_version",
             "model_dir",
             "model_manifest_sha256",
-            "reference_sha256",
             "prompt",
             "seeds",
             "cutout",
-        }:
+        }
+        if version == 1:
+            if set(request) != common | {"reference_sha256"}:
+                raise ValueError
+            hashes = [request["reference_sha256"]]
+        elif version == 2:
+            if set(request) != common | {"reference_sha256s"}:
+                raise ValueError
+            hashes = request["reference_sha256s"]
+            if type(hashes) is not list or len(hashes) != 2 or len(set(hashes)) != 2:
+                raise ValueError
+        else:
             raise ValueError
-        if type(request["schema_version"]) is not int or request["schema_version"] != 1:
-            raise ValueError
-        for field in ("model_manifest_sha256", "reference_sha256"):
-            if type(request[field]) is not str or not SHA.fullmatch(request[field]):
+        for value in [request["model_manifest_sha256"], *hashes]:
+            if type(value) is not str or not SHA.fullmatch(value):
                 raise ValueError
         if type(request["model_dir"]) is not str or not Path(request["model_dir"]).is_absolute():
             raise ValueError

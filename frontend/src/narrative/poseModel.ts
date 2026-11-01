@@ -1,18 +1,26 @@
-import type { ImageJob } from "../lib/api";
+import type { ImageJob, NarrativeImage } from "../lib/api";
 import type { CharacterLook } from "./lookModel";
+export type PoseView = "front" | "side" | "back" | "detail";
+export interface PoseReference {asset_id:string;sha256:string;view:string;name:string}
+export interface AdditionalPoseView {asset:NarrativeImage;view:PoseView;confirmed:boolean}
 export interface PoseJob {
+  references?:PoseReference[];
   operation: "pose"; model_id: string; model_manifest_sha256: string; pose: string;
   look: { id: string; name: string; asset_id: string; source_sha256: string; sha256: string };
   job: ImageJob;
 }
-export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string} }
+export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number} }
 export const POSE_PRESETS = ["standing, arms relaxed", "sitting on a chair, hands in lap", "walking, three-quarter view", "back view, looking over shoulder"];
-export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string) {
+export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string, extra?:AdditionalPoseView) {
   const pose=instruction.replace(/\s+/g," ").trim();
   if (!look || look.asset.status!=="approved") throw new Error("Choose an approved reviewed look first.");
   if (!pose || pose.length>300 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(pose)) throw new Error("Describe the pose in 1–300 characters.");
   if (!Number.isInteger(count) || count<1 || count>4) throw new Error("Choose 1–4 candidates.");
-  return {look_id:look.id,pose,count,transparent,idempotency_key:key};
+  if(extra&&(!extra.confirmed||extra.asset.status!=="approved"||extra.asset.media_type!=="image/png"
+    ||extra.asset.id===look.asset.id||extra.asset.sha256===look.source_sha256
+    ||!["front","side","back","detail"].includes(extra.view)))throw new Error("Choose another approved view and confirm it shows the same character and outfit.");
+  return {look_id:look.id,pose,count,transparent,idempotency_key:key,
+    ...(extra?{additional_references:[{asset_id:extra.asset.id,view:extra.view}]}:{})};
 }
 export function poseStatus(job:ImageJob):string {
   if (job.cancel_requested && ["queued","running"].includes(job.status)) return "Cancelling…";

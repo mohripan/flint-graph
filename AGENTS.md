@@ -63,7 +63,12 @@ the opt-in pinned FLUX.2 klein 4B editing worker
 (ADR 0048, migration 0035): immutable reviewed look + pose instruction, then
 manual comparison/approval and normal stage binding. Read
 `docs/reports/2026-11-01-character-poses.md` and the image-generation runbook.
-The Studio launcher selects the separate `pose` service explicitly.
+The Studio launcher selects the separate `pose` service explicitly. ADR 0049
+(migration 0036) adds one approved supplemental view, frozen source snapshots,
+protocol-1 compatibility and explicit primary-rendering instructions. The operator
+sets `NARRATIVE_POSE_MAX_REFERENCES=2` after qualification; the default is one.
+Read `docs/reports/2026-11-01-pose-reference-views.md`. Identity, outfit and drawing
+style/lighting are separate review dimensions; the new flow does not lock style.
 Slice C (migration 0030) draws event CGs of one or two characters from an approved
 image of each through a pinned IP-Adapter Plus (ViT-H): Assets → CGs → Generate CGs,
 `scene_art` image jobs, opaque 1344×768 candidates. The image worker needs the optional

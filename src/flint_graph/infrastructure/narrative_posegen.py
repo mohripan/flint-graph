@@ -32,6 +32,7 @@ from flint_graph.narrative.poses import MODEL_REPO, MODEL_REVISION, POSE_HEIGHT,
 @dataclass(frozen=True, kw_only=True)
 class PoseGenerationRequest(GenerationRequest):
     reference: bytes
+    additional_references: tuple[bytes, ...] = ()
 
 
 def verify_pose_model(root: Path, manifest: str, runtime: Path) -> ModelIdentity:
@@ -188,16 +189,22 @@ class LocalPoseGenerator:
             raise ImageGenerationError("bad_request")
         if request.cutout and self.cutout is None:
             raise ImageGenerationError("cutout_unavailable")
-        if len(request.reference) > IMAGE_LIMIT:
+        if len(request.additional_references) > 1:
+            raise ImageGenerationError("bad_request")
+        references = (request.reference, *request.additional_references)
+        if any(len(item) > IMAGE_LIMIT for item in references):
             raise ImageGenerationError("reference_unavailable")
         try:
-            validate_png(request.reference, "reference")
+            for item in references:
+                validate_png(item, "reference")
         except ValueError:
             raise ImageGenerationError("reference_unavailable") from None
         with tempfile.TemporaryDirectory(prefix="flint-pose-") as directory:
             work = Path(directory)
-            (work / "reference.png").write_bytes(request.reference)
-            payload = {
+            for index, data in enumerate(references):
+                name = "reference.png" if len(references) == 1 else f"reference-{index}.png"
+                (work / name).write_bytes(data)
+            payload: dict[str, Any] = {
                 "schema_version": 1,
                 "model_dir": str(self.model_dir.resolve()),
                 "model_manifest_sha256": self.model_manifest_sha256,
@@ -208,6 +215,12 @@ class LocalPoseGenerator:
                 if request.cutout and self.cutout
                 else None,
             }
+            if len(references) == 2:
+                payload["schema_version"] = 2
+                payload.pop("reference_sha256")
+                payload["reference_sha256s"] = [
+                    hashlib.sha256(item).hexdigest() for item in references
+                ]
             env = {
                 key: value
                 for key, value in os.environ.items()

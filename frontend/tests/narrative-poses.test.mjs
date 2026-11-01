@@ -23,3 +23,12 @@ test("pose status names resource shortages and preserves cancellation",()=>{
 test("pose renders do not appear a second time under generated portraits",()=>{
  assert.deepEqual(model.portraitJobs([{id:"ordinary"},{id:"pose"}], [{job:{id:"pose"}}]),[{id:"ordinary"}]);
 });
+
+test("an additional approved view requires explicit same-look confirmation",()=>{
+ const look={id:"look",source_sha256:"primaryhash",asset:{id:"primary",status:"approved"}};
+ const extra={asset:{id:"side",status:"approved",sha256:"sidehash",media_type:"image/png"},view:"side",confirmed:true};
+ assert.deepEqual(model.poseBody(look,"standing",1,true,"key",extra).additional_references,[{asset_id:"side",view:"side"}]);
+ for(const value of [{...extra,confirmed:false},{...extra,view:"random"},{...extra,asset:{...extra.asset,id:"primary"}},{...extra,asset:{...extra.asset,status:"candidate"}}]){
+  assert.throws(()=>model.poseBody(look,"standing",1,true,"key",value));
+ }
+});

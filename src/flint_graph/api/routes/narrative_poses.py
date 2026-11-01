@@ -1,6 +1,6 @@
 """Explicit pose jobs from an approved reviewed look."""
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -23,7 +23,10 @@ from flint_graph.application.services.narrative_poses import queue_pose_job
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.infrastructure.db.models import NarrativeAsset, NarrativeImageJob
 from flint_graph.infrastructure.db.narrative_look_models import NarrativeLookJob
-from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseJob
+from flint_graph.infrastructure.db.narrative_pose_models import (
+    NarrativePoseJob,
+    NarrativePoseReference,
+)
 from flint_graph.narrative.imagegen import content_policy
 from flint_graph.narrative.poses import MODEL_ID
 
@@ -32,9 +35,16 @@ router = APIRouter(
 )
 
 
+class PoseReferenceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    asset_id: UUID
+    view: Literal["front", "side", "back", "detail"]
+
+
 class PoseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     look_id: UUID
+    additional_references: list[PoseReferenceInput] = Field(default_factory=list, max_length=1)
     pose: str = Field(min_length=1, max_length=300)
     count: int = Field(default=1, ge=1, le=4)
     transparent: StrictBool = True
@@ -53,7 +63,35 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
             .order_by(NarrativeAsset.job_index)
         )
     )
+    references = list(
+        await session.scalars(
+            select(NarrativePoseReference)
+            .where(NarrativePoseReference.job_id == job.id)
+            .order_by(NarrativePoseReference.position)
+        )
+    )
+    frozen = [
+        {
+            "asset_id": str(row.asset_id),
+            "sha256": row.sha256,
+            "view": row.view,
+            "name": row.name,
+            "size_bytes": row.size_bytes,
+        }
+        for row in references
+    ]
+    if not frozen:
+        # Jobs admitted before migration 0036 keep their original single source.
+        frozen = [
+            {
+                "asset_id": snapshot.snapshot["asset_id"],
+                "sha256": snapshot.snapshot["source_sha256"],
+                "view": "primary",
+                "name": snapshot.snapshot["name"],
+            }
+        ]
     return {
+        "references": frozen,
         "operation": "pose",
         "model_id": MODEL_ID,
         "model_manifest_sha256": plan.model_manifest_sha256,
@@ -84,6 +122,7 @@ async def create_pose_endpoint(
             author_user_id=user.user.id,
             actor=actor,
             available=settings.narrative_pose_generation_enabled,
+            max_references=settings.narrative_pose_max_references,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
             policy=content_policy(settings.narrative_image_content_policy),
             model_manifest_sha256=settings.narrative_pose_model_manifest_sha256,
@@ -123,5 +162,6 @@ async def list_pose_endpoint(
             ),
             "transparent": bool(settings.narrative_image_cutout_manifest_sha256),
             "model_id": MODEL_ID,
+            "max_references": settings.narrative_pose_max_references,
         },
     }

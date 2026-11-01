@@ -339,3 +339,40 @@ uv run pytest tests/integration/test_narrative_pose_live.py -q --tb=short
 This check uses the repository's synthetic adult QA reference, not a creator's
 project. See the [delivery report](../reports/2026-11-01-character-poses.md) for the
 real Temporal/MinIO/browser proof and current fidelity limits.
+
+### Additional approved views and rendering consistency (ADR 0049)
+
+After migration 0036 and deployment of the compatible pose API/worker/child,
+set `FLINT_GRAPH_NARRATIVE_POSE_MAX_REFERENCES=2` to allow one optional extra view.
+The default remains one. The primary reviewed image defines identity/outfit and
+requests line weight, palette, shading and light direction. The extra is labelled
+front, side, back or detail and is instructed to provide missing shape/garment
+information without blending its rendering style. These are model instructions;
+outputs can still change linework, illumination and fine costume details.
+
+In Characters → Poses, choose **Additional approved view**, inspect it, label its
+view, and explicitly confirm the same character/outfit. The image must be approved,
+from the project, unassigned or assigned to this character, and distinct from the
+primary hash. Do not select another outfit as a supplementary view. **References
+used** shows the immutable sources for an earlier job, even after changing the
+form or default look. Reusing a request key with different views returns conflict.
+
+Both sources are hash verified before generation. The additional image fits within
+512×512 with Lanczos preprocessing; the primary keeps its existing preprocessing.
+The result provenance records ordered source hashes, sizes, view-manifest hash and
+preprocessing identity. Child protocol 2 has two fixed private reference files;
+protocol 1 remains accepted. Existing single-source job hashes/replays remain valid,
+including jobs admitted before the new reference table existed. The new table has
+workspace/project foreign keys, an ordered primary/extra constraint and no game
+format effect. No reference weights, training data or model files enter exports.
+
+Identity similarity does not measure drawing style or lighting. The live fixture
+still had heavier outlines than its primary despite the instructions. For a change
+limited to facial expression, use the existing bounded face repaint: it preserves
+the body/outfit pixels. A newly drawn pose needs visual review. Consistent learned
+style and any style LoRA training remain #184 work; no such training is claimed here.
+
+To qualify two-reference generation, set the existing live-model opt-in plus
+`FLINT_GRAPH_NARRATIVE_POSE_LIVE_SECONDARY` to an explicitly approved synthetic QA
+PNG, then run `tests/integration/test_narrative_pose_live.py`. That path verifies
+ordered input hashes and the secondary-size cap, not a style-quality score.

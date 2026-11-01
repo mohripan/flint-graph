@@ -226,3 +226,128 @@ async def test_pose_access_policy_and_archiving_match_image_jobs(studio):  # noq
             url + "/pose-jobs", headers=headers, json={**body, "idempotency_key": str(uuid4())}
         )
     ).status_code == 409
+
+
+async def test_two_approved_views_are_frozen_and_used_in_order(studio):  # noqa: F811
+    from flint_graph.worker.activities.narrative_pose import NarrativePoseActivities
+
+    client, factory, store, headers, base, *_ = studio
+    url, body, _ = await admitted(studio)
+    config = app.dependency_overrides[get_settings]().model_copy(
+        update={"narrative_pose_max_references": 2}
+    )
+    app.dependency_overrides[get_settings] = lambda: config
+    extra = await approved(client, headers, base, shade=89)
+    body = {
+        **body,
+        "additional_references": [{"asset_id": extra["id"], "view": "back"}],
+        "idempotency_key": str(uuid4()),
+    }
+    response = await client.post(url + "/pose-jobs", headers=headers, json=body)
+    assert response.status_code == 202, response.text
+    result = response.json()
+    assert [item["view"] for item in result["references"]] == ["primary", "back"]
+    assert result["references"][1]["sha256"] == extra["sha256"]
+    assert "same character" in result["job"]["prompt"].lower()
+    assert "back" in result["job"]["prompt"].lower()
+    assert "do not blend" in result["job"]["prompt"].lower()
+    replay = await client.post(url + "/pose-jobs", headers=headers, json=body)
+    assert replay.json()["job"]["id"] == result["job"]["id"]
+    changed = await client.post(
+        url + "/pose-jobs",
+        headers=headers,
+        json={**body, "additional_references": [{"asset_id": extra["id"], "view": "side"}]},
+    )
+    assert changed.status_code == 409
+    # Consume both accepted jobs; the new one must get two verified source images.
+    dispatcher = Dispatcher()
+    await relay_image_batch(factory, dispatcher=dispatcher, poses=True)
+    generator = FakeGenerator()
+    generator.model = ModelIdentity(MODEL_REPO, MODEL_REVISION, "apache-2.0")
+    generator.model_manifest_sha256 = "b" * 64
+    activity = NarrativePoseActivities(factory=factory, generator=generator, store=store)
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=result["job"]["id"]
+    )
+    outcome = await environment(payload, dispatcher.run_id).run(activity.run, payload)
+    assert outcome["status"] == "completed"
+    assert len(generator.requests[0].additional_references) == 1
+    assert generator.requests[0].additional_references[0] != generator.requests[0].reference
+    history = (await client.get(url + "/pose-jobs", headers=headers)).json()
+    assert history["capabilities"]["max_references"] == 2
+    assert (
+        next(item for item in history["jobs"] if item["job"]["id"] == result["job"]["id"])[
+            "references"
+        ]
+        == result["references"]
+    )
+
+
+async def test_pose_prompt_preserves_primary_rendering_and_gives_extra_views_only_geometry(studio):  # noqa: F811
+    _, _, result = await admitted(studio)
+    prompt = result["job"]["prompt"].lower()
+    assert "line weight" in prompt and "light direction" in prompt
+    assert "shading" in prompt and "palette" in prompt
+
+
+async def test_additional_view_rejects_unapproved_foreign_and_duplicate_images(studio):  # noqa: F811
+    client, _, _, headers, base, *_ = studio
+    url, body, result = await admitted(studio)
+    config = app.dependency_overrides[get_settings]().model_copy(
+        update={"narrative_pose_max_references": 2}
+    )
+    app.dependency_overrides[get_settings] = lambda: config
+    duplicate = result["look"]["asset_id"]
+    foreign = await approved(client, headers, base, character="someone_else", shade=91)
+    for asset_id, status in [(duplicate, 422), (foreign["id"], 422), (str(uuid4()), 404)]:
+        response = await client.post(
+            url + "/pose-jobs",
+            headers=headers,
+            json={
+                **body,
+                "idempotency_key": str(uuid4()),
+                "additional_references": [{"asset_id": asset_id, "view": "detail"}],
+            },
+        )
+        assert response.status_code == status, response.text
+    replay = await client.post(
+        url + "/pose-jobs", headers=headers, json={**body, "additional_references": []}
+    )
+    assert replay.status_code == 202 and replay.json()["job"]["id"] == result["job"]["id"]
+
+
+async def test_legacy_single_reference_jobs_still_execute_without_new_reference_rows(studio):  # noqa: F811
+    from uuid import UUID
+
+    from sqlalchemy import delete
+
+    from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseReference
+    from flint_graph.worker.activities.narrative_pose import NarrativePoseActivities
+
+    client, factory, store, headers, base, *_ = studio
+    url, body, result = await admitted(studio)
+    async with factory() as session:
+        await session.execute(
+            delete(NarrativePoseReference).where(
+                NarrativePoseReference.job_id == UUID(result["job"]["id"])
+            )
+        )
+        await session.commit()
+    replay = await client.post(url + "/pose-jobs", headers=headers, json=body)
+    assert replay.status_code == 202 and len(replay.json()["references"]) == 1
+    dispatcher = Dispatcher()
+    await relay_image_batch(factory, dispatcher=dispatcher, poses=True)
+    gen = FakeGenerator()
+    gen.model = ModelIdentity(MODEL_REPO, MODEL_REVISION, "apache-2.0")
+    gen.model_manifest_sha256 = "b" * 64
+    activity = NarrativePoseActivities(factory=factory, generator=gen, store=store)
+    payload = ImageJobPayload(
+        schema_version="1", tenant_id=headers["X-Tenant-ID"], job_id=result["job"]["id"]
+    )
+    outcome = await environment(payload, dispatcher.run_id).run(activity.run, payload)
+    assert outcome["status"] == "completed" and gen.requests[0].additional_references == ()
+    job = (await client.get(base + "/image-jobs/" + result["job"]["id"], headers=headers)).json()
+    assert job["assets"][0]["provenance"]["runtime"]["reference_count"] == "1"
+    assert job["assets"][0]["provenance"]["runtime"]["references_sha256"] != (
+        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    )

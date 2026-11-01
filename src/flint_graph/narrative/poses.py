@@ -9,14 +9,23 @@ MODEL_REVISION = "e7b7dc27f91deacad38e78976d1f2b499d76a294"
 POSE_WIDTH, POSE_HEIGHT = 768, 1152
 
 
-def pose_request(appearance: str, pose: str, *, policy: ContentPolicy) -> ImageRequest:
+def pose_request(
+    appearance: str, pose: str, *, policy: ContentPolicy, additional_view: str | None = None
+) -> ImageRequest:
     appearance, pose = clean_appearance(appearance), clean_appearance(pose)
     if not pose or len(pose) > 300:
         raise ValueError("Describe the pose in 1-300 characters.")
     policy.check(appearance)
     policy.check(pose)
+    if additional_view is not None and additional_view not in {"front", "side", "back", "detail"}:
+        raise ValueError("Unknown approved view")
+    prompt = (
+        render("narrative.image.pose_views", appearance=appearance, pose=pose, view=additional_view)
+        if additional_view
+        else render("narrative.image.pose", appearance=appearance, pose=pose)
+    )
     return ImageRequest(
-        prompt=render("narrative.image.pose", appearance=appearance, pose=pose),
+        prompt=prompt,
         # This distilled editing model does not implement SDXL negative conditioning.
         negative_prompt="",
         width=POSE_WIDTH,

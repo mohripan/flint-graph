@@ -1,8 +1,10 @@
 """Pose execution extends the image supervisor, with verified frozen references."""
 
 from dataclasses import fields, replace
+from hashlib import sha256
 from uuid import UUID
 
+from sqlalchemy import select
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -14,7 +16,10 @@ from flint_graph.application.narrative_image_workflow import (
 from flint_graph.application.services.narrative_images import ImageWork
 from flint_graph.infrastructure.db.models import NarrativeAsset
 from flint_graph.infrastructure.db.narrative_look_models import NarrativeLookJob
-from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseJob
+from flint_graph.infrastructure.db.narrative_pose_models import (
+    NarrativePoseJob,
+    NarrativePoseReference,
+)
 from flint_graph.infrastructure.narrative_imagegen import (
     GenerationRequest,
     GenerationResult,
@@ -23,6 +28,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
 )
 from flint_graph.infrastructure.narrative_posegen import PoseGenerationRequest
 from flint_graph.narrative.poses import MODEL_REPO, MODEL_REVISION
+from flint_graph.narrative.values import canonical_json
 from flint_graph.worker.activities.narrative_image import NarrativeImageActivities
 
 
@@ -68,10 +74,41 @@ class NarrativePoseActivities(NarrativeImageActivities):
                 or asset.sha256 != snapshot.snapshot["source_sha256"]
             ):
                 raise ImageGenerationError("reference_unavailable")
+            references = list(
+                await session.scalars(
+                    select(NarrativePoseReference)
+                    .where(NarrativePoseReference.job_id == plan.job_id)
+                    .order_by(NarrativePoseReference.position)
+                )
+            )
+            additional = []
+            if references:
+                if (
+                    references[0].asset_id != asset.id
+                    or references[0].sha256 != asset.sha256
+                    or references[0].position != 0
+                ):
+                    raise ImageGenerationError("reference_unavailable")
+                for item in references[1:]:
+                    extra = await session.get(NarrativeAsset, item.asset_id)
+                    if (
+                        extra is None
+                        or extra.status != "approved"
+                        or extra.project_id != work.project_id
+                        or extra.tenant_id != work.tenant_id
+                        or extra.sha256 != item.sha256
+                        or extra.size_bytes != item.size_bytes
+                        or extra.character_id not in (None, plan.character_id)
+                    ):
+                        raise ImageGenerationError("reference_unavailable")
+                    additional.append(
+                        await self._image(work, extra.id, item.size_bytes, item.sha256)
+                    )
             data = await self._image(work, asset.id, asset.size_bytes, asset.sha256)
         return PoseGenerationRequest(
             **{item.name: getattr(work.request, item.name) for item in fields(work.request)},
             reference=data,
+            additional_references=tuple(additional),
         )
 
     async def _generate(
@@ -87,11 +124,41 @@ class NarrativePoseActivities(NarrativeImageActivities):
             assert plan is not None
             look = await session.get(NarrativeLookJob, (job_id, plan.character_id))
             assert look is not None
+            references = list(
+                await session.scalars(
+                    select(NarrativePoseReference)
+                    .where(NarrativePoseReference.job_id == job_id)
+                    .order_by(NarrativePoseReference.position)
+                )
+            )
+            manifest = [
+                {
+                    "asset_id": str(item.asset_id),
+                    "sha256": item.sha256,
+                    "view": item.view,
+                    "size_bytes": item.size_bytes,
+                }
+                for item in references
+            ]
+            if not manifest:
+                # Legacy jobs have a frozen look snapshot but no reference-table rows.
+                source = await session.get(NarrativeAsset, UUID(look.snapshot["asset_id"]))
+                assert source is not None
+                manifest = [
+                    {
+                        "asset_id": look.snapshot["asset_id"],
+                        "sha256": look.snapshot["source_sha256"],
+                        "view": "primary",
+                        "size_bytes": source.size_bytes,
+                    }
+                ]
             return replace(
                 result,
                 runtime={
                     **result.runtime,
                     "operation": "pose",
+                    "references_sha256": sha256(canonical_json(manifest)).hexdigest(),
+                    "reference_count": str(len(manifest) or 1),
                     "look_sha256": look.snapshot["sha256"],
                     "source_sha256": look.snapshot["source_sha256"],
                     "model_manifest_sha256": plan.model_manifest_sha256,
