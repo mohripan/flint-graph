@@ -1,0 +1,317 @@
+{
+  "schema": 1,
+  "id": "original-adult-fixtures-pilot-v1",
+  "review_kind": "agent",
+  "reference_generation": {
+    "model": "cagliostrolab/animagine-xl-4.0",
+    "revision": "2b7c1b397761bf5bd3cc42e5b39ec99314a75a96",
+    "scheduler": "EulerAncestralDiscreteScheduler",
+    "steps": 28,
+    "guidance": 5,
+    "seed": 701,
+    "runtime": {
+      "torch": "2.11.0+cu128",
+      "diffusers": "0.42.1",
+      "cuda": "12.8"
+    },
+    "prompts": {
+      "aster": "1boy, adult, androgynous, shoulder-length hair, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, full body, standing, arms at sides, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "nera": "1girl, adult, black hair, single braid, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, full body, standing, arms at sides, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres"
+    }
+  },
+  "references": {
+    "aster": {
+      "image": "references/aster.png",
+      "sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "seed": 701,
+      "review_kind": "agent",
+      "note": "Original synthetic adult fixture; not a creator-approved Studio asset."
+    },
+    "nera": {
+      "image": "references/nera.png",
+      "sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "seed": 701,
+      "review_kind": "agent",
+      "note": "Original synthetic adult fixture; not a creator-approved Studio asset."
+    }
+  },
+  "cases": [
+    {
+      "id": "aster/back/101",
+      "character": "aster",
+      "pose": "back",
+      "seed": 101,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/back.png",
+        "sha256": "4a197e1ecf00d3b3a4649b56831f09c18a0591f7d851e30fd5fe2e8f8c75eede"
+      }
+    },
+    {
+      "id": "aster/back/102",
+      "character": "aster",
+      "pose": "back",
+      "seed": 102,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/back.png",
+        "sha256": "4a197e1ecf00d3b3a4649b56831f09c18a0591f7d851e30fd5fe2e8f8c75eede"
+      }
+    },
+    {
+      "id": "nera/back/101",
+      "character": "nera",
+      "pose": "back",
+      "seed": 101,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/back.png",
+        "sha256": "4a197e1ecf00d3b3a4649b56831f09c18a0591f7d851e30fd5fe2e8f8c75eede"
+      }
+    },
+    {
+      "id": "nera/back/102",
+      "character": "nera",
+      "pose": "back",
+      "seed": 102,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, from behind, back view, standing, looking away, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/back.png",
+        "sha256": "4a197e1ecf00d3b3a4649b56831f09c18a0591f7d851e30fd5fe2e8f8c75eede"
+      }
+    },
+    {
+      "id": "aster/sitting/101",
+      "character": "aster",
+      "pose": "sitting",
+      "seed": 101,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/sitting.png",
+        "sha256": "3356928653c2e8f4f22eb75996706cd08e831ab8bde2a0dce0f36c740b31f467"
+      }
+    },
+    {
+      "id": "aster/sitting/102",
+      "character": "aster",
+      "pose": "sitting",
+      "seed": 102,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/sitting.png",
+        "sha256": "3356928653c2e8f4f22eb75996706cd08e831ab8bde2a0dce0f36c740b31f467"
+      }
+    },
+    {
+      "id": "nera/sitting/101",
+      "character": "nera",
+      "pose": "sitting",
+      "seed": 101,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/sitting.png",
+        "sha256": "3356928653c2e8f4f22eb75996706cd08e831ab8bde2a0dce0f36c740b31f467"
+      }
+    },
+    {
+      "id": "nera/sitting/102",
+      "character": "nera",
+      "pose": "sitting",
+      "seed": 102,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, sitting on a wooden bench, full body, knees bent, outdoors, garden, warm sunset lighting, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/sitting.png",
+        "sha256": "3356928653c2e8f4f22eb75996706cd08e831ab8bde2a0dce0f36c740b31f467"
+      }
+    },
+    {
+      "id": "aster/crossed/101",
+      "character": "aster",
+      "pose": "crossed",
+      "seed": 101,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/crossed.png",
+        "sha256": "eb659090672fdd8173c4d1247ad1ede211e4502f03805a60ccb49022b240b70e"
+      }
+    },
+    {
+      "id": "aster/crossed/102",
+      "character": "aster",
+      "pose": "crossed",
+      "seed": 102,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/crossed.png",
+        "sha256": "eb659090672fdd8173c4d1247ad1ede211e4502f03805a60ccb49022b240b70e"
+      }
+    },
+    {
+      "id": "nera/crossed/101",
+      "character": "nera",
+      "pose": "crossed",
+      "seed": 101,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/crossed.png",
+        "sha256": "eb659090672fdd8173c4d1247ad1ede211e4502f03805a60ccb49022b240b70e"
+      }
+    },
+    {
+      "id": "nera/crossed/102",
+      "character": "nera",
+      "pose": "crossed",
+      "seed": 102,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, standing, crossed arms, full body, looking at viewer, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/crossed.png",
+        "sha256": "eb659090672fdd8173c4d1247ad1ede211e4502f03805a60ccb49022b240b70e"
+      }
+    },
+    {
+      "id": "aster/flower/101",
+      "character": "aster",
+      "pose": "flower",
+      "seed": 101,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/flower.png",
+        "sha256": "79a7f786bb010acce4ae65db9912dba253a9dfe389eea62e31f314451d749979"
+      }
+    },
+    {
+      "id": "aster/flower/102",
+      "character": "aster",
+      "pose": "flower",
+      "seed": 102,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, blue coat, gold buttons, white shirt, black pants, red scarf, black boots, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/flower.png",
+        "sha256": "79a7f786bb010acce4ae65db9912dba253a9dfe389eea62e31f314451d749979"
+      }
+    },
+    {
+      "id": "nera/flower/101",
+      "character": "nera",
+      "pose": "flower",
+      "seed": 101,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/flower.png",
+        "sha256": "79a7f786bb010acce4ae65db9912dba253a9dfe389eea62e31f314451d749979"
+      }
+    },
+    {
+      "id": "nera/flower/102",
+      "character": "nera",
+      "pose": "flower",
+      "seed": 102,
+      "prompt": "1girl, adult, black hair, green eyes, orange jacket, black shirt, black skirt, black pantyhose, white boots, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, solo, standing, holding a flower in one hand, full body, looking at flower, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "control": {
+        "image": "controls/flower.png",
+        "sha256": "79a7f786bb010acce4ae65db9912dba253a9dfe389eea62e31f314451d749979"
+      }
+    }
+  ],
+  "caveats": [
+    "Agent fixture selection only; no creator calibration.",
+    "Hand-drawn 2D skeletons do not encode view direction, fingers or the flower.",
+    "No multi-person or expression cases in this pose pilot."
+  ]
+}

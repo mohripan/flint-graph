@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "scores_sha256": "42b991d885b6f5326d3cc2e34d4ff3ad95f041abf0e3c94205ee94e1ad69a43e",
+  "review_kind": "agent",
+  "reviewer": "Codex visual inspection of the contact sheets and selected full-size outputs",
+  "blinded": false,
+  "rubric": {
+    "identity": "Recognizable as the reference character from visible face/hair/eyes. Back views without a clear face are unknown. No claim of exact facial geometry.",
+    "clothes": "Coarse garment categories, primary colors and coverage. Unknown when cropped or skirt/shorts or tights/skin cannot be distinguished. Same does not mean identical trim, buttons or cut.",
+    "pose": "Requested main body pose/object is clear. Framing, eye direction and fine anatomy are separate. The back-view prompt does not explicitly request full-body framing, so a crop is not itself a pose failure.",
+    "fine_details": "Not calibrated. Visible coat cuts, trim, jacket fit and braids can change even when identity and coarse outfit match."
+  },
+  "ratings": [
+    {
+      "id": "negative/aster/301",
+      "identity": "drifted",
+      "clothes": "same",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "060bdaa70baeb62805a49199ded7e8f40ec0c52ccba882e46800947ef28e64eb",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "note": "Different visible face/age; similar colors are not identity."
+    },
+    {
+      "id": "negative/aster/302",
+      "identity": "drifted",
+      "clothes": "same",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "ff228cf06063f2fd109f345aa5675c7f55591a4326cda7bb1a18e0e3c2d611a1",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "note": "Different visible face/age; similar colors are not identity."
+    },
+    {
+      "id": "negative/nera/301",
+      "identity": "drifted",
+      "clothes": "unknown",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "5e3a59756495f46eb977718e0544abaa4d8a1db607270893a4ec6d56fc4c7b4b",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "note": "Different visible face/age; similar colors are not identity."
+    },
+    {
+      "id": "negative/nera/302",
+      "identity": "drifted",
+      "clothes": "unknown",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "292a82a54ad1c834f49c7622709a3776291dce07e7cdb8a7b725c9c2e4a47f59",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "note": "Different visible face/age; similar colors are not identity."
+    }
+  ]
+}

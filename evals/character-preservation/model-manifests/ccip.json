@@ -1,0 +1,42 @@
+{
+  "repo": "deepghs/ccip_onnx",
+  "revision": "eb2acdd29af1703388d3d0c04221add322bc9110",
+  "license": "openrail-unspecified",
+  "files": {
+    "README.md": {
+      "size": 2407,
+      "sha256": "0832843d0238f1a08f71f9bcffaa95c338cba33079fcc1d26f83d80f45e24e58",
+      "lfs_verified": false
+    },
+    "ccip-caformer-24-randaug-pruned/metrics.json": {
+      "size": 147,
+      "sha256": "b5535577288e22940b853192cd1661e45c7615b7d89b49a8745c2c81685552d4",
+      "lfs_verified": false
+    },
+    "ccip-caformer-24-randaug-pruned/model_feat.onnx": {
+      "size": 150248245,
+      "sha256": "4ea118d16496274f4f6e08d3afc768cc592389e8f7f32f8732ce2215c228ac5f",
+      "lfs_verified": true
+    },
+    "ccip-caformer-24-randaug-pruned/model_metrics.onnx": {
+      "size": 1649,
+      "sha256": "7e4646fdfbe369ad485b227ec47ac4092c98b8deef3af44e19fdbd8ba7bc25c1",
+      "lfs_verified": true
+    },
+    "ccip-caformer_b36-24/metrics.json": {
+      "size": 147,
+      "sha256": "5e4a1cdb81053acfbab36980ca3b5ec6ca545cb73f3a38d5b114ddbd5c6ab60a",
+      "lfs_verified": false
+    },
+    "ccip-caformer_b36-24/model_feat.onnx": {
+      "size": 383591416,
+      "sha256": "c1e7333a55c2ad9e03cd340c635e96c9c1d86f0836fa7eae65720e7c9c94ee51",
+      "lfs_verified": true
+    },
+    "ccip-caformer_b36-24/model_metrics.onnx": {
+      "size": 1618,
+      "sha256": "816f291e385e854896276ff283dc83eac4966e5f51ab10260fee50de3ca9b8e3",
+      "lfs_verified": true
+    }
+  }
+}

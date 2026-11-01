@@ -153,6 +153,23 @@ enter prompt refresh. Default is locked/offline. Do not enable SDK tracing or
 restart owned services to activate a new lock. The legacy image TOML is an explicit
 locked-mode override, never an automatic source to publish.
 
+M40 #180–#186 now has an isolated character-preservation research bench, not a
+shipped pose/looks/scoring feature. Read ADR 0046,
+`docs/reports/2026-11-01-character-preservation.md` and
+`docs/architecture/character-preservation-research.md`. Staged FLUX.2 klein 4B
+followed 16/16 primary pose requests on two original adult fixture characters on
+the 12 GB GPU; it is the next pose candidate. Cached ControlNet reproduced all
+16 baseline PNGs with lower memory. Two-reference editing is promising, but
+adding a background reference changed hair in one of two scenes. Identity scores
+do not certify clothes or reviewed traits; the provisional garment fit missed
+14/15 labelled drifts. Agent labels are not creator calibration. CCIP's exact
+weight license remains unresolved. LoRA work measured random-tensor memory only:
+no creator-selected training images, useful trained weights or quality claim.
+Use the separate `runtimes/character_eval` / `runtimes/character_lab` locks; never
+add these dependencies or private weights to the API, Studio workers or games.
+Named looks, advisory UI, qualified person assignment and actual character/style
+training remain follow-up work. Do not close all seven issues from this report.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

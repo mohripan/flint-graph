@@ -1,0 +1,175 @@
+{
+  "schema": 1,
+  "scores_sha256": "69aecca1ecf82dba164f1dbae0bc396ca625e8377f9c48952a1eed0c857f2d33",
+  "review_kind": "agent",
+  "reviewer": "Codex visual inspection of the contact sheets and selected full-size outputs",
+  "blinded": false,
+  "rubric": {
+    "identity": "Recognizable as the reference character from visible face/hair/eyes. Back views without a clear face are unknown. No claim of exact facial geometry.",
+    "clothes": "Coarse garment categories, primary colors and coverage. Unknown when cropped or skirt/shorts or tights/skin cannot be distinguished. Same does not mean identical trim, buttons or cut.",
+    "pose": "Requested main body pose/object is clear. Framing, eye direction and fine anatomy are separate. The back-view prompt does not explicitly request full-body framing, so a crop is not itself a pose failure.",
+    "fine_details": "Not calibrated. Visible coat cuts, trim, jacket fit and braids can change even when identity and coarse outfit match."
+  },
+  "ratings": [
+    {
+      "id": "aster/back/101",
+      "candidate_sha256": "c5abd47e8ce1c97a3fe7090336893b0245f0fd6228711af419ad8b29be076332",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/back/102",
+      "candidate_sha256": "12748cf06a309262bfdd465b19d1a2d99b86ad29ec18d379b1b32b20c8199ce3",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/back/101",
+      "candidate_sha256": "76c1e25061826710e7cea4ba5207d6b2ad6226e98b88c3d1f664788b134609b9",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/back/102",
+      "candidate_sha256": "71169db1b2ec141bdfe5017a3e0e6a0bd5836bcb7478a2743f2465de8e3d4e19",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Backless top replaces reference shirt; partial/overhead framing.",
+      "identity": "unknown",
+      "clothes": "drifted",
+      "pose": "same"
+    },
+    {
+      "id": "aster/sitting/101",
+      "candidate_sha256": "e5baf154c9a5a726768a1e4f6de95c48c889c3e0efc1de64268106963012273d",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/sitting/102",
+      "candidate_sha256": "9672fcfbbe5e8a69d50b505c8f228da1233c1fa67b499eedd1fbb43d7a5569dc",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/sitting/101",
+      "candidate_sha256": "759c1a530a1c8e5c904b261ac05bcd698b3b12d35bfd134fff77c9668c83a95c",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/sitting/102",
+      "candidate_sha256": "a79e8e7243f5e875cf0030701e6a51a96be19989770ede9b9b21cc45b19dbc66",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/crossed/101",
+      "candidate_sha256": "8e47e48acb208bc417d16113c407048f04f83f09e9f8802b9f0f5ff15ff5b639",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/crossed/102",
+      "candidate_sha256": "e2f006a40e18acc7cfbcf344b2440702c1eb4ec09787728969354196bf3d5ef9",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/crossed/101",
+      "candidate_sha256": "c703497af0bf1e0d56e8e62129c8d9b53f7648d7d16b3ece09144ade99199618",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/crossed/102",
+      "candidate_sha256": "dd336a012f35ad33cb950f095aba7418250b2c1f47b32d6e6009d53ad2c107af",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "New long hairstyle and overhead cropped framing.",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/flower/101",
+      "candidate_sha256": "8c94ddc4500a2a34edef898bc08c99c4ef5affb39c85843302540a3d97fe842e",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/flower/102",
+      "candidate_sha256": "67aa11ae1f23ac737c6a2d6a0b04256a916804f1d8f78d7940f1ce11aaedaaf9",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/flower/101",
+      "candidate_sha256": "b4ecc7e792c62ab781547427a590e489a00ad4621954d6d34080870ead6b2911",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Shorts/bare legs replace skirt/tights.",
+      "identity": "same",
+      "clothes": "drifted",
+      "pose": "same"
+    },
+    {
+      "id": "nera/flower/102",
+      "candidate_sha256": "5dcb0f244e3a2609e24d167add18cf55e2fadf60db8e8f8f71df1e70ca12cd03",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Close crop hides lower outfit. Identity labels recognize the salient cast look, not exact facial geometry; a two-color cast is an easy test.",
+      "identity": "same",
+      "clothes": "unknown",
+      "pose": "same"
+    }
+  ]
+}

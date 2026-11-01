@@ -1,0 +1,175 @@
+{
+  "schema": 1,
+  "scores_sha256": "f83997e071b991b2c41d5be850590126686a72b34cee247d6ead7b512873a835",
+  "review_kind": "agent",
+  "reviewer": "Codex visual inspection of the contact sheets and selected full-size outputs",
+  "blinded": false,
+  "rubric": {
+    "identity": "Recognizable as the reference character from visible face/hair/eyes. Back views without a clear face are unknown. No claim of exact facial geometry.",
+    "clothes": "Coarse garment categories, primary colors and coverage. Unknown when cropped or skirt/shorts or tights/skin cannot be distinguished. Same does not mean identical trim, buttons or cut.",
+    "pose": "Requested main body pose/object is clear. Framing, eye direction and fine anatomy are separate. The back-view prompt does not explicitly request full-body framing, so a crop is not itself a pose failure.",
+    "fine_details": "Not calibrated. Visible coat cuts, trim, jacket fit and braids can change even when identity and coarse outfit match."
+  },
+  "ratings": [
+    {
+      "id": "aster/back/101",
+      "candidate_sha256": "b952e94aa80c99796aef951394446554d6f36f8a2637ae46aeca63744d93c2ce",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/back/102",
+      "candidate_sha256": "2b3bf32043075671537ccfc6a816fdc3cf2265de8748bdec507edce16935a449",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/back/101",
+      "candidate_sha256": "fb0ad68cf6fe26a55da79f1c09314312f43296bcdda39afc9e0243d66e629fb5",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Source standing front view remains instead of back view.",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "drifted"
+    },
+    {
+      "id": "nera/back/102",
+      "candidate_sha256": "a9ce85d272e7a0e938cb4b33225a53496db93ae777860c8ea703662db62c995f",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "unknown",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/sitting/101",
+      "candidate_sha256": "29ad6c7966caa6e63c9c3b902cec47d5f10d94f21c9aa9888ce2e047b9b5ab92",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "Standing with bench behind instead of sitting.",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "drifted"
+    },
+    {
+      "id": "aster/sitting/102",
+      "candidate_sha256": "a3ce07e16514a04146b58286004ee9ad97f6d0c61e403b44ecd04c703ebb8659",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/sitting/101",
+      "candidate_sha256": "5ec26ee27761d6bb3bfaa3d73502837286cd6bcd710f286b1976140b7bfdab08",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Standing instead of sitting.",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "drifted"
+    },
+    {
+      "id": "nera/sitting/102",
+      "candidate_sha256": "0ce42df7cc4bc2aedc5c2567b26177a47a78f0f37637634bb47e8bc182d0ae78",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Standing instead of sitting; lower garment ambiguous.",
+      "identity": "same",
+      "clothes": "unknown",
+      "pose": "drifted"
+    },
+    {
+      "id": "aster/crossed/101",
+      "candidate_sha256": "fae6c76ae5fa05c06a45519d5e531b4ac022fb8eb52ede87cc7142ae8ed736c4",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/crossed/102",
+      "candidate_sha256": "d6bf3f74f3795ff614b39464290f69aca1e5d11f9a197a4d10ac409613b5780c",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/crossed/101",
+      "candidate_sha256": "8493a0e8e429db190ae6f688b30f3421deed70edf81fc9022fb41a41119993f5",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "Crossed arms work but skirt/shorts ambiguous. Fine decorations still vary.",
+      "identity": "same",
+      "clothes": "unknown",
+      "pose": "same"
+    },
+    {
+      "id": "nera/crossed/102",
+      "candidate_sha256": "7496b222b57acb11d0df312320fe9ae33b78a791a7cc7c313a9068d413d537c7",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "unknown",
+      "pose": "same"
+    },
+    {
+      "id": "aster/flower/101",
+      "candidate_sha256": "70db607f319a77edf201fcc13e73eb84628b7c1e3e279eb4769104710be1d1e7",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "aster/flower/102",
+      "candidate_sha256": "eda1ef5d9101ac557f56f3a00d089a676ae1fe7575c4bc1f3db0f9ea66a6822e",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    },
+    {
+      "id": "nera/flower/101",
+      "candidate_sha256": "8af80948c285d1ab5a02bb04e043de84f7273b93ffc951012bbdb54b2df51020",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "unknown",
+      "pose": "same"
+    },
+    {
+      "id": "nera/flower/102",
+      "candidate_sha256": "2010fee2f4ef4411e430ad0e02ed93bbd61869b83926ecd807ad76a048ad1c1c",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "person_count": 1,
+      "note": "",
+      "identity": "same",
+      "clothes": "same",
+      "pose": "same"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "repo": "deepghs/wd14_tagger_with_embeddings",
+  "revision": "4ec31f2aeabf66353f3ee3ccd20d2f07e716851b",
+  "license": "upstream-apache-2.0",
+  "files": {
+    "README.md": {
+      "size": 2420,
+      "sha256": "2d3779a45ced25571d7d261010a1ba360beca596c95d2f3a4d59f1829cd8c92d",
+      "lfs_verified": false
+    },
+    "SmilingWolf/wd-swinv2-tagger-v3/model.onnx": {
+      "size": 467461052,
+      "sha256": "ae25f5f12b2d5891728fb7768fa63d65bf13a83d6d4823e3a1bf7b42875c74ff",
+      "lfs_verified": true
+    }
+  }
+}

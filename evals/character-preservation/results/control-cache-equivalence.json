@@ -1,0 +1,10 @@
+{
+  "images": 16,
+  "identical_png_hashes": 16,
+  "original_source_run_sha256": "8510894b1912f7605633a02c977802dbfa7f1dc7f3f7cbbf774e9dc41abba6f8",
+  "cached_source_run_sha256": "35b30120d33c0d79ac98f85541b26a35e0f530753c2a195f77dcdd28d080c3d8",
+  "torch_peak_original_mib": 10739.875,
+  "torch_peak_cached_mib": 9177.5830078125,
+  "device_used_after_original_mib": 12190.09765625,
+  "device_used_after_cached_mib": 10618.09765625
+}

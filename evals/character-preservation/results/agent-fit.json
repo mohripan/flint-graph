@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "review_kind": "agent",
+  "production_ready": false,
+  "scorer_sha256": "b16862db97f017da27603516a6b925055b04914e126c3fb7787c14bf4a4e4ac6",
+  "parents": [
+    {
+      "scores_sha256": "48fc738b9057ea724104ad9455c53834e8f38738aae00e7e4c986610531f0074",
+      "review_sha256": "cfaacedbf2509124e19524c137dc5fe45456c5d5776219c382c51cb1d02e9bfd",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "ip"
+    },
+    {
+      "scores_sha256": "3b5c3fbed7fbbeac89b25316d4913c58676086df0824611373860a3af57839d7",
+      "review_sha256": "c8f892fad039aa22da0442534725bfc178029fe28d0fd532d9148846b71ea8eb",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "locked"
+    },
+    {
+      "scores_sha256": "e40a2a9d29f136be628c8787c0801e4a569df7e2fef496e53c6b5e916383497f",
+      "review_sha256": "2041171baa40d6341d615058651541d308e7d15025846d0b3ba9a2060746a7f5",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "multi"
+    },
+    {
+      "scores_sha256": "5255514a6635e21d05e9ba72b06e34f2d439bb56b1f4db83ef249fa8e904f673",
+      "review_sha256": "e0fc678a7abe84de9d60e56e19a58eb7e3a657c6281f0bc23d6d6e1cf045f8a0",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "face"
+    },
+    {
+      "scores_sha256": "790a7762b3bd3305b9fa4ec7135d215020146e7be1398ffcdc11c66fafaa1ba5",
+      "review_sha256": "871904ade1976c9c9e9303b6d16aa678e73e2203a4a7f10be6ee358051d53b1e",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "img2img"
+    },
+    {
+      "scores_sha256": "f83997e071b991b2c41d5be850590126686a72b34cee247d6ead7b512873a835",
+      "review_sha256": "071f6d56b171e00f0492ab684b0db4fcbb669db74ef5ae0670991c5e2a41dbea",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "img2img-950"
+    },
+    {
+      "scores_sha256": "08240b7b29e73874db18c18bb31313dad4032e3b69e1965a0630144b2dcc75dd",
+      "review_sha256": "3a3792f4c6b6aa9d3ca57340d75bdcfe0951d869a9934b3fac55269e00831043",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "control"
+    },
+    {
+      "scores_sha256": "69aecca1ecf82dba164f1dbae0bc396ca625e8377f9c48952a1eed0c857f2d33",
+      "review_sha256": "37e4b64e0e30fdc0196622440852c9749de16fe47800944bc1fc868672926bfc",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "text"
+    },
+    {
+      "scores_sha256": "829d8d4974561f0f44648e047d65e973d90181b7945d5a857b0a4113565abce5",
+      "review_sha256": "623d01ba086184225ef3ad2834b3e2901eca8b99e5106a2fd5868260d30d81ad",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "klein"
+    },
+    {
+      "scores_sha256": "79349ea3d88fcf6862adc3c312e209d152b665b1c43d059e5eb2d91e0158ed15",
+      "review_sha256": "ef4c04713481db88808b3c253ca9fd69f0d139bb6d825583d649ebda130ff50c",
+      "dataset_sha256": "a739eabb5b04b08ef88174268af2b4cf7f4318f8b3b1fede7d9334df5df591d9",
+      "method": "control-cached"
+    },
+    {
+      "scores_sha256": "42b991d885b6f5326d3cc2e34d4ff3ad95f041abf0e3c94205ee94e1ad69a43e",
+      "review_sha256": "9d3c2520f12696e298f3b984d86d14bff4c6b445fb0c0ee6d832103704c2fe91",
+      "dataset_sha256": "67b890c7cad1e827f680134e2cf5140eaba3e7bf64261be2fc9f64ed69122975",
+      "method": "text"
+    },
+    {
+      "scores_sha256": "ce30e162a7099fff3230b6e5b7ba520f0861cda11210c1773970a9f09cdebef8",
+      "review_sha256": "15d0f5174f2494b86e8c60125c3a48e10e23ec35fb46e6eb1d6ccb18dbc8fd7a",
+      "dataset_sha256": "e827edf0972a2dd96d47421539373bf9e7eafbb1a31a2b25f4b70175e7443562",
+      "method": "img2img"
+    },
+    {
+      "scores_sha256": "dd98fbc87e907dcbda0c95de7068320c041c6f4b89980dbcecbd7c34788bcfcb",
+      "review_sha256": "ee69ea039989cba7c5e3902d0be3311636cd4bdceb6baebaea222c487ad77f6a",
+      "dataset_sha256": "e827edf0972a2dd96d47421539373bf9e7eafbb1a31a2b25f4b70175e7443562",
+      "method": "img2img-950"
+    }
+  ],
+  "unique_pairs": 156,
+  "duplicate_pairs_removed": 16,
+  "identity": {
+    "threshold": 0.22749898582696915,
+    "f1": 1.0,
+    "review_kind": "agent",
+    "production_ready": false,
+    "labelled_pairs": 124,
+    "confusion": {
+      "tp": 120,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    }
+  },
+  "clothing": {
+    "0.15": {
+      "threshold": 0.5969990460765608,
+      "f1": 0.9571984435797666,
+      "review_kind": "agent",
+      "production_ready": false,
+      "labelled_pairs": 139,
+      "confusion": {
+        "tp": 123,
+        "fp": 10,
+        "tn": 5,
+        "fn": 1
+      },
+      "overlap_minimum": 0.40300095392343915,
+      "unknown_metric_count": 0
+    },
+    "0.25": {
+      "threshold": 0.6047101552173104,
+      "f1": 0.9565217391304348,
+      "review_kind": "agent",
+      "production_ready": false,
+      "labelled_pairs": 139,
+      "confusion": {
+        "tp": 121,
+        "fp": 8,
+        "tn": 7,
+        "fn": 3
+      },
+      "overlap_minimum": 0.3952898447826896,
+      "unknown_metric_count": 0
+    },
+    "0.35": {
+      "threshold": 0.6947553682916883,
+      "f1": 0.9465648854961832,
+      "review_kind": "agent",
+      "production_ready": false,
+      "labelled_pairs": 139,
+      "confusion": {
+        "tp": 124,
+        "fp": 14,
+        "tn": 1,
+        "fn": 0
+      },
+      "overlap_minimum": 0.30524463170831173,
+      "unknown_metric_count": 0
+    },
+    "0.5": {
+      "threshold": 0.6995162392405955,
+      "f1": 0.9538461538461539,
+      "review_kind": "agent",
+      "production_ready": false,
+      "labelled_pairs": 139,
+      "confusion": {
+        "tp": 124,
+        "fp": 12,
+        "tn": 3,
+        "fn": 0
+      },
+      "overlap_minimum": 0.30048376075940453,
+      "unknown_metric_count": 0
+    }
+  },
+  "warning": "Fit statistics only. Confidence and match thresholds share the fit set; no held-out qualification. Coarse garment labels do not establish fine outfit fidelity."
+}

@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "id": "original-adult-pair-pilot-v1",
+  "review_kind": "agent",
+  "references": {
+    "aster": {
+      "image": "references/aster.png",
+      "sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "seed": 701,
+      "review_kind": "agent",
+      "note": "Original synthetic adult fixture; not a creator-approved Studio asset."
+    },
+    "nera": {
+      "image": "references/nera.png",
+      "sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "seed": 701,
+      "review_kind": "agent",
+      "note": "Original synthetic adult fixture; not a creator-approved Studio asset."
+    }
+  },
+  "background": {
+    "image": "references/background.png",
+    "sha256": "c6eb33b9167599a3d66f374308965f3a1be3c4dc5daaee7c506af010ade3d3a1"
+  },
+  "background_generation": {
+    "protocol": 1,
+    "prompt": "empty wooden bench in a quiet garden, trees, flower beds, sunset, warm golden lighting, no people, anime background, masterpiece, high score, great score, absurdres",
+    "negative_prompt": "people, person, 1girl, 1boy, text, watermark, lowres",
+    "width": 1344,
+    "height": 768,
+    "steps": 28,
+    "guidance": 5,
+    "seeds": [
+      501
+    ]
+  },
+  "cases": [
+    {
+      "id": "pair/101/aster",
+      "character": "aster",
+      "participants": [
+        "aster",
+        "nera"
+      ],
+      "description": "Both are sitting side by side on a wooden bench in a garden at sunset, warm golden light",
+      "seed": 101,
+      "width": 1344,
+      "height": 768,
+      "box": [
+        0,
+        0,
+        672,
+        768
+      ]
+    },
+    {
+      "id": "pair/101/nera",
+      "character": "nera",
+      "participants": [
+        "aster",
+        "nera"
+      ],
+      "description": "Both are sitting side by side on a wooden bench in a garden at sunset, warm golden light",
+      "seed": 101,
+      "width": 1344,
+      "height": 768,
+      "box": [
+        672,
+        0,
+        1344,
+        768
+      ]
+    },
+    {
+      "id": "pair/102/aster",
+      "character": "aster",
+      "participants": [
+        "aster",
+        "nera"
+      ],
+      "description": "Both are sitting side by side on a wooden bench in a garden at sunset, warm golden light",
+      "seed": 102,
+      "width": 1344,
+      "height": 768,
+      "box": [
+        0,
+        0,
+        672,
+        768
+      ]
+    },
+    {
+      "id": "pair/102/nera",
+      "character": "nera",
+      "participants": [
+        "aster",
+        "nera"
+      ],
+      "description": "Both are sitting side by side on a wooden bench in a garden at sunset, warm golden light",
+      "seed": 102,
+      "width": 1344,
+      "height": 768,
+      "box": [
+        672,
+        0,
+        1344,
+        768
+      ]
+    }
+  ],
+  "scene_prompt": "2people, adult white-haired boy on the left, adult black-haired woman on the right, sitting side by side on a wooden bench, garden, sunset, anime illustration, masterpiece, high score",
+  "negative_prompt": "lowres, bad anatomy, text, watermark, extra person, three people, child, young, nsfw",
+  "caveats": [
+    "Fixed half-image crops are not detection. Manually audit figure count, assignment and crop validity before scoring conclusions.",
+    "Two seeds only; no population success estimate."
+  ]
+}

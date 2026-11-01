@@ -1,0 +1,22 @@
+{
+  "repo": "xinsir/controlnet-openpose-sdxl-1.0",
+  "revision": "23f966cd5cfdd3f7729c903e243d87152162d2b7",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "size": 7520,
+      "sha256": "861acd4a9812e9a9aee81d5afea030e89cbcd4a31fd96a684ab15b91cabb77c5",
+      "lfs_verified": false
+    },
+    "config.json": {
+      "size": 1235,
+      "sha256": "b5b8f9a7619c9452f19407ef73a01ce3f061fcf932de43ddbaca336d12d02801",
+      "lfs_verified": false
+    },
+    "diffusion_pytorch_model.safetensors": {
+      "size": 2502139104,
+      "sha256": "b8524e557a7df60d081f5d4a0eb109967d107df217943bf88c2d99b9ebcc06c5",
+      "lfs_verified": true
+    }
+  }
+}

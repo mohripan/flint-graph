@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "synthetic_only": true,
+  "approved_training_images": 0,
+  "saved_weights": false,
+  "quality_measured": false,
+  "model_manifest_sha256": "9c2308313c36fd1479e178b34eb0b4f861257177d222b87dfbbab07e2feac900",
+  "rank": 4,
+  "batch": 1,
+  "resolution": 512,
+  "gradient_checkpointing": true,
+  "optimizer": "bitsandbytes.AdamW8bit",
+  "cached_conditioning": true,
+  "trainable_parameters": 5806080,
+  "step_seconds": [
+    15.359000000171363,
+    0.828999999910593,
+    0.5930000001098961,
+    0.625,
+    0.6409999998286366,
+    0.7809999999590218
+  ],
+  "losses": [
+    1.7675750255584717,
+    1.716886043548584,
+    1.6872754096984863,
+    1.6667182445526123,
+    1.649611473083496,
+    1.634293556213379
+  ],
+  "seconds_including_load": 22.92199999978766,
+  "torch_peak_bytes": 5485481984,
+  "device_used_bytes_after": 6325112832,
+  "torch": "2.11.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU"
+}

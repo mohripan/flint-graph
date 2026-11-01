@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "scores_sha256": "dd98fbc87e907dcbda0c95de7068320c041c6f4b89980dbcecbd7c34788bcfcb",
+  "review_kind": "agent",
+  "reviewer": "Codex visual inspection of the contact sheets and selected full-size outputs",
+  "blinded": false,
+  "rubric": {
+    "identity": "Recognizable as the reference character from visible face/hair/eyes. Back views without a clear face are unknown. No claim of exact facial geometry.",
+    "clothes": "Coarse garment categories, primary colors and coverage. Unknown when cropped or skirt/shorts or tights/skin cannot be distinguished. Same does not mean identical trim, buttons or cut.",
+    "pose": "Requested main body pose/object is clear. Framing, eye direction and fine anatomy are separate. The back-view prompt does not explicitly request full-body framing, so a crop is not itself a pose failure.",
+    "fine_details": "Not calibrated. Visible coat cuts, trim, jacket fit and braids can change even when identity and coarse outfit match."
+  },
+  "ratings": [
+    {
+      "id": "outfit/aster/301",
+      "identity": "same",
+      "clothes": "drifted",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "50a2c729c84eccbed8f7221b9e5931ddccf021dbdf5584a6f667ff6bdfc20a74",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "note": "Requested wardrobe mostly ignored. Label is observed reference fidelity, not request success."
+    },
+    {
+      "id": "outfit/aster/302",
+      "identity": "same",
+      "clothes": "drifted",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "c26c55a29616456845d1d6f5f88a0b3133a084a858b064ec8f8654ffaae46181",
+      "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "note": "Requested wardrobe mostly ignored. Label is observed reference fidelity, not request success."
+    },
+    {
+      "id": "outfit/nera/301",
+      "identity": "same",
+      "clothes": "drifted",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "ca6ad3ca937ab6446ba1b669b02cedf264309b9ed47377f3d96f68d039f07c03",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "note": "Requested wardrobe mostly ignored. Label is observed reference fidelity, not request success."
+    },
+    {
+      "id": "outfit/nera/302",
+      "identity": "same",
+      "clothes": "unknown",
+      "pose": "same",
+      "person_count": 1,
+      "candidate_sha256": "8e7c96646c285188705df479b2d9655a4cdb3256e072d9979260f5f109b7557e",
+      "reference_sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "note": "Requested wardrobe mostly ignored. Label is observed reference fidelity, not request success."
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "id": "original-adult-controls-outfit-v1",
+  "review_kind": "unreviewed",
+  "references": {
+    "aster": {
+      "image": "references/aster.png",
+      "sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "seed": 701,
+      "review_kind": "agent",
+      "note": "Original synthetic adult fixture; not a creator-approved Studio asset."
+    },
+    "nera": {
+      "image": "references/nera.png",
+      "sha256": "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+      "seed": 701,
+      "review_kind": "agent",
+      "note": "Original synthetic adult fixture; not a creator-approved Studio asset."
+    }
+  },
+  "cases": [
+    {
+      "id": "outfit/aster/301",
+      "character": "aster",
+      "pose": "standing",
+      "seed": 301,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, green hoodie, grey pants, white sneakers, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, green hoodie, grey pants, white sneakers, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "intended_control": "Same source image with intentionally changed clothing; requires visual label"
+    },
+    {
+      "id": "outfit/aster/302",
+      "character": "aster",
+      "pose": "standing",
+      "seed": 302,
+      "prompt": "1boy, adult, androgynous, white hair, red eyes, green hoodie, grey pants, white sneakers, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1boy, adult, androgynous, white hair, red eyes, green hoodie, grey pants, white sneakers, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "intended_control": "Same source image with intentionally changed clothing; requires visual label"
+    },
+    {
+      "id": "outfit/nera/301",
+      "character": "nera",
+      "pose": "standing",
+      "seed": 301,
+      "prompt": "1girl, adult, black hair, green eyes, red coat, blue jeans, black boots, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, red coat, blue jeans, black boots, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "intended_control": "Same source image with intentionally changed clothing; requires visual label"
+    },
+    {
+      "id": "outfit/nera/302",
+      "character": "nera",
+      "pose": "standing",
+      "seed": 302,
+      "prompt": "1girl, adult, black hair, green eyes, red coat, blue jeans, black boots, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "short_prompt": "1girl, adult, black hair, green eyes, red coat, blue jeans, black boots, solo, full body, standing, arms at sides, white background, simple background, anime coloring, masterpiece, high score, great score, absurdres",
+      "negative_prompt": "lowres, bad anatomy, bad hands, text, watermark, extra digits, missing fingers, multiple views, child, young, nsfw",
+      "width": 832,
+      "height": 1216,
+      "steps": 28,
+      "guidance": 5,
+      "intended_control": "Same source image with intentionally changed clothing; requires visual label"
+    }
+  ]
+}

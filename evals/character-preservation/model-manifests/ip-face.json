@@ -1,0 +1,17 @@
+{
+  "repo": "h94/IP-Adapter",
+  "revision": "018e402774aeeddd60609b4ecdb7e298259dc729",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "size": 3091,
+      "sha256": "ba3a50dc2093d0eb075890e9af7409382874669d83939e64323246d0c4403cf8",
+      "lfs_verified": false
+    },
+    "sdxl_models/ip-adapter-plus-face_sdxl_vit-h.safetensors": {
+      "size": 847517512,
+      "sha256": "677ad8860204f7d0bfba12d29e6c31ded9beefdf3e4bbd102518357d31a292c1",
+      "lfs_verified": true
+    }
+  }
+}

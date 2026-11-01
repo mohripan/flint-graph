@@ -199,3 +199,24 @@ optional authoring/refresh service with Viewer runtime credentials, no tenant-da
 uploads, and no SDK tracing. See [prompt management](prompt-management.md) for
 import, review, activation, diagnosis and rollback. Image TOML overrides remain
 explicit in locked mode and cannot be combined with managed Langfuse mode.
+
+## Character-preservation research (M40)
+
+The offline [bench](../../evals/character-preservation/README.md) has separate CPU
+and GPU environments, fixed original fixtures, model hashes, contact sheets and
+explicit agent reviews. See [measured results](../reports/2026-11-01-character-preservation.md)
+and [ADR 0046](../adr/0046-character-preservation-measurement-and-pose-direction.md).
+This is not a new production worker mode: current image generation is unchanged.
+
+Run experiments sequentially with new output directories. Refuse a busy GPU;
+never stop another owner's process to fit a model. Cached ControlNet requires
+11 GiB free; its uncached baseline requires 11.6 GiB and nearly fills this card.
+Staged klein requires 11 GiB free GPU and 9 GiB available host RAM, releases the
+text encoder before loading the transformer, and uses only verified local files.
+Private weights/caches/raw outputs stay under ignored `notes/`, outside games.
+
+Do not activate the provisional score fits as candidate filters. The tiny agent
+fixture set is not creator calibration, garment overlap misses visible changes,
+and CCIP's exact model license is unresolved for production. An unavailable score
+is unknown and never prevents approval. Actual LoRA training requires the creator
+to select approved images; the retained synthetic probe saves no trained weights.

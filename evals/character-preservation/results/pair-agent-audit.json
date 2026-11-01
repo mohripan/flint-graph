@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "review_kind": "agent",
+  "reviewer": "Codex visual inspection of the complete scenes",
+  "blinded": false,
+  "criterion": "Exactly two people with intended left/right hair colors and visible coat/scarf palette. This is coarse scene fidelity, not creator approval or exact costume fidelity.",
+  "calibration_included": false,
+  "methods": {
+    "ip-pair": {
+      "scores_sha256": "ecd16aae1727505c73c5425772d8f6e1167969f144482f4c235a3f988d3c908f",
+      "scenes": [
+        {
+          "seed": 101,
+          "candidate_sha256": "b00f104c856e0f394be0a2ed503656571363de17f6055c8ab9912a9b99912b01",
+          "person_count": 2,
+          "fixed_region_status": "diagnostic only: one intended face per half; boundary limbs/occlusion remain limitations",
+          "coarse_criterion_met": false,
+          "note": "2 people; Aster coat/scarf drift; Nera loses tights"
+        },
+        {
+          "seed": 102,
+          "candidate_sha256": "0b61f890ab290ff966a07a362fead69de40a77198dbd502189e0d69f2fec68e4",
+          "person_count": 3,
+          "fixed_region_status": "invalid multi-person crop",
+          "coarse_criterion_met": false,
+          "note": "3 people; both fixed region scores invalid"
+        }
+      ]
+    },
+    "klein-pair": {
+      "scores_sha256": "7487563d147f085bb04703fa962884d7fa1cf04a0cae00e435637a8252b2c5cb",
+      "scenes": [
+        {
+          "seed": 101,
+          "candidate_sha256": "da8ad6b915f1f89c35f44236bbfcd9b8d5fc9ef4106954b72a8bad2a59aaedd6",
+          "person_count": 2,
+          "fixed_region_status": "diagnostic only: one intended face per half; boundary limbs/occlusion remain limitations",
+          "coarse_criterion_met": true,
+          "note": "2 people; intended hair colors/visible clothes retained"
+        },
+        {
+          "seed": 102,
+          "candidate_sha256": "60d10d7d4a9fb7ed689b2796395710b1de47435e546816fc8a923053fc41504b",
+          "person_count": 2,
+          "fixed_region_status": "diagnostic only: one intended face per half; boundary limbs/occlusion remain limitations",
+          "coarse_criterion_met": true,
+          "note": "2 people; intended hair colors/visible clothes retained"
+        }
+      ]
+    },
+    "klein-pair-context": {
+      "scores_sha256": "62b7127128184d075d202a7f5711f58d2f8a83f15e32ef9c4c50eb094b53179d",
+      "scenes": [
+        {
+          "seed": 101,
+          "candidate_sha256": "1d8938d2726be2e6a4902572f3392e6b70fd07f848c50b26564cd340c771e4bb",
+          "person_count": 2,
+          "fixed_region_status": "diagnostic only: one intended face per half; boundary limbs/occlusion remain limitations",
+          "coarse_criterion_met": false,
+          "note": "2 people; Nera hair becomes white/silver"
+        },
+        {
+          "seed": 102,
+          "candidate_sha256": "609e5a59463f10ab147a6b852e6664e194595d16e166ec1b6f800a968f830c5d",
+          "person_count": 2,
+          "fixed_region_status": "diagnostic only: one intended face per half; boundary limbs/occlusion remain limitations",
+          "coarse_criterion_met": true,
+          "note": "2 people; intended hair colors retained"
+        }
+      ]
+    }
+  }
+}

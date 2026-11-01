@@ -9,3 +9,10 @@ frontend/src/narrative/Lora.ttf -text
 frontend/public/LICENSE-Lora.txt text eol=lf whitespace=-blank-at-eol
 # Exact upstream license bytes: their SHA-256 is what creators accept and what releases name.
 src/flint_graph/narrative/voice_licenses/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
+# Research reviews pin exact JSON bytes; preserve their hashes on every checkout.
+evals/character-preservation/**/*.json -text whitespace=cr-at-eol
+docs/reports/evidence/character-preservation-2026-11-01/*.json -text whitespace=cr-at-eol
+# The scorer fingerprint includes source bytes, so use the same bytes on all hosts.
+runtimes/character_eval/*.py text eol=lf
+runtimes/character_lab/*.py text eol=lf
+src/flint_graph/narrative/character_bench.py text eol=lf

@@ -1,0 +1,85 @@
+{
+  "limit": 77,
+  "cases": [
+    {
+      "id": "aster/back/101",
+      "full_tokens": 67,
+      "short_tokens": 49
+    },
+    {
+      "id": "aster/back/102",
+      "full_tokens": 67,
+      "short_tokens": 49
+    },
+    {
+      "id": "nera/back/101",
+      "full_tokens": 61,
+      "short_tokens": 45
+    },
+    {
+      "id": "nera/back/102",
+      "full_tokens": 61,
+      "short_tokens": 45
+    },
+    {
+      "id": "aster/sitting/101",
+      "full_tokens": 70,
+      "short_tokens": 52
+    },
+    {
+      "id": "aster/sitting/102",
+      "full_tokens": 70,
+      "short_tokens": 52
+    },
+    {
+      "id": "nera/sitting/101",
+      "full_tokens": 64,
+      "short_tokens": 48
+    },
+    {
+      "id": "nera/sitting/102",
+      "full_tokens": 64,
+      "short_tokens": 48
+    },
+    {
+      "id": "aster/crossed/101",
+      "full_tokens": 68,
+      "short_tokens": 50
+    },
+    {
+      "id": "aster/crossed/102",
+      "full_tokens": 68,
+      "short_tokens": 50
+    },
+    {
+      "id": "nera/crossed/101",
+      "full_tokens": 62,
+      "short_tokens": 46
+    },
+    {
+      "id": "nera/crossed/102",
+      "full_tokens": 62,
+      "short_tokens": 46
+    },
+    {
+      "id": "aster/flower/101",
+      "full_tokens": 72,
+      "short_tokens": 54
+    },
+    {
+      "id": "aster/flower/102",
+      "full_tokens": 72,
+      "short_tokens": 54
+    },
+    {
+      "id": "nera/flower/101",
+      "full_tokens": 66,
+      "short_tokens": 50
+    },
+    {
+      "id": "nera/flower/102",
+      "full_tokens": 66,
+      "short_tokens": 50
+    }
+  ]
+}
