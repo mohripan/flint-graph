@@ -146,6 +146,76 @@ test("the inherited stage follows every path and marks disagreement as varying",
   assert.deepEqual(stage.describeSnapshot(value, undefined), ["Not reached from the start"]);
 });
 
+test("all 10,000 reachable nodes receive every late-arriving stage alternative", () => {
+  const value = story();
+  value.entry = "fork0";
+  value.nodes = {};
+  // Each later fork sends one more character into a long shared scene chain.
+  // Every character is absent on other routes, so each must vary at the end.
+  const alternatives = 32;
+  const tail = 10000 - alternatives * 2;
+  for (let i = 0; i < alternatives; i++) {
+    const character = `actor${i}`;
+    value.characters[character] = { name: character, sprites: { neutral: "mira_neutral" } };
+    value.nodes[`fork${i}`] = { type: "choice", text_id: `fork${i}`, text: "Route", options: [
+      { id: "show", text_id: `show${i}`, text: "Show", target: `show${i}` },
+      { id: "later", text_id: `later${i}`, text: "Later", target: i + 1 < alternatives ? `fork${i+1}` : "tail0" },
+    ] };
+    value.nodes[`show${i}`] = { type: "stage", show: [{ character, sprite: "neutral", position: "left" }], next: "tail0" };
+  }
+  for (let i = 0; i < tail - 1; i++) value.nodes[`tail${i}`] = line("Continue", `tail${i+1}`);
+  value.nodes[`tail${tail-1}`] = { type: "end", text_id: "end", text: "Fin", ending: "done" };
+  const before = stage.stageBefore(value);
+  assert.equal(before.size, 10000);
+  assert.deepEqual(before.get(`tail${tail-1}`), {
+    background: null, cg: null,
+    characters: Object.fromEntries(Array.from({ length: alternatives }, (_, i) => [`actor${i}`, "?"])),
+  });
+});
+
+test("loops converge to varying inputs while explicit stage changes restore known outputs", () => {
+  const value = story();
+  value.entry = "start";
+  value.nodes = {
+    start: { type: "stage", background: "courtyard", cg: "train", show: [{ character: "mira", sprite: "neutral", position: "left", x: 25 }], next: "choose" },
+    choose: { type: "choice", text_id: "choose", text: "Again?", options: [
+      { id: "again", text_id: "again", text: "Again", target: "change" },
+      { id: "finish", text_id: "finish", text: "Finish", target: "end" },
+    ] },
+    change: { type: "stage", background: "forest", cg: null, hide: ["mira"], show: [{ character: "oren", sprite: "neutral", position: "right", x: 70 }], next: "return" },
+    return: line("Back", "choose"),
+    end: { type: "end", text_id: "end", text: "Fin", ending: "done" },
+    unreachable: line("Unused", "end"),
+  };
+  const original = structuredClone(value);
+  const before = stage.stageBefore(value);
+  assert.deepEqual(before.get("end"), { background: "?", cg: "?", characters: { mira: "?", oren: "?" } });
+  assert.deepEqual(before.get("return"), { background: "forest", cg: null, characters: { oren: { position: "right", sprite: "neutral", x: 70 } } });
+  assert.equal(before.has("unreachable"), false);
+  assert.deepEqual(value, original, "analysis leaves the authored story unchanged");
+});
+
+test("placements compare horizontal centers while agreeing routes keep a known placement", () => {
+  for (const [left, right, expected] of [[20, 80, "?"], [35, 35, { position: "center", sprite: "neutral", x: 35 }]]) {
+    const value = story();
+    value.entry = "fork";
+    value.nodes.fork = { type: "choice", text_id: "fork", text: "Route", options: [
+      { id: "a", text_id: "a", text: "A", target: "a" }, { id: "b", text_id: "b", text: "B", target: "b" },
+    ] };
+    for (const [id, x] of [["a", left], ["b", right]]) value.nodes[id] = {
+      type: "stage", show: [{ character: "mira", sprite: "neutral", position: "center", x }], next: "end",
+    };
+    assert.deepEqual(stage.stageBefore(value).get("end").characters.mira, expected);
+  }
+});
+
+test("a speaking character named constructor does not appear on stage without placement", () => {
+  const value = story();
+  value.characters.constructor = { name: "Constructor", sprites: { happy: "mira_happy" } };
+  value.nodes.opening = line("Hello", "end", { speaker: "constructor", expression: "happy" });
+  assert.deepEqual(stage.stageBefore(value).get("end"), { background: null, cg: null, characters: {} });
+});
+
 test("speakers, expressions and sprites stay consistent", () => {
   let value = stage.setLineExpression(story(), "opening", "happy");
   assert.equal(value.nodes.opening.expression, "happy");

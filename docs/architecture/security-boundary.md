@@ -51,8 +51,15 @@ Implemented boundary:
   includes DNS, redirects and body reads. See [ADR 0030](../adr/0030-connection-bound-document-url-intake.md).
   Deployment routing/translation and private-network opt-in remain operator
   responsibilities; this is not full agent/tool egress enforcement.
-- Expensive endpoints are protected by a fixed-window rate limiter keyed by
-  user and workspace when enabled.
+- Expensive endpoints have optional fixed-window admission per API process,
+  keyed by a bounded route group, hashed credential/dev identity/socket peer,
+  and normalized workspace UUID. Keys retain no raw authorization header.
+  Both general and narrative pools have independent capacity limits and remove
+  expired windows on subsequent traffic. Full pools reject new identities with
+  429 without evicting active quotas. This pre-auth check does not validate a
+  token or combine different tokens for one subject; downstream auth still applies.
+  Replicas and process restarts have independent counters. Global quotas require
+  an ingress/proxy limiter or a separately implemented shared backend.
 
 Local-development boundary:
 

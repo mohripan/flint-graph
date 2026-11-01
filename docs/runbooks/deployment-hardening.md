@@ -56,6 +56,27 @@ testing and controlled single-process deployments only.
 - For multiple API replicas, put rate limiting at the ingress/proxy layer or
   replace the backend with a shared store before scaling out.
 
+The memory backend has two independent pools. Configure
+`FLINT_GRAPH_RATE_LIMIT_MAX_BUCKETS` for general expensive routes and
+`FLINT_GRAPH_NARRATIVE_RATE_LIMIT_MAX_BUCKETS` for narrative routes. Each defaults
+to 10,000 identities and accepts 1–100,000. Entries expire after their fixed
+window; later requests prune expired entries in window-start order. Hits do not
+extend a window. At capacity, new identities receive 429 with `Retry-After`;
+existing identities keep their counters. Pools never evict a live quota to admit
+another identity. Capacity pressure can therefore delay new legitimate callers
+until a slot expires; choose caps for the deployment's expected traffic.
+
+Keys group dynamic resource paths under the configured expensive route prefix.
+In OIDC mode, a normalized bearer credential (or socket peer if absent/malformed)
+is hashed; spoofed dev headers do not change that identity. In dev mode the dev
+subject is hashed. Workspace UUIDs are canonicalized and malformed/missing values
+share an invalid-workspace marker. Raw credentials, arbitrary paths and raw
+workspace headers are not retained as bucket keys. Token rotation can create a
+new pre-auth identity; this is not an authenticated-subject or distributed quota.
+No shared rate-limit backend is shipped by these changes. Keep the explicit
+staging/production opt-in for process-local limits and qualify ingress enforcement
+before multiple replicas serve traffic.
+
 ## Secrets
 
 - Rotate local Compose defaults before deployment.

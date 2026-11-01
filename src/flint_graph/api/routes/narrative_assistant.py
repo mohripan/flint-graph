@@ -322,6 +322,17 @@ async def _turn_events(
                         NarrativeAssistantTurn.id == turn_id
                     )
                 )
+                if status in _TERMINAL:
+                    # READ COMMITTED can observe a finish after the empty event
+                    # read. Drain again after observing that atomic status/event
+                    # commit before treating this cursor as caught up.
+                    rows = await events_after(
+                        session,
+                        tenant_id=tenant_id,
+                        turn_id=turn_id,
+                        after_sequence=cursor,
+                        limit=200,
+                    )
         for row in rows:
             cursor = row.sequence
             yield _frame(row)

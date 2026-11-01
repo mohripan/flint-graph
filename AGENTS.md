@@ -179,6 +179,17 @@ needed; never restart owned services. Qualified person assignment, pose-model
 rollout and actual character/style training remain follow-up work. Do not close
 all seven issues from these reports.
 
+Studio stage analysis now propagates to a complete fixed point without an
+iteration cutoff. It uses iterative reverse postorder, a de-duplicated FIFO and
+structural joins; it still conservatively merges all structural routes, without
+evaluating conditions. General and narrative API rate pools both have bounded,
+expiry-ordered storage and hashed pre-auth identities. The new general cap is
+`rate_limit_max_buckets`; neither pool is a replica-wide quota. See
+`docs/reports/2026-11-01-stage-propagation-and-rate-limits.md` and deployment
+hardening for the correctness regression, scope and exact verification commands.
+The assistant API stream re-reads events after observing terminal status so a
+concurrent finish cannot close the stream before its final event is drained.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

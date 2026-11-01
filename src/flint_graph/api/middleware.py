@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from hashlib import sha256
 from time import monotonic
@@ -142,6 +143,8 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
+    """Bounded pre-auth admission local to one API process, not a replica-wide quota."""
+
     # Public so the metric label helper can attribute rejections to a bounded set
     # of prefixes rather than to raw request paths.
     EXPENSIVE_PATHS = (
@@ -159,9 +162,10 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp, *, settings: Settings) -> None:
         super().__init__(app)
         self._settings = settings
-        self._buckets: dict[str, tuple[float, int]] = {}
-        self._narrative_buckets: dict[str, tuple[float, int]] = {}
-        self._narrative_next_sweep = 0.0
+        # Fixed window starts remain insertion-ordered; hits do not extend them.
+        # Expiration can therefore pop a prefix instead of scanning every bucket.
+        self._buckets: OrderedDict[str, tuple[float, int]] = OrderedDict()
+        self._narrative_buckets: OrderedDict[str, tuple[float, int]] = OrderedDict()
 
     async def dispatch(
         self,
@@ -170,32 +174,24 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if not self._should_limit(request):
             return await call_next(request)
-        key = self._key(request)
+        key = rate_limit_key(request, self._settings)
         now = monotonic()
         narrative = request.url.path.startswith("/v1/narrative/")
         buckets = self._narrative_buckets if narrative else self._buckets
-        if (
-            narrative
-            and key not in buckets
-            and len(buckets) >= self._settings.narrative_rate_limit_max_buckets
-        ):
-            if now >= self._narrative_next_sweep:
-                expired = [
-                    item
-                    for item, (started, _) in buckets.items()
-                    if now - started >= self._settings.rate_limit_window_seconds
-                ]
-                for item in expired:
-                    del buckets[item]
-                self._narrative_next_sweep = now + 1.0
-            if len(buckets) >= self._settings.narrative_rate_limit_max_buckets:
-                return self._reject(
-                    request, self._settings.rate_limit_window_seconds, capacity=True
-                )
+        capacity = (
+            self._settings.narrative_rate_limit_max_buckets
+            if narrative
+            else self._settings.rate_limit_max_buckets
+        )
+        while buckets:
+            started, _ = next(iter(buckets.values()))
+            if now - started < self._settings.rate_limit_window_seconds:
+                break
+            buckets.popitem(last=False)
+        if key not in buckets and len(buckets) >= capacity:
+            # Do not evict live identities: that would reset their request quota.
+            return self._reject(request, self._settings.rate_limit_window_seconds, capacity=True)
         window_start, count = buckets.get(key, (now, 0))
-        if now - window_start >= self._settings.rate_limit_window_seconds:
-            window_start = now
-            count = 0
         count += 1
         buckets[key] = (window_start, count)
         if count > self._settings.rate_limit_requests:
@@ -227,39 +223,6 @@ class FixedWindowRateLimitMiddleware(BaseHTTPMiddleware):
             return False
         return any(request.url.path.startswith(path) for path in self.EXPENSIVE_PATHS)
 
-    def _key(self, request: Request) -> str:
-        if request.url.path.startswith("/v1/narrative/"):
-            # A project UUID or spoofed dev header must not create fresh OIDC buckets.
-            if self._settings.auth_mode == "dev":
-                identity = "dev:" + request.headers.get(
-                    "X-Dev-User", self._settings.dev_auth_subject
-                )
-            else:
-                authorization = request.headers.get("Authorization", "")
-                token = (
-                    authorization.removeprefix("Bearer ").strip()
-                    if authorization.startswith("Bearer ")
-                    else ""
-                )
-                identity = (
-                    "bearer:" + token
-                    if token
-                    else "peer:" + (request.client.host if request.client else "unknown")
-                )
-            try:
-                workspace = str(UUID(request.headers.get("X-Tenant-ID", "")))
-            except ValueError:
-                workspace = "invalid-workspace"
-            # Never retain raw bearer credentials as dictionary keys.
-            return f"/v1/narrative/:{sha256(identity.encode()).hexdigest()}:{workspace}"
-        user = (
-            request.headers.get("X-Dev-User")
-            or request.headers.get("Authorization")
-            or (request.client.host if request.client else "unknown")
-        )
-        workspace = request.headers.get("X-Tenant-ID", "no-workspace")
-        return f"{request.url.path}:{user}:{workspace}"
-
 
 def limited_route_label(request: Request) -> str:
     """Bounded metric label for middleware that runs before routing.
@@ -273,6 +236,33 @@ def limited_route_label(request: Request) -> str:
         if path.startswith(prefix):
             return prefix
     return "other"
+
+
+def rate_limit_key(request: Request, settings: Settings) -> str:
+    """A bounded pre-auth key: route group, hashed credential/peer and workspace.
+
+    Hashing avoids credential retention; it does not authenticate a caller or join
+    different bearer tokens for the same subject. Auth still runs downstream.
+    """
+    if settings.auth_mode == "dev":
+        identity = "dev:" + request.headers.get("X-Dev-User", settings.dev_auth_subject)
+    else:
+        authorization = request.headers.get("Authorization", "")
+        token = (
+            authorization.removeprefix("Bearer ").strip()
+            if authorization.startswith("Bearer ")
+            else ""
+        )
+        identity = (
+            "bearer:" + token
+            if token
+            else "peer:" + (request.client.host if request.client else "unknown")
+        )
+    try:
+        workspace = str(UUID(request.headers.get("X-Tenant-ID", "")))
+    except ValueError:
+        workspace = "invalid-workspace"
+    return f"{limited_route_label(request)}:{sha256(identity.encode()).hexdigest()}:{workspace}"
 
 
 def _request_size_limit(request: Request, settings: Settings) -> int | None:

@@ -148,7 +148,7 @@ export function applyStageNode(state: StageSnapshot, node: StoryNode): StageSnap
       cg: node.cg !== undefined ? node.cg : state.cg, characters };
   }
   if (node.type === "line" && node.expression && node.speaker) {
-    const placed = state.characters[node.speaker];
+    const placed = has(state.characters, node.speaker) ? state.characters[node.speaker] : undefined;
     if (placed && placed !== "?") {
       return { ...state, characters: { ...state.characters, [node.speaker]: { ...placed, sprite: node.expression } } };
     }
@@ -157,13 +157,18 @@ export function applyStageNode(state: StageSnapshot, node: StoryNode): StageSnap
 }
 
 function join(left: StageSnapshot, right: StageSnapshot): StageSnapshot {
-  const characters: Record<string, Placed | "?"> = {};
-  for (const id of new Set([...Object.keys(left.characters), ...Object.keys(right.characters)])) {
-    const a = left.characters[id], b = right.characters[id];
-    characters[id] = a && b && JSON.stringify(a) === JSON.stringify(b) ? a : "?";
+  let changed: StageSnapshot["characters"] | undefined;
+  const vary = (id: string) => { changed ??= { ...left.characters }; changed[id] = "?"; };
+  for (const [id, a] of Object.entries(left.characters)) {
+    if (a === "?") continue;
+    const b = has(right.characters, id) ? right.characters[id] : undefined;
+    if (!b || b === "?" || a.position !== b.position || a.sprite !== b.sprite || a.x !== b.x) vary(id);
   }
-  return { background: left.background === right.background ? left.background : "?",
-    cg: left.cg === right.cg ? left.cg : "?", characters };
+  for (const id of Object.keys(right.characters)) if (!has(left.characters, id)) vary(id);
+  const background = left.background === right.background ? left.background : "?";
+  const cg = left.cg === right.cg ? left.cg : "?";
+  return !changed && background === left.background && cg === left.cg ? left
+    : { background, cg, characters: changed ?? left.characters };
 }
 
 function targets(node: StoryNode): string[] {
@@ -173,6 +178,23 @@ function targets(node: StoryNode): string[] {
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
   }
+}
+
+/** Iterative reverse postorder: forward paths arrive before their joins in a DAG. */
+function propagationOrder(story: StoryDraft): string[] {
+  const seen = new Set<string>(), order: string[] = [];
+  const stack: Array<[string, boolean]> = [[story.entry, false]];
+  while (stack.length) {
+    const [id, finished] = stack.pop()!;
+    if (finished) { order.push(id); continue; }
+    if (seen.has(id) || !has(story.nodes, id)) continue;
+    seen.add(id); stack.push([id, true]);
+    const next = targets(story.nodes[id]);
+    for (let index = next.length - 1; index >= 0; index--) {
+      if (!seen.has(next[index])) stack.push([next[index], false]);
+    }
+  }
+  return order.reverse();
 }
 
 /** Stable first-use order across canonical JSON: entry-first DFS, then orphan node IDs. */
@@ -192,26 +214,40 @@ export function cgGalleryAssets(story: StoryDraft): string[] {
   return [...assets];
 }
 
-/** The stage as each reachable node begins; paths that disagree give "?" (varies). */
+/**
+ * The complete stage as each reachable node begins; disagreeing paths give "?".
+ * Joins only lose precision: each image/character can become varying once per node.
+ * This finite-height state space converges even with loops, without a cutoff that
+ * could return partially propagated states as if they were complete.
+ */
 export function stageBefore(story: StoryDraft): Map<string, StageSnapshot> {
   const states = new Map<string, StageSnapshot>();
   if (!has(story.nodes, story.entry)) return states;
   states.set(story.entry, EMPTY);
-  const pending = [story.entry];
-  let budget = 200000;
-  while (pending.length && budget-- > 0) {
-    const id = pending.shift()!;
+  // Seed the worklist in graph order so long shared tails do not run once for
+  // every arriving branch. Cyclic changes requeue normally until convergence.
+  let pending = propagationOrder(story), cursor = 0;
+  const queued = new Set(pending);
+  while (cursor < pending.length) {
+    const id = pending[cursor++];
+    queued.delete(id);
     const node = story.nodes[id];
-    if (!node) continue;
-    const after = applyStageNode(states.get(id)!, node);
+    const before = states.get(id);
+    if (!node || !before) continue;
+    const after = applyStageNode(before, node);
     for (const target of targets(node)) {
       if (!has(story.nodes, target)) continue;
       const previous = states.get(target);
       const joined = previous ? join(previous, after) : after;
-      if (!previous || JSON.stringify(previous) !== JSON.stringify(joined)) {
+      if (joined !== previous) {
         states.set(target, joined);
-        pending.push(target);
+        if (!queued.has(target)) { pending.push(target); queued.add(target); }
       }
+    }
+    // Release processed entries in batches; copying no more than we consumed
+    // keeps dequeue amortized O(1) and retained queue storage proportional to nodes.
+    if (cursor >= 4096 && cursor * 2 >= pending.length) {
+      pending = pending.slice(cursor); cursor = 0;
     }
   }
   return states;

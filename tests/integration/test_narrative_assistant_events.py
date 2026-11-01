@@ -251,6 +251,51 @@ async def test_the_stream_follows_a_running_turn_until_its_status_commits(story_
 
 
 @pytest.mark.anyio
+async def test_terminal_event_is_drained_when_it_commits_between_poll_reads(
+    story_case, monkeypatch
+):
+    from flint_graph.api.routes import narrative_assistant as route
+
+    client, factory, _, start, ask = story_case
+    headers, project, path, thread = await start()
+    turn = await ask(headers, project, path, thread)
+    token = uuid4()
+    await claim(factory, turn["id"], token)
+    prior = await events(factory, turn["id"])
+    cursor = prior[-1].sequence if prior else 0
+    read_events = route.events_after
+    finished = False
+
+    async def finish_after_empty_read(session, **options):
+        nonlocal finished
+        rows = await read_events(session, **options)
+        if not rows and not finished:
+            finished = True
+            async with factory() as writer:
+                await fail_turn(
+                    writer,
+                    turn_id=UUID(turn["id"]),
+                    execution_token=token,
+                    error_code="provider_timeout",
+                )
+                await writer.commit()
+        return rows
+
+    # Force the real database commit between the two poll reads, avoiding sleeps
+    # or a weakened assertion that merely accepts an occasionally missing event.
+    monkeypatch.setattr(route, "events_after", finish_after_empty_read)
+    response = await client.get(
+        f"{path}/threads/{thread['id']}/turns/{turn['id']}/events/stream?after_sequence={cursor}",
+        headers=headers,
+    )
+    received = frames(response.text)
+    assert response.status_code == 200 and finished
+    assert [item["kind"] for item in received] == ["status"]
+    assert received[0]["sequence"] == cursor + 1
+    assert received[0]["payload"] == {"status": "failed", "error_code": "provider_timeout"}
+
+
+@pytest.mark.anyio
 async def test_every_terminal_transition_appends_exactly_one_status_event(story_case):
     client, factory, _, start, ask = story_case
     headers, project, path, thread = await start()
