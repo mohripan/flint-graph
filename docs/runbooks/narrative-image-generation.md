@@ -261,3 +261,81 @@ pins or bytes produce a recoverable message; use manual entry/review rather than
 guessing a score. Tags miss colors and fine details. CCIP, ranking/best-N and
 per-person CG metrics remain unqualified. Assistant image suggestions retain
 their profile-based path.
+
+## Character poses (ADR 0048)
+
+This separate optional worker edits one immutable reviewed look using
+`black-forest-labs/FLUX.2-klein-4B`, revision
+`e7b7dc27f91deacad38e78976d1f2b499d76a294` (Apache-2.0). Use the pinned download
+manifest from the model-fetch tool, not a moving branch or unverified checkpoint.
+A reproducible download uses the public file list in
+[`runtimes/posegen/model-files.txt`](../../runtimes/posegen/model-files.txt):
+
+```powershell
+$poseFiles = Get-Content runtimes/posegen/model-files.txt
+$poseArgs = @('--repo','black-forest-labs/FLUX.2-klein-4B','--revision','e7b7dc27f91deacad38e78976d1f2b499d76a294','--license','apache-2.0','--out','notes/models/flux2-klein-4b')
+foreach ($poseFile in $poseFiles) { $poseArgs += @('--file',$poseFile) }
+uv run python tools/narrative/fetch_model.py @poseArgs
+```
+
+The model directory must contain the diffusers configuration, tokenizer, Qwen3
+encoder, transformer and VAE files listed in that manifest. Its SHA-256 is the
+`NARRATIVE_POSE_MODEL_MANIFEST_SHA256` pin; every file is verified at worker startup
+and in each child. The operator retains the weights privately.
+
+```powershell
+uv sync --frozen --project runtimes/posegen
+$env:FLINT_GRAPH_NARRATIVE_POSE_WORKER_ENABLED='true'
+uv run python -m flint_graph.processes.narrative_pose_worker
+```
+
+Configure absolute `FLINT_GRAPH_NARRATIVE_POSE_RUNTIME_DIR` and
+`FLINT_GRAPH_NARRATIVE_POSE_MODEL_DIR`, the manifest pin and a distinct
+`FLINT_GRAPH_NARRATIVE_POSE_TASK_QUEUE`. Enable API admission separately with
+`FLINT_GRAPH_NARRATIVE_POSE_GENERATION_ENABLED=true`. For the launcher, append
+`pose` to the explicit `STUDIO_SERVICES` list; the default services do not enable it.
+Transparent results also need the existing pinned `NARRATIVE_IMAGE_CUTOUT_*`
+installation. Reload API/image/pose worker code together after migration 0035,
+while queues are idle: older image relays cannot distinguish the new pose sidecar.
+Never restart another operator's processes. If using Langfuse refresh, deploy and
+activate a reviewed bundle containing `narrative.image.pose` before enabling poses.
+
+The child is offline and has a private temporary home/cache. It stages bf16 text
+encoding, frees the encoder, then loads transformer/VAE directly to CUDA with low
+CPU memory loading. Output is 768×1152, four steps, guidance 1; transparent sprites
+are cropped after CPU segmentation. No high-resolution repaint, face-only inpaint,
+additional references or model switching is hidden behind this operation.
+
+This path needs one CUDA device supporting bf16, 11 GiB free dedicated VRAM and
+6 GiB available host RAM. These are admission observations, not a shared resource
+reservation: other image/audio/LLM workers can contend. A busy resource or OOM retries
+within the inherited three-attempt workflow; it never unloads another model. The
+child deadline defaults to 900 s (60–1100 s configurable) inside the 20-minute
+activity timeout. GPU coordination remains M41 work. The API imports no ML packages.
+
+Klein's distilled editing pipeline does not support SDXL negative conditioning.
+The typed policy checks creator instructions/reviewed tags; its negative-prompt
+tags are not applied by this model. The prompt is catalog-versioned and the exact
+chat-wrapped token count is checked against 512 before encoding; long input fails
+with `prompt_too_long`, rather than being silently truncated.
+
+Jobs use the existing full-body character-render ledger purpose plus an immutable
+`narrative_pose_jobs` sidecar. POST/GET
+`/v1/narrative/projects/{project}/characters/{character}/looks/pose-jobs` explicitly
+identifies `operation=pose`, includes its frozen look/model and returns normal
+image-job progress/assets. Generic image-job cancel/content endpoints still apply.
+Original portrait/expression/CG workers exclude pose plans during dispatch/recovery;
+pose workers select only them. Restoring a changed model pin is required to run an
+already-admitted job; retries never silently substitute the new installation.
+
+Optional real-model check (requires these private operator settings and an idle GPU):
+
+```powershell
+$env:FLINT_GRAPH_ENV='test'
+$env:FLINT_GRAPH_NARRATIVE_POSE_LIVE='1'
+uv run pytest tests/integration/test_narrative_pose_live.py -q --tb=short
+```
+
+This check uses the repository's synthetic adult QA reference, not a creator's
+project. See the [delivery report](../reports/2026-11-01-character-poses.md) for the
+real Temporal/MinIO/browser proof and current fidelity limits.

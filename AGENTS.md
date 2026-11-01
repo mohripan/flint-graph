@@ -58,8 +58,13 @@ bump is involved. Existing owned API/assistant processes need an owner-managed r
 to use the new endpoints/prompt; never restart another session's processes.
 Expressions (ADR 0041 slice A, migration 0026) repaint only the face of an approved
 base sprite as `character_expression` image jobs, so expressions swap on stage without
-jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) are
-planned. Slice C (migration 0030) draws event CGs of one or two characters from an approved
+jitter; read `docs/reports/2026-10-31-character-expressions.md`. Poses (slice B) use
+the opt-in pinned FLUX.2 klein 4B editing worker
+(ADR 0048, migration 0035): immutable reviewed look + pose instruction, then
+manual comparison/approval and normal stage binding. Read
+`docs/reports/2026-11-01-character-poses.md` and the image-generation runbook.
+The Studio launcher selects the separate `pose` service explicitly.
+Slice C (migration 0030) draws event CGs of one or two characters from an approved
 image of each through a pinned IP-Adapter Plus (ViT-H): Assets → CGs → Generate CGs,
 `scene_art` image jobs, opaque 1344×768 candidates. The image worker needs the optional
 `FLINT_GRAPH_NARRATIVE_IMAGE_IP_ADAPTER_*` pin; read `docs/reports/2026-10-31-scene-art-cgs.md`.

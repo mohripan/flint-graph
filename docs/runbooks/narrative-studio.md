@@ -179,6 +179,25 @@ changes first. Stories with per-line pictures from format 1 cannot be upgraded.
   size. The preview is drawn to scale with the runtime's rules. **Reset to defaults**
   removes the theme.
 
+## Generate poses from a reviewed look
+
+In **Characters**, lock and select a reviewed look, then use **Poses from a
+reviewed look**. Describe the pose or choose an idea, request 1–4 candidates and
+choose transparent output for stage sprites. Jobs and progress survive navigation;
+**Cancel** stops active work. The server needs the optional pose worker described
+in the [image-generation runbook](narrative-image-generation.md#character-poses-adr-0048).
+
+**Compare look** opens the reference comparison and manual identity/clothing
+feedback. **Approve** keeps a candidate in the library. **Use on stage** approves
+it and adds a named sprite to the character; select that sprite in a scene or line.
+It does not place the character into every scene. Save the revision before playing.
+Changing the look or outfit later does not alter already admitted pose jobs.
+
+Check faces, clothes, hands, props and cutout edges yourself. The model can change
+fine details; a back view can invent details absent from the reference. No automatic
+identity pass/fail or trained character LoRA is claimed by this feature. Model
+weights remain private to Studio; approved PNGs use ordinary export assets.
+
 ## Build and download a release
 
 **Releases** opens the server-backed release dialog. Choose a saved revision; it

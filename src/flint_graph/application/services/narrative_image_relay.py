@@ -19,6 +19,7 @@ from flint_graph.application.services.narrative_images import (
 )
 from flint_graph.domain.enums import OutboxMessageStatus
 from flint_graph.infrastructure.db.models import NarrativeImageJob, OutboxMessage
+from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseJob
 
 
 class ImageDispatcher(Protocol):
@@ -34,6 +35,7 @@ async def relay_image_message(
     *,
     dispatcher: ImageDispatcher,
     retry_delay_seconds: int = 30,
+    poses: bool = False,
 ) -> bool | None:
     """Caller commits the acknowledgement and run registration together.
 
@@ -48,6 +50,10 @@ async def relay_image_message(
             OutboxMessage.status == OutboxMessageStatus.PENDING,
             OutboxMessage.topic.in_([QUEUED_TOPIC, CANCELLED_TOPIC]),
             OutboxMessage.available_at <= datetime.now(UTC),
+            select(NarrativePoseJob.job_id)
+            .where(NarrativePoseJob.job_id == OutboxMessage.aggregate_id)
+            .exists()
+            == poses,
         )
         .order_by(
             case((OutboxMessage.topic == QUEUED_TOPIC, 0), else_=1),
@@ -113,6 +119,7 @@ async def relay_image_batch(
     dispatcher: ImageDispatcher,
     batch_size: int = 10,
     retry_delay_seconds: int = 30,
+    poses: bool = False,
 ) -> int:
     """Commit each registration before issuing the next message's RPC."""
     if not 1 <= batch_size <= 100:
@@ -121,7 +128,10 @@ async def relay_image_batch(
     for _ in range(batch_size):
         async with factory() as session:
             result = await relay_image_message(
-                session, dispatcher=dispatcher, retry_delay_seconds=retry_delay_seconds
+                session,
+                dispatcher=dispatcher,
+                retry_delay_seconds=retry_delay_seconds,
+                poses=poses,
             )
             await session.commit()
         if result is None:
@@ -136,6 +146,7 @@ async def recover_stale_image_jobs(
     dispatcher: ImageDispatcher,
     older_than: timedelta = timedelta(minutes=30),
     limit: int = 20,
+    poses: bool = False,
 ) -> int:
     """Fail active jobs whose registered run has closed without finishing them.
 
@@ -156,6 +167,10 @@ async def recover_stale_image_jobs(
                     NarrativeImageJob.status.in_(("queued", "running")),
                     NarrativeImageJob.workflow_run_id.is_not(None),
                     age < cutoff,
+                    select(NarrativePoseJob.job_id)
+                    .where(NarrativePoseJob.job_id == NarrativeImageJob.id)
+                    .exists()
+                    == poses,
                 )
                 .order_by(age, NarrativeImageJob.id)
                 .limit(limit)

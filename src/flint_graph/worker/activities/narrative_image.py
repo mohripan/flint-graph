@@ -48,7 +48,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
 )
 
 # A busy or exhausted GPU may free up; other failures would repeat identically.
-_TRANSIENT = {"gpu_busy", "out_of_memory"}
+_TRANSIENT = {"gpu_busy", "host_memory_busy", "out_of_memory"}
 _TERMINAL = ("completed", "failed", "cancelled")
 
 

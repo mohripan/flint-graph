@@ -15,4 +15,5 @@ docs/reports/evidence/character-preservation-2026-11-01/*.json -text whitespace=
 # The scorer fingerprint includes source bytes, so use the same bytes on all hosts.
 runtimes/character_eval/*.py text eol=lf
 runtimes/character_lab/*.py text eol=lf
+runtimes/posegen/*.py text eol=lf
 src/flint_graph/narrative/character_bench.py text eol=lf

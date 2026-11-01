@@ -1,3 +1,4 @@
+import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
 import type {
   NarrativeProject,
   NarrativeRevision,
@@ -428,6 +429,16 @@ export const api = {
     });
   },
 
+  listPoseJobs(tenantId:string, projectId:string, characterId:string, signal?:AbortSignal):Promise<PoseHistory> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/pose-jobs`, {
+      headers:tenantHeaders(tenantId), signal, cache:"no-store",
+    });
+  },
+  createPoseJob(tenantId:string, projectId:string, characterId:string, body:ReturnType<typeof poseBody>):Promise<PoseJob> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/pose-jobs`, {
+      method:"POST", headers:tenantHeaders(tenantId), json:body,
+    });
+  },
   listCharacterLooks(tenantId: string, projectId: string, characterId: string, signal?: AbortSignal): Promise<LookList> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks`, {
       headers: tenantHeaders(tenantId), signal, cache: "no-store",

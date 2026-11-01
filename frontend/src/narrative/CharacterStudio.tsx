@@ -1,3 +1,5 @@
+import { portraitJobs } from "./poseModel";
+import { PoseStudio } from "./PoseStudio";
 import { useContext, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import type { CharacterFraming, CharacterProfile, CharacterType, ImageJob, NarrativeImage } from "../lib/api";
@@ -111,7 +113,10 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
     if (!context) return;
     const controller = new AbortController();
     api.listPortraitJobs(tenantId, projectId, id, controller.signal)
-      .then(listed => setJobs(listed.jobs))
+      .then(async listed => {
+        const poses = await api.listPoseJobs(tenantId, projectId, id, controller.signal);
+        if (!controller.signal.aborted) setJobs(portraitJobs(listed.jobs, poses.jobs));
+      })
       .catch(error => { if (!controller.signal.aborted) setNotice(message(error, "Could not load portraits.")); });
     return () => controller.abort();
   }, [context, tenantId, projectId, id]);
@@ -230,6 +235,8 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
       </fieldset>
     </div>
     <CharacterLooks tenantId={tenantId} projectId={projectId} characterId={id} readOnly={readOnly} />
+    <PoseStudio id={id} story={story} tenantId={tenantId} projectId={projectId} readOnly={readOnly}
+      onChange={onChange} onError={onError} />
     <CharacterSprites id={id} story={story} tenantId={tenantId} projectId={projectId} readOnly={readOnly}
       onChange={onChange} onError={onError} onUpgrade={onUpgrade} />
     {active && <div className="studio-job" role="status">

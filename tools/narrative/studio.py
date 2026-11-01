@@ -11,7 +11,8 @@ Before starting anything it starts the listed Docker containers, waits for
 PostgreSQL, the object store, Temporal and Ollama, checks that the ports are free and
 that the playtest build matches the frontend and the Godot runtime, and applies the
 database migrations. It then runs the API, the build, relay, assistant, image and
-voice workers, the playtest server and the frontend, prefixes their output, and stops all
+voice workers (plus an explicitly selected pose worker), the playtest server and
+the frontend, prefixes their output, and stops all
 of them on Ctrl+C or when one fails to start. Settings values are never printed.
 """
 
@@ -37,7 +38,9 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "studio.local.env"
 SERVICES = ("api", "worker", "relay", "assistant", "image", "voice", "preview", "frontend")
+OPTIONAL_SERVICES = ("pose",)
 WORKERS = {
+    "pose": ("FLINT_GRAPH_NARRATIVE_POSE_WORKER_ENABLED", "narrative_pose_worker"),
     "worker": ("FLINT_GRAPH_NARRATIVE_WORKER_ENABLED", "narrative_worker"),
     "relay": ("FLINT_GRAPH_NARRATIVE_RELAY_ENABLED", "narrative_relay"),
     "assistant": ("FLINT_GRAPH_NARRATIVE_ASSISTANT_WORKER_ENABLED", "narrative_assistant_worker"),
@@ -109,11 +112,14 @@ class StudioConfig:
         if unknown:
             raise StudioError("Unknown settings: " + ", ".join(unknown))
         chosen = _names(values.get("STUDIO_SERVICES", ",".join(SERVICES)))
-        if wrong := [name for name in chosen if name not in SERVICES]:
+        if wrong := [name for name in chosen if name not in (*SERVICES, *OPTIONAL_SERVICES)]:
             raise StudioError(
-                f"Unknown services: {', '.join(wrong)} (choose from {', '.join(SERVICES)})"
+                f"Unknown services: {', '.join(wrong)} "
+                f"(choose from {', '.join((*SERVICES, *OPTIONAL_SERVICES))})"
             )
-        services = tuple(name for name in SERVICES if name in chosen)
+        services = tuple(
+            name for name in (*SERVICES[:6], *OPTIONAL_SERVICES, *SERVICES[6:]) if name in chosen
+        )
         ports = (
             _port(values, "STUDIO_API_PORT", 8101),
             _port(values, "STUDIO_PREVIEW_PORT", 5192),

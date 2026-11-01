@@ -264,6 +264,18 @@ class Settings(BaseSettings):
     narrative_image_generation_enabled: bool = False
     narrative_look_tagger_python: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_look_tagger_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_pose_generation_enabled: bool = False
+    narrative_pose_worker_enabled: bool = False
+    narrative_pose_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_pose_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_pose_task_queue: str = Field(
+        default="narrative-pose", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
+    )
+    narrative_pose_job_deadline_seconds: int = Field(default=900, ge=60, le=1100)
+    narrative_pose_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+    narrative_pose_model_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{64}$"
+    )
     narrative_image_worker_enabled: bool = False
     narrative_image_task_queue: str = Field(
         default="narrative-image", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
@@ -372,6 +384,30 @@ class Settings(BaseSettings):
                 "The narrative worker requires an absolute private root "
                 "and pinned builder/toolchain"
             )
+        if self.narrative_pose_worker_enabled:
+            if self.narrative_pose_task_queue in {
+                self.temporal_task_queue,
+                self.narrative_task_queue,
+                self.narrative_assistant_task_queue,
+                self.narrative_image_task_queue,
+                self.narrative_voice_task_queue,
+            }:
+                raise ValueError("A separate narrative pose task queue is required")
+            if (
+                not self.narrative_pose_runtime_dir
+                or not self.narrative_pose_model_dir
+                or not Path(self.narrative_pose_runtime_dir).is_absolute()
+                or not Path(self.narrative_pose_model_dir).is_absolute()
+                or not self.narrative_pose_model_manifest_sha256
+            ):
+                raise ValueError(
+                    "The pose worker requires absolute runtime/model directories and a pin"
+                )
+            cutout_dir = self.narrative_image_cutout_model_dir
+            if (cutout_dir is None) != (self.narrative_image_cutout_manifest_sha256 is None) or (
+                cutout_dir is not None and not Path(cutout_dir).is_absolute()
+            ):
+                raise ValueError("Pose cutout requires an absolute directory and pinned manifest")
         if self.narrative_image_worker_enabled:
             queues = {
                 self.temporal_task_queue,

@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "fixture": "repository synthetic adult Aster; task-owned workspace/project only",
+  "model": "black-forest-labs/FLUX.2-klein-4B@e7b7dc27f91deacad38e78976d1f2b499d76a294",
+  "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+  "look_sha256": "96c47ec5415eba2543b08f1a49d7d6e9e9eefa0fbae68936fabb2e5354f7c928",
+  "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+  "request": {
+    "pose": "sitting on a chair, hands resting in lap",
+    "count": 1,
+    "transparent": true,
+    "steps": 4,
+    "guidance": 1.0,
+    "seeds": [
+      1610368469
+    ]
+  },
+  "result": {
+    "status": "completed",
+    "sha256": "71bfed4e08cbd02963e1c776b44a1eb7803cb6cac43199812e01aef0f9faaa9f",
+    "width": 729,
+    "height": 1117,
+    "runtime": {
+      "operation": "pose",
+      "torch": "2.11.0+cu128",
+      "diffusers": "0.42.1",
+      "cuda": "12.8",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+      "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "pose_child_sha256": "48026acb3312fb486494d227acf4afec8d83a7cbd9fe136ea2bbd142c96edec4",
+      "protocol_sha256": "cfdae01037476fa858b7aeaf8e4cc6be6e0d747934077fa363693b9df5834eeb",
+      "text_encoder_released_before_transformer": "true",
+      "peak_allocated_bytes": "9869127680",
+      "dedicated_used_bytes_after": "10825601024",
+      "host_available_at_start_bytes": "8497295360",
+      "direct_cuda_loading": "true",
+      "host_rss_bytes": "2781954048",
+      "seconds": "70.469",
+      "cutout_code_sha256": "fbe06761236bc588aa92a36ebbf2ce9b4f0a757c5fb6f048fb97a494724014db",
+      "onnxruntime": "1.31.1",
+      "look_sha256": "96c47ec5415eba2543b08f1a49d7d6e9e9eefa0fbae68936fabb2e5354f7c928"
+    }
+  },
+  "evidence": {
+    "http_admission": true,
+    "registered_temporal_worker": true,
+    "postgresql_ledger": true,
+    "minio_verified_content": true,
+    "browser_approve_and_stage_bind": true,
+    "saved_godot_web_playtest": true,
+    "mobile_viewport": 390,
+    "mobile_document_width": 390,
+    "scoped_axe_violations": 0
+  },
+  "limits": [
+    "One production fixture proves execution, not general identity accuracy.",
+    "Creator review remains required.",
+    "No trained character or style LoRA is included.",
+    "No Linux GPU qualification claimed."
+  ],
+  "release": {
+    "status": "completed",
+    "artifacts": {
+      "source": {
+        "sha256": "af76c23d4ba9288965afc83d58fc147f71a4a6486efcb5619812667bbad55322",
+        "size_bytes": 926650
+      },
+      "web": {
+        "sha256": "d52ac2a8a5fc142abc4b5dc8889a66662b83092a12ce8fc130449507da8e6b81",
+        "size_bytes": 11191305
+      },
+      "manifest": {
+        "sha256": "41b410d57f61acf7c448054aa90a993ba8e8cb116df7f182e241aba45430afe2",
+        "size_bytes": 934
+      }
+    },
+    "source_has_apache_notice": true,
+    "source_has_no_private_model_weights": true,
+    "source_imported_with_pinned_godot": true,
+    "downloaded_browser_build_played": true,
+    "browser_console_errors": 0
+  },
+  "cancellation": {
+    "status": "cancelled",
+    "assets": 0,
+    "cancel_seconds": 2.078,
+    "model_processes_remaining": 0,
+    "dedicated_gpu_used_after_mib": 0
+  }
+}

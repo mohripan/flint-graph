@@ -112,3 +112,27 @@ async def test_voice_worker_is_opt_in_with_its_own_queue_runtime_and_model_pin(t
     ):
         with pytest.raises(ValidationError):
             Settings(**{**base, **change})
+
+
+async def test_pose_worker_requires_its_own_queue_and_verified_install(tmp_path):
+    from flint_graph.processes.narrative_pose_worker import run_worker
+
+    with pytest.raises(SystemExit, match="pose worker is disabled"):
+        await run_worker(Settings(env="test"))
+    base = dict(
+        env="test",
+        narrative_pose_worker_enabled=True,
+        narrative_pose_runtime_dir=str(tmp_path),
+        narrative_pose_model_dir=str(tmp_path),
+        narrative_pose_model_manifest_sha256="a" * 64,
+    )
+    assert Settings(**base).narrative_pose_task_queue == "narrative-pose"
+    for changes in (
+        {"narrative_pose_model_manifest_sha256": None},
+        {"narrative_pose_runtime_dir": "relative"},
+        {"narrative_pose_model_dir": None},
+        {"narrative_pose_task_queue": "narrative-image"},
+        {"narrative_image_cutout_model_dir": str(tmp_path)},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**{**base, **changes})

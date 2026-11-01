@@ -96,6 +96,7 @@ from flint_graph.infrastructure.db.narrative_models import (
     NarrativeProjectLayout as NarrativeProjectLayout,
 )
 from flint_graph.infrastructure.db.narrative_models import NarrativeRevision as NarrativeRevision
+from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseJob as NarrativePoseJob
 from flint_graph.infrastructure.db.narrative_release_models import (
     NarrativeRelease as NarrativeRelease,
 )

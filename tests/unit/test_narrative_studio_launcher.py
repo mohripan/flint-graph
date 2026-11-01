@@ -174,3 +174,12 @@ def test_the_frontend_starts_after_everything_else_answers():
     ]
     assert studio.waves(["frontend"]) == [["frontend"]]
     assert studio.waves(["api", "worker"]) == [["api", "worker"]]
+
+
+def test_pose_service_is_explicitly_selected_and_isolated():
+    assert "pose" not in studio.plan(config())
+    chosen = studio.plan(config(STUDIO_SERVICES="api,image,pose"))
+    assert chosen["pose"].argv[1:] == ["-m", "flint_graph.processes.narrative_pose_worker"]
+    flag = "FLINT_GRAPH_NARRATIVE_POSE_WORKER_ENABLED"
+    assert chosen["pose"].env[flag] == "true"
+    assert chosen["image"].env[flag] == chosen["api"].env[flag] == "false"

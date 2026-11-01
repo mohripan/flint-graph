@@ -672,19 +672,20 @@ async def test_cancellation_before_and_during_execution(studio):
 
 
 @pytest.mark.anyio
-async def test_gpu_contention_retries_releases_ollama_and_fails_with_a_safe_code(studio):
+@pytest.mark.parametrize("busy_code", ["gpu_busy", "host_memory_busy"])
+async def test_gpu_contention_retries_releases_ollama_and_fails_with_a_safe_code(studio, busy_code):
     client, factory, store, headers, base, *_ = studio
     _, payload = await queue_job(client, headers, base)
     run_id = await registered(factory, payload)
     with pytest.raises(ApplicationError) as raised:
-        await run_job(factory, store, payload, FakeGenerator("gpu_busy"), run_id=run_id)
-    assert raised.value.type == "gpu_busy" and not raised.value.non_retryable
+        await run_job(factory, store, payload, FakeGenerator(busy_code), run_id=run_id)
+    assert raised.value.type == busy_code and not raised.value.non_retryable
     assert (await job_row(factory, payload)).status == "running"
     failed = await run_job(
-        factory, store, payload, FakeGenerator("gpu_busy"), attempt=3, run_id=run_id
+        factory, store, payload, FakeGenerator(busy_code), attempt=3, run_id=run_id
     )
     assert failed["status"] == "failed"
-    assert (await job_row(factory, payload)).error_code == "gpu_busy"
+    assert (await job_row(factory, payload)).error_code == busy_code
 
     _, payload = await queue_job(client, headers, base, character="oren")
     releaser = Releaser()

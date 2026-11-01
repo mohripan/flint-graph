@@ -1,0 +1,12 @@
+.pose-workbench { display:grid; grid-template-columns:minmax(140px,230px) minmax(0,1fr); gap:24px; margin-block:20px; align-items:start; }
+.pose-workbench > fieldset { border:0; padding:0; margin:0; min-width:0; display:grid; gap:16px; }
+.pose-workbench:not(:has(figure)) > fieldset { grid-column:1 / -1; }
+.pose-presets { display:flex; flex-wrap:wrap; gap:8px 16px; }
+.pose-transparent { display:flex; align-items:center; gap:8px; }
+.pose-results { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:20px; margin-top:20px; }
+.pose-result { border-top:2px solid var(--studio-border,#d7dfe4); padding-top:16px; display:flex; flex-direction:column; gap:12px; min-width:0; }
+.pose-result .studio-actions { margin-top:auto; flex-wrap:wrap; }
+.pose-studio button { min-height:44px; }
+.pose-studio :focus-visible { outline:3px solid #8c672a; outline-offset:3px; }
+.pose-studio progress { max-width:100%; accent-color:#8c672a; }
+@media(max-width:640px){ .pose-workbench { grid-template-columns:1fr; } .pose-workbench .studio-look-image { max-width:230px; } }

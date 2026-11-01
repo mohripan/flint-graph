@@ -20,6 +20,7 @@ bundle identity. See the implementation notes and report below.
 | `narrative.assistant.context` / text inserted as user message | `narrative/assistant/context.py::build_turn_messages`, `_render`, formatting helpers | bounded/escaped story outline, focus/neighbors, library IDs/metadata, saved appearance profiles, request and bounded history; formatting algorithms remain trusted code |
 | `narrative.assistant.repair` / text appended as user message | `narrative/assistant/turn.py::_repair_request` | bounded diagnostics code/location list; include the complete corrective wording |
 | `narrative.image.portrait` / text conditioning | `narrative/imagegen.py::portrait_request`, `_portrait_negative`, `QUALITY`, `QUALITY_NEGATIVE`, `TYPE_NEGATIVES` and transparency/type/framing fragments | normalized appearance and character type; generation/hires settings are typed config, resource ceilings remain code |
+| `narrative.image.pose` / reference editing | `narrative/poses.py::pose_request`; FLUX.2 klein 4B, ADR 0048 | reviewed appearance and pose text; 4 steps, guidance 1, token ceiling 512. Distilled editing has no negative conditioning; typed input policy still applies. Reference verification, staging and resource limits remain code |
 | `narrative.image.expression` / text conditioning | `imagegen.py::expression_request`, `EXPRESSION_QUALITY`, expression/negative fragments | approved-base description and expression tags; crop/reference/strength validation remains code |
 | `narrative.image.background` / text conditioning | `imagegen.py::background_request`, `BACKGROUND_QUALITY`, people-exclusion and quality-negative fragments | place description; keep negative-prefix order and token limits |
 | `narrative.image.scene_solo`, `narrative.image.scene_pair` / text; `narrative.image.scene_conditioning` / policy | `imagegen.py::scene_art_request`, `_solo_scene`, `_pair_negative`, `SCENE_QUALITY`, `SOLO_NEGATIVES` and the character-count tags | scene text and each referenced character's description (one or two); reference images, adapter scale and half masks remain code |
@@ -34,8 +35,8 @@ CG/audio instructions must be inventoried by their owners when implemented.
 
 The migration preserves the old wording, wire schemas and shipped image policy.
 Image normalization, character counting, dimensions, adapter scale, masks and
-resource ceilings remain trusted code. The current default has 21 entries; the
-original 18-entry artifact remains available for historical replay.
+resource ceilings remain trusted code. The current default has 22 entries; the
+original 18-entry and subsequent 21-entry artifacts remain available for historical replay.
 
 ## Pinned compatibility candidates
 
