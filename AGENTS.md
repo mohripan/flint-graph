@@ -153,8 +153,8 @@ enter prompt refresh. Default is locked/offline. Do not enable SDK tracing or
 restart owned services to activate a new lock. The legacy image TOML is an explicit
 locked-mode override, never an automatic source to publish.
 
-M40 #180–#186 now has an isolated character-preservation research bench, not a
-shipped pose/looks/scoring feature. Read ADR 0046,
+M40 #180–#186 has an isolated character-preservation research bench and the first
+Studio look/feedback slice described below. Read ADR 0046,
 `docs/reports/2026-11-01-character-preservation.md` and
 `docs/architecture/character-preservation-research.md`. Staged FLUX.2 klein 4B
 followed 16/16 primary pose requests on two original adult fixture characters on
@@ -167,8 +167,15 @@ weight license remains unresolved. LoRA work measured random-tensor memory only:
 no creator-selected training images, useful trained weights or quality claim.
 Use the separate `runtimes/character_eval` / `runtimes/character_lab` locks; never
 add these dependencies or private weights to the API, Studio workers or games.
-Named looks, advisory UI, qualified person assignment and actual character/style
-training remain follow-up work. Do not close all seven issues from this report.
+ADR 0047 and `docs/reports/2026-11-01-reviewed-character-looks.md` deliver immutable
+looks, explicit default selection, frozen Studio portrait/expression/CG admission,
+optional isolated WD-only CPU suggestions/comparison, and manual candidate
+feedback/badges (migration 0034). It loads no CCIP weights and activates no
+automatic thresholds/ranking. Original assistant image APIs remain profile-based;
+keep their integration separate. Owner-managed migration/API/frontend reload is
+needed; never restart owned services. Qualified person assignment, pose-model
+rollout and actual character/style training remain follow-up work. Do not close
+all seven issues from these reports.
 
 ## Project Snapshot
 

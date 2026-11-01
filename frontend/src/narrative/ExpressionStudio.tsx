@@ -3,6 +3,9 @@ import type { KeyboardEvent, PointerEvent } from "react";
 import { api } from "../lib/api";
 import type { ImageJob, NarrativeImage } from "../lib/api";
 import { useNarrativeImage } from "./characterImages";
+import { useCharacterLooks } from "./CharacterLooks";
+import { CandidateLookReview, useLookReviewFlags } from "./CandidateLookReview";
+import type { LookFlag } from "./lookModel";
 import { isActive, jobStatus } from "./characterModel";
 import {
   EXPRESSION_PRESETS, MAX_EXPRESSIONS, faceBoxFromAlpha, faceView, moveBox, normalizeExpression, resizeBox, validExpression,
@@ -23,8 +26,9 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
   onChange: (story: StoryDraft, group?: string) => void; onError: (message: string) => void;
 }) {
   const { assets } = useApprovedAssets(tenantId, projectId);
+  const looks = useCharacterLooks(tenantId, projectId, id);
   const latest = useRef(story); latest.current = story;
-  const bases = Object.entries(story.characters[id]?.sprites ?? {}).flatMap(([expression, key]) => {
+  const bases = looks.look ? [{ expression: `Look: ${looks.look.name}`, asset: looks.look.asset }] : Object.entries(story.characters[id]?.sprites ?? {}).flatMap(([expression, key]) => {
     const asset = libraryAsset(assets, story.assets[key]?.sha256);
     return asset && asset.media_type === "image/png" && asset.width && asset.height ? [{ expression, asset }] : [];
   });
@@ -62,10 +66,12 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
     setChosen(current => [...current, value]);
   };
   async function generate() {
-    if (!base || !box || !chosen.length || busy || active) return;
+    if (!base || !box || !chosen.length || busy || active || !looks.ready) return;
     setBusy(true); setNotice(null);
     try {
-      const job = await api.createExpressionJob(tenantId, projectId, id, {
+      const job = looks.look ? await api.createLookExpressionJob(tenantId, projectId, id, {
+        look_id: looks.look.id, face_box: box, expressions: chosen, idempotency_key: crypto.randomUUID(),
+      }) : await api.createExpressionJob(tenantId, projectId, id, {
         base_asset_id: base.asset.id, face_box: box, expressions: chosen, idempotency_key: crypto.randomUUID(),
       });
       setJobs(current => [job, ...current]); setChosen([]);
@@ -91,11 +97,14 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
 
   const results = jobs.flatMap(job => job.assets.map(asset => ({ asset, expression: String(asset.provenance.expression ?? "") })))
     .filter(item => item.expression);
+  const reviews = useLookReviewFlags(tenantId, projectId, results.map(item => item.asset));
   if (!bases.length) {
     return <p className="studio-hint">Add an expression with an approved image first; new expressions are repainted from it.</p>;
   }
   return <div className="expression-studio">
-    {!open ? <button type="button" className="studio-secondary" disabled={readOnly} onClick={() => setOpen(true)}>
+    {looks.error && <p className="studio-error" role="alert">{looks.error}</p>}
+    {looks.look && <p className="studio-hint">Expressions start from “{looks.look.name}”.</p>}
+    {!open ? <button type="button" className="studio-secondary" disabled={readOnly || !looks.ready} onClick={() => setOpen(true)}>
       Generate expressions…</button>
       : <div className="expression-panel">
         <div className="studio-section-heading"><strong>New expressions from one sprite</strong>
@@ -120,7 +129,7 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
             onClick={() => { add(custom); setCustom(""); }}>Add</button>
         </div>
         <div className="studio-actions">
-          <button type="button" className="studio-primary" disabled={readOnly || busy || Boolean(active) || !chosen.length || !box}
+          <button type="button" className="studio-primary" disabled={readOnly || busy || Boolean(active) || !looks.ready || !chosen.length || !box}
             onClick={() => void generate()}>{active ? "Generating…" : chosen.length
               ? `Generate ${chosen.length} expression${chosen.length === 1 ? "" : "s"}` : "Generate expressions"}</button>
           <span className="studio-hint">Up to {MAX_EXPRESSIONS} at a time · about 10 seconds each on this computer's GPU.</span>
@@ -131,8 +140,10 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
       <span>{jobStatus(active).replace("portraits", "expressions").replace("portrait", "expression")}</span></div>}
     {jobs[0] && !isActive(jobs[0]) && jobs[0].status !== "completed" && <p className="studio-notice">{jobStatus(jobs[0])}</p>}
     {notice && <p className="studio-hint" role="status">{notice}</p>}
+    {reviews.failed && <p role="status" className="studio-notice">Some saved look feedback could not be shown. Open Compare look to check an image.</p>}
     {results.length > 0 && <div className="expression-results">
       {results.map(({ asset, expression }) => <ExpressionResult key={asset.id} tenantId={tenantId} projectId={projectId}
+        flags={reviews.flags}
         asset={asset} expression={expression} readOnly={readOnly}
         inUse={story.characters[id]?.sprites?.[expression] !== undefined
           && story.assets[story.characters[id]!.sprites![expression]]?.sha256 === asset.sha256}
@@ -200,9 +211,10 @@ function FaceBoxEditor({ tenantId, projectId, asset, box, onBox }: {
   </div>;
 }
 
-function ExpressionResult({ tenantId, projectId, asset, expression, readOnly, inUse, onUse, onDiscard }: {
+function ExpressionResult({ tenantId, projectId, asset, expression, readOnly, inUse, onUse, onDiscard, flags }: {
   tenantId: string; projectId: string; asset: NarrativeImage; expression: string; readOnly: boolean;
   inUse: boolean; onUse: () => void; onDiscard: () => void;
+  flags: LookFlag[];
 }) {
   // The face is a small part of a full-body sprite, so the preview zooms onto it.
   const box = asset.provenance.face_box as Box | undefined;
@@ -215,6 +227,7 @@ function ExpressionResult({ tenantId, projectId, asset, expression, readOnly, in
     <figcaption><strong>{expression}</strong>
       {inUse ? <small>In use</small> : !readOnly && <button type="button" className="studio-secondary" onClick={onUse}>Use as “{expression}”</button>}
       {!inUse && !readOnly && <button type="button" className="studio-link studio-danger" onClick={onDiscard}>Discard</button>}
+      <CandidateLookReview tenantId={tenantId} projectId={projectId} asset={asset} readOnly={readOnly} flags={flags} />
     </figcaption>
   </figure>;
 }

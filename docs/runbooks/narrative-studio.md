@@ -219,6 +219,18 @@ authoring are later work.
 No paid model or inference service is enabled by these flows.
 
 
+## Reviewed character looks
+
+Reviewed character appearances live in **Characters → Reviewed looks**, separate
+from the global **Look** theme tab. After migration 0034, lock an approved image
+with edited hair/eye/clothing tags and use another named look for a new outfit.
+Studio portraits, expressions and CGs pin the selected record at admission.
+**Compare look** on image cards saves advisory feedback and optional garment-tag
+overlap; it never blocks approval. Optional WD-only CPU setup and remaining
+limits are in [image generation](narrative-image-generation.md#reviewed-looks-and-clothing-tags).
+Existing assistant image suggestions remain profile-based. The owner must reload
+their running Studio after applying the migration; agents must not restart it.
+
 ## Reviewed prompt catalog
 
 Assistant instructions, provider/extraction templates and default image conditioning

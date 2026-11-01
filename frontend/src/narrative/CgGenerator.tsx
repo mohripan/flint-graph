@@ -8,6 +8,7 @@ import {
 } from "./cgModel";
 import type { CgPick } from "./cgModel";
 import { useNarrativeImage } from "./characterImages";
+import { useCharacterLooks } from "./CharacterLooks";
 import { jobStatus } from "./characterModel";
 import { Field } from "./FormFields";
 
@@ -39,7 +40,8 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
 
   const name = (id: string) => characterNames[id] || id;
   const change = (index: number, pick: CgPick) => setPicks(current => current.map((item, at) => at === index ? pick : item));
-  const problem = cgProblem({ picks, scene });
+  const mixed = picks.some(pick => pick.look) && picks.some(pick => !pick.look);
+  const problem = mixed ? "Choose a reviewed look for both characters, or use approved images for both." : cgProblem({ picks, scene });
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (problem || busy || active) return;
@@ -48,7 +50,10 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
     let started = 0;
     try {
       for (; started < cgJobCount(picks); started += 1) {
-        onStarted(await api.createSceneArtJob(tenantId, projectId, cgRequest({ picks, scene })));
+        onStarted(picks.every(pick => pick.look) ? await api.createLookSceneArtJob(tenantId, projectId, {
+          scene: scene.trim(), characters: picks.map(pick => ({ character_id: pick.character, look_id: pick.look! })),
+          count: 4, idempotency_key: crypto.randomUUID(),
+        }) : await api.createSceneArtJob(tenantId, projectId, cgRequest({ picks, scene })));
       }
     } catch (failure) {
       if (started) setNotice("Started 4 CGs. Generate more when they are done.");
@@ -72,12 +77,13 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
       onClick={() => setPicks(current => [...current, { character: otherCharacters(ids, current[0].character)[0], reference: null }])}>
       Add a second character</button>}
     {two && <p className="studio-notice studio-cg-two" role="note">{TWO_CHARACTER_NOTE}</p>}
+    {mixed && <p className="studio-notice">{problem} <button type="button" className="studio-link" onClick={() => setPicks(current => current.map(pick => ({...pick, look:null})))}>Use approved images for both</button></p>}
     <Field label="Scene" hint={`Where they are, what they are doing, the time of day and the mood.${two ? " The first character stands on the left." : ""}`}>
       <textarea rows={2} maxLength={CG_SCENE_LIMIT} value={scene}
         placeholder={`${subject} sitting on the couch by the window at night`}
         onChange={event => setScene(event.target.value)} /></Field>
     <div className="studio-actions">
-      <button type="submit" className="studio-primary" disabled={busy || Boolean(active) || Boolean(problem)}>
+      <button type="submit" className="studio-primary" disabled={busy || Boolean(active) || Boolean(problem) || picks.some(pick => pick.look === undefined)}>
         {active ? "Generating…" : `Generate ${cgCandidates(picks)} CGs`}</button>
       {active && <><span role="status" className="studio-hint">{jobStatus(active)}</span>
         {!active.cancel_requested && <button type="button" className="studio-link" onClick={() => onCancel(active)}>Cancel</button>}</>}
@@ -93,6 +99,8 @@ function CharacterPick({ tenantId, projectId, pick, label, options, names, portr
 }) {
   const [choices, setChoices] = useState<NarrativeImage[] | null>(null);
   const { character, reference } = pick;
+  const looks = useCharacterLooks(tenantId, projectId, character);
+  const reviewed = looks.state?.looks.find(item => item.id === pick.look);
   useEffect(() => {
     if (!character) { setChoices([]); return; }
     const controller = new AbortController();
@@ -107,8 +115,11 @@ function CharacterPick({ tenantId, projectId, pick, label, options, names, portr
   const ordered = choices && referenceChoices(choices, portraitId);
   const preferred = ordered ? defaultReference(ordered, reference) : null;
   useEffect(() => {
-    if (ordered && preferred !== reference) onChange({ character, reference: preferred });
-  }, [ordered, preferred, reference, character, onChange]);
+    if (!looks.ready || !ordered) return;
+    if (pick.look === undefined) {
+      onChange({ character, look: looks.look?.id ?? null, reference: looks.look?.asset.id ?? preferred });
+    } else if (!pick.look && preferred !== reference) onChange({ character, reference: preferred, look: null });
+  }, [ordered, preferred, reference, character, onChange, looks.ready, looks.look, pick.look]);
   const name = names[character] || character;
   return <div className="studio-cg-pick">
     <div className="studio-cg-pick-head">
@@ -116,6 +127,15 @@ function CharacterPick({ tenantId, projectId, pick, label, options, names, portr
         {options.map(id => <option key={id} value={id}>{names[id] || id}</option>)}</select></Field>
       {onRemove && <button type="button" className="studio-link" onClick={onRemove}>Remove</button>}
     </div>
+    {looks.error && <p className="studio-error" role="alert">{looks.error} <button type="button" className="studio-link" onClick={looks.reload}>Retry</button></p>}
+    {looks.state && <Field label="Reviewed look"><select value={pick.look ?? ""} onChange={event => {
+      const chosen = looks.state?.looks.find(item => item.id === event.target.value);
+      onChange({ character, look: chosen?.id ?? null, reference: chosen?.asset.id ?? preferred });
+    }}><option value="">Choose an approved image instead</option>{looks.state.looks.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>}
+    {reviewed ? <fieldset className="studio-cg-references"><legend>{reviewed.name}</legend>
+      <ReferenceOption tenantId={tenantId} projectId={projectId} group={`look-${label}`} asset={reviewed.asset} checked onPick={() => undefined} />
+      <p className="studio-hint">{[...reviewed.identity_tags, ...reviewed.clothing_tags].join(", ")}</p>
+    </fieldset> :
     <fieldset className="studio-cg-references">
       <legend>Look from</legend>
       <p className="studio-hint">The CG keeps {name}’s look from this approved image. A plain portrait or sprite works best: effects and backdrops in it carry into the scene.</p>
@@ -124,8 +144,9 @@ function CharacterPick({ tenantId, projectId, pick, label, options, names, portr
         : <div className="studio-cg-reference-list" role="radiogroup" aria-label={`Reference image for ${name}`}>
           {ordered.slice(0, REFERENCES_SHOWN).map(choice => <ReferenceOption key={choice.id} tenantId={tenantId} projectId={projectId}
             group={`cg-reference-${label}`} asset={choice} checked={choice.id === reference}
-            onPick={() => onChange({ character, reference: choice.id })} />)}</div>}
+            onPick={() => onChange({ character, reference: choice.id, look: null })} />)}</div>}
     </fieldset>
+    }
   </div>;
 }
 

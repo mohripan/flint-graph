@@ -14,6 +14,8 @@ import { imageJobStarted, useBackgroundJobs, useLibraryJobs } from "./imageJobs"
 import { CgGenerator } from "./CgGenerator";
 import { cgSubject } from "./cgModel";
 import { Viewer } from "./CharacterStudio";
+import { CandidateLookReview, useLookReviewFlags } from "./CandidateLookReview";
+import type { LookFlag } from "./lookModel";
 import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
 import { ClipPlayButton } from "./VoiceControls";
@@ -31,6 +33,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
   const [view, setView] = useState<LibraryView>({ type: "all" });
   const [index, setIndex] = useState<LibraryIndex | null>(null);
   const [assets, setAssets] = useState<NarrativeImage[] | null>(null);
+  const reviews = useLookReviewFlags(tenantId, projectId, assets ?? []);
   const [next, setNext] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -157,10 +160,12 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
         {!private_ && canWrite && selected.size > 0 && <MoveBar count={selected.size} folders={folders}
           onClear={() => setSelected(new Set())} onMove={move} />}
         {notice && <p className="studio-notice" role="status">{notice}</p>}
+        {reviews.failed && !private_ && <p role="status" className="studio-notice">Some saved look feedback could not be shown. Open Compare look to check an image.</p>}
         {private_ ? null : assets === null ? <p className="studio-hint">Loading assets…</p>
           : !assets.length ? <p className="studio-empty">{view.type === "review" ? "Nothing waiting for review." : cgs ? "No CGs here yet." : "No assets here yet."}</p>
           : <div className="studio-asset-grid">{assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
               projectId={projectId} asset={asset} canWrite={canWrite} onView={() => setViewing(asset)}
+              flags={reviews.flags} names={characterNames}
               selected={selected.has(asset.id)} onSelect={() => toggle(asset.id)}
               folder={asset.folder_id ? folderPath(folders, asset.folder_id) : ""}
               onRename={name => act(async () => replace(await api.renameNarrativeAsset(tenantId, projectId, asset.id, name)), "Could not rename.")}
@@ -213,10 +218,11 @@ function BackgroundGenerator({ tenantId, projectId, active, onStarted, onCancel 
   </form>;
 }
 
-function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onApprove, onDiscard, selected, onSelect, folder }: {
+function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onApprove, onDiscard, selected, onSelect, folder, flags, names }: {
   tenantId: string; projectId: string; asset: NarrativeImage; canWrite: boolean;
   onView: () => void; onRename: (name: string) => Promise<void>; onApprove: () => Promise<void>; onDiscard: () => Promise<void>;
   selected: boolean; onSelect: () => void; folder: string;
+  flags: LookFlag[]; names: Record<string,string>;
 }) {
   const [editing, setEditing] = useState(false);
   const image = asset.media_type === "image/png";
@@ -241,6 +247,7 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
       <small>{KIND_LABELS[asset.kind] ?? asset.kind}{asset.width ? ` · ${asset.width}×${asset.height}` : ""}{asset.duration_ms ? ` · ${(asset.duration_ms / 1000).toFixed(1)} s` : ""} · {asset.license}</small>
       {folder && <small title={folder}>In {folder}</small>}
       {asset.status === "candidate" && <span className="studio-asset-badge">To review</span>}
+      <CandidateLookReview tenantId={tenantId} projectId={projectId} asset={asset} readOnly={!canWrite} flags={flags} names={names} />
       {canWrite && <span className="studio-asset-actions">
         {asset.status === "candidate" && <button type="button" className="studio-secondary" onClick={() => void onApprove()}>Approve</button>}
         <button type="button" className="studio-link" onClick={() => setEditing(true)}>Rename</button>

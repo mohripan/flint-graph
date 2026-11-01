@@ -7,6 +7,9 @@ import {
   hiresLabel, isActive, jobSize, jobStatus,
 } from "./characterModel";
 import { CharacterSprites } from "./CharacterSprites";
+import { CharacterLooks, useCharacterLooks } from "./CharacterLooks";
+import { CandidateLookReview, useLookReviewFlags } from "./CandidateLookReview";
+import type { LookFlag } from "./lookModel";
 import { Field } from "./FormFields";
 import { refreshLibrary } from "./libraryAssets";
 import { addCharacter, deleteCharacter } from "./model";
@@ -67,6 +70,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
   const saved = useRef(profile);
   saved.current = profile;
   const tenantId = context?.tenantId ?? "", projectId = context?.projectId ?? "";
+  const looks = useCharacterLooks(tenantId, projectId, id);
   const character = story.characters[id];
   const active = jobs.find(isActive) ?? null;
   const dirty = cleanAppearance(appearance) !== profile.appearance || type !== profile.character_type
@@ -126,11 +130,13 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
   }, [activeId, context, tenantId, projectId]);
 
   async function generate() {
-    if (!context || busy || active || !cleanAppearance(appearance)) return;
+    if (!context || busy || active || !looks.ready || (!looks.look && !cleanAppearance(appearance))) return;
     setBusy(true); setNotice(null);
     try {
       if (dirty && !(await persist())) return;
-      const job = await api.createPortraitJob(tenantId, projectId, id, {
+      const job = looks.look ? await api.createLookPortraitJob(tenantId, projectId, id, {
+        look_id: looks.look.id, framing, count: PORTRAITS_PER_JOB, idempotency_key: crypto.randomUUID(), transparent: sprite, hires,
+      }) : await api.createPortraitJob(tenantId, projectId, id, {
         appearance: cleanAppearance(appearance), character_type: type, framing, count: PORTRAITS_PER_JOB,
         idempotency_key: crypto.randomUUID(), transparent: sprite, hires,
       });
@@ -178,6 +184,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
   }
 
   const candidates = jobs.flatMap(job => job.assets.map(asset => ({ asset, job })));
+  const reviews = useLookReviewFlags(tenantId, projectId, candidates.map(item => item.asset));
   const latest = jobs[0];
   return <section className="studio-character-sheet" aria-label={`Character ${character.name}`}>
     <div className="studio-character-hero">
@@ -189,11 +196,11 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
           ...story, characters: { ...story.characters, [id]: { ...character, name: event.target.value } },
         }, `character:${id}:name`)} /></Field>
         <Field label="Appearance" hint="Short tags separated by commas follow best, for example: medium hair, white hair, red eyes, androgynous, black coat. Not real people or existing characters.">
-          <textarea rows={4} maxLength={MAX_APPEARANCE} value={appearance}
+          <textarea rows={4} maxLength={MAX_APPEARANCE} value={appearance} disabled={Boolean(looks.look)}
             placeholder="silver hair, low ponytail, amber eyes, navy coat, calm smile"
             onChange={event => setAppearance(event.target.value)} /></Field>
         <div className="studio-character-choices">
-          <Field label="Character type"><select value={type} onChange={event => setType(event.target.value as CharacterType)}>
+          <Field label="Character type"><select value={type} disabled={Boolean(looks.look)} onChange={event => setType(event.target.value as CharacterType)}>
             {CHARACTER_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select></Field>
           <Field label="Framing"><select value={framing} onChange={event => setFraming(event.target.value as CharacterFraming)}>
@@ -209,7 +216,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
           onChange={event => setHiresChoice(event.target.checked)} />
           <span>{hiresLabel()}</span></label>
         {!readOnly && <div className="studio-actions">
-          <button type="button" className="studio-primary" disabled={busy || Boolean(active) || !cleanAppearance(appearance)}
+          <button type="button" className="studio-primary" disabled={busy || Boolean(active) || !looks.ready || (looks.look ? looks.look.asset.status !== "approved" : !cleanAppearance(appearance))}
             onClick={() => void generate()}>{active ? "Generating…" : generateLabel(sprite)}</button>
           {profile.portrait && <button type="button" className="studio-link" onClick={() => void choose(null)}>Remove portrait</button>}
           <button type="button" className="studio-link studio-danger" onClick={() => {
@@ -217,9 +224,12 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
             catch (error) { onError(message(error, "Could not remove a character.")); }
           }}>Remove character</button>
         </div>}
+        {looks.look && <p className="studio-hint">New images use “{looks.look.name}”. Choose or create a look below to change it.</p>}
+        {looks.error && <p className="studio-error" role="alert">{looks.error}</p>}
         <p className="studio-hint" role="status">{notice ?? (dirty ? "Saving…" : "")}</p>
       </fieldset>
     </div>
+    <CharacterLooks tenantId={tenantId} projectId={projectId} characterId={id} readOnly={readOnly} />
     <CharacterSprites id={id} story={story} tenantId={tenantId} projectId={projectId} readOnly={readOnly}
       onChange={onChange} onError={onError} onUpgrade={onUpgrade} />
     {active && <div className="studio-job" role="status">
@@ -230,9 +240,11 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
     {latest && !isActive(latest) && latest.status !== "completed" && <p className="studio-notice">{jobStatus(latest)}</p>}
     {latest?.truncated && <p className="studio-notice">This description is long; the model only read its first part. Shorter descriptions follow more closely.</p>}
     <h3 className="studio-candidates-title">Generated portraits</h3>
+    {reviews.failed && <p role="status" className="studio-notice">Some saved look feedback could not be shown. Open Compare look to check an image.</p>}
     {!candidates.length && !active && <p className="studio-empty">Describe this character, then generate portraits to choose from. Images are made on this computer's GPU.</p>}
     <div className="studio-candidates">
       {candidates.map(({ asset }) => <Candidate key={asset.id} tenantId={tenantId} projectId={projectId} asset={asset}
+        flags={reviews.flags}
         chosen={profile.portrait?.id === asset.id} readOnly={readOnly} onChoose={() => void choose(asset)}
         onApprove={() => void approve(asset)} onDiscard={() => void discard(asset)} onView={() => setViewing(asset)} />)}
     </div>
@@ -259,9 +271,10 @@ function Portrait({ tenantId, projectId, asset, name, onView }: {
   </button>;
 }
 
-function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onApprove, onDiscard, onView }: {
+function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onApprove, onDiscard, onView, flags }: {
   tenantId: string; projectId: string; asset: NarrativeImage; chosen: boolean; readOnly: boolean;
   onChoose: () => void; onApprove: () => void; onDiscard: () => void; onView: () => void;
+  flags: LookFlag[];
 }) {
   const url = useNarrativeImage(tenantId, projectId, asset.id, "thumbnail");
   const sprite = asset.kind === "sprite";
@@ -277,6 +290,7 @@ function Candidate({ tenantId, projectId, asset, chosen, readOnly, onChoose, onA
         : chosen ? <strong>Current portrait</strong>
           : !readOnly && <button type="button" className="studio-secondary" onClick={onChoose}>Use as portrait</button>}
       {!chosen && !readOnly && <button type="button" className="studio-link studio-danger" onClick={onDiscard}>Discard</button>}
+      <CandidateLookReview tenantId={tenantId} projectId={projectId} asset={asset} readOnly={readOnly} flags={flags} />
       <small>{sprite ? "Transparent sprite · " : ""}{asset.width}×{asset.height} · Seed {asset.seed}</small>
     </figcaption>
   </figure>;

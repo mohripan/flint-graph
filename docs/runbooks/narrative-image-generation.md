@@ -206,7 +206,8 @@ The offline [bench](../../evals/character-preservation/README.md) has separate C
 and GPU environments, fixed original fixtures, model hashes, contact sheets and
 explicit agent reviews. See [measured results](../reports/2026-11-01-character-preservation.md)
 and [ADR 0046](../adr/0046-character-preservation-measurement-and-pose-direction.md).
-This is not a new production worker mode: current image generation is unchanged.
+The research lab is not a new worker mode. The Studio slice below uses the
+existing image worker and model.
 
 Run experiments sequentially with new output directories. Refuse a busy GPU;
 never stop another owner's process to fit a model. Cached ControlNet requires
@@ -220,3 +221,43 @@ fixture set is not creator calibration, garment overlap misses visible changes,
 and CCIP's exact model license is unresolved for production. An unavailable score
 is unknown and never prevents approval. Actual LoRA training requires the creator
 to select approved images; the retained synthetic probe saves no trained weights.
+
+## Reviewed looks and clothing tags
+
+Apply `0034_narrative_looks`, then reload the API/frontend through the owner's
+normal process. Characters → Reviewed looks locks an approved reference and
+creator-edited tags as an immutable named look. Studio portrait, expression and
+CG requests pin that exact record; a new default affects later requests. Use
+**New look** for another outfit. **Compare look** on image cards saves manual
+feedback and offers an optional coarse garment-tag comparison. Scores/warnings
+never hide images or revoke approval. See
+[ADR 0047](../adr/0047-reviewed-character-looks-and-advisory-feedback.md) and the
+[report](../reports/2026-11-01-reviewed-character-looks.md).
+
+Manual looks/feedback need no ML installation. For optional tag suggestions and
+comparisons, prepare the separate CPU environment:
+
+```powershell
+uv sync --project runtimes/character_eval
+```
+
+Download only the reviewed `wd14` model using the fetch/copy procedure in the
+[bench README](../../evals/character-preservation/README.md#prepare-offline-models).
+Copy its reviewed manifest bytes verbatim. Do not install CCIP for this feature.
+Set these API values in the owner's private environment:
+
+| Setting | Value |
+| --- | --- |
+| `FLINT_GRAPH_NARRATIVE_LOOK_TAGGER_PYTHON` | Absolute path to the isolated environment's Python executable. |
+| `FLINT_GRAPH_NARRATIVE_LOOK_TAGGER_MODEL_DIR` | Absolute path to `wd14`, containing `model.onnx`, `selected_tags.csv` and its reviewed manifest. |
+
+The exact manifest SHA-256 is
+`7e95e8ddb226fe53d512698f9589cbe37d7d1a26f53a78f63fa31010e4ddccf5`.
+Every model file is verified; the child uses CPU only and downloads nothing.
+Each API process runs at most one child, bounded to 45 seconds. An occupied
+tagger returns 429 so another tab can retry instead of waiting indefinitely.
+Keep weights/private observations outside releases. Missing or broken settings,
+pins or bytes produce a recoverable message; use manual entry/review rather than
+guessing a score. Tags miss colors and fine details. CCIP, ranking/best-N and
+per-person CG metrics remain unqualified. Assistant image suggestions retain
+their profile-based path.

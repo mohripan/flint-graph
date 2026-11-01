@@ -8,7 +8,7 @@ export const CG_SCENE_LIMIT = 600;
 export const CG_MAX_CHARACTERS = 2;
 const REFERENCE_KINDS = ["character_portrait", "sprite", "image"];
 
-export interface CgPick { character: string; reference: string | null }
+export interface CgPick { character: string; reference: string | null; look?: string | null }
 
 // Two characters keep both looks in about 7 renders of 12 (ADR 0041; M40 #185 owns
 // improving it), so the Studio says so and starts two jobs of four. Jobs stay within

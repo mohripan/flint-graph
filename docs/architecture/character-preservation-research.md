@@ -1,7 +1,11 @@
 # Character preservation: research boundaries and Studio design
 
 Status: research and implementation design for M40 #180–#186. The offline lab is
-implemented; the Studio features described below are **not shipped** by this work.
+implemented. [ADR 0047](../adr/0047-reviewed-character-looks-and-advisory-feedback.md)
+delivers the first Studio slice: immutable looks, optional WD suggestions and
+garment-tag comparison, and manual advisory feedback. Multi-view looks, automatic
+identity scoring/ranking, pose-model rollout and LoRA training below remain
+designs, **not shipped features**.
 See the [measured report](../reports/2026-11-01-character-preservation.md).
 
 ## Compare three separate outcomes
@@ -37,7 +41,9 @@ clothing from a chosen approved reference, then let the creator edit them before
 locking the look. A suggested tag is not an assertion of intent. Preview source
 and tags side by side; preserve an explicit draft/reviewed state.
 
-The proposed editor-only immutable look record contains:
+The first slice stores the source hash, reviewed tags, authored character type,
+parent, reviewer, policy/bundle and optional raw observation. The fuller proposed
+multi-view record contains:
 
 - Project/character IDs, look ID, creator name such as “Travel coat”, parent look
   ID and a schema version.

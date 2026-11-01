@@ -261,6 +261,8 @@ class Settings(BaseSettings):
     # Local image generation (ADR 0039). The API admits jobs only when enabled; the
     # opt-in worker needs the isolated runtime, the model and its pinned manifest.
     narrative_image_generation_enabled: bool = False
+    narrative_look_tagger_python: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_look_tagger_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_image_worker_enabled: bool = False
     narrative_image_task_queue: str = Field(
         default="narrative-image", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"

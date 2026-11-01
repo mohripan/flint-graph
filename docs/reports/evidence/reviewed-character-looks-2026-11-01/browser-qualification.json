@@ -1,0 +1,35 @@
+{
+  "fixture": "Original synthetic adult fixtures; agent-operated QA, not creator calibration",
+  "ui_generation_admission_only": true,
+  "new_gpu_model_run": false,
+  "portrait_expression_cg_snapshots_match": true,
+  "edited_words_in_all_prompts": true,
+  "declared_character_type_preserved": true,
+  "predicted_gender_excluded": true,
+  "feedback_persisted_without_changing_approval": true,
+  "live_wd_only_child": true,
+  "tagger_unavailable_keeps_manual_edits": true,
+  "feedback_unavailable_message_observed": true,
+  "desktop_viewport": [
+    1440,
+    1100
+  ],
+  "mobile_viewport": [
+    390,
+    844
+  ],
+  "axe_version": "4.12.1",
+  "desktop_axe": {
+    "inapplicable": 43,
+    "incomplete": 0,
+    "passes": 17,
+    "violations": 0
+  },
+  "mobile_axe": {
+    "inapplicable": 43,
+    "incomplete": 0,
+    "passes": 17,
+    "violations": 0
+  },
+  "scrolled_audit_manual_check": "Sticky header obscured two offscreen labels; visually checked at top and while scrolling."
+}

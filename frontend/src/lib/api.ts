@@ -14,6 +14,7 @@ import type {
 } from "../narrative/types";
 import type { AssetFolder, LibraryIndex } from "../narrative/assetFolders";
 import type { LayoutItem } from "../narrative/sceneTree";
+import type { CharacterLook, LookList, LookFeedback, LookFlag, ClothingComparison, lookRequest } from "../narrative/lookModel";
 
 export interface SceneLayout { project_id: string; version: number; items: LayoutItem[] }
 export type CharacterType = "girl" | "boy" | "woman" | "man" | "other";
@@ -424,6 +425,66 @@ export const api = {
   }, signal?: AbortSignal): Promise<ImageJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/portrait-jobs`, {
       method: "POST", headers: tenantHeaders(tenantId), signal, json: body,
+    });
+  },
+
+  listCharacterLooks(tenantId: string, projectId: string, characterId: string, signal?: AbortSignal): Promise<LookList> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+  lockCharacterLook(tenantId: string, projectId: string, characterId: string, body: ReturnType<typeof lookRequest>): Promise<CharacterLook> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: body,
+    });
+  },
+  candidateLookFeedback(tenantId: string, projectId: string, characterId: string, lookId: string, assetId: string,
+    signal?: AbortSignal): Promise<LookFeedback> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/${encodeURIComponent(lookId)}/reviews/${encodeURIComponent(assetId)}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+  saveCandidateLookFeedback(tenantId: string, projectId: string, characterId: string, lookId: string, assetId: string,
+    body: {base_version:number; identity: LookFeedback["identity"]; clothes: LookFeedback["clothes"]; notes:string}): Promise<LookFeedback> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/${encodeURIComponent(lookId)}/reviews/${encodeURIComponent(assetId)}`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: body,
+    });
+  },
+  lookReviewFlags(tenantId: string, projectId: string, ids: string[], signal?: AbortSignal): Promise<{reviews:LookFlag[];truncated:boolean}> {
+    const query = new URLSearchParams(); ids.forEach(id => query.append("asset_id", id));
+    return jsonRequest(`${projectPath(projectId)}/look-reviews?${query}`, {headers: tenantHeaders(tenantId), signal, cache:"no-store"});
+  },
+  suggestCharacterLookTags(tenantId:string, projectId:string, characterId:string, assetId:string):Promise<{observation_id:string; identity_tags:string[]; clothing_tags:string[]}> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/suggestions`, {method:"POST",headers:tenantHeaders(tenantId),json:{asset_id:assetId}});
+  },
+  compareClothingTags(tenantId:string, projectId:string, characterId:string, lookId:string, assetId:string, signal?:AbortSignal):Promise<ClothingComparison> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/${encodeURIComponent(lookId)}/compare/${encodeURIComponent(assetId)}`, {method:"POST",headers:tenantHeaders(tenantId),signal});
+  },
+  selectCharacterLook(tenantId: string, projectId: string, characterId: string, body: {look_id: string | null; base_version: number}): Promise<LookList["selection"]> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/selection`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: body,
+    });
+  },
+  createLookPortraitJob(tenantId: string, projectId: string, characterId: string, body: {
+    look_id: string; framing: CharacterFraming; count: number; transparent: boolean; hires: boolean; idempotency_key: string;
+  }): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/portrait-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: body,
+    });
+  },
+  createLookExpressionJob(tenantId: string, projectId: string, characterId: string, body: {
+    look_id: string; face_box: number[]; expressions: string[]; idempotency_key: string;
+  }): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/expression-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: body,
+    });
+  },
+  createLookSceneArtJob(tenantId: string, projectId: string, body: {
+    scene: string; characters: {character_id: string; look_id?: string; reference_asset_id?: string}[];
+    count: number; idempotency_key: string;
+  }): Promise<ImageJob> {
+    return jsonRequest(`${projectPath(projectId)}/look-scene-art-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), json: body,
     });
   },
 

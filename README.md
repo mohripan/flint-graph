@@ -22,6 +22,7 @@ completed work from the next milestones.
 | Characters and Assets | Upload art, approve generated candidates, manage backgrounds, sprites, expressions and CGs, and organize the library. |
 | Stage and Look | Place and frame characters, change backgrounds and expressions, show full-screen event CGs under the dialogue, and edit the game's theme. |
 | Voices | Upload line audio or generate it with a configured local model; choose character voices and per-line delivery. Cloned voices require consented references and applicable license acceptance. |
+| Reviewed looks | Lock an approved reference with edited hair, eye and clothing tags; reuse named looks for new requests and save side-by-side character/clothes feedback. Optional clothing-tag comparisons stay advisory. |
 | Playtest and Releases | Test the saved story in the isolated Godot preview, then build and download a web game or editable Godot source. |
 
 The player supports authored choices and conditions, local saves, voice volume,
@@ -32,7 +33,8 @@ underneath.
 Projects keep immutable revisions and recoverable edit conflicts. Uploaded and
 generated assets record provenance, hashes, approval and rights declarations.
 Releases capture a particular story and its approved assets with versioned build
-metadata and notices. Private model weights stay out of the game.
+metadata and notices. Private model weights and Studio look metadata stay out of
+the game.
 
 ## Run the narrative Studio
 
@@ -87,20 +89,23 @@ Voice choices and their installation/license requirements are documented in the
 [voice runbook](docs/runbooks/narrative-voice-generation.md). Nothing downloads
 model weights merely by opening an exported game.
 
-Approved reference images guide expressions and CGs. You still review every
-candidate: references do not guarantee identity or clothing fidelity, especially
-in two-character CGs.
+Reviewed looks freeze the words used for new portraits and the approved reference
+used for expressions and CGs. A deliberate outfit change gets a new named look.
+You still review every candidate: image references do not guarantee identity or
+clothing fidelity, especially in two-character CGs. Clothing-tag overlap misses
+fine details and does not determine approval.
 
-Reviewed look integration, new pose methods, useful character/style LoRA training,
-CCIP identity scoring and automatic candidate ranking remain follow-up work. The
+New pose methods, useful character/style LoRA training, CCIP identity scoring and
+automatic candidate ranking remain research or follow-up work. The
 [measured character-preservation report](docs/reports/2026-11-01-character-preservation.md)
-records what was tested and what remains unqualified.
+and [Studio look integration report](docs/reports/2026-11-01-reviewed-character-looks.md)
+record what was tested and what remains unqualified.
 
 ## Documentation
 
 - [Studio workflow and local setup](docs/runbooks/narrative-studio.md)
 - [Assistant and reviewed proposals](docs/runbooks/narrative-assistant.md)
-- [Image generation, expressions and CGs](docs/runbooks/narrative-image-generation.md)
+- [Image generation, expressions, CGs and reviewed looks](docs/runbooks/narrative-image-generation.md)
 - [Voice generation and model licenses](docs/runbooks/narrative-voice-generation.md)
 - [Godot toolchain](docs/runbooks/godot-toolchain.md) and [player contract](docs/architecture/godot-player-contract.md)
 - [Product direction](docs/product/narrative-game-studio.md), [delivery queue](docs/product/narrative-game-backlog.md) and [roadmap](docs/ROADMAP.md)
