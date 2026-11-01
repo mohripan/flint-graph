@@ -41,14 +41,37 @@ def parse_request(data):
             if set(request) != common | {"reference_sha256"}:
                 raise ValueError
             hashes = [request["reference_sha256"]]
-        elif version == 2:
-            if set(request) != common | {"reference_sha256s"}:
+        elif version in (2, 3):
+            if set(request) != common | {"reference_sha256s"} | (
+                {"style"} if version == 3 else set()
+            ):
                 raise ValueError
             hashes = request["reference_sha256s"]
-            if type(hashes) is not list or len(hashes) != 2 or len(set(hashes)) != 2:
+            if (
+                type(hashes) is not list
+                or len(hashes) not in ((2,) if version == 2 else (1, 2))
+                or any(type(h) is not str for h in hashes)
+                or len(set(hashes)) != len(hashes)
+            ):
                 raise ValueError
         else:
             raise ValueError
+        if version == 3:
+            style = request["style"]
+            if type(style) is not dict or set(style) != {
+                "sha256",
+                "strength",
+                "dataset_sha256",
+                "recipe_sha256",
+            }:
+                raise ValueError
+            if type(style["strength"]) not in (int, float) or not 0.1 <= style["strength"] <= 1:
+                raise ValueError
+            if any(
+                type(style[k]) is not str or not SHA.fullmatch(style[k])
+                for k in ("sha256", "dataset_sha256", "recipe_sha256")
+            ):
+                raise ValueError
         for value in [request["model_manifest_sha256"], *hashes]:
             if type(value) is not str or not SHA.fullmatch(value):
                 raise ValueError

@@ -369,10 +369,101 @@ format effect. No reference weights, training data or model files enter exports.
 Identity similarity does not measure drawing style or lighting. The live fixture
 still had heavier outlines than its primary despite the instructions. For a change
 limited to facial expression, use the existing bounded face repaint: it preserves
-the body/outfit pixels. A newly drawn pose needs visual review. Consistent learned
-style and any style LoRA training remain #184 work; no such training is claimed here.
+the body/outfit pixels. A newly drawn pose needs visual review. Project style adapters are
+trained through ADR 0050 below; neither instructions nor adapters eliminate review.
 
 To qualify two-reference generation, set the existing live-model opt-in plus
 `FLINT_GRAPH_NARRATIVE_POSE_LIVE_SECONDARY` to an explicitly approved synthetic QA
 PNG, then run `tests/integration/test_narrative_pose_live.py`. That path verifies
 ordered input hashes and the secondary-size cap, not a style-quality score.
+
+### Private project style training (ADR 0050)
+
+After migration 0037, **Look → Project art style** lets a member select 4–12
+approved project images, review a content caption for each, confirm training
+rights, and train an immutable named version. Use images with consistent
+linework/shading and captions describing the person, clothes, pose and scene.
+Different characters help separate rendering style from identity. Four images
+is an admission minimum, not an established quality threshold. The qualification
+set was selected and reviewed by an agent, not calibrated by the creator.
+
+Install the isolated trainer and compatible pose runtime:
+
+```powershell
+uv sync --project runtimes/stylegen
+uv sync --project runtimes/posegen
+```
+
+Keep the existing pinned klein model and pose settings. Add the opt-in settings
+to private operator configuration (absolute directory on this machine):
+
+```dotenv
+FLINT_GRAPH_NARRATIVE_STYLE_TRAINING_ENABLED=true
+FLINT_GRAPH_NARRATIVE_STYLE_WORKER_ENABLED=true
+FLINT_GRAPH_NARRATIVE_STYLE_RUNTIME_DIR=C:/Projects/flint-graph-codex-character-studio/runtimes/stylegen
+FLINT_GRAPH_NARRATIVE_STYLE_TASK_QUEUE=narrative-style
+FLINT_GRAPH_NARRATIVE_STYLE_DEADLINE_SECONDS=1800
+```
+
+Select `style` as an additional `STUDIO_SERVICES` entry, beside the existing
+`pose` entry; it is optional and off by default. Standalone start:
+`uv run python -m flint_graph.processes.narrative_style_worker`. A separate task
+queue and absolute pose/training runtime plus base-model manifest pin are required.
+Deploy API, worker, both children and their locks together. Existing active owned
+processes require an owner-managed reload; do not restart someone else's Studio.
+
+The trainer uses rank/alpha 4, 512² area / 768-side aspect buckets in multiples of
+32, batch one, cached text and VAE latents, frozen bf16 base weights, FP32 LoRA
+parameters, gradient checkpointing and AdamW8bit at 1e-4. The creator chooses
+20–400 updates and a 32-bit seed (defaults 200 and 42). It needs the same 11 GiB
+free dedicated GPU / 6 GiB available host admission floors as poses. These are
+observations, not reservations; concurrent image/audio jobs can still contend.
+No other model process is stopped or unloaded. Busy/low-memory attempts retry at
+20 and 40 seconds before failing safely. M41 owns shared GPU coordination.
+
+A dedicated ledger/outbox/run registration and execution token fence every
+attempt. Sources must remain approved and match frozen hashes on each retry.
+Cancellation stops only that child's process tree. Progress and loss records
+persist across views. Closed-run recovery does not interrupt a slow live run.
+Weights are strict finite FP32 rank-4 safetensors, hash checked and create-only in
+private `style-adapters/<job>/executions/<token>/` objects. They have no ordinary
+asset binding or browser download route. Abandoned attempt objects remain private;
+retention/garbage collection is not implemented by this slice.
+
+In **Characters → Poses → Project style version**, choose a completed version
+and strength 0.1–1.0. Each pose freezes its exact version/weight hash, dataset,
+recipe and base model; no adapter remains the default. Metadata identifies the
+version used. This path targets the installed FLUX.2 klein 4B renderer. It does not
+apply these weights to the SDXL expression/CG workers. Character-specific LoRA
+training and broader quality calibration remain #184 work. Review candidates:
+style/lighting and fine garment details can still drift.
+
+### Optional MLflow tracking
+
+MLflow records training metadata independently of Langfuse's reviewed prompt
+catalog. Temporal remains the job executor; PostgreSQL/private object storage
+remain authoritative. The root environment has no MLflow dependency.
+
+For a local loopback tracking UI in its isolated pinned environment:
+
+```powershell
+uv sync --project runtimes/modeltracking
+runtimes/modeltracking/.venv/Scripts/mlflow.exe server --host 127.0.0.1 --port 6096 --workers 1 --backend-store-uri sqlite:///notes/model-tracking.db --default-artifact-root ./notes/model-tracking-artifacts --no-serve-artifacts
+```
+
+On Linux use `runtimes/modeltracking/.venv/bin/mlflow`. Set
+`FLINT_GRAPH_NARRATIVE_MODEL_TRACKING_URL=http://127.0.0.1:6096` on the style worker;
+omit it to disable tracking. The URL is an operator HTTP(S) origin without embedded
+credentials, query or fragment. The worker makes bounded REST requests, then logs
+loss steps, image count, time/memory and opaque job/base/dataset/recipe/weight
+hashes. It uploads no images, captions, prompts, paths or weights and enables no
+autologging. Tracking failure does not undo training. A crash between publication
+and mirroring can leave a completed version without a tracking run; PostgreSQL is
+the durable record, and the mirror is not an exactly-once event sink.
+
+Local SQLite/loopback operation is development-only. Linux multi-node production
+requires operator-managed MLflow authentication/TLS and shared backing storage,
+plus existing Temporal, PostgreSQL and private artifact services. GPU admission
+across nodes is separate M41 work; local NVML is not distributed coordination.
+See the [delivery report](../reports/2026-11-02-private-style-adapters.md) for exact
+measurements and the matched-seed comparison.

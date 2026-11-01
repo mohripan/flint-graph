@@ -32,3 +32,10 @@ test("an additional approved view requires explicit same-look confirmation",()=>
   assert.throws(()=>model.poseBody(look,"standing",1,true,"key",value));
  }
 });
+
+test('poses pin only a completed style version and bounded strength',()=>{
+ const look={id:'look',asset:{status:'approved'}};
+ const style={id:'version',status:'completed',weights_sha256:'hash'};
+ assert.deepEqual(model.poseBody(look,'sitting',1,false,'key',undefined,{style,strength:0.5}).style_adapter,{id:'version',strength:0.5});
+ for(const selected of [{style:{...style,status:'running'},strength:0.5},{style,strength:2}])assert.throws(()=>model.poseBody(look,'sitting',1,false,'key',undefined,selected));
+});

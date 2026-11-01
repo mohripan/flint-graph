@@ -109,6 +109,12 @@ from flint_graph.infrastructure.db.narrative_release_models import (
 from flint_graph.infrastructure.db.narrative_release_models import (
     NarrativeReleaseJob as NarrativeReleaseJob,
 )
+from flint_graph.infrastructure.db.narrative_style_models import (
+    NarrativePoseStyle as NarrativePoseStyle,
+)
+from flint_graph.infrastructure.db.narrative_style_models import (
+    NarrativeStyleJob as NarrativeStyleJob,
+)
 from flint_graph.infrastructure.db.narrative_voice_models import (
     NarrativeLineDelivery as NarrativeLineDelivery,
 )

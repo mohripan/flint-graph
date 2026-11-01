@@ -257,3 +257,25 @@ async def test_invalid_expectations_are_rejected_before_contacting_the_sdk(size,
     store = S3NarrativeArtifactStore(ForbiddenSDK(), bucket="owned-fixture")
     with pytest.raises(ValueError, match=r"^Invalid artifact expectation$"):
         await store.get_verified("key", expected_size=size, expected_sha256=digest, max_bytes=cap)
+
+
+async def test_private_adapter_objects_are_create_only_and_cannot_target_game_assets():
+    from uuid import uuid4
+
+    client = S3Fixture()
+    store = S3NarrativeArtifactStore(client, bucket="owned-fixture")
+    tenant, project, job, token = (uuid4() for _ in range(4))
+    key = (
+        f"tenants/{tenant}/narrative/projects/{project}/style-adapters/{job}/"
+        f"executions/{token}/adapter.safetensors"
+    )
+    await store.put_private_adapter(key, b"abc", expected_sha256=ABC_SHA256)
+    await store.put_private_adapter(key, b"abc", expected_sha256=ABC_SHA256)
+    with pytest.raises(ArtifactStoreError, match="artifact_conflict"):
+        await store.put_private_adapter(
+            key, b"new", expected_sha256=hashlib.sha256(b"new").hexdigest()
+        )
+    with pytest.raises(ValueError):
+        await store.put_private_adapter(
+            key.replace("style-adapters", "assets"), b"abc", expected_sha256=ABC_SHA256
+        )

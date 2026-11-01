@@ -29,10 +29,19 @@ from flint_graph.narrative.png import normalize_png, validate_png
 from flint_graph.narrative.poses import MODEL_REPO, MODEL_REVISION, POSE_HEIGHT, POSE_WIDTH
 
 
+@dataclass(frozen=True)
+class PoseStyleAdapter:
+    weights: bytes
+    dataset_hash: str
+    recipe_hash: str
+    strength: float
+
+
 @dataclass(frozen=True, kw_only=True)
 class PoseGenerationRequest(GenerationRequest):
     reference: bytes
     additional_references: tuple[bytes, ...] = ()
+    style_adapter: PoseStyleAdapter | None = None
 
 
 def verify_pose_model(root: Path, manifest: str, runtime: Path) -> ModelIdentity:
@@ -221,6 +230,30 @@ class LocalPoseGenerator:
                 payload["reference_sha256s"] = [
                     hashlib.sha256(item).hexdigest() for item in references
                 ]
+            if request.style_adapter:
+                from flint_graph.narrative.style_weights import validate_adapter
+
+                style = request.style_adapter
+                validate_adapter(
+                    style.weights,
+                    base_hash=self.model_manifest_sha256,
+                    dataset_hash=style.dataset_hash,
+                    recipe_hash=style.recipe_hash,
+                )
+                if type(style.strength) not in (float, int) or not 0.1 <= style.strength <= 1:
+                    raise ImageGenerationError("bad_request")
+                (work / "style.safetensors").write_bytes(style.weights)
+                payload["schema_version"] = 3
+                payload.pop("reference_sha256", None)
+                payload["reference_sha256s"] = [
+                    hashlib.sha256(item).hexdigest() for item in references
+                ]
+                payload["style"] = {
+                    "sha256": hashlib.sha256(style.weights).hexdigest(),
+                    "dataset_sha256": style.dataset_hash,
+                    "recipe_sha256": style.recipe_hash,
+                    "strength": style.strength,
+                }
             env = {
                 key: value
                 for key, value in os.environ.items()

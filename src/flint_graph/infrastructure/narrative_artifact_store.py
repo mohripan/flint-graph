@@ -81,6 +81,24 @@ class S3NarrativeArtifactStore:
         object_uri(bucket, "validate")
         self.client, self.bucket = client, bucket
 
+    async def put_private_adapter(
+        self, key: str, data: bytes, *, expected_sha256: str
+    ) -> ObjectReceipt:
+        from flint_graph.narrative.style_weights import MAX_ADAPTER_BYTES
+
+        if not re.fullmatch(
+            r"tenants/[0-9a-f-]{36}/narrative/projects/[0-9a-f-]{36}/style-adapters/"
+            r"[0-9a-f-]{36}/executions/[0-9a-f-]{36}/adapter\.safetensors",
+            key,
+        ):
+            raise ValueError("Invalid private adapter key")
+        self._expect(key, len(data), expected_sha256, MAX_ADAPTER_BYTES)
+        if hashlib.sha256(data).hexdigest() != expected_sha256:
+            raise ArtifactStoreError("artifact_integrity")
+        return await asyncio.to_thread(
+            self._put, key, data, expected_sha256, "application/octet-stream"
+        )
+
     def _expect(self, key: str, size: int, sha256: str, cap: int) -> None:
         if (
             type(cap) is not int

@@ -61,6 +61,16 @@ def run(request):
             or digest(reference) != expected
         ):
             raise PoseFailure("reference_unavailable")
+    style = request.get("style")
+    if style:
+        weight = Path("style.safetensors")
+        if (
+            weight.is_symlink()
+            or not weight.is_file()
+            or weight.stat().st_size > 32 * 1024**2
+            or digest(weight) != style["sha256"]
+        ):
+            raise PoseFailure("reference_unavailable")
     import psutil
     import pynvml
 
@@ -138,6 +148,14 @@ def run(request):
     pipe = Flux2KleinPipeline.from_pretrained(
         request["model_dir"], text_encoder=None, tokenizer=None, **options
     )
+    if style:
+        pipe.load_lora_weights(
+            ".",
+            weight_name="style.safetensors",
+            adapter_name="project_style",
+            local_files_only=True,
+        )
+        pipe.set_adapters("project_style", adapter_weights=style["strength"])
     pipe.to("cuda")
     pipe.vae.enable_tiling()
     pipe.set_progress_bar_config(disable=True)

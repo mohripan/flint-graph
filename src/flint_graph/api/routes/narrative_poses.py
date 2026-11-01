@@ -41,9 +41,16 @@ class PoseReferenceInput(BaseModel):
     view: Literal["front", "side", "back", "detail"]
 
 
+class PoseStyleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: UUID
+    strength: float = Field(default=0.5, ge=0.1, le=1, strict=True)
+
+
 class PoseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     look_id: UUID
+    style_adapter: PoseStyleInput | None = None
     additional_references: list[PoseReferenceInput] = Field(default_factory=list, max_length=1)
     pose: str = Field(min_length=1, max_length=300)
     count: int = Field(default=1, ge=1, le=4)
@@ -90,7 +97,22 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
                 "name": snapshot.snapshot["name"],
             }
         ]
+    from flint_graph.infrastructure.db.narrative_style_models import (
+        NarrativePoseStyle,
+        NarrativeStyleJob,
+    )
+
+    binding = await session.get(NarrativePoseStyle, job.id)
+    style = await session.get(NarrativeStyleJob, binding.style_id) if binding else None
     return {
+        "style_adapter": {
+            "id": str(style.id),
+            "name": style.name,
+            "strength": binding.strength,
+            "weights_sha256": binding.weights_sha256,
+        }
+        if style and binding
+        else None,
         "references": frozen,
         "operation": "pose",
         "model_id": MODEL_ID,
@@ -122,6 +144,7 @@ async def create_pose_endpoint(
             author_user_id=user.user.id,
             actor=actor,
             available=settings.narrative_pose_generation_enabled,
+            styles_enabled=settings.narrative_style_training_enabled,
             max_references=settings.narrative_pose_max_references,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
             policy=content_policy(settings.narrative_image_content_policy),
@@ -163,5 +186,6 @@ async def list_pose_endpoint(
             "transparent": bool(settings.narrative_image_cutout_manifest_sha256),
             "model_id": MODEL_ID,
             "max_references": settings.narrative_pose_max_references,
+            "styles": settings.narrative_style_training_enabled,
         },
     }

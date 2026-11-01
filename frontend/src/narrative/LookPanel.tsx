@@ -1,3 +1,4 @@
+import { StyleStudio } from "./StyleStudio";
 import { useContext, useState } from "react";
 import type { CSSProperties } from "react";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
@@ -96,6 +97,7 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
         <p className="studio-hint">The preview uses the story's first background and first character with sprites.</p>
       </div>
     </div>
+    {tenantId&&projectId&&<StyleStudio key={projectId} tenantId={tenantId} projectId={projectId} readOnly={readOnly} />}
   </section>;
 }
 

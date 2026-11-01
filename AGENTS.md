@@ -175,8 +175,9 @@ the 12 GB GPU; it is the next pose candidate. Cached ControlNet reproduced all
 adding a background reference changed hair in one of two scenes. Identity scores
 do not certify clothes or reviewed traits; the provisional garment fit missed
 14/15 labelled drifts. Agent labels are not creator calibration. CCIP's exact
-weight license remains unresolved. LoRA work measured random-tensor memory only:
-no creator-selected training images, useful trained weights or quality claim.
+weight license remains unresolved. The initial research delivery measured LoRA memory on random tensors;
+ADR 0050 below adds real private project-style training and pose integration.
+Creator-calibrated quality and character-specific training remain separate.
 Use the separate `runtimes/character_eval` / `runtimes/character_lab` locks; never
 add these dependencies or private weights to the API, Studio workers or games.
 ADR 0047 and `docs/reports/2026-11-01-reviewed-character-looks.md` deliver immutable
@@ -186,7 +187,8 @@ feedback/badges (migration 0034). It loads no CCIP weights and activates no
 automatic thresholds/ranking. Original assistant image APIs remain profile-based;
 keep their integration separate. Owner-managed migration/API/frontend reload is
 needed; never restart owned services. Qualified person assignment, pose-model
-rollout and actual character/style training remain follow-up work. Do not close
+rollout are delivered by ADRs 0048/0049 below; character-specific training and
+creator-calibrated quality remain follow-up work. Do not close
 all seven issues from these reports.
 
 Studio stage analysis now propagates to a complete fixed point without an
@@ -521,3 +523,19 @@ docker compose config
 ```
 
 Tell the user exactly which commands passed and which were skipped.
+
+Private project style training is now available as an opt-in slice of #184:
+[ADR 0050](docs/adr/0050-private-project-style-adapters.md), migration 0037,
+`runtimes/stylegen`, and a dedicated `narrative_style_worker`/queue. Look → Project
+art style explicitly selects 4–12 approved images and reviewed captions with
+training-rights confirmation; Characters → Poses chooses a completed private
+version/strength. Rank-4 LoRAs target the exact klein pose base pin, never SDXL CG
+or expression workers. Weights stay outside assets/exports and have no public
+download route. Optional isolated MLflow 3.17.2 mirrors numeric losses/resources
+and hashes through bounded REST calls, with no inputs/artifacts/autologging and
+no root OTel dependency changes. A real four-image 200-step run and adapter-backed
+pose completed on the 12 GB GPU; this is not a style/lighting guarantee or creator
+calibration. Character-specific training remains follow-up. Read
+`docs/reports/2026-11-02-private-style-adapters.md` and the image runbook before
+rollout. Keep the active Studio/playtest running; apply additive schema while idle
+and leave any existing process reload to its owner.

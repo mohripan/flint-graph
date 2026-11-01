@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -264,6 +265,12 @@ class Settings(BaseSettings):
     narrative_image_generation_enabled: bool = False
     narrative_look_tagger_python: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_look_tagger_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_style_training_enabled: bool = False
+    narrative_style_worker_enabled: bool = False
+    narrative_style_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_style_task_queue: str = Field(default="narrative-style", min_length=1, max_length=128)
+    narrative_style_deadline_seconds: int = Field(default=1800, ge=60, le=3500)
+    narrative_model_tracking_url: str | None = Field(default=None, max_length=2048)
     narrative_pose_generation_enabled: bool = False
     narrative_pose_worker_enabled: bool = False
     narrative_pose_max_references: int = Field(default=1, ge=1, le=2)
@@ -385,6 +392,42 @@ class Settings(BaseSettings):
                 "The narrative worker requires an absolute private root "
                 "and pinned builder/toolchain"
             )
+        if self.narrative_model_tracking_url:
+            tracking = urlsplit(self.narrative_model_tracking_url)
+            if (
+                tracking.scheme not in {"http", "https"}
+                or not tracking.hostname
+                or tracking.username
+                or tracking.password
+                or tracking.query
+                or tracking.fragment
+                or tracking.path not in {"", "/"}
+            ):
+                raise ValueError(
+                    "Model tracking requires an HTTP(S) origin without embedded credentials"
+                )
+        if self.narrative_style_worker_enabled:
+            if self.narrative_style_task_queue in {
+                self.temporal_task_queue,
+                self.narrative_task_queue,
+                self.narrative_assistant_task_queue,
+                self.narrative_image_task_queue,
+                self.narrative_voice_task_queue,
+                self.narrative_pose_task_queue,
+            }:
+                raise ValueError("A separate narrative style task queue is required")
+            if (
+                not self.narrative_style_runtime_dir
+                or not self.narrative_pose_runtime_dir
+                or not self.narrative_pose_model_dir
+                or not self.narrative_pose_model_manifest_sha256
+                or not Path(self.narrative_style_runtime_dir).is_absolute()
+                or not Path(self.narrative_pose_runtime_dir).is_absolute()
+                or not Path(self.narrative_pose_model_dir).is_absolute()
+            ):
+                raise ValueError(
+                    "The style worker requires absolute runtime/model directories and a pin"
+                )
         if self.narrative_pose_worker_enabled:
             if self.narrative_pose_task_queue in {
                 self.temporal_task_queue,

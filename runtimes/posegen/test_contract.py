@@ -64,6 +64,24 @@ class PoseContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "model_invalid"):
                     verify_model(root, hashlib.sha256(data).hexdigest())
 
+    def test_style_protocol_pins_weights_without_accepting_a_weight_path(self):
+        value = self.request(schema_version=3)
+        value["reference_sha256s"] = [value.pop("reference_sha256")]
+        value["style"] = {
+            "sha256": "c" * 64,
+            "strength": 0.5,
+            "dataset_sha256": "d" * 64,
+            "recipe_sha256": "e" * 64,
+        }
+        self.assertEqual(parse_request(json.dumps(value).encode())["style"]["strength"], 0.5)
+        for style in (
+            {**value["style"], "strength": True},
+            {**value["style"], "path": "private"},
+            {**value["style"], "strength": 1.1},
+        ):
+            with self.assertRaises(ValueError):
+                parse_request(json.dumps({**value, "style": style}).encode())
+
     def test_duplicate_fields_and_large_requests_are_rejected(self):
         for data in (b'{"schema_version":1,"schema_version":1}', b"x" * 65537):
             with self.assertRaises(ValueError):

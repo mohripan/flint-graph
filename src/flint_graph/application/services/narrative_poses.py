@@ -1,5 +1,6 @@
 """Pose admission: shared quotas/fences, an immutable look and a pinned model."""
 
+from dataclasses import replace
 from hashlib import sha256
 from typing import Any
 from uuid import UUID
@@ -21,7 +22,7 @@ from flint_graph.infrastructure.db.narrative_pose_models import (
     NarrativePoseJob,
     NarrativePoseReference,
 )
-from flint_graph.narrative.imagegen import ContentPolicy, clean_appearance
+from flint_graph.narrative.imagegen import ContentPolicy, ImageRequest, clean_appearance
 from flint_graph.narrative.poses import pose_request
 from flint_graph.narrative.values import canonical_json
 from flint_graph.prompts.source import snapshot_async
@@ -48,6 +49,8 @@ async def queue_pose_job(
     cutout_manifest_sha256: str | None,
     additional_references: list[dict[str, Any]] | None = None,
     max_references: int = 1,
+    style_adapter: dict[str, Any] | None = None,
+    styles_enabled: bool = False,
 ) -> NarrativeImageJob:
     try:
         pose = clean_appearance(pose)
@@ -68,6 +71,16 @@ async def queue_pose_job(
         canonical_json(
             {
                 "operation": "pose",
+                **(
+                    {
+                        "style_adapter": {
+                            "id": str(style_adapter["id"]),
+                            "strength": style_adapter["strength"],
+                        }
+                    }
+                    if style_adapter
+                    else {}
+                ),
                 "character_id": character_id,
                 "look_id": str(look_id),
                 "pose": pose,
@@ -100,6 +113,45 @@ async def queue_pose_job(
             "Additional pose views are not enabled on this server.",
             "pose-reference-unavailable",
         )
+    from flint_graph.application.services.narrative_styles import get_style
+    from flint_graph.infrastructure.db.narrative_style_models import NarrativePoseStyle
+
+    style = None
+    if style_adapter:
+        if not styles_enabled:
+            raise DomainError(
+                503,
+                "Style adapters unavailable",
+                "Style adapters are not enabled on this server.",
+                "style-unavailable",
+            )
+        style = await get_style(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            job_id=UUID(str(style_adapter["id"])),
+        )
+        if (
+            style.status != "completed"
+            or not style.weights_sha256
+            or style.model_manifest_sha256 != model_manifest_sha256
+        ):
+            raise DomainError(
+                422,
+                "Style unavailable",
+                "Choose a completed style version for this installed model.",
+                "invalid-style-adapter",
+            )
+
+    def build() -> ImageRequest:
+        request = pose_request(
+            caption(look),
+            pose,
+            policy=policy,
+            additional_view=extras[0]["view"] if extras else None,
+        )
+        return replace(request, prompt=style.trigger + ", " + request.prompt) if style else request
+
     look = await get_look(
         session,
         tenant_id=tenant_id,
@@ -149,12 +201,7 @@ async def queue_pose_job(
         framing="full_body",
         transparent=transparent,
         hires=False,
-        build=lambda: pose_request(
-            caption(look),
-            pose,
-            policy=policy,
-            additional_view=extras[0]["view"] if extras else None,
-        ),
+        build=build,
         count=count,
         idempotency_key=idempotency_key,
         actor=actor,
@@ -176,6 +223,17 @@ async def queue_pose_job(
         )
     )
     await session.flush()
+    if style and style_adapter:
+        session.add(
+            NarrativePoseStyle(
+                job_id=job.id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                style_id=style.id,
+                strength=style_adapter["strength"],
+                weights_sha256=style.weights_sha256,
+            )
+        )
     for position, (asset, view) in enumerate(sources):
         session.add(
             NarrativePoseReference(

@@ -1,3 +1,4 @@
+import type {StyleHistory,StyleJob,styleBody} from "../narrative/styleModel";
 import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
 import type {
   NarrativeProject,
@@ -429,6 +430,15 @@ export const api = {
     });
   },
 
+  listStyleJobs(tenantId:string,projectId:string,signal?:AbortSignal):Promise<StyleHistory>{
+    return jsonRequest(`${projectPath(projectId)}/style-jobs`,{headers:tenantHeaders(tenantId),signal,cache:"no-store"});
+  },
+  createStyleJob(tenantId:string,projectId:string,body:ReturnType<typeof styleBody>):Promise<StyleJob>{
+    return jsonRequest(`${projectPath(projectId)}/style-jobs`,{method:"POST",headers:tenantHeaders(tenantId),json:body});
+  },
+  cancelStyleJob(tenantId:string,projectId:string,id:string):Promise<StyleJob>{
+    return jsonRequest(`${projectPath(projectId)}/style-jobs/${encodeURIComponent(id)}/cancel`,{method:"POST",headers:tenantHeaders(tenantId)});
+  },
   listPoseJobs(tenantId:string, projectId:string, characterId:string, signal?:AbortSignal):Promise<PoseHistory> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/pose-jobs`, {
       headers:tenantHeaders(tenantId), signal, cache:"no-store",
