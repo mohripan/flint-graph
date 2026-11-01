@@ -11,7 +11,7 @@ export interface PoseJob {
   look: { id: string; name: string; asset_id: string; source_sha256: string; sha256: string };
   job: ImageJob;
 }
-export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;styles?:boolean} }
+export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;styles?:boolean;character_training?:boolean} }
 export const POSE_PRESETS = ["standing, arms relaxed", "sitting on a chair, hands in lap", "walking, three-quarter view", "back view, looking over shoulder"];
 export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string, extra?:AdditionalPoseView, selected?:{style:StyleJob;strength:number}) {
   const pose=instruction.replace(/\s+/g," ").trim();
@@ -21,6 +21,7 @@ export function poseBody(look: CharacterLook | null, instruction:string, count:n
   if(extra&&(!extra.confirmed||extra.asset.status!=="approved"||extra.asset.media_type!=="image/png"
     ||extra.asset.id===look.asset.id||extra.asset.sha256===look.source_sha256
     ||!["front","side","back","detail"].includes(extra.view)))throw new Error("Choose another approved view and confirm it shows the same character and outfit.");
+  if(selected?.style.kind==="character_look"&&(selected.style.look?.id!==look.id||selected.style.look.sha256!==look.sha256))throw new Error("Choose a trained version for this exact reviewed character look.");
   if(selected&&(selected.style.status!=="completed"||!selected.style.weights_sha256||!Number.isFinite(selected.strength)||selected.strength<0.1||selected.strength>1))throw new Error("Choose a ready style version and a strength from 0.1 to 1.");
   return {look_id:look.id,pose,count,transparent,idempotency_key:key,
     ...(selected?{style_adapter:{id:selected.style.id,strength:selected.strength}}:{}),

@@ -16,12 +16,14 @@ from flint_graph.application.narrative_image_workflow import (
     ImageJobPayload,
     validate_image_payload,
 )
+from flint_graph.application.services.narrative_character_adapters import details, verify_target
 from flint_graph.application.services.narrative_styles import (
     ACTIVE,
     RECIPE_SHA,
     WORKFLOW,
     workflow_id,
 )
+from flint_graph.domain.errors import DomainError
 from flint_graph.infrastructure.db.models import NarrativeAsset
 from flint_graph.infrastructure.db.narrative_style_models import NarrativeStyleJob
 from flint_graph.infrastructure.narrative_artifact_store import asset_object_key
@@ -141,6 +143,10 @@ class NarrativeStyleActivities:
                 raise ValueError("model_pin_mismatch")
             images = []
             async with self.factory() as session:
+                try:
+                    await verify_target(session, row)
+                except DomainError:
+                    raise ValueError("reference_unavailable") from None
                 for item in row.images:
                     source = await session.get(NarrativeAsset, UUID(item["asset_id"]))
                     if (
@@ -214,6 +220,8 @@ class NarrativeStyleActivities:
                 current.status, current.finished_at = "completed", datetime.now(UTC)
                 await session.commit()
             if self.tracker:
+                async with self.factory() as session:
+                    kind = (await details(session, row))["kind"]
                 tracking = await self.tracker.record(
                     job_id=job_id,
                     base_hash=row.model_manifest_sha256,
@@ -223,6 +231,7 @@ class NarrativeStyleActivities:
                     losses=result.losses,
                     runtime=result.runtime,
                     image_count=len(row.images),
+                    kind=kind,
                 )
                 async with self.factory() as session:
                     current = await session.get(NarrativeStyleJob, job_id)

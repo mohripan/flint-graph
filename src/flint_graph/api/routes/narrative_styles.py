@@ -15,6 +15,7 @@ from flint_graph.api.dependencies import (
     TenantMemberDep,
 )
 from flint_graph.api.routes.narrative import _persist
+from flint_graph.application.services.narrative_character_adapters import details, list_details
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.narrative_styles import (
     cancel_style,
@@ -34,9 +35,18 @@ class TrainingImage(BaseModel):
     caption: str = Field(min_length=1, max_length=600)
 
 
+class CharacterTrainingTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    character_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    look_id: UUID
+    same_look_confirmed: StrictBool
+    anatomy_reviewed: StrictBool
+
+
 class StyleCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     name: str = Field(min_length=1, max_length=80, pattern=r"\S")
+    character_look: CharacterTrainingTarget | None = None
     images: list[TrainingImage] = Field(min_length=4, max_length=12)
     rights_confirmed: StrictBool
     steps: int = Field(default=200, ge=20, le=400)
@@ -66,7 +76,7 @@ async def create(
             **payload.model_dump(),
         ),
     )
-    return response(row)
+    return {**response(row), **await details(session, row)}
 
 
 @router.get("")
@@ -80,8 +90,10 @@ async def listing(
         .order_by(NarrativeStyleJob.created_at.desc(), NarrativeStyleJob.id.desc())
         .limit(30)
     )
+    rows = list(jobs)
+    targets = await list_details(session, rows)
     return {
-        "jobs": [response(row) for row in jobs],
+        "jobs": [{**response(row), **targets[row.id]} for row in rows],
         "available": bool(
             settings.narrative_style_training_enabled
             and settings.narrative_pose_model_manifest_sha256
@@ -93,9 +105,8 @@ async def listing(
 async def detail(
     project_id: UUID, job_id: UUID, tenant_id: TenantIdDep, session: SessionDep
 ) -> dict[str, Any]:
-    return response(
-        await get_style(session, tenant_id=tenant_id, project_id=project_id, job_id=job_id)
-    )
+    row = await get_style(session, tenant_id=tenant_id, project_id=project_id, job_id=job_id)
+    return {**response(row), **await details(session, row)}
 
 
 @router.post("/{job_id}/cancel")
@@ -105,4 +116,4 @@ async def cancel(
     row = await _persist(
         session, cancel_style(session, tenant_id=tenant_id, project_id=project_id, job_id=job_id)
     )
-    return response(row)
+    return {**response(row), **await details(session, row)}

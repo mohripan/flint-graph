@@ -104,8 +104,12 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
 
     binding = await session.get(NarrativePoseStyle, job.id)
     style = await session.get(NarrativeStyleJob, binding.style_id) if binding else None
+    from flint_graph.application.services.narrative_character_adapters import details
+
+    target = await details(session, style) if style else {}
     return {
         "style_adapter": {
+            **target,
             "id": str(style.id),
             "name": style.name,
             "strength": binding.strength,
@@ -187,5 +191,6 @@ async def list_pose_endpoint(
             "model_id": MODEL_ID,
             "max_references": settings.narrative_pose_max_references,
             "styles": settings.narrative_style_training_enabled,
+            "character_training": settings.narrative_style_training_enabled,
         },
     }

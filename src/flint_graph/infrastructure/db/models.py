@@ -70,6 +70,9 @@ from flint_graph.infrastructure.db.narrative_assistant_models import (
 from flint_graph.infrastructure.db.narrative_assistant_models import (
     NarrativeAssistantTurn as NarrativeAssistantTurn,
 )
+from flint_graph.infrastructure.db.narrative_character_adapter_models import (
+    NarrativeCharacterAdapter as NarrativeCharacterAdapter,
+)
 from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeAsset as NarrativeAsset,
 )

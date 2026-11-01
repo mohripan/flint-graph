@@ -53,3 +53,32 @@ async def test_tracking_outage_never_fails_training():
             image_count=4,
         )
     assert result is None
+
+
+async def test_character_training_uses_a_separate_allowlisted_experiment():
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if request.url.path.endswith("get-by-name"):
+            return httpx.Response(200, json={"experiment": {"experiment_id": "2"}})
+        if request.url.path.endswith("create"):
+            return httpx.Response(200, json={"run": {"info": {"run_id": "c" * 32}}})
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        result = await ModelTracker("http://localhost:6096", client=client).record(
+            job_id=uuid4(),
+            base_hash="a" * 64,
+            dataset_hash="b" * 64,
+            recipe_hash="d" * 64,
+            weights_hash="e" * 64,
+            losses=[0.5],
+            runtime={},
+            image_count=4,
+            kind="character_look",
+        )
+    assert result == "c" * 32
+    assert requests[0].url.params["experiment_name"] == "flint-character-look"
+    batch = next(json.loads(r.content) for r in requests if r.url.path.endswith("log-batch"))
+    assert {"key": "kind", "value": "character_look"} in batch["params"]

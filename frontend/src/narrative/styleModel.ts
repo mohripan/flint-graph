@@ -1,5 +1,7 @@
+import type {CharacterLook} from './lookModel';
 import type {NarrativeImage} from '../lib/api';
 export interface StyleJob {
+ kind?:"project_style"|"character_look";look?:{id:string;sha256:string;character_id:string;name:string}|null;
  id:string;name:string;status:string;progress:number;steps:number;seed:number;
  images:{asset_id:string;sha256:string;name:string;caption:string}[];
  weights_sha256:string|null;model_manifest_sha256:string;dataset_sha256:string;recipe_sha256:string;
@@ -11,7 +13,11 @@ export interface TrainingSelection {asset:NarrativeImage;caption:string}
 export function trainingAssets(assets:NarrativeImage[]):NarrativeImage[]{
  return assets.filter(a=>a.status==='approved'&&a.media_type==='image/png'&&(a.width??0)>=64&&(a.height??0)>=64);
 }
-export function styleBody(name:string,images:TrainingSelection[],rights:boolean,steps:number,seed:number,key:string){
+export interface CharacterTraining {look:CharacterLook;characterId:string;sameLook:boolean;anatomyReviewed:boolean}
+export function compatibleAdapters(jobs:StyleJob[],look:Pick<CharacterLook,'id'|'sha256'>|null):StyleJob[]{
+ return jobs.filter(job=>job.status==='completed'&&(job.kind!=='character_look'||(look&&job.look?.id===look.id&&job.look.sha256===look.sha256)));
+}
+export function styleBody(name:string,images:TrainingSelection[],rights:boolean,steps:number,seed:number,key:string,target?:CharacterTraining){
  name=name.trim();
  if(!name||name.length>80)throw new Error('Name this style version in 1–80 characters.');
  if(!rights)throw new Error('Confirm you have rights to train on these images.');
@@ -22,7 +28,9 @@ export function styleBody(name:string,images:TrainingSelection[],rights:boolean,
   if(asset.status!=='approved'||asset.media_type!=='image/png'||!caption||caption.length>600)throw new Error('Review a content caption for every approved image.');
   return {asset_id:asset.id,caption};
  });
- return {name,images:captions,rights_confirmed:true,steps,seed,idempotency_key:key};
+ if(target&&(!target.characterId||!target.sameLook||!target.anatomyReviewed||target.look.asset.status!=='approved'||!images.some(i=>i.asset.sha256===target.look.source_sha256)))throw new Error('Include the reviewed base and check the same character, outfit and anatomy in every selected image.');
+ return {name,images:captions,rights_confirmed:true,steps,seed,idempotency_key:key,
+  ...(target?{character_look:{character_id:target.characterId,look_id:target.look.id,same_look_confirmed:true,anatomy_reviewed:true}}:{})};
 }
 export function styleStatus(job:StyleJob):string{
  if(job.status==='completed')return 'Ready to try in Poses — review the results before approving.';

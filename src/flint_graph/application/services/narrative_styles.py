@@ -101,6 +101,7 @@ async def queue_style(
     available: bool,
     model_manifest_sha256: str | None,
     policy: ContentPolicy,
+    character_look: dict[str, Any] | None = None,
 ) -> NarrativeStyleJob:
     if not rights_confirmed:
         raise DomainError(
@@ -117,6 +118,18 @@ async def queue_style(
         canonical_json(
             {
                 "name": name,
+                **(
+                    {
+                        "character_look": {
+                            "character_id": character_look["character_id"],
+                            "look_id": str(character_look["look_id"]),
+                            "same_look_confirmed": character_look["same_look_confirmed"],
+                            "anatomy_reviewed": character_look["anatomy_reviewed"],
+                        }
+                    }
+                    if character_look
+                    else {}
+                ),
                 "images": [
                     {"asset_id": str(i["asset_id"]), "caption": i["caption"]} for i in images
                 ],
@@ -164,6 +177,23 @@ async def queue_style(
             "Wait for or cancel the current training job.",
             "style-quota",
         )
+    from flint_graph.application.services.narrative_character_adapters import training_look
+    from flint_graph.application.services.narrative_looks import look_snapshot
+    from flint_graph.infrastructure.db.narrative_character_adapter_models import (
+        NarrativeCharacterAdapter,
+    )
+
+    look = (
+        await training_look(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            target=character_look,
+            images=images,
+        )
+        if character_look
+        else None
+    )
     frozen = []
     seen = set()
     for image in images:
@@ -203,6 +233,16 @@ async def queue_style(
         frozen.append(
             {
                 "asset_id": str(asset.id),
+                **(
+                    {
+                        "look_sha256": look.sha256,
+                        "character_id": look.character_id,
+                        "same_look_confirmed": True,
+                        "anatomy_reviewed": True,
+                    }
+                    if look
+                    else {}
+                ),
                 "sha256": asset.sha256,
                 "size_bytes": asset.size_bytes,
                 "name": asset.name,
@@ -234,6 +274,18 @@ async def queue_style(
     )
     session.add(row)
     await session.flush()
+    if look:
+        session.add(
+            NarrativeCharacterAdapter(
+                job_id=row.id,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                character_id=look.character_id,
+                look_id=look.id,
+                snapshot=look_snapshot(look),
+            )
+        )
+        await session.flush()
     await append_outbox_message(
         session,
         tenant_id=tenant_id,

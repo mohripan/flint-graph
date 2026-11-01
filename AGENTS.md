@@ -539,3 +539,19 @@ calibration. Character-specific training remains follow-up. Read
 `docs/reports/2026-11-02-private-style-adapters.md` and the image runbook before
 rollout. Keep the active Studio/playtest running; apply additive schema while idle
 and leave any existing process reload to its owner.
+
+[ADR 0051](docs/adr/0051-reviewed-character-look-adapters.md), migration 0038,
+extends private training with a reviewed character/look target. Characters →
+Poses → Character look training requires 4–12 same-look images including the
+approved base, edited content captions, same-look/anatomy review and training
+rights. The immutable sidecar/dataset look hash is checked at admission and on
+training/render retries. Pose selection offers only this exact character look's
+versions plus project styles; existing style requests/replay hashes stay valid.
+The worker/klein recipe/private weights are reused, while MLflow separates runs
+by an allowlisted kind. No automatic anatomy score or quality guarantee is implied:
+a user identified an extra boot in the earlier QA seated pose despite correct
+identity/clothes; that image is excluded from the character training dataset,
+and replacement candidates remain subject to review. See
+`docs/reports/2026-11-02-character-look-adapters.md`. Preserve the existing Studio
+and the Aster QA on 5276 while they are in use; this delivery uses another
+isolated fixture on 8278/5278/5298. Do not close all of #184 or M40 from this slice.

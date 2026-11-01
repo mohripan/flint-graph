@@ -23,7 +23,13 @@ class ModelTracker:
         losses: list[float],
         runtime: dict[str, str],
         image_count: int,
+        kind: str = "project_style",
     ) -> str | None:
+        if kind not in {"project_style", "character_look"}:
+            return None
+        experiment_name = (
+            "flint-character-look" if kind == "character_look" else "flint-project-style"
+        )
         client = self.client or httpx.AsyncClient(timeout=2, trust_env=False)
         try:
 
@@ -36,11 +42,11 @@ class ModelTracker:
 
             experiment = await client.get(
                 self.url + "/api/2.0/mlflow/experiments/get-by-name",
-                params={"experiment_name": "flint-project-style"},
+                params={"experiment_name": experiment_name},
                 timeout=2,
             )
             if experiment.status_code == 404:
-                experiment_id = (await post("experiments/create", {"name": "flint-project-style"}))[
+                experiment_id = (await post("experiments/create", {"name": experiment_name}))[
                     "experiment_id"
                 ]
             else:
@@ -76,6 +82,7 @@ class ModelTracker:
                     "params": [
                         {"key": key, "value": value}
                         for key, value in {
+                            "kind": kind,
                             "base_sha256": base_hash,
                             "dataset_sha256": dataset_hash,
                             "recipe_sha256": recipe_hash,

@@ -467,3 +467,49 @@ plus existing Temporal, PostgreSQL and private artifact services. GPU admission
 across nodes is separate M41 work; local NVML is not distributed coordination.
 See the [delivery report](../reports/2026-11-02-private-style-adapters.md) for exact
 measurements and the matched-seed comparison.
+
+### Reviewed-character adapters (ADR 0051)
+
+Migration 0038 adds immutable character-look targets to the existing private
+training ledger. In **Characters → Poses → Character look training**, select a
+reviewed look, open **Train this reviewed look**, and choose 4–12 approved images
+of the same character and outfit, including its locked base. Unassigned uploads
+are eligible only with explicit same-look confirmation. Other characters, CG
+scenes, backgrounds, missing/discarded bases and foreign project/workspace
+resources are refused.
+
+The form starts captions with the look's reviewed traits/clothes. Edit each one
+to describe its actual pose and scene; these are suggestions to review, not
+new tagger observations. Confirm the same look, check anatomy/hands/feet/limb
+count in every source, and confirm training rights. These checks record the
+creator's review; they are not an automatic anatomy detector. A likeness/outfit
+match can still have extra limbs and must not become training data on that
+basis alone.
+
+The existing style worker, klein base pin, rank-4 recipe, numeric metrics and
+private safetensors store are reused. `POST /style-jobs` accepts an optional
+`character_look` object with `character_id`, `look_id`, `same_look_confirmed` and
+`anatomy_reviewed`. Old project-style requests/replay hashes remain valid.
+Responses identify `kind=character_look` and the frozen look snapshot. The
+sidecar has workspace/project/character/look foreign keys, and its look hash
+also participates in the frozen dataset hash. Listings batch target lookup.
+
+**Trained rendering version** in Poses offers project styles and versions for
+this exact reviewed look. A different outfit/look needs a compatible version;
+it never silently reuses another look's weights. Admission and training/render
+retries validate the immutable target and the still-approved base. Generated
+PNG provenance records the adapter kind and reviewed-look hash as well as the
+existing version/weight hash/strength. The renderer still selects one adapter;
+stacking independent character and style adapters is not enabled.
+
+MLflow uses `flint-character-look` for these runs and keeps project styles in
+`flint-project-style`, adding only an allowlisted `kind` parameter. It uploads
+no character name, look tags, image/caption, prompt or weight artifact. The
+worker and API must be deployed together after the migration; the new capability
+is hidden when an older API does not advertise `character_training`.
+
+This is character/look training for the installed klein pose path. It does not
+complete #184's Animagine training, creator-calibrated comparisons or cross-model
+CG support. It also does not guarantee anatomy, exact costume trim, lighting or
+style fidelity. Keep candidate review manual. Read the [delivery report](../reports/2026-11-02-character-look-adapters.md)
+for the real four-image run and the extra-leg regression example.

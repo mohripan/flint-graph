@@ -4,7 +4,8 @@ import type { NarrativeImage } from "../lib/api";
 import { LookImage, useCharacterLooks } from "./CharacterLooks";
 import { CandidateLookReview, useLookReviewFlags } from "./CandidateLookReview";
 import { isActive } from "./characterModel";
-import {useStyleJobs} from "./StyleStudio";
+import {compatibleAdapters} from "./styleModel";
+import {StyleStudio,useStyleJobs} from "./StyleStudio";
 import { Field } from "./FormFields";
 import { refreshLibrary, useApprovedAssets } from "./libraryAssets";
 import { lookReferences } from "./lookModel";
@@ -32,7 +33,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
   const styles=useStyleJobs(tenantId,projectId,!!history?.capabilities.styles);
   const [styleId,setStyleId]=useState("");
   const [strength,setStrength]=useState(0.5);
-  const style=styles.history?.jobs.find(j=>j.id===styleId&&j.status==="completed");
+  const style=compatibleAdapters(styles.history?.jobs??[],looks.look).find(j=>j.id===styleId);
   const [notice,setNotice]=useState<string|null>(null);
   const [failed,setFailed]=useState(false);
   const [revision,setRevision]=useState(0);
@@ -125,13 +126,13 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
           <p className="studio-hint">The primary image guides linework, colors, shading and lighting. An extra view supplies missing shape and garment details. Check the result for style drift.</p>
         </div>}
         {history?.capabilities.styles&&<div>
-          <Field label="Project style version"><select value={styleId} disabled={styles.failed} onChange={event=>setStyleId(event.target.value)}>
+          <Field label="Trained rendering version"><select value={styleId} disabled={styles.failed} onChange={event=>setStyleId(event.target.value)}>
             <option value="">Use reference rendering only</option>
-            {styles.history?.jobs.filter(j=>j.status==="completed").map(j=><option key={j.id} value={j.id}>{j.name} · {j.id.slice(0,8)}</option>)}
+            {compatibleAdapters(styles.history?.jobs??[],looks.look).map(j=><option key={j.id} value={j.id}>{j.kind==="character_look"?"This look: ":"Style: "}{j.name} · {j.id.slice(0,8)}</option>)}
           </select></Field>
           {styles.failed&&<p role="alert">Style versions could not be loaded. <button type="button" onClick={styles.refresh}>Retry</button></p>}
           {style&&<Field label={`Style strength · ${strength.toFixed(1)}`}><input type="range" min={0.1} max={1} step={0.1} value={strength} onChange={event=>setStrength(Number(event.target.value))} /></Field>}
-          <p className="studio-hint">Train a private style version in Look. Review each pose for changes in light and linework.</p>
+          <p className="studio-hint">Train a project style in Look, or this character below. Check anatomy, light and linework in every result.</p>
         </div>}
         <Field label="Pose"><textarea rows={3} maxLength={300} value={active?.pose??pose} onChange={event=>setPose(event.target.value)} /></Field>
         <div className="pose-presets" role="group" aria-label="Pose ideas">{POSE_PRESETS.map(value=><button type="button" className="studio-link" key={value} onClick={()=>setPose(value)}>{value}</button>)}</div>
@@ -163,6 +164,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
         </div>
       </article>;
     })}</div>}
+    {history?.capabilities.character_training&&looks.look&&<StyleStudio key={looks.look.id} tenantId={tenantId} projectId={projectId} readOnly={readOnly} characterLook={looks.look} characterId={id} />}
   </section>;
 }
 

@@ -113,6 +113,7 @@ async def queue_pose_job(
             "Additional pose views are not enabled on this server.",
             "pose-reference-unavailable",
         )
+    from flint_graph.application.services.narrative_character_adapters import verify_target
     from flint_graph.application.services.narrative_styles import get_style
     from flint_graph.infrastructure.db.narrative_style_models import NarrativePoseStyle
 
@@ -142,6 +143,8 @@ async def queue_pose_job(
                 "Choose a completed style version for this installed model.",
                 "invalid-style-adapter",
             )
+
+        await verify_target(session, style, character_id=character_id, look_id=look_id)
 
     def build() -> ImageRequest:
         request = pose_request(

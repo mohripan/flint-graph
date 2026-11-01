@@ -13,7 +13,9 @@ from flint_graph.application.narrative_image_workflow import (
     ImageJobOutcome,
     ImageJobPayload,
 )
+from flint_graph.application.services.narrative_character_adapters import details, verify_target
 from flint_graph.application.services.narrative_images import ImageWork
+from flint_graph.domain.errors import DomainError
 from flint_graph.infrastructure.db.models import NarrativeAsset
 from flint_graph.infrastructure.db.narrative_look_models import NarrativeLookJob
 from flint_graph.infrastructure.db.narrative_pose_models import (
@@ -125,6 +127,12 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     or style.model_manifest_sha256 != plan.model_manifest_sha256
                 ):
                     raise ImageGenerationError("style_unavailable")
+                try:
+                    await verify_target(
+                        session, style, character_id=plan.character_id, look_id=plan.look_id
+                    )
+                except DomainError:
+                    raise ImageGenerationError("reference_unavailable") from None
                 weights = await self.store.get_verified(
                     style.weights_key,
                     expected_size=style.weights_size,
@@ -189,8 +197,15 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     }
                 ]
             binding = await session.get(NarrativePoseStyle, job_id)
+            target = (
+                await details(session, style)
+                if binding and (style := await session.get(NarrativeStyleJob, binding.style_id))
+                else {}
+            )
             style_meta = (
                 {
+                    "adapter_kind": target.get("kind", "project_style"),
+                    "adapter_look_sha256": target["look"]["sha256"] if target.get("look") else "",
                     "style_id": str(binding.style_id),
                     "style_weights_sha256": binding.weights_sha256,
                     "style_strength": str(binding.strength),
