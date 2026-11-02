@@ -16,7 +16,9 @@ from flint_graph.application.narrative_image_workflow import (
     ImageJobPayload,
     validate_image_payload,
 )
+from flint_graph.application.services.narrative_anatomy_reviews import ensure_training_anatomy
 from flint_graph.application.services.narrative_character_adapters import details, verify_target
+from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.narrative_styles import (
     ACTIVE,
     RECIPE_SHA,
@@ -115,6 +117,17 @@ class NarrativeStyleActivities:
             await session.commit()
         job_id = row.id
 
+        async def check_anatomy(session: AsyncSession) -> None:
+            try:
+                await ensure_training_anatomy(
+                    session,
+                    tenant_id=row.tenant_id,
+                    project_id=row.project_id,
+                    hashes=[item["sha256"] for item in row.images],
+                )
+            except DomainError:
+                raise ValueError("anatomy_review_failed") from None
+
         async def progress(step: int) -> None:
             async with self.factory() as session:
                 current = await session.get(NarrativeStyleJob, job_id, with_for_update=True)
@@ -126,6 +139,7 @@ class NarrativeStyleActivities:
                     raise Superseded
                 if current.cancel_requested:
                     raise asyncio.CancelledError
+                await check_anatomy(session)
                 current.progress = max(current.progress, step)
                 await session.commit()
 
@@ -143,6 +157,7 @@ class NarrativeStyleActivities:
                 raise ValueError("model_pin_mismatch")
             images = []
             async with self.factory() as session:
+                await check_anatomy(session)
                 try:
                     await verify_target(session, row)
                 except DomainError:
@@ -205,6 +220,12 @@ class NarrativeStyleActivities:
             weight_hash = sha256(result.weights).hexdigest()
             await self.store.put_private_adapter(key, result.weights, expected_sha256=weight_hash)
             async with self.factory() as session:
+                # Review writes take the same project lock: a recorded failure cannot
+                # race past this final check and publish a completed version.
+                await get_project(
+                    session, tenant_id=row.tenant_id, project_id=row.project_id, for_update=True
+                )
+                await check_anatomy(session)
                 current = await session.get(NarrativeStyleJob, job_id, with_for_update=True)
                 if (
                     current is None
@@ -259,6 +280,7 @@ class NarrativeStyleActivities:
                     "reference_unavailable",
                     "invalid_adapter",
                     "caption_too_long",
+                    "anatomy_review_failed",
                 }
                 else "training_failed"
             )

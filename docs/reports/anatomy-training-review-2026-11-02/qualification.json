@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "scope": "agent-selected synthetic QA; no creator projects or calibration",
+  "image_sha256": "51cd74d4cca76a5cffc83021f14144414099ac9bdc52fe7b7814493c590b126c",
+  "approval_status": "approved",
+  "review": {
+    "version": 1,
+    "identity": "same",
+    "clothes": "same",
+    "anatomy": "flawed",
+    "anatomy_version": 1,
+    "notes": "Agent manual QA, not creator calibration: identity and broad outfit match, but the left hand merges into the thigh. Exclude these bytes from training. Uploaded only into a synthetic QA project."
+  },
+  "job": {
+    "id": "5e767862-0263-4526-8590-37e700674bac",
+    "status": "failed",
+    "progress": 0,
+    "error_code": "anatomy_review_failed",
+    "weights_sha256": null,
+    "created_at": "2026-11-02T04:19:42.858052+00:00"
+  },
+  "accessibility": {
+    "anatomy-dialog-a11y.json": {
+      "counts": {
+        "inapplicable": 72,
+        "incomplete": 1,
+        "passes": 16,
+        "violations": 0
+      },
+      "violations": [],
+      "incomplete": [
+        {
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=axeAPI",
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodeCount": 3,
+          "nodes": [
+            {
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements",
+              "html": "<p><strong>Hair and eyes:</strong> adult, white bob hair, red eyes<br><strong>Clothes:</strong> navy coat with gold trim, red scarf, black trousers, black boots</p>",
+              "target": [
+                "p:nth-child(4)"
+              ]
+            },
+            {
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements",
+              "html": "<p class=\"studio-hint\">Check the face, hair, eye color, outfit and pose separately. For a CG, check the number of people too. Your feedback never blocks approval.</p>",
+              "target": [
+                ".studio-peek-body > .studio-hint"
+              ]
+            },
+            {
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements",
+              "html": "<p class=\"studio-hint\">Inspect hands, feet, extra or missing limbs and body geometry. A recorded problem excludes these image bytes from new training in this project, even if approved. You can revise this review; approval stays your choice.</p>",
+              "target": [
+                "fieldset > .studio-hint"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.color",
+            "wcag2aa",
+            "wcag143",
+            "TTv5",
+            "TT13.c",
+            "EN-301-549",
+            "EN-9.1.4.3",
+            "ACT",
+            "RGAAv4",
+            "RGAA-3.2.1"
+          ]
+        }
+      ]
+    },
+    "anatomy-training-a11y.json": {
+      "counts": {
+        "inapplicable": 67,
+        "incomplete": 0,
+        "passes": 21,
+        "violations": 0
+      },
+      "violations": [],
+      "incomplete": []
+    },
+    "anatomy-mobile-a11y.json": {
+      "counts": {
+        "inapplicable": 66,
+        "incomplete": 0,
+        "passes": 22,
+        "violations": 0
+      },
+      "violations": [],
+      "incomplete": []
+    }
+  }
+}

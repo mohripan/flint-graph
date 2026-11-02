@@ -550,3 +550,34 @@ Inspect face, outfit details, hands/limbs, linework and scene lighting separatel
 Combining adapters does not fix an extra leg or guarantee identical rendering.
 See [ADR 0052](../adr/0052-character-and-style-pose-adapters.md) and the
 [qualification report](../reports/2026-11-02-combined-pose-adapters.md).
+
+
+### Manual anatomy review and training (ADR 0053)
+
+Apply migration 0040 and deploy the API/style worker together. In **Assets →
+Compare look**, review **Anatomy** separately from character appearance and
+clothes. Choose **Anatomy problem — exclude from training** for extra/missing
+limbs, malformed hands/feet or faulty body geometry. Approval remains available.
+Cards show **Review anatomy** even if identity and clothes are both marked same.
+A verdict covers these exact image bytes throughout this project, including
+reuploads and comparisons against other looks. Other projects are independent.
+
+The review response adds `anatomy` and `anatomy_version`. To change it, send
+`anatomy` and `anatomy_base_version` alongside the existing feedback body. Both
+ordinary-review and anatomy versions must be current; a stale write returns 409.
+Omitting anatomy preserves it for older clients. Explicit `unknown` clears the
+failure after a deliberate revision; it does not assert that anatomy passed.
+Old notes are not converted into verdicts automatically.
+
+Character and project-style training pickers disable known flawed sources.
+The API returns `anatomy-review-failed` (422) if selected bytes are marked flawed.
+If a source is flagged after admission, the style worker rechecks before loading
+inputs, during progress and at final publication, then fails the job with
+`anatomy_review_failed` and no published weights. Remove the source or revise the
+review after inspecting it, then start a new training version. Replaying an old
+request still returns its original job. Existing completed adapters stay available.
+
+This is a human review and training-data guard, not automatic anatomy detection
+or repair. Unknown sources still require the existing training review/rights
+checks. See [ADR 0053](../adr/0053-manual-anatomy-review-and-training.md) and the
+[report](../reports/2026-11-02-anatomy-training-review.md).

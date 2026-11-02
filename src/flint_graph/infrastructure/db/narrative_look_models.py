@@ -132,6 +132,7 @@ class NarrativeCandidateReview(TimestampMixin, Base):
     __tablename__ = "narrative_candidate_reviews"
     __table_args__ = (
         Index("ix_candidate_reviews_assets", "tenant_id", "project_id", "asset_id"),
+        Index("ix_candidate_review_hash", "tenant_id", "project_id", "candidate_sha256"),
         ForeignKeyConstraint(
             ["look_id", "project_id", "tenant_id", "character_id"],
             [
@@ -185,3 +186,26 @@ class NarrativeLookObservation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source_sha256: Mapped[str] = mapped_column(String(64))
     tagger_sha256: Mapped[str] = mapped_column(String(64))
     observation: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class NarrativeAnatomyReview(TimestampMixin, Base):
+    """One explicitly versioned manual verdict per project and immutable image hash."""
+
+    __tablename__ = "narrative_anatomy_reviews"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["project_id", "tenant_id"],
+            ["narrative_projects.id", "narrative_projects.tenant_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "anatomy IN ('acceptable','flawed','unknown')", name="ck_anatomy_review_verdict"
+        ),
+        CheckConstraint("version > 0", name="ck_anatomy_review_version"),
+    )
+    tenant_id: Mapped[UUID] = mapped_column(primary_key=True)
+    project_id: Mapped[UUID] = mapped_column(primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    anatomy: Mapped[str] = mapped_column(String(16))
+    version: Mapped[int]
+    reviewed_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))

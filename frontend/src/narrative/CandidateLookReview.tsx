@@ -4,7 +4,8 @@ import { api, ApiError } from "../lib/api";
 import type { NarrativeImage } from "../lib/api";
 import { LookImage, useCharacterLooks } from "./CharacterLooks";
 import { Field } from "./FormFields";
-import type { ClothingComparison, LookFeedback, LookFlag, LookVerdict } from "./lookModel";
+import type { AnatomyVerdict, ClothingComparison, LookFeedback, LookFlag, LookVerdict } from "./lookModel";
+import {feedbackBody,reviewWarnings} from "./lookModel";
 import { StudioDialog } from "./StudioDialog";
 
 const REVIEW_CHANGED = "flint-look-review-changed";
@@ -35,9 +36,9 @@ export function CandidateLookReview({ tenantId, projectId, asset, readOnly, flag
   if (asset.media_type !== "image/png" || !["sprite","image","character_portrait"].includes(asset.kind)) return null;
   const characters = Object.keys(names).length ? names : asset.character_id ? {[asset.character_id]:asset.character_id} : {};
   if (!Object.keys(characters).length) return null;
-  const warnings = flags.filter(flag => flag.asset_id === asset.id && (flag.identity === "drifted" || flag.clothes === "drifted"));
+  const warnings = reviewWarnings(asset,flags);
   return <>
-    {warnings.map(flag => <small key={flag.look_id} className="studio-look-warning">{flag.look_name}: {flag.identity === "drifted" ? "Review character" : ""}{flag.identity === "drifted" && flag.clothes === "drifted" ? " · " : ""}{flag.clothes === "drifted" ? "Review clothes" : ""}</small>)}
+    {warnings.map(flag => <small key={`${flag.look_id}:${flag.asset_id}`} className="studio-look-warning">{flag.look_name}: {flag.reasons.join(" · ")}</small>)}
     <button type="button" className="studio-link" onClick={() => setOpen(true)}>Compare look</button>
     {open && createPortal(<ReviewDialog tenantId={tenantId} projectId={projectId} asset={asset} readOnly={readOnly} names={characters} onClose={() => setOpen(false)} />, document.body)}
   </>;
@@ -73,9 +74,7 @@ function ReviewDialog({ tenantId, projectId, asset, readOnly, names, onClose }: 
     if (!feedback || !feedbackReady || !look || readOnly || busy) return;
     setBusy(true); setError(null); setNotice(null);
     try {
-      const result = await api.saveCandidateLookFeedback(tenantId, projectId, character, look.id, asset.id, {
-        base_version:feedback.version, identity:feedback.identity, clothes:feedback.clothes, notes:feedback.notes,
-      });
+      const result = await api.saveCandidateLookFeedback(tenantId, projectId, character, look.id, asset.id, feedbackBody(feedback));
       window.dispatchEvent(new Event(REVIEW_CHANGED));
       if (currentScope.current === scope) {setFeedback(result);setNotice("Feedback saved. You can still approve this image.");}
     } catch (failure) { setError(failure instanceof ApiError && failure.status === 409 ? "Someone else changed this review. Reload their feedback before saving." : "Could not save feedback. Your edits are still here."); }
@@ -107,6 +106,12 @@ function ReviewDialog({ tenantId, projectId, asset, readOnly, names, onClose }: 
           <p>{comparison.reason}</p><p>Reference: {Object.keys(comparison.reference_tags).join(", ") || "No garment evidence"}<br />Candidate: {Object.keys(comparison.candidate_tags).join(", ") || "No garment evidence"}</p></div>}
         <fieldset disabled={readOnly || busy || !feedbackReady} className="studio-reviewed-look-form"><legend>Your review</legend>
           {verdict("identity","Character appearance")}{verdict("clothes","Clothes")}
+          {feedback?.anatomy!==undefined&&<>
+            <Field label="Anatomy"><select value={feedback.anatomy} onChange={event=>setFeedback(current=>current&&{...current,anatomy:event.target.value as AnatomyVerdict})}>
+              <option value="unknown">Not checked / not sure</option><option value="acceptable">Anatomy looks acceptable</option><option value="flawed">Anatomy problem — exclude from training</option>
+            </select></Field>
+            <p className="studio-hint">Inspect hands, feet, extra or missing limbs and body geometry. A recorded problem excludes these image bytes from new training in this project, even if approved. You can revise this review; approval stays your choice.</p>
+          </>}
           <Field label="Review notes"><textarea rows={2} maxLength={1200} value={feedback?.notes ?? ""} onChange={event => setFeedback(current => current && {...current,notes:event.target.value})} /></Field>
           {!readOnly && <button type="button" className="studio-primary" onClick={() => void save()}>Save feedback</button>}
         </fieldset>

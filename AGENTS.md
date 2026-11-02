@@ -569,3 +569,17 @@ weights never enter assets, games or tracking artifacts. See
 limits. Preserve main Studio, Aster QA on 5276 and character QA on 5278; this
 qualification uses a new random database/queues and 8280/5280/5300. Candidate
 anatomy/style/lighting review remains manual.
+
+
+[ADR 0053](docs/adr/0053-manual-anatomy-review-and-training.md), migration 0040,
+adds manual anatomy verdicts shared by image SHA-256 within a workspace/project,
+with a separate optimistic version. Legacy feedback writes preserve anatomy;
+new writes require the current anatomy version. Compare look and asset cards
+show the verdict independently of identity/clothes, and known flawed sources
+are excluded from both character and project-style training. The API checks
+admission; the style worker checks input loading, progress and publication under
+the review project lock. Image approval and existing completed adapters remain
+available. This adds no automatic detector, calibration, model/recipe change or
+Godot bump. Read `docs/reports/2026-11-02-anatomy-training-review.md` for real
+Temporal, browser, PostgreSQL and deployment qualification. Use synthetic fixtures;
+do not infer anatomy verdicts from old notes or annotate creator projects.

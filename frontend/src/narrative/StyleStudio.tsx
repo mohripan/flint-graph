@@ -2,8 +2,9 @@ import {useEffect,useRef,useState} from 'react';
 import {api} from '../lib/api';
 import {Field} from './FormFields';
 import {LookImage} from './CharacterLooks';
+import {useLookReviewFlags} from './CandidateLookReview';
 import type {CharacterLook} from './lookModel';
-import {lookReferences} from './lookModel';
+import {anatomyFailures,lookReferences} from './lookModel';
 import {useApprovedAssets} from './libraryAssets';
 import {styleBody,styleStatus,trainingAssets} from './styleModel';
 import type {StyleHistory,TrainingSelection} from './styleModel';
@@ -29,6 +30,8 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
  const library=useApprovedAssets(tenantId,projectId);
  const approved=trainingAssets(library.assets??[]);
  const choices=characterLook?lookReferences(approved,characterId??''):approved;
+ const reviews=useLookReviewFlags(tenantId,projectId,choices);
+ const blocked=anatomyFailures(choices,reviews.flags);
  const [sameLook,setSameLook]=useState(false);const [anatomy,setAnatomy]=useState(false);
  const suggestedCaption=characterLook?[...characterLook.identity_tags,...characterLook.clothing_tags].join(', '):'';
  const [selected,setSelected]=useState<TrainingSelection[]>([]);
@@ -43,11 +46,11 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
  const active=history?.jobs.find(j=>['queued','running'].includes(j.status));
  const disabled=readOnly||busy||!!active||!history?.available||failed;
  async function train(){
-  if(disabled)return;setBusy(true);setNotice(null);
+   if(disabled)return;setBusy(true);setNotice(null);
   try{
    const signature=JSON.stringify([name,selected.map(i=>[i.asset.id,i.caption]),rights,steps,seed,characterLook?.id,sameLook,anatomy]);
    if(pending.current?.signature!==signature)pending.current={signature,key:crypto.randomUUID()};
-   await api.createStyleJob(tenantId,projectId,styleBody(name,selected,rights,steps,seed,pending.current.key,characterLook?{look:characterLook,characterId:characterId??'',sameLook,anatomyReviewed:anatomy}:undefined));
+   await api.createStyleJob(tenantId,projectId,styleBody(name,selected,rights,steps,seed,pending.current.key,characterLook?{look:characterLook,characterId:characterId??'',sameLook,anatomyReviewed:anatomy}:undefined,blocked));
    pending.current=null;setSelected([]);setRights(false);refresh();
   }catch(error){setNotice(error instanceof Error?error.message:'Could not start training.');}
   finally{setBusy(false);}
@@ -66,14 +69,17 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
     <Field label={characterLook?"Character version name":"Style version name"}><input maxLength={80} value={name} onChange={e=>setName(e.target.value)} placeholder="Evening illustrations" /></Field>
     <p className="studio-hint">{characterLook?"Choose 4–12 approved images of this character in this outfit, including the locked base. Start with the reviewed look tags, then describe the pose and visible scene in each caption.":"Choose 4–12 approved images with consistent rendering. Describe the content in each image so the model can distinguish the style from the person, outfit and scene."}</p>
     {library.failed&&<p role="alert">Approved images could not be loaded.</p>}
+    {reviews.failed&&<p role="status">Some anatomy reviews could not be loaded. The server checks the selected sources before training.</p>}
     <div className="style-image-picker" role="group" aria-label="Training images">{choices.map(asset=>{
      const chosen=selected.some(i=>i.asset.id===asset.id);
      return <label key={asset.id} className={chosen?'selected':''}>
-      <input type="checkbox" aria-label={asset.name} checked={chosen} disabled={!chosen&&selected.length>=12} onChange={e=>{setRights(false);setSameLook(false);setAnatomy(false);setSelected(current=>e.target.checked?[...current,{asset,caption:suggestedCaption.length<=600?suggestedCaption:''}]:current.filter(i=>i.asset.id!==asset.id));}} />
+      <input type="checkbox" aria-label={asset.name} checked={chosen} disabled={!chosen&&(selected.length>=12||blocked.has(asset.id))} onChange={e=>{setRights(false);setSameLook(false);setAnatomy(false);setSelected(current=>e.target.checked?[...current,{asset,caption:suggestedCaption.length<=600?suggestedCaption:''}]:current.filter(i=>i.asset.id!==asset.id));}} />
       <LookImage tenantId={tenantId} projectId={projectId} asset={asset} label={asset.name} /><span>{asset.name}</span>
+      {blocked.has(asset.id)&&<small className="studio-look-warning">Anatomy problem — excluded from training</small>}
      </label>;
     })}</div>
     <p role="status">{selected.length} of 4–12 images selected</p>
+    {selected.some(item=>blocked.has(item.asset.id))&&<p role="alert">Remove images with a recorded anatomy problem, or revise their review after inspecting them again.</p>}
     {selected.map(item=><div className="style-caption" key={item.asset.id}>
      <LookImage tenantId={tenantId} projectId={projectId} asset={item.asset} label={item.asset.name} />
      <Field label={`Content caption: ${item.asset.name}`}><textarea rows={3} maxLength={600} value={item.caption} onChange={e=>{setRights(false);setSameLook(false);setAnatomy(false);setSelected(current=>current.map(i=>i.asset.id===item.asset.id?{...i,caption:e.target.value}:i));}} placeholder="White hair, red scarf, navy coat, sitting on a chair…" /></Field>
@@ -86,7 +92,7 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
     </>}
     <label className="studio-check"><input type="checkbox" checked={rights} onChange={e=>setRights(e.target.checked)} /><span>I reviewed these images and captions and have rights to train on them.</span></label>
     <p className="studio-hint">Weights stay private in the Studio and are never included in exported games.</p>
-    <button type="button" className="studio-primary" disabled={selected.length<4||!rights||!name.trim()||selected.some(i=>!i.caption.trim())||(!!characterLook&&(!sameLook||!anatomy||!selected.some(i=>i.asset.sha256===characterLook.source_sha256)))} onClick={()=>void train()}>{characterLook?"Train character version":"Train style version"}</button>
+    <button type="button" className="studio-primary" disabled={selected.length<4||!rights||!name.trim()||selected.some(i=>!i.caption.trim()||blocked.has(i.asset.id))||(!!characterLook&&(!sameLook||!anatomy||!selected.some(i=>i.asset.sha256===characterLook.source_sha256)))} onClick={()=>void train()}>{characterLook?"Train character version":"Train style version"}</button>
    </fieldset>
   </details>}
   {notice&&<p role="status">{notice}</p>}

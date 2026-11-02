@@ -25,3 +25,9 @@ test('pose versions are filtered to this exact character look',()=>{
  const wrong={...own,id:'wrong',look:{...own.look,id:'b'}};
  assert.deepEqual(model.compatibleAdapters([style,own,wrong],look).map(j=>j.id),['style','own']);
 });
+
+test('training refuses a selected image explicitly flagged for anatomy',()=>{
+ assert.throws(()=>model.styleBody('Travel coat',images,true,200,42,'key',undefined,new Set(['0'])),/anatomy/i);
+ assert.equal(model.styleBody('Travel coat',images,true,200,42,'key',undefined,new Set(['other'])).images.length,4);
+ assert.match(model.styleStatus({status:'failed',error_code:'anatomy_review_failed'}),/anatomy/i);
+});

@@ -25,3 +25,15 @@ test("a character's own approved image is offered before unassigned uploads", ()
   const asset = (id, character_id) => ({id,character_id,status:"approved",kind:"image",media_type:"image/png",provenance:{}});
   assert.deepEqual(model.lookReferences([asset("unassigned",null),asset("own","mira")], "mira").map(item=>item.id), ["own","unassigned"]);
 });
+
+test("anatomy warnings survive matching identity and clothes and apply to duplicate image bytes", () => {
+  const asset={id:'new-copy',sha256:'same-bytes'};
+  const flag={asset_id:'old-copy',candidate_sha256:'same-bytes',look_id:'look',identity:'same',clothes:'same',anatomy:'flawed'};
+  assert.deepEqual(model.reviewWarnings(asset,[flag]),[{...flag,reasons:['Review anatomy']}]);
+  assert.deepEqual(model.anatomyFailures([asset],[flag]),new Set(['new-copy']));
+  assert.deepEqual(model.reviewWarnings({...asset,sha256:'different'},[flag]),[]);
+  assert.deepEqual(model.reviewWarnings(asset,[{...flag,anatomy:'unknown'}]),[]);
+  assert.deepEqual(model.feedbackBody({version:1,identity:'same',clothes:'same',notes:'legacy'}),{base_version:1,identity:'same',clothes:'same',notes:'legacy'});
+  assert.equal(model.feedbackBody({version:2,identity:'same',clothes:'same',notes:'',anatomy:'flawed'}).anatomy,'flawed');
+  assert.equal(model.feedbackBody({version:2,identity:'same',clothes:'same',notes:'',anatomy:'flawed',anatomy_version:4}).anatomy_base_version,4);
+});

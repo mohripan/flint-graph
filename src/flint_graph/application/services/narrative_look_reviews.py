@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.services.audit import AuditActor, record_audit_event
+from flint_graph.application.services.narrative_anatomy_reviews import write_anatomy
 from flint_graph.application.services.narrative_characters import get_asset
 from flint_graph.application.services.narrative_looks import get_look, invalid
 from flint_graph.application.services.narrative_projects import get_project
@@ -86,6 +87,8 @@ async def write_review(
     clothes: str,
     notes: str,
     actor: AuditActor,
+    anatomy: str | None = None,
+    anatomy_base_version: int | None = None,
 ) -> NarrativeCandidateReview:
     project = await get_project(
         session, tenant_id=tenant_id, project_id=project_id, for_update=True
@@ -107,6 +110,14 @@ async def write_review(
             "Review conflict",
             "Someone else reviewed this image. Reload their feedback before saving.",
             "stale-candidate-review",
+        )
+    if anatomy is not None:
+        await write_anatomy(
+            session,
+            asset=asset,
+            anatomy=anatomy,
+            base_version=anatomy_base_version,
+            author_user_id=author_user_id,
         )
     if row is None:
         look = await get_look(
@@ -143,6 +154,7 @@ async def write_review(
             "character_id": character_id,
             "look_id": str(look_id),
             "version": row.version,
+            "anatomy": anatomy,
         },
     )
     return row

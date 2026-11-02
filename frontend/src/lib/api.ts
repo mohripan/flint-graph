@@ -466,7 +466,7 @@ export const api = {
     });
   },
   saveCandidateLookFeedback(tenantId: string, projectId: string, characterId: string, lookId: string, assetId: string,
-    body: {base_version:number; identity: LookFeedback["identity"]; clothes: LookFeedback["clothes"]; notes:string}): Promise<LookFeedback> {
+    body: {base_version:number; identity: LookFeedback["identity"]; clothes: LookFeedback["clothes"]; anatomy?:LookFeedback["anatomy"]; anatomy_base_version?:number; notes:string}): Promise<LookFeedback> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/${encodeURIComponent(lookId)}/reviews/${encodeURIComponent(assetId)}`, {
       method: "POST", headers: tenantHeaders(tenantId), json: body,
     });

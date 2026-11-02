@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.narrative_image_workflow import ImageJobPayload
+from flint_graph.application.services.narrative_anatomy_reviews import ensure_training_anatomy
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.outbox import append_outbox_message
 from flint_graph.domain.errors import DomainError, NotFoundError
@@ -255,6 +256,9 @@ async def queue_style(
                 "prompt_bundle_sha256": current_snapshot().sha256,
             }
         )
+    await ensure_training_anatomy(
+        session, tenant_id=tenant_id, project_id=project_id, hashes=list(seen)
+    )
     job_id = uuid4()
     row = NarrativeStyleJob(
         id=job_id,

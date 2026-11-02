@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.api.dependencies import (
@@ -120,6 +120,8 @@ class CandidateFeedback(BaseModel):
     base_version: int = Field(ge=0)
     identity: Literal["same", "drifted", "unknown"]
     clothes: Literal["same", "drifted", "unknown"]
+    anatomy: Literal["acceptable", "flawed", "unknown"] | None = None
+    anatomy_base_version: int | None = Field(default=None, ge=0, strict=True)
     notes: str = Field(default="", max_length=1200)
 
 
@@ -342,11 +344,26 @@ async def look_scene_endpoint(
     return job_response(job, [])
 
 
-def feedback_response(row: NarrativeCandidateReview | None) -> dict[str, Any]:
+async def feedback_response(
+    session: AsyncSession,
+    row: NarrativeCandidateReview | None,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    asset_id: UUID,
+) -> dict[str, Any]:
+    from flint_graph.infrastructure.db.narrative_look_models import NarrativeAnatomyReview
+
+    asset = await get_asset(session, tenant_id=tenant_id, project_id=project_id, asset_id=asset_id)
+    anatomy = await session.get(
+        NarrativeAnatomyReview, (tenant_id, project_id, asset.sha256), populate_existing=True
+    )
     return {
         "version": row.version if row else 0,
         "identity": row.identity if row else "unknown",
         "clothes": row.clothes if row else "unknown",
+        "anatomy": anatomy.anatomy if anatomy else "unknown",
+        "anatomy_version": anatomy.version if anatomy else 0,
         "notes": row.notes if row else "",
         "review_kind": "manual" if row else None,
         "reviewed_by_user_id": row.reviewed_by_user_id if row else None,
@@ -553,7 +570,9 @@ async def read_feedback_endpoint(
         look_id=look_id,
         asset_id=asset_id,
     )
-    return feedback_response(row)
+    return await feedback_response(
+        session, row, tenant_id=tenant_id, project_id=project_id, asset_id=asset_id
+    )
 
 
 @project_router.get("/look-reviews")
@@ -564,13 +583,30 @@ async def review_flags_endpoint(
     session: SessionDep,
 ) -> dict[str, Any]:
     await get_project(session, tenant_id=tenant_id, project_id=project_id)
+    from flint_graph.infrastructure.db.narrative_look_models import NarrativeAnatomyReview
+
+    hashes = select(NarrativeAsset.sha256).where(
+        NarrativeAsset.tenant_id == tenant_id,
+        NarrativeAsset.project_id == project_id,
+        NarrativeAsset.id.in_(asset_id),
+    )
     rows = await session.execute(
-        select(NarrativeCandidateReview, NarrativeCharacterLook.name)
+        select(
+            NarrativeCandidateReview, NarrativeCharacterLook.name, NarrativeAnatomyReview.anatomy
+        )
         .join(NarrativeCharacterLook, NarrativeCharacterLook.id == NarrativeCandidateReview.look_id)
+        .outerjoin(
+            NarrativeAnatomyReview,
+            and_(
+                NarrativeAnatomyReview.tenant_id == NarrativeCandidateReview.tenant_id,
+                NarrativeAnatomyReview.project_id == NarrativeCandidateReview.project_id,
+                NarrativeAnatomyReview.sha256 == NarrativeCandidateReview.candidate_sha256,
+            ),
+        )
         .where(
             NarrativeCandidateReview.tenant_id == tenant_id,
             NarrativeCandidateReview.project_id == project_id,
-            NarrativeCandidateReview.asset_id.in_(asset_id),
+            NarrativeCandidateReview.candidate_sha256.in_(hashes),
         )
         .order_by(NarrativeCandidateReview.updated_at.desc())
         .limit(1001)
@@ -585,8 +621,10 @@ async def review_flags_endpoint(
                 "look_name": name,
                 "identity": row.identity,
                 "clothes": row.clothes,
+                "anatomy": anatomy or "unknown",
+                "candidate_sha256": row.candidate_sha256,
             }
-            for row, name in found[:1000]
+            for row, name, anatomy in found[:1000]
         ],
     }
 
@@ -617,4 +655,6 @@ async def write_feedback_endpoint(
             **payload.model_dump(),
         ),
     )
-    return feedback_response(row)
+    return await feedback_response(
+        session, row, tenant_id=tenant_id, project_id=project_id, asset_id=asset_id
+    )

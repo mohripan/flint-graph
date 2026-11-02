@@ -17,11 +17,12 @@ export interface CharacterTraining {look:CharacterLook;characterId:string;sameLo
 export function compatibleAdapters(jobs:StyleJob[],look:Pick<CharacterLook,'id'|'sha256'>|null):StyleJob[]{
  return jobs.filter(job=>job.status==='completed'&&(job.kind!=='character_look'||(look&&job.look?.id===look.id&&job.look.sha256===look.sha256)));
 }
-export function styleBody(name:string,images:TrainingSelection[],rights:boolean,steps:number,seed:number,key:string,target?:CharacterTraining){
+export function styleBody(name:string,images:TrainingSelection[],rights:boolean,steps:number,seed:number,key:string,target?:CharacterTraining,anatomyBlocked:ReadonlySet<string>=new Set()){
  name=name.trim();
  if(!name||name.length>80)throw new Error('Name this style version in 1–80 characters.');
  if(!rights)throw new Error('Confirm you have rights to train on these images.');
  if(images.length<4||images.length>12||new Set(images.map(i=>i.asset.sha256)).size!==images.length)throw new Error('Choose 4–12 different approved images.');
+ if(images.some(item=>anatomyBlocked.has(item.asset.id)))throw new Error('Remove images with a recorded anatomy problem, or revise their anatomy review after inspecting them again.');
  if(!Number.isInteger(steps)||steps<20||steps>400||!Number.isInteger(seed)||seed<0||seed>4294967295)throw new Error('Choose 20–400 training steps and a valid seed.');
  const captions=images.map(({asset,caption})=>{
   caption=caption.replace(/\s+/g,' ').trim();
@@ -39,5 +40,6 @@ export function styleStatus(job:StyleJob):string{
  if(job.status==='queued')return 'Waiting for the training worker…';
  if(job.status==='running')return job.progress?`Training ${job.progress} of ${job.steps} steps…`:'Preparing images and loading the model…';
  const messages:Record<string,string>={caption_too_long:'A caption exceeds the model token limit. Shorten the captions and start a new version.',gpu_busy:'The GPU stayed busy. Try again when other work finishes.',host_memory_busy:'Not enough system memory was available.',out_of_memory:'Training ran out of GPU memory.',reference_unavailable:'A selected image is no longer approved or available.',model_pin_mismatch:'The installed model or training recipe changed. Start a new version.'};
+ if(job.error_code==='anatomy_review_failed')return 'A selected image has a recorded anatomy problem. Review the sources before starting a new version.';
  return messages[job.error_code??'']??'Training failed. Start a new version to try again.';
 }
