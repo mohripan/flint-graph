@@ -8,6 +8,10 @@ The creator owns the story. The Assistant proposes changes for review; accepting
 a proposal creates a revision. Gameplay follows the authored story and needs no
 AI service or FlintGraph account.
 
+![A visual-novel playtest with an illustrated train-carriage scene and dialogue](docs/reports/evidence/scene-art-cgs-2026-10-31/04-playtest.png)
+
+*Play a saved story in the browser, with dialogue over a full-screen event CG.*
+
 The local Studio, Godot player, browser playtests and release downloads are
 implemented. The project is under active development; the
 [roadmap](docs/ROADMAP.md#narrative-game-studio) separates
@@ -23,12 +27,17 @@ completed work from the next milestones.
 | Stage and Look | Place and frame characters, change backgrounds and expressions, show full-screen event CGs under the dialogue, and edit the game's theme. |
 | Voices | Upload line audio or generate it with a configured local model; choose character voices and per-line delivery. Cloned voices require consented references and applicable license acceptance. |
 | Reviewed looks | Lock an approved reference with edited hair, eye and clothing tags; reuse named looks for new requests and save side-by-side character/clothes feedback. Optional clothing-tag comparisons stay advisory. |
+| Poses and training | Generate poses from an approved look, choose seated, standing or walking body guides, repair a selected area, and train private character/style versions from reviewed images. |
 | Playtest and Releases | Test the saved story in the isolated Godot preview, then build and download a web game or editable Godot source. |
 
 The player supports authored choices and conditions, local saves, voice volume,
 and a CG gallery that unlocks illustrations as they are seen. CGs cover the stage
 while dialogue continues; clearing them reveals the background and characters
 underneath.
+
+![The scene editor with a scene hierarchy, event CG, character placement and dialogue](docs/reports/evidence/scene-art-cgs-2026-10-31/03-stage-event-cg.png)
+
+*Arrange scenes, set the stage and edit the dialogue in one writing desk.*
 
 Projects keep immutable revisions and recoverable edit conflicts. Uploaded and
 generated assets record provenance, hashes, approval and rights declarations.
@@ -83,8 +92,9 @@ For a smaller introduction without the Studio services, follow
 
 ## Models and character consistency
 
-The current image path uses local Animagine XL, optional transparent sprite
-cutouts, face-only expression repainting and reference-guided CG generation.
+Local image tools include Animagine XL character/background generation, optional
+transparent sprite cutouts, face-only expression repainting and reference-guided
+CG generation. Poses use a separately installed FLUX.2 klein 4B editing model.
 Voice choices and their installation/license requirements are documented in the
 [voice runbook](docs/runbooks/narrative-voice-generation.md). Nothing downloads
 model weights merely by opening an exported game.
@@ -95,11 +105,26 @@ You still review every candidate: image references do not guarantee identity or
 clothing fidelity, especially in two-character CGs. Clothing-tag overlap misses
 fine details and does not determine approval.
 
-New pose methods, useful character/style LoRA training, CCIP identity scoring and
-automatic candidate ranking remain research or follow-up work. The
-[measured character-preservation report](docs/reports/2026-11-01-character-preservation.md)
-and [Studio look integration report](docs/reports/2026-11-01-reviewed-character-looks.md)
-record what was tested and what remains unqualified.
+![The pose workbench showing an approved character reference, walking skeleton and editable pose description](docs/reports/standing-walking-guides-2026-11-02/studio-walking-desktop.png)
+
+*Use the approved look for appearance and a body guide for pose geometry.*
+
+The pose workbench supports an additional approved appearance view or a body
+guide, local area repairs, and private character/style LoRA versions trained from
+explicitly selected, approved images. Character and style versions can be combined
+within a bounded strength budget. Training is a local worker job; optional MLflow
+tracking records numeric metrics and hashes. Training images and weights stay out
+of exported games.
+
+Check anatomy, costume details, linework and lighting before approval. Known
+anatomically flawed images are excluded from training, but guides and trained
+versions do not guarantee a correct result. Automatic calibrated CCIP identity
+scoring, per-character CG scoring and candidate ranking remain unfinished.
+
+See the [body-guide examples and limits](docs/reports/2026-11-02-standing-and-walking-guides.md),
+[character/style training](docs/reports/2026-11-02-combined-pose-adapters.md) and
+[measurement research](docs/reports/2026-11-01-character-preservation.md).
+The screenshots above use qualification fixtures documented in the delivery reports.
 
 ## Documentation
 
