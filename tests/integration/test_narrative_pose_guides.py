@@ -1,4 +1,4 @@
-"""Seated body guidance is explicit, frozen and separately pinned."""
+"""Versioned body guidance is explicit, frozen and separately pinned."""
 
 from uuid import uuid4
 
@@ -19,7 +19,10 @@ async def test_pose_guides_require_explicit_operator_rollout(studio):  # noqa: F
     assert response.json()["type"].endswith("pose-guide-unavailable")
 
 
-async def test_selected_body_guide_is_frozen_and_replay_survives_operator_changes(studio):  # noqa: F811
+@pytest.mark.parametrize(
+    "guide_id", ["seated-front-v1", "standing-front-v1", "walking-three-quarter-v1"]
+)
+async def test_selected_body_guide_is_frozen_and_replay_survives_operator_changes(studio, guide_id):  # noqa: F811
     from flint_graph.config import get_settings
     from flint_graph.main import app
 
@@ -33,12 +36,21 @@ async def test_selected_body_guide_is_frozen_and_replay_survives_operator_change
         }
     )
     app.dependency_overrides[get_settings] = lambda: settings
-    body = {**body, "pose_guide": "seated-front-v1", "idempotency_key": str(uuid4())}
+    capabilities = (await client.get(url + "/pose-jobs", headers=headers)).json()["capabilities"]
+    guides = capabilities["body_guides"]
+    assert [guide["id"] for guide in guides] == [
+        "seated-front-v1",
+        "standing-front-v1",
+        "walking-three-quarter-v1",
+    ]
+    assert "arms relaxed" in guides[1]["suggested_pose"]
+    assert "one foot forward" in guides[2]["suggested_pose"]
+    body = {**body, "pose_guide": guide_id, "idempotency_key": str(uuid4())}
     response = await client.post(url + "/pose-jobs", headers=headers, json=body)
     assert response.status_code == 202, response.text
     row = response.json()
     assert "pose skeleton" in row["job"]["prompt"]
-    assert row["pose_guide"]["id"] == "seated-front-v1"
+    assert row["pose_guide"]["id"] == guide_id
     assert row["pose_guide"]["control_manifest_sha256"] == "c" * 64
     assert len(row["pose_guide"]["points"]) == 18
     assert row["pose_guide"]["points"][10] != row["pose_guide"]["points"][13]

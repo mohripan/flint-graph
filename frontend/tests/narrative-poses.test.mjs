@@ -65,3 +65,14 @@ test('an explicit seated guide replaces the extra appearance view without changi
  const extra={asset:{id:'side',sha256:'other',status:'approved',media_type:'image/png'},view:'side',confirmed:true};
  assert.throws(()=>model.poseBody(look,'sitting',1,false,'key',extra,undefined,undefined,'seated-front-v1'));
 });
+
+test('standing and walking guides preserve the selected pose and remain mutually exclusive with extra views',()=>{
+ const look={id:'look',asset:{status:'approved'}};
+ const extra={asset:{id:'side',sha256:'other',status:'approved',media_type:'image/png'},view:'side',confirmed:true};
+ for(const guide of ['standing-front-v1','walking-three-quarter-v1']){
+  const body=model.poseBody(look,'my editable pose',1,true,'key',undefined,undefined,undefined,guide);
+  assert.equal(body.pose_guide,guide);
+  assert.equal(body.pose,'my editable pose');
+  assert.throws(()=>model.poseBody(look,'walking',1,true,'key',extra,undefined,undefined,guide));
+ }
+});

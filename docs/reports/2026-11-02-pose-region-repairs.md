@@ -41,9 +41,11 @@ This is a local correction capability, not an anatomy-quality guarantee.
 A second real job generated a transparent source, followed by a registered repair.
 The repair retained its **628×1129 RGBA** dimensions and original canvas crop
 `[100,23,728,1152]`. All **697,812 outside pixels**, including **448,385 nonopaque
-pixels**, were identical. More than 10,000 inside pixels changed. The source has
-segmentation fringe outside the selected hand area; exact preservation deliberately
-retains that fringe. This run qualifies crop/alpha preservation and does not claim
+pixels**, were identical. More than 10,000 inside pixels changed. Correction after
+proper alpha-composite inspection: the raw RGBA preview exposed hidden RGB bleed;
+white/dark composites show no striped fringe. See the
+[composite evidence](standing-walking-guides-2026-11-02/alpha-composites.png).
+This run qualifies crop/alpha preservation and does not claim
 better anatomy or whole-sprite cutout quality. An independent Pillow check of the
 stored original/output files agreed with the parent decoder for all three repairs.
 The [safe receipt](pose-region-repairs-2026-11-02/qualification.json) records hashes,

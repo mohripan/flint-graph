@@ -30,3 +30,12 @@ def test_guided_images_carry_the_pinned_pose_model_credit_in_game_notices():
     assert compose_notices(text, [bound]) == text
     asset.source = "uploaded"
     assert CONTROL_REPO not in compose_notices("", [bound])
+
+
+def test_deployed_seated_v1_guide_is_byte_identical():
+    from flint_graph.narrative.pose_guides import body_guide, guide_sha256
+
+    assert (
+        guide_sha256(body_guide("seated-front-v1"))
+        == "665c6b7508ec44ab3a132fa5d514a20f16264ce9cd15486c9697d4bc7ebecf0a"
+    )

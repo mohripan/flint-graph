@@ -128,7 +128,11 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
         {!!history?.capabilities.body_guides?.length&&<div className="pose-ref-picker">
           <Field label="Body guide"><select value={shownGuide?.id??""} onChange={event=>{
             setGuideId(event.target.value);
-            if(event.target.value){setExtraId("");setConfirmed(false);setPose("sitting on a chair, both feet on the floor, hands resting on thighs");}
+            if(event.target.value){
+              setExtraId("");setConfirmed(false);
+              const selected=history.capabilities.body_guides?.find(item=>item.id===event.target.value);
+              setPose(selected?.suggested_pose??"sitting on a chair, both feet on the floor, hands resting on thighs");
+            }
           }}><option value="">Let the model choose the body position</option>{history.capabilities.body_guides.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
           {shownGuide&&<><PoseGuidePreview guide={shownGuide}/><p className="studio-hint">The guide sets the body position; the reviewed look supplies the character and outfit. Check hands, limbs and clothing in each result.</p></>}
         </div>}

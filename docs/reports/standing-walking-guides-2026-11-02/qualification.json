@@ -1,0 +1,422 @@
+{
+  "scope": "manual visible limb count and pose check; not a calibrated anatomy or identity score",
+  "reference_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+  "runs": [
+    {
+      "kind": "standing",
+      "job_id": "eb254d21-dd79-4c3e-a375-880efcf2247e",
+      "guide": {
+        "id": "standing-front-v1",
+        "label": "Standing — arms relaxed",
+        "width": 768,
+        "height": 1152,
+        "points": [
+          [
+            384,
+            160
+          ],
+          [
+            384,
+            280
+          ],
+          [
+            315,
+            290
+          ],
+          [
+            275,
+            450
+          ],
+          [
+            270,
+            620
+          ],
+          [
+            453,
+            290
+          ],
+          [
+            493,
+            450
+          ],
+          [
+            500,
+            620
+          ],
+          [
+            350,
+            590
+          ],
+          [
+            345,
+            810
+          ],
+          [
+            340,
+            1080
+          ],
+          [
+            418,
+            590
+          ],
+          [
+            423,
+            810
+          ],
+          [
+            428,
+            1080
+          ],
+          [
+            363,
+            153
+          ],
+          [
+            405,
+            153
+          ],
+          [
+            346,
+            171
+          ],
+          [
+            422,
+            171
+          ]
+        ],
+        "sha256": "9b3182da3fbfbd96759968880c4feb69aeb0723b882681a317d8b5afff8e86d2",
+        "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+      },
+      "transparent": false,
+      "candidates": [
+        {
+          "asset_id": "0423debd-de36-4a20-85de-bf2017377dbc",
+          "sha256": "4f8e5cacb12fb584143822e888bdbe7634f0dbc387f3ca7def5fc6da9ca5e351",
+          "seed": 2665563845,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "standing-0.png",
+          "approval": "candidate",
+          "manual_visible_legs": 2,
+          "manual_visible_boots": 2,
+          "manual_visible_hands": 2,
+          "runtime": {
+            "seconds": "95.89",
+            "host_available_at_start_bytes": "6949199872",
+            "peak_allocated_bytes": "9967721472",
+            "pose_control_strength": "0.8",
+            "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+            "pose_guide_renderer_sha256": "96d63aaed78d5bd09390a3719628eba538e69766fb3fcb4d6bc6a8a95222570c"
+          }
+        },
+        {
+          "asset_id": "69b41e12-d1b5-4167-a098-78b74fbfe8c7",
+          "sha256": "13a2784c79e8e57df91cc538f2221e345fc7d035890a5ba87654e67bc84f649f",
+          "seed": 1536735156,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "standing-1.png",
+          "approval": "candidate",
+          "manual_visible_legs": 2,
+          "manual_visible_boots": 2,
+          "manual_visible_hands": 2,
+          "runtime": {
+            "seconds": "95.89",
+            "host_available_at_start_bytes": "6949199872",
+            "peak_allocated_bytes": "9967721472",
+            "pose_control_strength": "0.8",
+            "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+            "pose_guide_renderer_sha256": "96d63aaed78d5bd09390a3719628eba538e69766fb3fcb4d6bc6a8a95222570c"
+          }
+        }
+      ],
+      "character_adapter": null,
+      "style_adapter": null
+    },
+    {
+      "kind": "walking",
+      "job_id": "a3ada4a7-4d18-40b5-9073-4a44e4184699",
+      "guide": {
+        "id": "walking-three-quarter-v1",
+        "label": "Walking — three-quarter view",
+        "width": 768,
+        "height": 1152,
+        "points": [
+          [
+            360,
+            170
+          ],
+          [
+            375,
+            285
+          ],
+          [
+            320,
+            300
+          ],
+          [
+            290,
+            455
+          ],
+          [
+            275,
+            640
+          ],
+          [
+            435,
+            300
+          ],
+          [
+            465,
+            455
+          ],
+          [
+            485,
+            635
+          ],
+          [
+            355,
+            590
+          ],
+          [
+            310,
+            790
+          ],
+          [
+            245,
+            1080
+          ],
+          [
+            415,
+            590
+          ],
+          [
+            455,
+            800
+          ],
+          [
+            530,
+            1010
+          ],
+          [
+            345,
+            165
+          ],
+          [
+            375,
+            165
+          ],
+          [
+            330,
+            180
+          ],
+          [
+            397,
+            180
+          ]
+        ],
+        "sha256": "afb4c6dec9f58778af85f6be3d93808248e550f2f8a86df663fa6b2159ba5080",
+        "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+      },
+      "transparent": true,
+      "candidates": [
+        {
+          "asset_id": "01f1fb8d-87ec-43c1-986d-7a1ba7be70ea",
+          "sha256": "1a0c01ffe5e6595a323925401d520b2f1faf2cef1cb62b2449890cc717f3ff87",
+          "seed": 2270619846,
+          "size": [
+            597,
+            1077
+          ],
+          "thumbnail": "walking-0.png",
+          "approval": "candidate",
+          "manual_visible_legs": 2,
+          "manual_visible_boots": 2,
+          "manual_visible_hands": 2,
+          "runtime": {
+            "seconds": "82.25",
+            "host_available_at_start_bytes": "9863692288",
+            "peak_allocated_bytes": "9984285696",
+            "pose_control_strength": "0.8",
+            "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+            "pose_guide_renderer_sha256": "96d63aaed78d5bd09390a3719628eba538e69766fb3fcb4d6bc6a8a95222570c"
+          }
+        },
+        {
+          "asset_id": "cce6bc43-ed8f-4325-b363-f844ffecd9a8",
+          "sha256": "78b04541d400a886df3cca5d4ede33678d1f96d8cb44aa38d7c89ac65e3abcb7",
+          "seed": 505099119,
+          "size": [
+            702,
+            1106
+          ],
+          "thumbnail": "walking-1.png",
+          "approval": "candidate",
+          "manual_visible_legs": 2,
+          "manual_visible_boots": 2,
+          "manual_visible_hands": 2,
+          "runtime": {
+            "seconds": "82.25",
+            "host_available_at_start_bytes": "9863692288",
+            "peak_allocated_bytes": "9984285696",
+            "pose_control_strength": "0.8",
+            "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+            "pose_guide_renderer_sha256": "96d63aaed78d5bd09390a3719628eba538e69766fb3fcb4d6bc6a8a95222570c"
+          }
+        }
+      ],
+      "character_adapter": {
+        "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+        "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+        "strength": 0.6
+      },
+      "style_adapter": {
+        "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+        "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+        "strength": 0.4
+      }
+    }
+  ],
+  "resource_failures": [
+    {
+      "job_id": "e155be7c-c1ee-4e92-b721-94f1d12610e3",
+      "guide": "standing-front-v1",
+      "error_code": "host_memory_busy",
+      "output_count": 0
+    }
+  ],
+  "prerelease_walking": {
+    "job_id": "0394b4ba-df34-4e4b-8e07-90ae5c376123",
+    "guide": {
+      "id": "walking-three-quarter-v1",
+      "label": "Walking — three-quarter view",
+      "width": 768,
+      "height": 1152,
+      "points": [
+        [
+          360,
+          170
+        ],
+        [
+          375,
+          285
+        ],
+        [
+          320,
+          300
+        ],
+        [
+          280,
+          460
+        ],
+        [
+          250,
+          600
+        ],
+        [
+          435,
+          300
+        ],
+        [
+          465,
+          430
+        ],
+        [
+          510,
+          520
+        ],
+        [
+          355,
+          590
+        ],
+        [
+          310,
+          790
+        ],
+        [
+          245,
+          1080
+        ],
+        [
+          415,
+          590
+        ],
+        [
+          455,
+          800
+        ],
+        [
+          530,
+          1010
+        ],
+        [
+          345,
+          165
+        ],
+        [
+          375,
+          165
+        ],
+        [
+          330,
+          180
+        ],
+        [
+          397,
+          180
+        ]
+      ],
+      "sha256": "9831c4f7fed2c1fd7c5e977d7d6c6841a6e77b85947fdd75b7ac28a0371e99fe",
+      "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+    },
+    "candidates": [
+      {
+        "asset_id": "1ab9d0f9-29ba-40d7-8224-c497e42c8864",
+        "sha256": "a84efc88e75c78e2b1504cb9b03d1a56e8e7d1961fa5707441f42a65a4e1388c",
+        "seed": 4066582076,
+        "thumbnail": "prerelease-walking-0.png",
+        "manual_anatomy": "extra arm and hand; boot/cuff fragments",
+        "approval": "candidate"
+      },
+      {
+        "asset_id": "a54f618e-9195-426f-b252-0fbf958f9072",
+        "sha256": "16f91480b8eb38a143e59274f12ec154aa5cf20413ab9aed4ed2a06bae735930",
+        "seed": 3420447427,
+        "thumbnail": "prerelease-walking-1.png",
+        "manual_anatomy": "two visible arms and legs; fine details unqualified",
+        "approval": "candidate"
+      }
+    ],
+    "seconds": "81.688",
+    "peak_allocated_bytes": "9984285696"
+  },
+  "browser": {
+    "desktop": {
+      "inapplicable": 71,
+      "incomplete": 0,
+      "passes": 17,
+      "violations": 0
+    },
+    "mobile": {
+      "inapplicable": 71,
+      "incomplete": 0,
+      "passes": 17,
+      "violations": 0
+    },
+    "mobile_widths": [
+      390,
+      390
+    ]
+  },
+  "model": {
+    "base_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+    "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460",
+    "pose_control_repo": "xocialize/refcontrol-FLUX.2-klein-4B-pose-lora",
+    "pose_control_revision": "b2b0edf2622f2abd980bf868441149d71b3eb7b0",
+    "pose_control_weights_sha256": "f9880f9070576ff1603c0988ed2afc9957deb0d7dd7c52cf15decbd4087f1339"
+  }
+}

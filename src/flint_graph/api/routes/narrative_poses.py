@@ -51,7 +51,9 @@ class PoseStyleInput(BaseModel):
 class PoseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     look_id: UUID
-    pose_guide: Literal["seated-front-v1"] | None = None
+    pose_guide: (
+        Literal["seated-front-v1", "standing-front-v1", "walking-three-quarter-v1"] | None
+    ) = None
     style_adapter: PoseStyleInput | None = None
     character_adapter: PoseStyleInput | None = None
     additional_references: list[PoseReferenceInput] = Field(default_factory=list, max_length=1)
@@ -278,7 +280,7 @@ async def list_pose_endpoint(
         .order_by(NarrativeImageJob.created_at.desc(), NarrativeImageJob.id.desc())
         .limit(30)
     )
-    from flint_graph.narrative.pose_guides import body_guide
+    from flint_graph.narrative.pose_guides import available_body_guides
 
     return {
         "jobs": [await pose_response(session, job) for job in jobs],
@@ -291,7 +293,7 @@ async def list_pose_endpoint(
             "model_id": MODEL_ID,
             "max_references": settings.narrative_pose_max_references,
             "max_adapters": settings.narrative_pose_max_adapters,
-            "body_guides": [body_guide("seated-front-v1")]
+            "body_guides": available_body_guides()
             if settings.narrative_pose_guides_enabled
             and settings.narrative_pose_control_manifest_sha256
             and settings.narrative_pose_max_references == 2

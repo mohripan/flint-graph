@@ -623,12 +623,14 @@ off the generated change. See [ADR 0054](../adr/0054-region-repairs-for-pose-can
 and the [qualification report](../reports/2026-11-02-pose-region-repairs.md).
 
 
-### Seated body guidance (ADR 0055)
+### Body guidance (ADR 0055)
 
 The creator's one-leg example reproduces before background removal. Character
 and project-style versions do not specify a complete body pose. The optional
 **Body guide** in Poses supplies both hip/knee/ankle chains and separate wrists.
-Select **Seated — both feet on the floor** and inspect the preview. The pose text
+Select **Seated — both feet on the floor**, **Standing — arms relaxed** or
+**Walking — three-quarter view**, and inspect the preview. Each selection fills
+an editable context description. The pose text
 adds context; the guide sets body geometry. It replaces the additional character
 view, while the approved look and optional trained character/style versions remain
 available. History and an active job disclose their actual frozen guide.
@@ -650,7 +652,8 @@ request identities, prompts and protocols 1–5 remain valid. Keep the installed
 weights/pins available while admitted jobs finish, even after disabling admission.
 
 `POST /characters/{character}/looks/pose-jobs` adds optional
-`pose_guide: "seated-front-v1"`; omit it for the existing behavior. The sidecar
+`pose_guide: "seated-front-v1"`, `"standing-front-v1"` or
+`"walking-three-quarter-v1"`; omit it for the existing behavior. The sidecar
 freezes the guide description/hash and control-model manifest. One guide and one
 extra view cannot be combined. The registered worker verifies the base, public
 control pin, approved source and any private versions before model execution.
@@ -668,7 +671,9 @@ use their existing area-preservation path and retain guided-source attribution;
 they do not rerun the pose adapter.
 
 Compare hands, limb continuity, costume details, linework and lighting separately.
-A guide can still produce malformed fingers or costume drift. The first shipped
-guide is a front seated pose; it is not a general pose editor, learned anatomy
-validator or promise that every output has correct anatomy. See the
-[delivery report](../reports/2026-11-02-seated-pose-guidance.md).
+A guide can still produce malformed fingers or costume drift. The presets cover
+front seated, front standing and three-quarter walking. They
+are not a general pose editor, learned anatomy validator or promise that every
+output has correct anatomy. See the
+[seated report](../reports/2026-11-02-seated-pose-guidance.md) and the
+[standing/walking report](../reports/2026-11-02-standing-and-walking-guides.md).

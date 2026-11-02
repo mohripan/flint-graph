@@ -1,4 +1,4 @@
-"""Versioned structural guide and public model identity for seated poses."""
+"""Versioned structural guides and their public model identity."""
 
 from copy import deepcopy
 from hashlib import sha256
@@ -39,10 +39,85 @@ GUIDE = {
 }
 
 
+GUIDES = {
+    "seated-front-v1": GUIDE,
+    "standing-front-v1": {
+        "id": "standing-front-v1",
+        "label": "Standing — arms relaxed",
+        "width": 768,
+        "height": 1152,
+        "points": [
+            [384, 160],
+            [384, 280],
+            [315, 290],
+            [275, 450],
+            [270, 620],
+            [453, 290],
+            [493, 450],
+            [500, 620],
+            [350, 590],
+            [345, 810],
+            [340, 1080],
+            [418, 590],
+            [423, 810],
+            [428, 1080],
+            [363, 153],
+            [405, 153],
+            [346, 171],
+            [422, 171],
+        ],
+    },
+    "walking-three-quarter-v1": {
+        "id": "walking-three-quarter-v1",
+        "label": "Walking — three-quarter view",
+        "width": 768,
+        "height": 1152,
+        "points": [
+            [360, 170],
+            [375, 285],
+            [320, 300],
+            [290, 455],
+            [275, 640],
+            [435, 300],
+            [465, 455],
+            [485, 635],
+            [355, 590],
+            [310, 790],
+            [245, 1080],
+            [415, 590],
+            [455, 800],
+            [530, 1010],
+            [345, 165],
+            [375, 165],
+            [330, 180],
+            [397, 180],
+        ],
+    },
+}
+SUGGESTED_POSES = {
+    "seated-front-v1": "sitting on a chair, both feet on the floor, hands resting on thighs",
+    "standing-front-v1": (
+        "standing facing forward, arms relaxed at the sides, both feet on the floor"
+    ),
+    "walking-three-quarter-v1": (
+        "walking slowly, three-quarter view, both arms relaxed down, "
+        "one foot forward and the other trailing"
+    ),
+}
+
+
 def body_guide(identifier: str) -> dict[str, Any]:
-    if identifier != GUIDE["id"]:
+    if identifier not in GUIDES:
         raise ValueError("invalid_pose_guide")
-    return deepcopy(GUIDE)
+    return deepcopy(GUIDES[identifier])
+
+
+def available_body_guides() -> list[dict[str, Any]]:
+    # Form suggestions are editable metadata, outside the frozen model condition.
+    return [
+        {**body_guide(identifier), "suggested_pose": SUGGESTED_POSES[identifier]}
+        for identifier in GUIDES
+    ]
 
 
 def guide_sha256(guide: dict[str, Any]) -> str:

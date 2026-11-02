@@ -38,3 +38,13 @@ show both legs/boots; record all outputs, appearance/style limits and actual mem
 Qualify the UI, full Python/PostgreSQL/frontend/Godot gates and live Studio rollout.
 
 Measured outcomes and limits: [delivery report](../reports/2026-11-02-seated-pose-guidance.md).
+
+## Standing and walking presets
+
+The same protocol and qualified public adapter also accept `standing-front-v1`
+and `walking-three-quarter-v1`. Each has immutable, complete COCO-18 geometry,
+independent of the unchanged seated guide. Capabilities advertise editable pose
+context separately from frozen guide data; selecting a guide fills that context.
+This extends the preset catalog without a migration, new prompt, runtime bump or
+model change. Deploy the API and child together, since older children reject the
+new identifiers. [Qualification](../reports/2026-11-02-standing-and-walking-guides.md).

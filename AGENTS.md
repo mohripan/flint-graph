@@ -608,3 +608,13 @@ The reported missing leg reproduces before cutout, and is a negative regression
 fixture, never a training positive. A guide is not an anatomy/appearance guarantee;
 review hands, limbs and costume details. See
 `docs/reports/2026-11-02-seated-pose-guidance.md` for exact evidence and commands.
+
+Body guidance also offers `standing-front-v1` and `walking-three-quarter-v1`
+under ADR 0055, using the same pinned model, protocol 6 and fixed 0.8 recipe.
+Capabilities carry editable pose suggestions outside frozen guide data. Keep all
+released guide coordinates immutable, including the original seated hash. Deploy
+API and pose child together; older children reject the new IDs. There is no new
+migration, prompt or game runtime pin. Read
+`docs/reports/2026-11-02-standing-and-walking-guides.md` for real output review and
+verification. Properly composite RGBA images before judging cutout edges: hidden
+RGB bleed at alpha zero can look striped in raw image-tool previews.

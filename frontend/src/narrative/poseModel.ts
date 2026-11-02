@@ -5,7 +5,7 @@ export type PoseView = "front" | "side" | "back" | "detail";
 export interface PoseReference {asset_id:string;sha256:string;view:string;name:string}
 export interface AdditionalPoseView {asset:NarrativeImage;view:PoseView;confirmed:boolean}
 export interface PoseAdapter {id:string;name:string;strength:number;weights_sha256:string;kind?:"project_style"|"character_look"}
-export interface BodyGuide {id:string;label:string;width:number;height:number;points:number[][];sha256?:string;control_manifest_sha256?:string}
+export interface BodyGuide {id:string;label:string;width:number;height:number;points:number[][];suggested_pose?:string;sha256?:string;control_manifest_sha256?:string}
 export interface PoseJob {
   pose_guide?:BodyGuide|null;
   repair?:{source_asset_id:string;source_sha256:string;box:number[];source_box:number[]|null;width:number;height:number;instruction:string}|null;
@@ -19,7 +19,7 @@ export interface PoseJob {
 export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;max_adapters?:number;styles?:boolean;character_training?:boolean;repairs?:boolean;body_guides?:BodyGuide[]} }
 export const POSE_PRESETS = ["standing, arms relaxed", "sitting on a chair, hands in lap", "walking, three-quarter view", "back view, looking over shoulder"];
 export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string, extra?:AdditionalPoseView, selected?:{style:StyleJob;strength:number}, character?:{style:StyleJob;strength:number},guide?:string) {
-  if(guide&&(guide!=="seated-front-v1"||extra))throw new Error("Choose a body guide or an additional character view, one at a time.");
+  if(guide&&(!["seated-front-v1","standing-front-v1","walking-three-quarter-v1"].includes(guide)||extra))throw new Error("Choose a body guide or an additional character view, one at a time.");
   const pose=instruction.replace(/\s+/g," ").trim();
   if (!look || look.asset.status!=="approved") throw new Error("Choose an approved reviewed look first.");
   if (!pose || pose.length>300 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(pose)) throw new Error("Describe the pose in 1–300 characters.");

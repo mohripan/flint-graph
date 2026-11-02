@@ -76,7 +76,11 @@ legs/boots/hands, in **70.907 seconds**, peak **9,984,285,696 bytes**. All candi
 remain unapproved, with manual review unknown. This is a scoped visual check,
 not a calibrated anatomy classifier or statistical quality comparison.
 
-The transparent output retains the existing cutout fringe and chair irregularities.
+Correction after alpha-composite inspection: the earlier raw RGBA preview showed
+hidden RGB bleed under fully transparent pixels. Compositing the stored PNG on
+white and dark backgrounds shows no striped fringe. Chair irregularities remain;
+the output pixels and cutout implementation are unchanged. See the
+[composite evidence](standing-walking-guides-2026-11-02/alpha-composites.png).
 Fine fingers, costume trim, face proportions, linework and lighting can still vary.
 This fixes an explicit geometry-conditioning gap; it does not prove all seated
 images or other poses correct. Back views, arbitrary pose editing, multi-character

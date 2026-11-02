@@ -46,7 +46,10 @@ def validate_guide(guide):
         raise ValueError("invalid_guide")
     if type(guide["width"]) is not int or type(guide["height"]) is not int:
         raise ValueError("invalid_guide")
-    if guide["id"] != "seated-front-v1" or (guide["width"], guide["height"]) != (768, 1152):
+    if guide["id"] not in ("seated-front-v1", "standing-front-v1", "walking-three-quarter-v1") or (
+        guide["width"],
+        guide["height"],
+    ) != (768, 1152):
         raise ValueError("invalid_guide")
     if type(guide["label"]) is not str or not 1 <= len(guide["label"]) <= 80:
         raise ValueError("invalid_guide")

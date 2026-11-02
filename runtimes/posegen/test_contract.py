@@ -181,6 +181,34 @@ class PoseContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_request(json.dumps({**value, "control": changed}).encode())
 
+    def test_standing_and_walking_guides_use_the_same_closed_protocol(self):
+        value = self.request(schema_version=6)
+        value.pop("reference_sha256")
+        value.update(
+            reference_sha256s=["a" * 64],
+            adapters=[],
+            control={
+                "manifest_sha256": "c" * 64,
+                "weights_sha256": "d" * 64,
+                "guide_sha256": "e" * 64,
+                "guide": {
+                    "id": "standing-front-v1",
+                    "label": "Standing",
+                    "width": 768,
+                    "height": 1152,
+                    "points": [[100, 100]] * 18,
+                },
+            },
+        )
+        for name in ["standing-front-v1", "walking-three-quarter-v1"]:
+            value["control"]["guide"]["id"] = name
+            self.assertEqual(
+                parse_request(json.dumps(value).encode())["control"]["guide"]["id"], name
+            )
+        value["control"]["guide"]["id"] = "unknown-guide"
+        with self.assertRaises(ValueError):
+            parse_request(json.dumps(value).encode())
+
 
 if __name__ == "__main__":
     unittest.main()
