@@ -1,0 +1,523 @@
+{
+  "model": {
+    "repo": "xocialize/refcontrol-FLUX.2-klein-4B-pose-lora",
+    "revision": "b2b0edf2622f2abd980bf868441149d71b3eb7b0",
+    "manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460",
+    "weights_sha256": "f9880f9070576ff1603c0988ed2afc9957deb0d7dd7c52cf15decbd4087f1339",
+    "declared_license": "apache-2.0"
+  },
+  "runs": [
+    {
+      "kind": "pre-release stacked",
+      "job_id": "8c8f22d9-c8d4-429a-abab-0ab91e5ffa6f",
+      "guide": {
+        "id": "seated-front-v1",
+        "label": "Seated — both feet on the floor",
+        "width": 768,
+        "height": 1152,
+        "points": [
+          [
+            384,
+            185
+          ],
+          [
+            384,
+            290
+          ],
+          [
+            320,
+            300
+          ],
+          [
+            300,
+            430
+          ],
+          [
+            355,
+            545
+          ],
+          [
+            448,
+            300
+          ],
+          [
+            468,
+            430
+          ],
+          [
+            410,
+            545
+          ],
+          [
+            340,
+            565
+          ],
+          [
+            260,
+            650
+          ],
+          [
+            270,
+            1070
+          ],
+          [
+            428,
+            565
+          ],
+          [
+            480,
+            650
+          ],
+          [
+            500,
+            1070
+          ],
+          [
+            365,
+            177
+          ],
+          [
+            401,
+            177
+          ],
+          [
+            348,
+            192
+          ],
+          [
+            420,
+            192
+          ]
+        ],
+        "sha256": "ba2b381cc83593a4073b1f0b8dd1b7018a73b54b71e3f10dab908a8118eb27d8",
+        "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+      },
+      "candidates": [
+        {
+          "asset_id": "544a5969-f729-4040-b6f0-0cb1b6fb5d04",
+          "sha256": "7235f9b87576b116785165d45b49837920bb6061f1e5372d0a30b17638e53b6c",
+          "seed": 2530480924,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "guide-live-0.png",
+          "manual_legs_visible": 2,
+          "manual_hands_visible": "uncertain detail",
+          "approval": "candidate",
+          "strength": "1.0 (pre-release)",
+          "seconds": "84.234",
+          "peak_allocated_bytes": "9984285696",
+          "pose_child_sha256": "ccbbed2734246798bce9201047115a7852516c8e919f555f7dc40b9b43749d3b",
+          "guide_renderer_sha256": "f354717959c28c66dd44a28e8d11934ab777208ef6b866ebe8629d36c59e6bf1"
+        },
+        {
+          "asset_id": "09959506-3b2f-4c1c-9f98-94d019487b26",
+          "sha256": "f33198164c1e1432e65c8b9d27de819bf8aa900de9d8a90beec5fa7b987c8c55",
+          "seed": 3787352880,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "guide-live-1.png",
+          "manual_legs_visible": 2,
+          "manual_hands_visible": "uncertain detail",
+          "approval": "candidate",
+          "strength": "1.0 (pre-release)",
+          "seconds": "84.234",
+          "peak_allocated_bytes": "9984285696",
+          "pose_child_sha256": "ccbbed2734246798bce9201047115a7852516c8e919f555f7dc40b9b43749d3b",
+          "guide_renderer_sha256": "f354717959c28c66dd44a28e8d11934ab777208ef6b866ebe8629d36c59e6bf1"
+        }
+      ],
+      "character_adapter": {
+        "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+        "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+        "strength": 0.6
+      },
+      "style_adapter": {
+        "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+        "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+        "strength": 0.4
+      }
+    },
+    {
+      "kind": "final default",
+      "job_id": "d9119348-e7dd-4d9b-b533-5b5ef18d74a0",
+      "guide": {
+        "id": "seated-front-v1",
+        "label": "Seated — both feet on the floor",
+        "width": 768,
+        "height": 1152,
+        "points": [
+          [
+            384,
+            185
+          ],
+          [
+            384,
+            290
+          ],
+          [
+            320,
+            300
+          ],
+          [
+            300,
+            430
+          ],
+          [
+            310,
+            600
+          ],
+          [
+            448,
+            300
+          ],
+          [
+            468,
+            430
+          ],
+          [
+            460,
+            600
+          ],
+          [
+            340,
+            565
+          ],
+          [
+            260,
+            650
+          ],
+          [
+            270,
+            1070
+          ],
+          [
+            428,
+            565
+          ],
+          [
+            480,
+            650
+          ],
+          [
+            500,
+            1070
+          ],
+          [
+            365,
+            177
+          ],
+          [
+            401,
+            177
+          ],
+          [
+            348,
+            192
+          ],
+          [
+            420,
+            192
+          ]
+        ],
+        "sha256": "665c6b7508ec44ab3a132fa5d514a20f16264ce9cd15486c9697d4bc7ebecf0a",
+        "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+      },
+      "candidates": [
+        {
+          "asset_id": "9c16a188-3d10-4f8f-addc-cd490226fafd",
+          "sha256": "c81feff5191200b28a945dbfc8b3003c7504dc06c93d9b3bb6d4ca3c59e355cc",
+          "seed": 1956413019,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "guide-final-0.png",
+          "manual_legs_visible": 2,
+          "manual_hands_visible": 2,
+          "approval": "candidate",
+          "strength": "0.8",
+          "seconds": "80.0",
+          "peak_allocated_bytes": "9967721472",
+          "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+          "guide_renderer_sha256": "942c3845918c60060f3bef5cf2f1b2e4b1533b3bee42fb0706f9cf10d62cec01"
+        },
+        {
+          "asset_id": "986ceeb4-a49f-44f5-91fc-0b454d7fb3db",
+          "sha256": "bf41a4305599ae3ea52e2357ab7fe034bbb374f09981aa4a0dfdf46e922b31e6",
+          "seed": 1650846580,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "guide-final-1.png",
+          "manual_legs_visible": 2,
+          "manual_hands_visible": 2,
+          "approval": "candidate",
+          "strength": "0.8",
+          "seconds": "80.0",
+          "peak_allocated_bytes": "9967721472",
+          "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+          "guide_renderer_sha256": "942c3845918c60060f3bef5cf2f1b2e4b1533b3bee42fb0706f9cf10d62cec01"
+        }
+      ],
+      "character_adapter": null,
+      "style_adapter": null
+    },
+    {
+      "kind": "final alpha",
+      "job_id": "4afd36f8-aa66-4785-9373-2e23bf47f678",
+      "guide": {
+        "id": "seated-front-v1",
+        "label": "Seated — both feet on the floor",
+        "width": 768,
+        "height": 1152,
+        "points": [
+          [
+            384,
+            185
+          ],
+          [
+            384,
+            290
+          ],
+          [
+            320,
+            300
+          ],
+          [
+            300,
+            430
+          ],
+          [
+            310,
+            600
+          ],
+          [
+            448,
+            300
+          ],
+          [
+            468,
+            430
+          ],
+          [
+            460,
+            600
+          ],
+          [
+            340,
+            565
+          ],
+          [
+            260,
+            650
+          ],
+          [
+            270,
+            1070
+          ],
+          [
+            428,
+            565
+          ],
+          [
+            480,
+            650
+          ],
+          [
+            500,
+            1070
+          ],
+          [
+            365,
+            177
+          ],
+          [
+            401,
+            177
+          ],
+          [
+            348,
+            192
+          ],
+          [
+            420,
+            192
+          ]
+        ],
+        "sha256": "665c6b7508ec44ab3a132fa5d514a20f16264ce9cd15486c9697d4bc7ebecf0a",
+        "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+      },
+      "candidates": [
+        {
+          "asset_id": "523adaab-0416-4c55-8a61-6926655ef765",
+          "sha256": "7a051ac85a0d8eef4a6faab817bc2eab346895d1c85fa898c829eeb7931aa1ec",
+          "seed": 4264802444,
+          "size": [
+            695,
+            1100
+          ],
+          "thumbnail": "guide-alpha-0.png",
+          "manual_legs_visible": 2,
+          "manual_hands_visible": 2,
+          "approval": "candidate",
+          "strength": "0.8",
+          "seconds": "73.907",
+          "peak_allocated_bytes": "9967574016",
+          "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+          "guide_renderer_sha256": "942c3845918c60060f3bef5cf2f1b2e4b1533b3bee42fb0706f9cf10d62cec01"
+        }
+      ],
+      "character_adapter": null,
+      "style_adapter": null
+    },
+    {
+      "kind": "final stacked",
+      "job_id": "2c186e4a-6f95-48ee-b383-3a5f186826bd",
+      "guide": {
+        "id": "seated-front-v1",
+        "label": "Seated — both feet on the floor",
+        "width": 768,
+        "height": 1152,
+        "points": [
+          [
+            384,
+            185
+          ],
+          [
+            384,
+            290
+          ],
+          [
+            320,
+            300
+          ],
+          [
+            300,
+            430
+          ],
+          [
+            310,
+            600
+          ],
+          [
+            448,
+            300
+          ],
+          [
+            468,
+            430
+          ],
+          [
+            460,
+            600
+          ],
+          [
+            340,
+            565
+          ],
+          [
+            260,
+            650
+          ],
+          [
+            270,
+            1070
+          ],
+          [
+            428,
+            565
+          ],
+          [
+            480,
+            650
+          ],
+          [
+            500,
+            1070
+          ],
+          [
+            365,
+            177
+          ],
+          [
+            401,
+            177
+          ],
+          [
+            348,
+            192
+          ],
+          [
+            420,
+            192
+          ]
+        ],
+        "sha256": "665c6b7508ec44ab3a132fa5d514a20f16264ce9cd15486c9697d4bc7ebecf0a",
+        "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+      },
+      "candidates": [
+        {
+          "asset_id": "7642142d-aa07-4c43-9cd0-7271acd9cb9b",
+          "sha256": "1ddcced0bb866ca5e9c731c6538b40d6cae2c022c378ef8c8ca8999e85000fcd",
+          "seed": 1990462755,
+          "size": [
+            768,
+            1152
+          ],
+          "thumbnail": "guide-stacked-0.png",
+          "manual_legs_visible": 2,
+          "manual_hands_visible": 2,
+          "approval": "candidate",
+          "strength": "0.8",
+          "seconds": "70.907",
+          "peak_allocated_bytes": "9984285696",
+          "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+          "guide_renderer_sha256": "942c3845918c60060f3bef5cf2f1b2e4b1533b3bee42fb0706f9cf10d62cec01"
+        }
+      ],
+      "character_adapter": {
+        "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+        "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+        "strength": 0.6
+      },
+      "style_adapter": {
+        "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+        "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+        "strength": 0.4
+      }
+    }
+  ],
+  "manual_review_scope": "visible limb continuity/count only; not an automatic detector or identity/style calibration",
+  "prototype": {
+    "seeds": [
+      1610368469,
+      187
+    ],
+    "thumbnails": [
+      "prototype-0.png",
+      "prototype-1.png"
+    ],
+    "extra_hand_in_first": true,
+    "exit_after_render": "diagnostic script source-hash path error; actual production runs above completed normally"
+  },
+  "browser": {
+    "desktop": {
+      "scoped_axe_violations": 0,
+      "scoped_axe_incomplete": 0
+    },
+    "mobile": {
+      "scoped_axe_violations": 0,
+      "scoped_axe_incomplete": 0
+    },
+    "mobile_widths": [
+      390,
+      390
+    ],
+    "queued_job_persisted_across_navigation": true
+  }
+}

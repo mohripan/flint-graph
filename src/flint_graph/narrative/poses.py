@@ -10,7 +10,12 @@ POSE_WIDTH, POSE_HEIGHT = 768, 1152
 
 
 def pose_request(
-    appearance: str, pose: str, *, policy: ContentPolicy, additional_view: str | None = None
+    appearance: str,
+    pose: str,
+    *,
+    policy: ContentPolicy,
+    additional_view: str | None = None,
+    body_guide: bool = False,
 ) -> ImageRequest:
     appearance, pose = clean_appearance(appearance), clean_appearance(pose)
     if not pose or len(pose) > 300:
@@ -20,7 +25,11 @@ def pose_request(
     if additional_view is not None and additional_view not in {"front", "side", "back", "detail"}:
         raise ValueError("Unknown approved view")
     prompt = (
-        render("narrative.image.pose_views", appearance=appearance, pose=pose, view=additional_view)
+        render("narrative.image.pose_control", appearance=appearance, pose=pose)
+        if body_guide
+        else render(
+            "narrative.image.pose_views", appearance=appearance, pose=pose, view=additional_view
+        )
         if additional_view
         else render("narrative.image.pose", appearance=appearance, pose=pose)
     )

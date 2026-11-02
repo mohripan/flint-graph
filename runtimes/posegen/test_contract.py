@@ -152,6 +152,35 @@ class PoseContractTests(unittest.TestCase):
         value["cutout"] = {"model": str(Path.cwd() / "cutout.onnx"), "sha256": "c" * 64}
         self.assertEqual(parse_request(json.dumps(value).encode())["repair"]["width"], 512)
 
+    def test_pose_guide_protocol_closes_roles_and_coordinates(self):
+        value = self.request(schema_version=6)
+        value.pop("reference_sha256")
+        value["reference_sha256s"] = ["a" * 64]
+        value["adapters"] = []
+        value["control"] = {
+            "manifest_sha256": "c" * 64,
+            "weights_sha256": "d" * 64,
+            "guide_sha256": "e" * 64,
+            "guide": {
+                "id": "seated-front-v1",
+                "label": "Seated",
+                "width": 768,
+                "height": 1152,
+                "points": [[100, 100]] * 18,
+            },
+        }
+        self.assertEqual(parse_request(json.dumps(value).encode())["schema_version"], 6)
+        for changed in [
+            dict(value["control"], path="untrusted.safetensors"),
+            dict(value["control"], guide=dict(value["control"]["guide"], width=768.0)),
+            dict(
+                value["control"], guide=dict(value["control"]["guide"], points=[[True, 100]] * 18)
+            ),
+            dict(value["control"], guide=dict(value["control"]["guide"], points=[[800, 100]] * 18)),
+        ]:
+            with self.assertRaises(ValueError):
+                parse_request(json.dumps({**value, "control": changed}).encode())
+
 
 if __name__ == "__main__":
     unittest.main()

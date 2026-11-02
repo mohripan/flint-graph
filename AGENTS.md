@@ -591,3 +591,20 @@ available. This adds no automatic detector, calibration, model/recipe change or
 Godot bump. Read `docs/reports/2026-11-02-anatomy-training-review.md` for real
 Temporal, browser, PostgreSQL and deployment qualification. Use synthetic fixtures;
 do not infer anatomy verdicts from old notes or annotate creator projects.
+
+
+[ADR 0055](docs/adr/0055-skeletal-guidance-for-seated-poses.md), migration 0042,
+adds opt-in **Body guide → Seated — both feet on the floor** to Poses. A pinned
+Apache-2.0 RefControl 4B pose adapter supplies geometry independently of the
+approved character look and optional private style/character versions. Protocol 6
+renders a frozen COCO-18 skeleton first and the approved appearance reference
+second. Guides replace the supplemental character view and require max references 2.
+`NARRATIVE_POSE_GUIDES_ENABLED` defaults off; set its control model directory and
+manifest pin and deploy API/worker together. Keep `seated-front-v1` coordinates,
+0.8 adapter strength, COCO-18 renderer and appearance preprocessing immutable;
+version the guide/recipe when changing them. No weights ship in games; generated
+notices carry the source credit, including local repairs of guided outputs.
+The reported missing leg reproduces before cutout, and is a negative regression
+fixture, never a training positive. A guide is not an anatomy/appearance guarantee;
+review hands, limbs and costume details. See
+`docs/reports/2026-11-02-seated-pose-guidance.md` for exact evidence and commands.

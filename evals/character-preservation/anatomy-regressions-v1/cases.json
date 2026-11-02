@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "scope": "manual negative anatomy regression; not a training dataset or detector",
+  "cases": [
+    {
+      "id": "seated-missing-leg",
+      "image": "seated-missing-leg.png",
+      "sha256": "71bfed4e08cbd02963e1c776b44a1eb7803cb6cac43199812e01aef0f9faaa9f",
+      "source": "synthetic QA model output",
+      "model": "black-forest-labs/FLUX.2-klein-4B",
+      "seed": 1610368469,
+      "prompt_sha256": "16fd21a3886afaaf1410f7ededdb7710dace213c72ab2e4d62b75027159ae3b6",
+      "anatomy": "flawed",
+      "defects": [
+        "missing visible second leg",
+        "unfinished leg contour"
+      ],
+      "allowed_for_training": false,
+      "label_basis": "creator report and before-cutout fixed-input replay"
+    }
+  ]
+}

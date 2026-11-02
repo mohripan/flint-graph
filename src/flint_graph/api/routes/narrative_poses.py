@@ -51,6 +51,7 @@ class PoseStyleInput(BaseModel):
 class PoseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     look_id: UUID
+    pose_guide: Literal["seated-front-v1"] | None = None
     style_adapter: PoseStyleInput | None = None
     character_adapter: PoseStyleInput | None = None
     additional_references: list[PoseReferenceInput] = Field(default_factory=list, max_length=1)
@@ -155,8 +156,12 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
         if character_binding
         else None
     )
-    from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseRepair
+    from flint_graph.infrastructure.db.narrative_pose_models import (
+        NarrativePoseGuide,
+        NarrativePoseRepair,
+    )
 
+    guided = await session.get(NarrativePoseGuide, job.id)
     repair = await session.get(NarrativePoseRepair, job.id)
     if repair:
         source = await session.get(NarrativeAsset, repair.source_asset_id)
@@ -171,6 +176,13 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
             {**frozen[0], "view": "approved_look"},
         ]
     return {
+        "pose_guide": {
+            **guided.guide,
+            "sha256": guided.guide_sha256,
+            "control_manifest_sha256": guided.control_manifest_sha256,
+        }
+        if guided
+        else None,
         "repair": {
             "source_asset_id": str(repair.source_asset_id),
             "source_sha256": repair.source_sha256,
@@ -232,6 +244,8 @@ async def create_pose_endpoint(
             actor=actor,
             available=settings.narrative_pose_generation_enabled,
             styles_enabled=settings.narrative_style_training_enabled,
+            guides_enabled=settings.narrative_pose_guides_enabled,
+            control_manifest_sha256=settings.narrative_pose_control_manifest_sha256,
             max_references=settings.narrative_pose_max_references,
             max_adapters=settings.narrative_pose_max_adapters,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
@@ -264,6 +278,8 @@ async def list_pose_endpoint(
         .order_by(NarrativeImageJob.created_at.desc(), NarrativeImageJob.id.desc())
         .limit(30)
     )
+    from flint_graph.narrative.pose_guides import body_guide
+
     return {
         "jobs": [await pose_response(session, job) for job in jobs],
         "capabilities": {
@@ -275,6 +291,11 @@ async def list_pose_endpoint(
             "model_id": MODEL_ID,
             "max_references": settings.narrative_pose_max_references,
             "max_adapters": settings.narrative_pose_max_adapters,
+            "body_guides": [body_guide("seated-front-v1")]
+            if settings.narrative_pose_guides_enabled
+            and settings.narrative_pose_control_manifest_sha256
+            and settings.narrative_pose_max_references == 2
+            else [],
             "repairs": settings.narrative_pose_repairs_enabled
             and settings.narrative_pose_max_references == 2,
             "styles": settings.narrative_style_training_enabled,

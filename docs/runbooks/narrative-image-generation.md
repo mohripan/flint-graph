@@ -621,3 +621,54 @@ This is reference editing and compositing, rather than mask-native diffusion.
 The model does not guarantee a corrected hand, and an insufficient region can cut
 off the generated change. See [ADR 0054](../adr/0054-region-repairs-for-pose-candidates.md)
 and the [qualification report](../reports/2026-11-02-pose-region-repairs.md).
+
+
+### Seated body guidance (ADR 0055)
+
+The creator's one-leg example reproduces before background removal. Character
+and project-style versions do not specify a complete body pose. The optional
+**Body guide** in Poses supplies both hip/knee/ankle chains and separate wrists.
+Select **Seated — both feet on the floor** and inspect the preview. The pose text
+adds context; the guide sets body geometry. It replaces the additional character
+view, while the approved look and optional trained character/style versions remain
+available. History and an active job disclose their actual frozen guide.
+
+Apply migration 0042, deploy API/pose worker together and prepare the public pose
+adapter separately from private project training:
+
+```powershell
+uv run python tools/narrative/fetch_model.py --repo xocialize/refcontrol-FLUX.2-klein-4B-pose-lora --revision b2b0edf2622f2abd980bf868441149d71b3eb7b0 --license apache-2.0 --file refcontrol-pose-klein-4b.safetensors --file README.md --out notes/models/refcontrol-pose-klein-4b
+```
+
+Set `FLINT_GRAPH_NARRATIVE_POSE_GUIDES_ENABLED=true`,
+`FLINT_GRAPH_NARRATIVE_POSE_MAX_REFERENCES=2`,
+`FLINT_GRAPH_NARRATIVE_POSE_CONTROL_MODEL_DIR` to that directory and
+`FLINT_GRAPH_NARRATIVE_POSE_CONTROL_MANIFEST_SHA256` to the downloaded manifest
+hash (`8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460`).
+The default is disabled and older APIs hide the selector. Existing no-guide jobs,
+request identities, prompts and protocols 1–5 remain valid. Keep the installed
+weights/pins available while admitted jobs finish, even after disabling admission.
+
+`POST /characters/{character}/looks/pose-jobs` adds optional
+`pose_guide: "seated-front-v1"`; omit it for the existing behavior. The sidecar
+freezes the guide description/hash and control-model manifest. One guide and one
+extra view cannot be combined. The registered worker verifies the base, public
+control pin, approved source and any private versions before model execution.
+Protocol 6 uses closed fields, fixed private weight filenames and integer COCO-18
+coordinates. The guide's version includes the fixed 0.8 pose strength, body raster
+and 512-square appearance preprocessing. Change the version for recipe changes;
+never silently alter a deployed guide. This public pose adapter is independent
+of the private character/style strength budget and is not a training version.
+
+The dedicated `narrative.image.pose_control` prompt was authored in Langfuse and
+is part of the complete offline lock. Existing prompt entries/bundles and typed
+image policy remain intact. The weights remain private to the operator runtime;
+only image pixels and source/license credit enter game packages. Local repairs
+use their existing area-preservation path and retain guided-source attribution;
+they do not rerun the pose adapter.
+
+Compare hands, limb continuity, costume details, linework and lighting separately.
+A guide can still produce malformed fingers or costume drift. The first shipped
+guide is a front seated pose; it is not a general pose editor, learned anatomy
+validator or promise that every output has correct anatomy. See the
+[delivery report](../reports/2026-11-02-seated-pose-guidance.md).

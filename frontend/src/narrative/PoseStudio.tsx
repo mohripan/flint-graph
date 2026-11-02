@@ -14,6 +14,7 @@ import { POSE_PRESETS, poseBody, poseStatus } from "./poseModel";
 import type { PoseHistory, PoseJob, PoseView, PoseReference } from "./poseModel";
 import { bindAsset, expressionId, setSprite } from "./stageModel";
 import type { StoryDraft } from "./types";
+import {PoseGuidePreview} from "./PoseGuidePreview";
 import {PoseRepairDialog} from "./PoseRepairDialog";
 import "./poses.css";
 
@@ -24,6 +25,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
   const looks=useCharacterLooks(tenantId,projectId,id);
   const library=useApprovedAssets(tenantId,projectId);
   const [extraId,setExtraId]=useState("");
+  const [guideId,setGuideId]=useState("");
   const [view,setView]=useState<PoseView>("detail");
   const [confirmed,setConfirmed]=useState(false);
   useEffect(()=>{setExtraId("");setConfirmed(false);},[looks.look?.id]);
@@ -64,6 +66,8 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
     const timer=window.setInterval(()=>void load(),activeKey?1500:10000);
     return ()=>{window.clearInterval(timer);controller.abort();};
   },[tenantId,projectId,id,revision,activeKey]);
+  const guide=history?.capabilities.body_guides?.find(item=>item.id===guideId);
+  const shownGuide=active?(active.pose_guide??undefined):guide;
   const jobs=history?.jobs??[];
   const results=jobs.flatMap(item=>item.job.assets.map(asset=>({asset,item})));
   const reviews=useLookReviewFlags(tenantId,projectId,results.map(item=>item.asset));
@@ -72,10 +76,10 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
     if(busy||readOnly||active||failed||strengthConflict||!history?.capabilities.available)return;
     setBusy(true);setNotice(null);
     try{
-      const signature=JSON.stringify([looks.look?.id,pose.trim(),count,transparent,extra?.id,view,confirmed,style?.id,strength,character?.id,characterStrength]);
+      const signature=JSON.stringify([looks.look?.id,pose.trim(),count,transparent,extra?.id,view,confirmed,style?.id,strength,character?.id,characterStrength,guide?.id]);
       if(pending.current?.signature!==signature)pending.current={signature,key:crypto.randomUUID()};
       const next=await api.createPoseJob(tenantId,projectId,id,poseBody(looks.look,pose,count,
-        transparent&&history.capabilities.transparent,pending.current.key,extra?{asset:extra,view,confirmed}:undefined,style?{style,strength}:undefined,character?{style:character,strength:characterStrength}:undefined));
+        transparent&&history.capabilities.transparent,pending.current.key,extra?{asset:extra,view,confirmed}:undefined,style?{style,strength}:undefined,character?{style:character,strength:characterStrength}:undefined,guide?.id));
       pending.current=null;
       setHistory(current=>current?{...current,jobs:[next,...current.jobs]}:current);refresh();
     }catch(error){setNotice(error instanceof Error?error.message:"Could not start this pose.");}
@@ -121,7 +125,14 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
     <div className="pose-workbench">
       {looks.look&&<LookImage tenantId={tenantId} projectId={projectId} asset={looks.look.asset} label={`Primary look and rendering: ${looks.look.name}`} />}
       <fieldset disabled={readOnly||busy||!!active||!looks.look||looks.look.asset.status!=="approved"||!history?.capabilities.available||failed}>
-        {(history?.capabilities.max_references??1)>1&&<div className="pose-ref-picker">
+        {!!history?.capabilities.body_guides?.length&&<div className="pose-ref-picker">
+          <Field label="Body guide"><select value={shownGuide?.id??""} onChange={event=>{
+            setGuideId(event.target.value);
+            if(event.target.value){setExtraId("");setConfirmed(false);setPose("sitting on a chair, both feet on the floor, hands resting on thighs");}
+          }}><option value="">Let the model choose the body position</option>{history.capabilities.body_guides.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+          {shownGuide&&<><PoseGuidePreview guide={shownGuide}/><p className="studio-hint">The guide sets the body position; the reviewed look supplies the character and outfit. Check hands, limbs and clothing in each result.</p></>}
+        </div>}
+        {!guide&&(history?.capabilities.max_references??1)>1&&<div className="pose-ref-picker">
           <Field label="Additional approved view"><select value={extraId} onChange={event=>{setExtraId(event.target.value);setConfirmed(false);}}>
             <option value="">None — use the primary image</option>{choices.map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}
           </select></Field>
@@ -162,6 +173,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
     </div>
     {active&&<div className="studio-job" role="status"><progress max={active.job.count} value={active.job.progress} aria-label="Pose generation progress" /><span>{poseStatus(active.job)}</span>
       {!readOnly&&!active.job.cancel_requested&&<button type="button" className="studio-link" disabled={busy} onClick={()=>void cancel(active)}>Cancel</button>}</div>}
+    {active?.pose_guide&&<p className="studio-hint" role="status">Body guide used: {active.pose_guide.label}. Its geometry stays fixed while this job runs.</p>}
     {active?.references&&<p className="studio-hint" role="status">This job uses {active.references.map(reference=>`${reference.view}: ${reference.name}`).join("; ")}. Its references stay fixed while it runs.</p>}
     {jobs[0]&&!isActive(jobs[0].job)&&<p role="status">{poseStatus(jobs[0].job)}</p>}
     {notice&&<p role="status" className="studio-notice">{notice}</p>}
@@ -170,6 +182,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
       const inUse=Object.values(story.characters[id]?.sprites??{}).some(key=>story.assets[key]?.sha256===asset.sha256);
       return <article className="pose-result" key={asset.id}>
         <LookImage tenantId={tenantId} projectId={projectId} asset={asset} label={item.pose} />
+        {item.pose_guide&&<PoseGuidePreview guide={item.pose_guide} frozen/>}
         {!!item.references?.length&&<details><summary>References used</summary><div className="pose-source-list">
           {item.references.map(reference=><FrozenReference key={reference.asset_id} tenantId={tenantId} projectId={projectId} reference={reference} />)}
         </div></details>}

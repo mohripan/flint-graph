@@ -22,6 +22,7 @@ from flint_graph.infrastructure.db.narrative_character_adapter_models import (
 )
 from flint_graph.infrastructure.db.narrative_look_models import NarrativeLookJob
 from flint_graph.infrastructure.db.narrative_pose_models import (
+    NarrativePoseGuide,
     NarrativePoseJob,
     NarrativePoseReference,
     NarrativePoseRepair,
@@ -38,6 +39,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
 )
 from flint_graph.infrastructure.narrative_posegen import (
     PoseGenerationRequest,
+    PoseGuideCondition,
     PoseRepairRegion,
     PoseStyleAdapter,
 )
@@ -199,6 +201,23 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     repair_plan.width,
                     repair_plan.height,
                 )
+            guided = await session.get(NarrativePoseGuide, work.job_id)
+            condition = None
+            if guided:
+                from flint_graph.narrative.pose_guides import guide_sha256
+
+                control_model = getattr(generator, "control_model", None)
+                if (
+                    not control_model
+                    or control_model.manifest_sha256 != guided.control_manifest_sha256
+                    or guided.guide_sha256 != guide_sha256(guided.guide)
+                    or additional
+                    or repair_region
+                ):
+                    raise ImageGenerationError("pose_control_unavailable")
+                condition = PoseGuideCondition(
+                    guided.guide, guided.guide_sha256, guided.control_manifest_sha256
+                )
         return PoseGenerationRequest(
             **{item.name: getattr(work.request, item.name) for item in fields(work.request)},
             reference=data,
@@ -206,6 +225,7 @@ class NarrativePoseActivities(NarrativeImageActivities):
             style_adapter=adapters.get("style"),
             character_adapter=adapters.get("character"),
             repair=repair_region,
+            pose_guide=condition,
         )
 
     async def _generate(
@@ -276,6 +296,41 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     "repair_source_box": canonical_json(repair_plan.source_box).decode(),
                     "look_source_sha256": look.snapshot["source_sha256"],
                 }
+            from flint_graph.narrative.pose_guides import (
+                CONTROL_REPO,
+                CONTROL_REVISION,
+                CONTROL_SHA256,
+            )
+
+            guided = await session.get(NarrativePoseGuide, job_id)
+            control_meta = {}
+            if guided:
+                control_meta = {
+                    "pose_control_repo": CONTROL_REPO,
+                    "pose_control_revision": CONTROL_REVISION,
+                    "pose_control_weights_sha256": CONTROL_SHA256,
+                    "pose_control_manifest_sha256": guided.control_manifest_sha256,
+                    "pose_guide_id": guided.guide["id"],
+                    "pose_guide_sha256": guided.guide_sha256,
+                    "pose_control_applied": "true",
+                }
+            elif repair_plan and source:
+                carried = source.provenance.get("runtime", {})
+                control_meta = {
+                    k: v
+                    for k, v in carried.items()
+                    if k
+                    in {
+                        "pose_control_repo",
+                        "pose_control_revision",
+                        "pose_control_weights_sha256",
+                        "pose_control_manifest_sha256",
+                        "pose_guide_id",
+                        "pose_guide_sha256",
+                    }
+                }
+                if control_meta:
+                    control_meta["pose_control_applied"] = "false"
             binding = await session.get(NarrativePoseStyle, job_id)
             target = (
                 await details(session, style)
@@ -319,5 +374,6 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     else look.snapshot["source_sha256"],
                     "model_manifest_sha256": plan.model_manifest_sha256,
                     **repair_meta,
+                    **control_meta,
                 },
             )

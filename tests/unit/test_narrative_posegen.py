@@ -228,3 +228,45 @@ Path('out/0.png').write_bytes(data[:33]+chunk(b'IDAT',zlib.compress(raw))+data[-
         result = await generator(tmp_path, code).generate(pending, on_progress=update)
         assert len(result.images) == 1 and result.images[0].data != source
         assert len(result.runtime["repair_preserved_sha256"]) == 64
+
+
+async def test_body_guidance_transfers_a_pinned_public_adapter_and_frozen_skeleton(tmp_path):
+    from dataclasses import replace
+    from hashlib import sha256
+
+    from flint_graph.infrastructure.narrative_posegen import PoseControlModel, PoseGuideCondition
+    from flint_graph.narrative.pose_guides import body_guide, guide_sha256
+
+    guide = body_guide("seated-front-v1")
+    path = tmp_path / "pose.safetensors"
+    path.write_bytes(b"verified test weights")
+    model = PoseControlModel(
+        path, sha256(path.read_bytes()).hexdigest(), path.stat().st_size, "c" * 64
+    )
+    code = FAKE.replace(
+        "r=json.load(sys.stdin)",
+        "r=json.load(sys.stdin)\nimport hashlib\nassert r['schema_version']==6\nassert r['control']['guide']['points'][10]!=r['control']['guide']['points'][13]\nassert hashlib.sha256(Path('pose-control.safetensors').read_bytes()).hexdigest()==r['control']['weights_sha256']\nassert r['reference_sha256s'] and len(r['reference_sha256s'])==1",  # noqa: E501
+    )
+    engine = generator(tmp_path, code)
+    engine.control_model = model
+    condition = PoseGuideCondition(guide, guide_sha256(guide), "c" * 64)
+
+    async def update(_done):
+        pass
+
+    result = await engine.generate(replace(request(), pose_guide=condition), on_progress=update)
+    assert len(result.images) == 1
+    path.write_bytes(b"changed test weights")
+    with pytest.raises(ImageGenerationError, match="pose_control_unavailable"):
+        await engine.generate(replace(request(), pose_guide=condition), on_progress=update)
+
+
+def test_control_model_manifest_requires_an_object_before_loading_weights(tmp_path):
+    from hashlib import sha256
+
+    from flint_graph.infrastructure.narrative_posegen import verify_control_model
+
+    manifest = tmp_path / "flintgraph-download.json"
+    manifest.write_bytes(b"[]")
+    with pytest.raises(ValueError, match="pose_control_unavailable"):
+        verify_control_model(tmp_path, sha256(manifest.read_bytes()).hexdigest())

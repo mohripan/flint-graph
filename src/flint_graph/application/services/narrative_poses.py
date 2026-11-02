@@ -19,6 +19,7 @@ from flint_graph.application.services.narrative_looks import (
 from flint_graph.domain.errors import DomainError
 from flint_graph.infrastructure.db.models import NarrativeImageJob
 from flint_graph.infrastructure.db.narrative_pose_models import (
+    NarrativePoseGuide,
     NarrativePoseJob,
     NarrativePoseReference,
 )
@@ -54,6 +55,9 @@ async def queue_pose_job(
     character_adapter: dict[str, Any] | None = None,
     max_adapters: int = 1,
     repair: dict[str, Any] | None = None,
+    pose_guide: str | None = None,
+    guides_enabled: bool = False,
+    control_manifest_sha256: str | None = None,
 ) -> NarrativeImageJob:
     try:
         pose = clean_appearance(pose)
@@ -74,6 +78,7 @@ async def queue_pose_job(
         canonical_json(
             {
                 "operation": "pose",
+                **({"pose_guide": pose_guide} if pose_guide else {}),
                 **(
                     {
                         "style_adapter": {
@@ -114,6 +119,20 @@ async def queue_pose_job(
     )
     if prior:
         return prior
+    if pose_guide and (not guides_enabled or not control_manifest_sha256 or max_references < 2):
+        raise DomainError(
+            503,
+            "Body guides unavailable",
+            "Pose body guides are not enabled on this server.",
+            "pose-guide-unavailable",
+        )
+    if pose_guide and (extras or repair):
+        raise DomainError(
+            422,
+            "Invalid references",
+            "Use a body guide or an additional character view, one at a time.",
+            "invalid-pose-guide",
+        )
     if not available or not model_manifest_sha256 or (transparent and not cutout_manifest_sha256):
         raise DomainError(
             503,
@@ -159,6 +178,7 @@ async def queue_pose_job(
             repair["instruction"] if repair else pose,
             policy=policy,
             additional_view="detail" if repair else extras[0]["view"] if extras else None,
+            body_guide=bool(pose_guide),
         )
         triggers = [item.trigger for item in (character, style) if item]
         return (
@@ -270,6 +290,21 @@ async def queue_pose_job(
                 name=asset.name,
                 sha256=asset.sha256,
                 size_bytes=asset.size_bytes,
+            )
+        )
+    if pose_guide:
+        from flint_graph.narrative.pose_guides import body_guide, guide_sha256
+
+        guide = body_guide(pose_guide)
+        assert control_manifest_sha256
+        session.add(
+            NarrativePoseGuide(
+                job_id=job.id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                guide=guide,
+                guide_sha256=guide_sha256(guide),
+                control_manifest_sha256=control_manifest_sha256,
             )
         )
     await session.flush()

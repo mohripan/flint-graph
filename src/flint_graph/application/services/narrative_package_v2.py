@@ -150,7 +150,15 @@ def compose_notices(text: str, bound: list[Bound]) -> str:
         return own
     groups: dict[tuple[str, str, str], list[Bound]] = {}
     for item in bound:
-        identity = (item.asset.license, _source(item.asset), (item.asset.notice or "").strip())
+        from flint_graph.narrative.pose_guides import control_notice
+
+        notice = (item.asset.notice or "").strip()
+        guide_credit = (
+            control_notice(item.asset.provenance) if item.asset.source == "generated" else ""
+        )
+        if guide_credit:
+            notice = "\n".join(part for part in [notice, guide_credit] if part)
+        identity = (item.asset.license, _source(item.asset), notice)
         groups.setdefault(identity, []).append(item)
     blocks = []
     for (license, source, notice), items in sorted(groups.items(), key=lambda pair: pair[1][0].key):

@@ -73,6 +73,23 @@ def run(request):
             or digest(weight) != adapter["sha256"]
         ):
             raise PoseFailure("reference_unavailable")
+    control = request.get("control")
+    if control:
+        import hashlib
+
+        control_weights = Path("pose-control.safetensors")
+        if (
+            control_weights.is_symlink()
+            or not control_weights.is_file()
+            or control_weights.stat().st_size > 100 * 1024**2
+            or digest(control_weights) != control["weights_sha256"]
+        ):
+            raise PoseFailure("reference_unavailable")
+        encoded = json.dumps(
+            control["guide"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        if hashlib.sha256(encoded.encode()).hexdigest() != control["guide_sha256"]:
+            raise PoseFailure("reference_unavailable")
     import psutil
     import pynvml
 
@@ -118,6 +135,11 @@ def run(request):
             if index:
                 source.thumbnail((512, 512), Image.Resampling.LANCZOS)
             sources.append(source)
+    if control:
+        from guidance import render_guide
+
+        sources[0].thumbnail((512, 512), Image.Resampling.LANCZOS)
+        sources.insert(0, render_guide(control["guide"]))
     segmenter, helper, helper_path = None, None, None
     if request["cutout"]:
         helper, helper_path = cutout_module()
@@ -165,10 +187,18 @@ def run(request):
             adapter_name="character" if adapter["role"] == "character" else "project_style",
             local_files_only=True,
         )
-    if adapters:
+    if control:
+        pipe.load_lora_weights(
+            ".",
+            weight_name="pose-control.safetensors",
+            adapter_name="pose_control",
+            local_files_only=True,
+        )
+    if adapters or control:
         pipe.set_adapters(
-            ["character" if a["role"] == "character" else "project_style" for a in adapters],
-            adapter_weights=[a["strength"] for a in adapters],
+            (["pose_control"] if control else [])
+            + ["character" if a["role"] == "character" else "project_style" for a in adapters],
+            adapter_weights=([0.8] if control else []) + [a["strength"] for a in adapters],
         )
     pipe.to("cuda")
     pipe.vae.enable_tiling()
@@ -246,6 +276,15 @@ def run(request):
     for adapter in adapters:
         for key in ("sha256", "strength", "dataset_sha256", "recipe_sha256"):
             runtime[adapter["role"] + "_adapter_" + key] = str(adapter[key])
+    if control:
+        runtime.update(
+            pose_control_strength="0.8",
+            pose_control_manifest_sha256=control["manifest_sha256"],
+            pose_control_weights_sha256=control["weights_sha256"],
+            pose_guide_sha256=control["guide_sha256"],
+            pose_guide_id=control["guide"]["id"],
+            pose_guide_renderer_sha256=digest(Path(__file__).with_name("guidance.py")),
+        )
     if repair:
         runtime.update(
             operation="pose_repair",

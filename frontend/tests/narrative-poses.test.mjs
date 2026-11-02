@@ -55,3 +55,13 @@ test('a pose can select this exact trained character look alongside a project st
  ])assert.throws(()=>model.poseBody(look,'walking',1,false,'key',undefined,chosen,identity));
  assert.equal(model.poseBody(look,'walking',1,false,'key',undefined,undefined,{style:character,strength:0.6}).character_adapter.id,'character');
 });
+
+
+test('an explicit seated guide replaces the extra appearance view without changing legacy bodies',()=>{
+ const look={id:'look',asset:{status:'approved'}};
+ assert.equal(model.poseBody(look,'sitting',1,false,'key',undefined,undefined,undefined,'seated-front-v1').pose_guide,'seated-front-v1');
+ assert.equal('pose_guide' in model.poseBody(look,'sitting',1,false,'key'),false);
+ assert.throws(()=>model.poseBody(look,'sitting',1,false,'key',undefined,undefined,undefined,'unknown-guide'));
+ const extra={asset:{id:'side',sha256:'other',status:'approved',media_type:'image/png'},view:'side',confirmed:true};
+ assert.throws(()=>model.poseBody(look,'sitting',1,false,'key',extra,undefined,undefined,'seated-front-v1'));
+});

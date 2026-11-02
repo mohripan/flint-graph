@@ -1,5 +1,6 @@
 """Immutable model/reference plans extending the existing image-job ledger."""
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -133,3 +134,25 @@ class NarrativePoseRepair(Base):
     source_box: Mapped[list[int] | None] = mapped_column(JSON)
     box: Mapped[list[int]] = mapped_column(JSON)
     instruction: Mapped[str] = mapped_column(String(300))
+
+
+class NarrativePoseGuide(Base):
+    __tablename__ = "narrative_pose_guides"
+    __table_args__ = (
+        ForeignKeyConstraint(["job_id"], ["narrative_pose_jobs.job_id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["job_id", "project_id", "tenant_id"],
+            [
+                "narrative_image_jobs.id",
+                "narrative_image_jobs.project_id",
+                "narrative_image_jobs.tenant_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+    )
+    job_id: Mapped[UUID] = mapped_column(primary_key=True)
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    guide: Mapped[dict[str, Any]] = mapped_column(JSON)
+    guide_sha256: Mapped[str] = mapped_column(String(64))
+    control_manifest_sha256: Mapped[str] = mapped_column(String(64))

@@ -45,6 +45,7 @@ class PoseGenerationRequest(GenerationRequest):
     style_adapter: PoseStyleAdapter | None = None
     character_adapter: PoseStyleAdapter | None = None
     repair: "PoseRepairRegion | None" = None
+    pose_guide: "PoseGuideCondition | None" = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,49 @@ class PoseRepairRegion:
     source_box: tuple[int, ...] | None
     width: int
     height: int
+
+
+@dataclass(frozen=True)
+class PoseControlModel:
+    path: Path
+    sha256: str
+    size_bytes: int
+    manifest_sha256: str
+
+
+@dataclass(frozen=True)
+class PoseGuideCondition:
+    guide: dict[str, Any]
+    sha256: str
+    model_manifest_sha256: str
+
+
+def verify_control_model(root: Path, expected: str) -> PoseControlModel:
+    from flint_graph.narrative.pose_guides import (
+        CONTROL_REPO,
+        CONTROL_REVISION,
+        CONTROL_SHA256,
+        CONTROL_SIZE,
+        CONTROL_WEIGHT,
+    )
+
+    manifest = root / "flintgraph-download.json"
+    if manifest.is_symlink() or manifest.stat().st_size > 1024**2:
+        raise ValueError("pose_control_unavailable")
+    raw = manifest.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise ValueError("pose_control_unavailable")
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("pose_control_unavailable")
+    if data.get("repo") != CONTROL_REPO or data.get("revision") != CONTROL_REVISION:
+        raise ValueError("pose_control_unavailable")
+    path = root / CONTROL_WEIGHT
+    if path.is_symlink() or path.stat().st_size != CONTROL_SIZE:
+        raise ValueError("pose_control_unavailable")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != CONTROL_SHA256:
+        raise ValueError("pose_control_unavailable")
+    return PoseControlModel(path.resolve(), CONTROL_SHA256, CONTROL_SIZE, expected)
 
 
 def verify_pose_model(root: Path, manifest: str, runtime: Path) -> ModelIdentity:
@@ -103,11 +147,13 @@ class LocalPoseGenerator:
         cutout_manifest_sha256: str | None,
         deadline_seconds: float,
         cutout: CutoutModel | None = None,
+        control_model: PoseControlModel | None = None,
     ) -> None:
         self.python, self.script, self.model_dir = python, script, model_dir
         self.model, self.model_manifest_sha256 = model, model_manifest_sha256
         self.cutout, self.cutout_manifest_sha256 = cutout, cutout_manifest_sha256
         self.deadline = deadline_seconds
+        self.control_model = control_model
 
     @staticmethod
     def _png(path: Path, limit: int) -> tuple[bytes, int, int]:
@@ -255,6 +301,36 @@ class LocalPoseGenerator:
                     raise ValueError
             except (ValueError, struct.error):
                 raise ImageGenerationError("bad_request") from None
+        control_weights = None
+        if request.pose_guide:
+            from flint_graph.narrative.pose_guides import body_guide, guide_sha256
+
+            condition = request.pose_guide
+            if (
+                request.repair
+                or request.additional_references
+                or condition.guide != body_guide(str(condition.guide.get("id")))
+                or guide_sha256(condition.guide) != condition.sha256
+            ):
+                raise ImageGenerationError("bad_request")
+            selected_model = self.control_model
+            if (
+                not selected_model
+                or selected_model.manifest_sha256 != condition.model_manifest_sha256
+            ):
+                raise ImageGenerationError("pose_control_unavailable")
+            try:
+                if (
+                    selected_model.path.is_symlink()
+                    or selected_model.path.stat().st_size != selected_model.size_bytes
+                    or selected_model.size_bytes > 100 * 1024**2
+                ):
+                    raise ValueError
+                control_weights = selected_model.path.read_bytes()
+                if hashlib.sha256(control_weights).hexdigest() != selected_model.sha256:
+                    raise ValueError
+            except (OSError, ValueError):
+                raise ImageGenerationError("pose_control_unavailable") from None
         with tempfile.TemporaryDirectory(prefix="flint-pose-") as directory:
             work = Path(directory)
             for index, data in enumerate(references):
@@ -341,6 +417,21 @@ class LocalPoseGenerator:
                     "height": repair.height,
                     "source_box": list(repair.source_box) if repair.source_box else None,
                     "feather": 8,
+                }
+            if request.pose_guide:
+                assert self.control_model and control_weights
+                (work / "pose-control.safetensors").write_bytes(control_weights)
+                control_weights = None
+                payload["schema_version"] = 6
+                payload.pop("reference_sha256", None)
+                payload.pop("style", None)
+                payload["reference_sha256s"] = [hashlib.sha256(request.reference).hexdigest()]
+                payload["adapters"] = adapters
+                payload["control"] = {
+                    "manifest_sha256": request.pose_guide.model_manifest_sha256,
+                    "weights_sha256": self.control_model.sha256,
+                    "guide_sha256": request.pose_guide.sha256,
+                    "guide": request.pose_guide.guide,
                 }
             env = {
                 key: value

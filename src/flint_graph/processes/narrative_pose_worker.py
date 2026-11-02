@@ -23,7 +23,11 @@ from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_image_temporal import TemporalImageDispatcher
 from flint_graph.infrastructure.narrative_imagegen import runtime_paths, verify_cutout_model
-from flint_graph.infrastructure.narrative_posegen import LocalPoseGenerator, verify_pose_model
+from flint_graph.infrastructure.narrative_posegen import (
+    LocalPoseGenerator,
+    verify_control_model,
+    verify_pose_model,
+)
 from flint_graph.infrastructure.object_store import create_s3_client
 from flint_graph.worker.activities.narrative_pose import NarrativePoseActivities
 from flint_graph.workflows.narrative_image import NarrativeImageJobWorkflow
@@ -80,6 +84,23 @@ def build_generator(configured: Settings) -> LocalPoseGenerator:
         )
     except (OSError, ValueError):
         raise SystemExit("The pose or cutout model does not match its pinned manifest.") from None
+    if configured.narrative_pose_guides_enabled and not (
+        configured.narrative_pose_control_model_dir
+        and configured.narrative_pose_control_manifest_sha256
+    ):
+        raise SystemExit("Pose body guidance requires the pinned control model.")
+    try:
+        control_model = (
+            verify_control_model(
+                Path(configured.narrative_pose_control_model_dir),
+                configured.narrative_pose_control_manifest_sha256,
+            )
+            if configured.narrative_pose_control_model_dir
+            and configured.narrative_pose_control_manifest_sha256
+            else None
+        )
+    except (OSError, ValueError):
+        raise SystemExit("The pose control adapter does not match its pinned model.") from None
     return LocalPoseGenerator(
         python=python,
         script=script,
@@ -88,6 +109,7 @@ def build_generator(configured: Settings) -> LocalPoseGenerator:
         model_manifest_sha256=configured.narrative_pose_model_manifest_sha256,
         cutout_manifest_sha256=configured.narrative_image_cutout_manifest_sha256,
         cutout=cutout,
+        control_model=control_model,
         deadline_seconds=configured.narrative_pose_job_deadline_seconds,
     )
 

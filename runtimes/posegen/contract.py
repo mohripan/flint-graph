@@ -41,7 +41,7 @@ def parse_request(data):
             if set(request) != common | {"reference_sha256"}:
                 raise ValueError
             hashes = [request["reference_sha256"]]
-        elif version in (2, 3, 4, 5):
+        elif version in (2, 3, 4, 5, 6):
             if set(request) != common | {"reference_sha256s"} | (
                 {"style"}
                 if version == 3
@@ -49,13 +49,16 @@ def parse_request(data):
                 if version == 4
                 else {"adapters", "repair"}
                 if version == 5
+                else {"adapters", "control"}
+                if version == 6
                 else set()
             ):
                 raise ValueError
             hashes = request["reference_sha256s"]
             if (
                 type(hashes) is not list
-                or len(hashes) not in ((2,) if version in (2, 5) else (1, 2))
+                or len(hashes)
+                not in ((1,) if version == 6 else (2,) if version in (2, 5) else (1, 2))
                 or any(type(h) is not str for h in hashes)
                 or len(set(hashes)) != len(hashes)
             ):
@@ -63,13 +66,13 @@ def parse_request(data):
         else:
             raise ValueError
         adapters = [request["style"]] if version == 3 else request.get("adapters", [])
-        if version in (4, 5):
+        if version in (4, 5, 6):
             if type(adapters) is not list or len(adapters) not in (
                 (1, 2) if version == 4 else (0, 1, 2)
             ):
                 raise ValueError
             roles = [["character"], ["character", "style"]]
-            if version == 5:
+            if version in (5, 6):
                 roles += [[], ["style"]]
             if [item.get("role") if type(item) is dict else None for item in adapters] not in roles:
                 raise ValueError
@@ -79,7 +82,7 @@ def parse_request(data):
                 "strength",
                 "dataset_sha256",
                 "recipe_sha256",
-            } | ({"role"} if version in (4, 5) else set()):
+            } | ({"role"} if version in (4, 5, 6) else set()):
                 raise ValueError
             if type(style["strength"]) not in (int, float) or not 0.1 <= style["strength"] <= 1:
                 raise ValueError
@@ -88,7 +91,7 @@ def parse_request(data):
                 for k in ("sha256", "dataset_sha256", "recipe_sha256")
             ):
                 raise ValueError
-        if version in (4, 5) and (
+        if version in (4, 5, 6) and (
             sum(item["strength"] for item in adapters) > 1 + 1e-9
             or len({item["sha256"] for item in adapters}) != len(adapters)
         ):
@@ -118,6 +121,21 @@ def parse_request(data):
             or not SHA.fullmatch(cutout["sha256"])
         ):
             raise ValueError
+        if version == 6:
+            from guidance import validate_guide
+
+            control = request["control"]
+            if type(control) is not dict or set(control) != {
+                "manifest_sha256",
+                "weights_sha256",
+                "guide_sha256",
+                "guide",
+            }:
+                raise ValueError
+            for key in ["manifest_sha256", "weights_sha256", "guide_sha256"]:
+                if type(control[key]) is not str or not SHA.fullmatch(control[key]):
+                    raise ValueError
+            validate_guide(control["guide"])
         if version == 5:
             repair = request["repair"]
             if type(repair) is not dict or set(repair) != {
