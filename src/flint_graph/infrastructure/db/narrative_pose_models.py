@@ -2,7 +2,15 @@
 
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Index, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from flint_graph.infrastructure.db.base import Base
@@ -77,3 +85,51 @@ class NarrativePoseReference(Base):
     name: Mapped[str] = mapped_column(String(200))
     sha256: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int]
+
+
+class NarrativePoseRepair(Base):
+    __tablename__ = "narrative_pose_repairs"
+    __table_args__ = (
+        ForeignKeyConstraint(["job_id"], ["narrative_pose_jobs.job_id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["source_job_id"], ["narrative_pose_jobs.job_id"], ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "project_id", "tenant_id"],
+            [
+                "narrative_image_jobs.id",
+                "narrative_image_jobs.project_id",
+                "narrative_image_jobs.tenant_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_job_id", "project_id", "tenant_id"],
+            [
+                "narrative_image_jobs.id",
+                "narrative_image_jobs.project_id",
+                "narrative_image_jobs.tenant_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_asset_id", "project_id", "tenant_id"],
+            ["narrative_assets.id", "narrative_assets.project_id", "narrative_assets.tenant_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "width BETWEEN 32 AND 768 AND height BETWEEN 32 AND 1152", name="ck_pose_repair_size"
+        ),
+    )
+    job_id: Mapped[UUID] = mapped_column(primary_key=True)
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    source_asset_id: Mapped[UUID]
+    source_job_id: Mapped[UUID]
+    source_sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int]
+    width: Mapped[int]
+    height: Mapped[int]
+    source_box: Mapped[list[int] | None] = mapped_column(JSON)
+    box: Mapped[list[int]] = mapped_column(JSON)
+    instruction: Mapped[str] = mapped_column(String(300))

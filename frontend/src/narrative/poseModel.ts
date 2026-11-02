@@ -6,6 +6,7 @@ export interface PoseReference {asset_id:string;sha256:string;view:string;name:s
 export interface AdditionalPoseView {asset:NarrativeImage;view:PoseView;confirmed:boolean}
 export interface PoseAdapter {id:string;name:string;strength:number;weights_sha256:string;kind?:"project_style"|"character_look"}
 export interface PoseJob {
+  repair?:{source_asset_id:string;source_sha256:string;box:number[];source_box:number[]|null;width:number;height:number;instruction:string}|null;
   references?:PoseReference[];
   style_adapter?:PoseAdapter|null;
   character_adapter?:PoseAdapter|null;
@@ -13,7 +14,7 @@ export interface PoseJob {
   look: { id: string; name: string; asset_id: string; source_sha256: string; sha256: string };
   job: ImageJob;
 }
-export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;max_adapters?:number;styles?:boolean;character_training?:boolean} }
+export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;max_adapters?:number;styles?:boolean;character_training?:boolean;repairs?:boolean} }
 export const POSE_PRESETS = ["standing, arms relaxed", "sitting on a chair, hands in lap", "walking, three-quarter view", "back view, looking over shoulder"];
 export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string, extra?:AdditionalPoseView, selected?:{style:StyleJob;strength:number}, character?:{style:StyleJob;strength:number}) {
   const pose=instruction.replace(/\s+/g," ").trim();
@@ -40,7 +41,7 @@ export function poseStatus(job:ImageJob):string {
   if (job.status==="running") return job.progress ? `Generated ${job.progress} of ${job.count}…` : "Loading the pose model…";
   if (job.status==="completed") return `${job.assets.length} pose${job.assets.length===1?"":"s"} ready`;
   if (job.status==="cancelled") return "Cancelled.";
-  const errors:Record<string,string>={host_memory_busy:"Not enough system memory was available. Try again when other work finishes.",gpu_busy:"The GPU was busy. Try again when other work finishes.",out_of_memory:"The pose model ran out of memory. Try again when other work finishes.",prompt_too_long:"The look and pose are too long for the model. Shorten the pose or choose a shorter reviewed look.",model_pin_mismatch:"The installed model changed. Ask the operator to restore this job's model, or start a new job.",reference_unavailable:"The approved reference is unavailable. Choose another reviewed look.",cutout_failed:"No clean sprite could be cut out. Try another pose or turn off transparency."};
+  const errors:Record<string,string>={repair_preservation_failed:"The repair changed pixels outside the selected area and was rejected. Try a new repair.",host_memory_busy:"Not enough system memory was available. Try again when other work finishes.",gpu_busy:"The GPU was busy. Try again when other work finishes.",out_of_memory:"The pose model ran out of memory. Try again when other work finishes.",prompt_too_long:"The look and pose are too long for the model. Shorten the pose or choose a shorter reviewed look.",model_pin_mismatch:"The installed model changed. Ask the operator to restore this job's model, or start a new job.",reference_unavailable:"The approved reference is unavailable. Choose another reviewed look.",cutout_failed:"No clean sprite could be cut out. Try another pose or turn off transparency."};
   return errors[job.error_code??""]??"Pose generation failed. Try again.";
 }
 

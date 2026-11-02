@@ -95,18 +95,26 @@ def run(request):
     ):
         raise PoseFailure("unsupported_device")
     sources = []
+    repair = request.get("repair")
+    repair_original = None
     for index, reference in enumerate(reference_paths):
         with Image.open(reference) as original:
             if (
                 original.format != "PNG"
-                or not 64 <= min(original.size)
+                or not (32 if repair and index == 0 else 64) <= min(original.size)
                 or max(original.size) > 2560
             ):
                 raise PoseFailure("reference_unavailable")
-            rgba = original.convert("RGBA")
-            source = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert(
-                "RGB"
-            )
+            if repair and index == 0:
+                from repair import source_canvas
+
+                repair_original = original.copy()
+                source = source_canvas(repair_original, repair)
+            else:
+                rgba = original.convert("RGBA")
+                source = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert(
+                    "RGB"
+                )
             if index:
                 source.thumbnail((512, 512), Image.Resampling.LANCZOS)
             sources.append(source)
@@ -193,6 +201,15 @@ def run(request):
             except helper.CutoutError:
                 emit("progress", done=index + 1)
                 continue
+        if repair:
+            from repair import composite
+
+            if segmenter is not None:
+                full = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+                full.paste(image, (box[0], box[1]))
+                image = full
+            image = composite(repair_original, image, repair)
+            box = repair["source_box"]
         image.save(out / f"{index}.png")
         thumbnail = image.copy()
         thumbnail.thumbnail((256, 256), Image.Resampling.LANCZOS)
@@ -229,6 +246,12 @@ def run(request):
     for adapter in adapters:
         for key in ("sha256", "strength", "dataset_sha256", "recipe_sha256"):
             runtime[adapter["role"] + "_adapter_" + key] = str(adapter[key])
+    if repair:
+        runtime.update(
+            operation="pose_repair",
+            repair_box=json.dumps(repair["box"], separators=(",", ":")),
+            repair_code_sha256=digest(Path(__file__).with_name("repair.py")),
+        )
     if helper_path:
         runtime.update(cutout_code_sha256=digest(helper_path), onnxruntime=onnx_version)
     emit("result", images=images, prompt_tokens=tokens, runtime=runtime)

@@ -1,0 +1,122 @@
+{
+  "qualification": "real GPU plus independent Pillow outside-pixel comparison",
+  "model": "black-forest-labs/FLUX.2-klein-4B",
+  "model_revision": "e7b7dc27f91deacad38e78976d1f2b499d76a294",
+  "runs": [
+    {
+      "kind": "opaque",
+      "job_id": "080f3407-54e2-44f2-860a-25fbf1ffa2b4",
+      "region": [
+        425,
+        510,
+        570,
+        660
+      ],
+      "source_sha256": "51cd74d4cca76a5cffc83021f14144414099ac9bdc52fe7b7814493c590b126c",
+      "source_box": null,
+      "native_size": [
+        768,
+        1152
+      ],
+      "mode": "RGB",
+      "candidates": [
+        {
+          "asset_id": "b048d3c0-77f2-4704-9d2f-d4d14d60ff1b",
+          "sha256": "4c1f05534529000dcafbaf613fb0243e4f1e83051cb4e391b6de077e2dc22807",
+          "seed": 3013595054,
+          "status": "candidate",
+          "outside_pixels_identical": 862986,
+          "outside_nonopaque_pixels_identical": 0,
+          "changed_inside_pixels": 21160,
+          "parent_outside_sha256": "77c0e12fb1e062e73ee95d86d29c29d3adb577953bf5d1536b0c080e4b1cfe92",
+          "seconds": "95.297",
+          "peak_allocated_bytes": "9886088192",
+          "pose_child_sha256": "b8d56749625cba25f15ea79589f29511b06f9257d01e762c9004daf86f0e7da2",
+          "repair_code_sha256": "f372128f548b0fa593f60ac9d1a5f95f8eb7e958682fed82e145e7dc7c4c852b"
+        },
+        {
+          "asset_id": "2b27ca2d-8656-44a2-8088-8b78e6304b28",
+          "sha256": "823e35f6c6c9f66faf83cac47df776160dbeb72d4bc0334cac96a6888bdb888b",
+          "seed": 4202162479,
+          "status": "candidate",
+          "outside_pixels_identical": 862986,
+          "outside_nonopaque_pixels_identical": 0,
+          "changed_inside_pixels": 21156,
+          "parent_outside_sha256": "77c0e12fb1e062e73ee95d86d29c29d3adb577953bf5d1536b0c080e4b1cfe92",
+          "seconds": "95.297",
+          "peak_allocated_bytes": "9886088192",
+          "pose_child_sha256": "b8d56749625cba25f15ea79589f29511b06f9257d01e762c9004daf86f0e7da2",
+          "repair_code_sha256": "f372128f548b0fa593f60ac9d1a5f95f8eb7e958682fed82e145e7dc7c4c852b"
+        }
+      ],
+      "character_adapter": {
+        "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+        "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+        "strength": 0.6
+      },
+      "style_adapter": {
+        "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+        "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+        "strength": 0.4
+      }
+    },
+    {
+      "kind": "alpha",
+      "job_id": "ee134c83-e176-4b86-8967-cb61b5c26007",
+      "region": [
+        425,
+        510,
+        505,
+        650
+      ],
+      "source_sha256": "40ebfc33c8230e4272e7ccf777db0fdcb1f305d59101efa2179637531f4b2bb5",
+      "source_box": [
+        100,
+        23,
+        728,
+        1152
+      ],
+      "native_size": [
+        628,
+        1129
+      ],
+      "mode": "RGBA",
+      "candidates": [
+        {
+          "asset_id": "6ae772b6-ef87-4140-812a-618534a7a705",
+          "sha256": "2a582450c7d2c6e299d67a85fe5be411e2021c64cad1a153a293379c3637202f",
+          "seed": 3927656278,
+          "status": "candidate",
+          "outside_pixels_identical": 697812,
+          "outside_nonopaque_pixels_identical": 448385,
+          "changed_inside_pixels": 10697,
+          "parent_outside_sha256": "8d41df6f7bac3267156d82d97196aca395ca7c4b2e1b430f1a477ae4d3f518a5",
+          "seconds": "72.219",
+          "peak_allocated_bytes": "9886088192",
+          "pose_child_sha256": "b8d56749625cba25f15ea79589f29511b06f9257d01e762c9004daf86f0e7da2",
+          "repair_code_sha256": "f372128f548b0fa593f60ac9d1a5f95f8eb7e958682fed82e145e7dc7c4c852b"
+        }
+      ],
+      "character_adapter": {
+        "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+        "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+        "strength": 0.6
+      },
+      "style_adapter": {
+        "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+        "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+        "strength": 0.4
+      }
+    }
+  ],
+  "browser": {
+    "dialog_axe_violations": 0,
+    "dialog_axe_incomplete": 0,
+    "mobile_axe_violations": 0,
+    "mobile_axe_incomplete": 0,
+    "mobile_viewport_width": 390,
+    "mobile_document_width": 390,
+    "existing_rail_contrast_violation": true
+  },
+  "new_candidate_manual_reviews": "identity/clothes/anatomy all unknown; verified through scoped review API"
+}

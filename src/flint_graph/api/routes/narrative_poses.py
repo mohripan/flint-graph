@@ -1,6 +1,6 @@
 """Explicit pose jobs from an approved reviewed look."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -19,6 +19,7 @@ from flint_graph.api.dependencies import (
 from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
 from flint_graph.api.routes.narrative_looks import CharacterId
+from flint_graph.application.services.narrative_pose_repairs import queue_pose_repair
 from flint_graph.application.services.narrative_poses import queue_pose_job
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.infrastructure.db.models import NarrativeAsset, NarrativeImageJob
@@ -57,6 +58,42 @@ class PoseCreate(BaseModel):
     count: int = Field(default=1, ge=1, le=4)
     transparent: StrictBool = True
     idempotency_key: UUID
+
+
+class PoseRepairCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    asset_id: UUID
+    box: list[Annotated[int, Field(strict=True)]] = Field(min_length=4, max_length=4)
+    instruction: str = Field(min_length=1, max_length=300)
+    count: int = Field(default=1, ge=1, le=2, strict=True)
+    idempotency_key: UUID
+
+
+@router.post("/pose-repairs", status_code=202)
+async def create_pose_repair_endpoint(
+    project_id: UUID,
+    character_id: CharacterId,
+    payload: PoseRepairCreate,
+    tenant_id: TenantMemberDep,
+    user: CurrentUserDep,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: AuditActorDep,
+) -> dict[str, Any]:
+    job = await _persist(
+        session,
+        queue_pose_repair(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            character_id=character_id,
+            author_user_id=user.user.id,
+            actor=actor,
+            settings=settings,
+            **payload.model_dump(),
+        ),
+    )
+    return await pose_response(session, job)
 
 
 async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[str, Any]:
@@ -118,7 +155,33 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
         if character_binding
         else None
     )
+    from flint_graph.infrastructure.db.narrative_pose_models import NarrativePoseRepair
+
+    repair = await session.get(NarrativePoseRepair, job.id)
+    if repair:
+        source = await session.get(NarrativeAsset, repair.source_asset_id)
+        frozen = [
+            {
+                "asset_id": str(repair.source_asset_id),
+                "sha256": repair.source_sha256,
+                "view": "repair_source",
+                "name": source.name if source else "Original pose",
+                "size_bytes": repair.size_bytes,
+            },
+            {**frozen[0], "view": "approved_look"},
+        ]
     return {
+        "repair": {
+            "source_asset_id": str(repair.source_asset_id),
+            "source_sha256": repair.source_sha256,
+            "box": repair.box,
+            "source_box": repair.source_box,
+            "width": repair.width,
+            "height": repair.height,
+            "instruction": repair.instruction,
+        }
+        if repair
+        else None,
         "character_adapter": {
             **(await details(session, character)),
             "id": str(character.id),
@@ -212,6 +275,8 @@ async def list_pose_endpoint(
             "model_id": MODEL_ID,
             "max_references": settings.narrative_pose_max_references,
             "max_adapters": settings.narrative_pose_max_adapters,
+            "repairs": settings.narrative_pose_repairs_enabled
+            and settings.narrative_pose_max_references == 2,
             "styles": settings.narrative_style_training_enabled,
             "character_training": settings.narrative_style_training_enabled,
         },

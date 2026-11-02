@@ -53,6 +53,7 @@ async def queue_pose_job(
     styles_enabled: bool = False,
     character_adapter: dict[str, Any] | None = None,
     max_adapters: int = 1,
+    repair: dict[str, Any] | None = None,
 ) -> NarrativeImageJob:
     try:
         pose = clean_appearance(pose)
@@ -102,6 +103,8 @@ async def queue_pose_job(
             }
         )
     ).hexdigest()
+    if repair:
+        request_hash = repair["request_hash"]
     prior = await replay_job(
         session,
         tenant_id=tenant_id,
@@ -153,9 +156,9 @@ async def queue_pose_job(
     def build() -> ImageRequest:
         request = pose_request(
             caption(look),
-            pose,
+            repair["instruction"] if repair else pose,
             policy=policy,
-            additional_view=extras[0]["view"] if extras else None,
+            additional_view="detail" if repair else extras[0]["view"] if extras else None,
         )
         triggers = [item.trigger for item in (character, style) if item]
         return (

@@ -24,6 +24,7 @@ from flint_graph.infrastructure.db.narrative_look_models import NarrativeLookJob
 from flint_graph.infrastructure.db.narrative_pose_models import (
     NarrativePoseJob,
     NarrativePoseReference,
+    NarrativePoseRepair,
 )
 from flint_graph.infrastructure.db.narrative_style_models import (
     NarrativePoseStyle,
@@ -35,7 +36,11 @@ from flint_graph.infrastructure.narrative_imagegen import (
     ImageGenerationError,
     ImageGenerator,
 )
-from flint_graph.infrastructure.narrative_posegen import PoseGenerationRequest, PoseStyleAdapter
+from flint_graph.infrastructure.narrative_posegen import (
+    PoseGenerationRequest,
+    PoseRepairRegion,
+    PoseStyleAdapter,
+)
 from flint_graph.narrative.poses import MODEL_REPO, MODEL_REVISION
 from flint_graph.narrative.style_weights import MAX_ADAPTER_BYTES, validate_adapter
 from flint_graph.narrative.values import canonical_json
@@ -164,12 +169,43 @@ class NarrativePoseActivities(NarrativeImageActivities):
                 adapters[role] = PoseStyleAdapter(
                     weights, style.dataset_sha256, style.recipe_sha256, chosen.strength
                 )
+            repair_plan = await session.get(NarrativePoseRepair, work.job_id)
+            repair_region = None
+            if repair_plan:
+                target = await session.get(NarrativeAsset, repair_plan.source_asset_id)
+                original_plan = await session.get(NarrativePoseJob, repair_plan.source_job_id)
+                if (
+                    not target
+                    or target.status == "discarded"
+                    or target.tenant_id != work.tenant_id
+                    or target.project_id != work.project_id
+                    or target.job_id != repair_plan.source_job_id
+                    or target.sha256 != repair_plan.source_sha256
+                    or target.size_bytes != repair_plan.size_bytes
+                    or (target.width, target.height) != (repair_plan.width, repair_plan.height)
+                    or not original_plan
+                    or original_plan.look_id != plan.look_id
+                    or original_plan.character_id != plan.character_id
+                    or original_plan.model_manifest_sha256 != plan.model_manifest_sha256
+                ):
+                    raise ImageGenerationError("reference_unavailable")
+                additional = [data]
+                data = await self._image(
+                    work, target.id, repair_plan.size_bytes, repair_plan.source_sha256
+                )
+                repair_region = PoseRepairRegion(
+                    tuple(repair_plan.box),
+                    tuple(repair_plan.source_box) if repair_plan.source_box else None,
+                    repair_plan.width,
+                    repair_plan.height,
+                )
         return PoseGenerationRequest(
             **{item.name: getattr(work.request, item.name) for item in fields(work.request)},
             reference=data,
             additional_references=tuple(additional),
             style_adapter=adapters.get("style"),
             character_adapter=adapters.get("character"),
+            repair=repair_region,
         )
 
     async def _generate(
@@ -213,6 +249,33 @@ class NarrativePoseActivities(NarrativeImageActivities):
                         "size_bytes": source.size_bytes,
                     }
                 ]
+            repair_plan = await session.get(NarrativePoseRepair, job_id)
+            repair_meta = {}
+            if repair_plan:
+                source = await session.get(NarrativeAsset, repair_plan.source_asset_id)
+                if (
+                    not source
+                    or source.status == "discarded"
+                    or source.sha256 != repair_plan.source_sha256
+                ):
+                    raise ImageGenerationError("reference_unavailable")
+                manifest = [
+                    {
+                        "asset_id": str(repair_plan.source_asset_id),
+                        "sha256": repair_plan.source_sha256,
+                        "view": "repair_source",
+                        "size_bytes": repair_plan.size_bytes,
+                    },
+                    {**manifest[0], "view": "approved_look"},
+                ]
+                repair_meta = {
+                    "operation": "pose_repair",
+                    "repair_source_asset_id": str(repair_plan.source_asset_id),
+                    "repair_source_sha256": repair_plan.source_sha256,
+                    "repair_box": canonical_json(repair_plan.box).decode(),
+                    "repair_source_box": canonical_json(repair_plan.source_box).decode(),
+                    "look_source_sha256": look.snapshot["source_sha256"],
+                }
             binding = await session.get(NarrativePoseStyle, job_id)
             target = (
                 await details(session, style)
@@ -251,7 +314,10 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     "references_sha256": sha256(canonical_json(manifest)).hexdigest(),
                     "reference_count": str(len(manifest) or 1),
                     "look_sha256": look.snapshot["sha256"],
-                    "source_sha256": look.snapshot["source_sha256"],
+                    "source_sha256": repair_plan.source_sha256
+                    if repair_plan
+                    else look.snapshot["source_sha256"],
                     "model_manifest_sha256": plan.model_manifest_sha256,
+                    **repair_meta,
                 },
             )

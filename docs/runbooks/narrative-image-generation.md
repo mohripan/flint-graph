@@ -581,3 +581,43 @@ This is a human review and training-data guard, not automatic anatomy detection
 or repair. Unknown sources still require the existing training review/rights
 checks. See [ADR 0053](../adr/0053-manual-anatomy-review-and-training.md) and the
 [report](../reports/2026-11-02-anatomy-training-review.md).
+
+
+### Repairing one area of a pose (ADR 0054)
+
+Apply migration 0041 and deploy the API and pose worker together. After qualifying
+protocol 5, set `FLINT_GRAPH_NARRATIVE_POSE_REPAIRS_ENABLED=true` and
+`FLINT_GRAPH_NARRATIVE_POSE_MAX_REFERENCES=2`. Repairs default off; older APIs
+omit the capability and the editor hides the action. Existing pose protocols,
+request hashes, images and game runtimes stay valid.
+
+In **Characters → Poses**, choose **Repair area…** on an available completed pose.
+Candidates can be repaired before approval. Move the rectangle over a faulty hand,
+foot or other detail; drag its corner to resize, use arrows to move (Shift resizes),
+or enter Left/Top/Width/Height. Describe the correction and generate 1–2 candidates.
+The rectangle must stay inside the native image, at least 16 pixels per side and
+at most a quarter of the image. The original is unchanged. Inspect the new detail
+and patch edges before approving; the model can miss the requested correction.
+
+`POST /characters/{character}/looks/pose-repairs` accepts `asset_id`, `box`
+(left/top/right/bottom in source-native pixels), `instruction`, optional `count`
+(default 1) and `idempotency_key`. Sources must be pose images in this exact
+workspace/project/character, made with the installed model. The original reviewed
+look must remain approved. The job freezes the source SHA/size/dimensions/crop,
+rectangle, correction and original character/style adapter versions and strengths.
+Retries check the source, look and private weight pins again. An identical replay
+returns the admitted job even if the feature is subsequently disabled.
+
+The existing klein editor receives the target first and approved look second.
+It redraws a candidate canvas; deterministic compositing retains only the selected
+area, feathering eight pixels inward. Transparent sources are reconstructed on
+the original canvas for inference, then restored to their exact cropped dimensions.
+The parent independently decodes RGB/RGBA PNG pixels and refuses any outside change,
+including alpha, with `repair_preservation_failed`. Provenance records the region,
+source, actual references, inherited versions and outside-pixel digest. Output
+approval and anatomy review remain manual; previous verdicts are not copied.
+
+This is reference editing and compositing, rather than mask-native diffusion.
+The model does not guarantee a corrected hand, and an insufficient region can cut
+off the generated change. See [ADR 0054](../adr/0054-region-repairs-for-pose-candidates.md)
+and the [qualification report](../reports/2026-11-02-pose-region-repairs.md).

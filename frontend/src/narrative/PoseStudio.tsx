@@ -14,6 +14,7 @@ import { POSE_PRESETS, poseBody, poseStatus } from "./poseModel";
 import type { PoseHistory, PoseJob, PoseView, PoseReference } from "./poseModel";
 import { bindAsset, expressionId, setSprite } from "./stageModel";
 import type { StoryDraft } from "./types";
+import {PoseRepairDialog} from "./PoseRepairDialog";
 import "./poses.css";
 
 export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange, onError }: {
@@ -49,6 +50,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
   const [count,setCount]=useState(1);
   const [transparent,setTransparent]=useState(true);
   const [busy,setBusy]=useState(false);
+  const [repair,setRepair]=useState<NarrativeImage|null>(null);
   const pending=useRef<{signature:string;key:string}|null>(null);
   const active=history?.jobs.find(item=>isActive(item.job));
   const activeKey=history?.jobs.filter(item=>isActive(item.job)).map(item=>item.job.id).join(",")??"";
@@ -173,15 +175,21 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
         </div></details>}
         {item.character_adapter&&<small>Character: {item.character_adapter.name} · strength {item.character_adapter.strength}</small>}
         {item.style_adapter&&<small>Style: {item.style_adapter.name} · strength {item.style_adapter.strength}</small>}
+        {item.repair&&<small>Repair of {item.repair.source_asset_id.slice(0,8)} · {item.repair.instruction} · area {item.repair.box.join(", ")}</small>}
         <small>Look: {item.look.name} · seed {String(asset.provenance.seed??"—")}</small>
         <CandidateLookReview tenantId={tenantId} projectId={projectId} asset={asset} readOnly={readOnly} flags={reviews.flags} />
         <div className="studio-actions">
+          {history?.capabilities.repairs&&<button type="button" className="studio-secondary" disabled={readOnly||busy||!!active||!history.capabilities.available} onClick={()=>setRepair(asset)}>Repair area…</button>}
           {asset.status==="candidate"&&<button type="button" className="studio-secondary" disabled={readOnly||busy} onClick={()=>void approve(asset)}>Approve</button>}
           {story.schema_version==="2"&&<button type="button" className="studio-secondary" disabled={readOnly||busy||inUse} onClick={()=>void use(asset,item)}>{inUse?"Added to stage":"Use on stage"}</button>}
           {!inUse&&<button type="button" className="studio-link studio-danger" disabled={readOnly||busy} onClick={()=>void discard(asset)}>Discard</button>}
         </div>
       </article>;
     })}</div>}
+    {repair&&<PoseRepairDialog key={repair.id} tenantId={tenantId} projectId={projectId} characterId={id} asset={repair}
+      disabled={readOnly||busy||!!active||!history?.capabilities.repairs} onClose={()=>setRepair(null)} onCreated={next=>{
+        setHistory(current=>current?{...current,jobs:[next,...current.jobs]}:current);setRepair(null);refresh();
+      }}/>}
     {history?.capabilities.character_training&&looks.look&&<StyleStudio key={looks.look.id} tenantId={tenantId} projectId={projectId} readOnly={readOnly} characterLook={looks.look} characterId={id} />}
   </section>;
 }

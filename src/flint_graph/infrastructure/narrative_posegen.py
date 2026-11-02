@@ -26,6 +26,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     Progress,
 )
 from flint_graph.narrative.png import normalize_png, validate_png
+from flint_graph.narrative.pose_repairs import validate_region, verify_preservation
 from flint_graph.narrative.poses import MODEL_REPO, MODEL_REVISION, POSE_HEIGHT, POSE_WIDTH
 
 
@@ -43,6 +44,15 @@ class PoseGenerationRequest(GenerationRequest):
     additional_references: tuple[bytes, ...] = ()
     style_adapter: PoseStyleAdapter | None = None
     character_adapter: PoseStyleAdapter | None = None
+    repair: "PoseRepairRegion | None" = None
+
+
+@dataclass(frozen=True)
+class PoseRepairRegion:
+    box: tuple[int, ...]
+    source_box: tuple[int, ...] | None
+    width: int
+    height: int
 
 
 def verify_pose_model(root: Path, manifest: str, runtime: Path) -> ModelIdentity:
@@ -160,6 +170,21 @@ class LocalPoseGenerator:
                     raise ValueError("invalid_output")
             elif box is not None or (width, height) != (POSE_WIDTH, POSE_HEIGHT):
                 raise ValueError("invalid_output")
+            if request.repair:
+                expected_box = (
+                    list(request.repair.source_box) if request.repair.source_box else None
+                )
+                if box != expected_box:
+                    raise ImageGenerationError("repair_preservation_failed")
+                try:
+                    preserved = verify_preservation(request.reference, data, request.repair.box)
+                except ValueError:
+                    raise ImageGenerationError("repair_preservation_failed") from None
+                runtime = {
+                    **runtime,
+                    "repair_preserved_sha256": preserved,
+                    "repair_preservation": "decoded-pixels-v1",
+                }
             images.append(
                 GeneratedImage(
                     index=index,
@@ -209,6 +234,27 @@ class LocalPoseGenerator:
                 validate_png(item, "reference")
         except ValueError:
             raise ImageGenerationError("reference_unavailable") from None
+        if request.repair:
+            repair = request.repair
+            try:
+                validate_region(repair.box, repair.width, repair.height)
+                if len(references) != 2 or struct.unpack_from(">II", request.reference, 16) != (
+                    repair.width,
+                    repair.height,
+                ):
+                    raise ValueError
+                if repair.source_box:
+                    left, top, right, bottom = repair.source_box
+                    if not request.cutout or not (
+                        0 <= left < right <= 768
+                        and 0 <= top < bottom <= 1152
+                        and (right - left, bottom - top) == (repair.width, repair.height)
+                    ):
+                        raise ValueError
+                elif request.cutout or (repair.width, repair.height) != (768, 1152):
+                    raise ValueError
+            except (ValueError, struct.error):
+                raise ImageGenerationError("bad_request") from None
         with tempfile.TemporaryDirectory(prefix="flint-pose-") as directory:
             work = Path(directory)
             for index, data in enumerate(references):
@@ -239,12 +285,12 @@ class LocalPoseGenerator:
                 )
                 if item is not None
             ]
+            adapters: list[dict[str, Any]] = []
             if selected:
                 from flint_graph.narrative.style_weights import validate_adapter
 
                 if sum(item.strength for _, item in selected) > 1 + 1e-9:
                     raise ImageGenerationError("bad_request")
-                adapters = []
                 for role, adapter in selected:
                     validate_adapter(
                         adapter.weights,
@@ -280,6 +326,22 @@ class LocalPoseGenerator:
                     payload["style"] = {
                         key: value for key, value in adapters[0].items() if key != "role"
                     }
+            if request.repair:
+                repair = request.repair
+                payload["schema_version"] = 5
+                payload.pop("reference_sha256", None)
+                payload.pop("style", None)
+                payload["reference_sha256s"] = [
+                    hashlib.sha256(item).hexdigest() for item in references
+                ]
+                payload["adapters"] = adapters
+                payload["repair"] = {
+                    "box": list(repair.box),
+                    "width": repair.width,
+                    "height": repair.height,
+                    "source_box": list(repair.source_box) if repair.source_box else None,
+                    "feather": 8,
+                }
             env = {
                 key: value
                 for key, value in os.environ.items()

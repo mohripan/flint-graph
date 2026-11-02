@@ -1,3 +1,4 @@
+import type {repairBody} from "../narrative/poseRepairModel";
 import type {StyleHistory,StyleJob,styleBody} from "../narrative/styleModel";
 import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
 import type {
@@ -447,6 +448,11 @@ export const api = {
   createPoseJob(tenantId:string, projectId:string, characterId:string, body:ReturnType<typeof poseBody>):Promise<PoseJob> {
     return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/pose-jobs`, {
       method:"POST", headers:tenantHeaders(tenantId), json:body,
+    });
+  },
+  createPoseRepairJob(tenantId:string,projectId:string,characterId:string,body:ReturnType<typeof repairBody>):Promise<PoseJob>{
+    return jsonRequest(`${projectPath(projectId)}/characters/${encodeURIComponent(characterId)}/looks/pose-repairs`,{
+      method:"POST",headers:tenantHeaders(tenantId),json:body,
     });
   },
   listCharacterLooks(tenantId: string, projectId: string, characterId: string, signal?: AbortSignal): Promise<LookList> {

@@ -189,3 +189,42 @@ async def test_both_adapters_transfer_as_verified_private_files_in_character_the
             ),
             on_progress=update,
         )
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+async def test_repair_parent_rejects_a_child_that_changes_any_outside_pixel(tmp_path, corrupt):
+    from dataclasses import replace
+
+    from flint_graph.infrastructure.narrative_posegen import PoseRepairRegion
+
+    source = png(768, 1152)
+    patch = """
+assert r['schema_version']==5 and r['repair']['box']==[400,500,560,660]
+assert r['adapters']==[]
+data=Path('reference-0.png').read_bytes()
+raw=bytearray(zlib.decompress(data[41:-16]))
+for y in range(500,660):
+ start=y*(768*3+1)+1+400*3
+ raw[start:start+160*3]=bytes([90,80,70])*160
+CORRUPT
+def chunk(k,p):return struct.pack('>I',len(p))+k+p+struct.pack('>I',zlib.crc32(k+p))
+Path('out/0.png').write_bytes(data[:33]+chunk(b'IDAT',zlib.compress(raw))+data[-12:])
+""".replace("CORRUPT", "raw[1]=99" if corrupt else "")
+    code = FAKE.replace("Path('out/0.png').write_bytes(png(768,1152))", patch)
+
+    async def update(_done):
+        pass
+
+    pending = replace(
+        request(),
+        reference=source,
+        additional_references=(png(80, 120),),
+        repair=PoseRepairRegion((400, 500, 560, 660), None, 768, 1152),
+    )
+    if corrupt:
+        with pytest.raises(ImageGenerationError, match="repair_preservation_failed"):
+            await generator(tmp_path, code).generate(pending, on_progress=update)
+    else:
+        result = await generator(tmp_path, code).generate(pending, on_progress=update)
+        assert len(result.images) == 1 and result.images[0].data != source
+        assert len(result.runtime["repair_preserved_sha256"]) == 64

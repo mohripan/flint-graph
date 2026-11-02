@@ -116,6 +116,42 @@ class PoseContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_request(json.dumps({**value, **changes}).encode())
 
+    def test_repair_protocol_pins_source_canvas_and_a_small_native_rectangle(self):
+        value = self.request(schema_version=5)
+        value.pop("reference_sha256")
+        value["reference_sha256s"] = ["a" * 64, "b" * 64]
+        value["adapters"] = []
+        value["repair"] = {
+            "width": 768,
+            "height": 1152,
+            "source_box": None,
+            "box": [400, 500, 560, 660],
+            "feather": 8,
+        }
+        self.assertEqual(
+            parse_request(json.dumps(value).encode())["repair"]["box"], [400, 500, 560, 660]
+        )
+        for repair in (
+            {**value["repair"], "box": [0, 0, 768, 1152]},
+            {**value["repair"], "box": [-1, 0, 20, 40]},
+            {**value["repair"], "box": [0, 0, True, 40]},
+            {**value["repair"], "width": 767},
+            {**value["repair"], "source_box": [0, 0, 700, 1100]},
+            {**value["repair"], "feather": 9},
+            {**value["repair"], "path": "private.png"},
+        ):
+            with self.assertRaises(ValueError):
+                parse_request(json.dumps({**value, "repair": repair}).encode())
+        value["repair"] = {
+            "width": 512,
+            "height": 900,
+            "source_box": [100, 100, 612, 1000],
+            "box": [100, 300, 200, 500],
+            "feather": 8,
+        }
+        value["cutout"] = {"model": str(Path.cwd() / "cutout.onnx"), "sha256": "c" * 64}
+        self.assertEqual(parse_request(json.dumps(value).encode())["repair"]["width"], 512)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -202,6 +202,14 @@ hardening for the correctness regression, scope and exact verification commands.
 The assistant API stream re-reads events after observing terminal status so a
 concurrent finish cannot close the stream before its final event is drained.
 
+ADR 0054 (migration 0041) adds opt-in **Repair area…** on completed pose candidates.
+It freezes the source/region and inherits the original trained versions. Protocol 5
+uses the target plus approved look, then composites only the selected patch; an
+independent parent PNG decoder rejects outside pixel, alpha, canvas or crop changes.
+Deploy API/pose worker together with `NARRATIVE_POSE_MAX_REFERENCES=2` before enabling
+`NARRATIVE_POSE_REPAIRS_ENABLED` (default off). Approval/anatomy review stay manual.
+Read `docs/reports/2026-11-02-pose-region-repairs.md` and the image-generation runbook.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,
