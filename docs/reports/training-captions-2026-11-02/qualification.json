@@ -1,0 +1,327 @@
+{
+  "source_count": 4,
+  "proposals_only": true,
+  "rows": [
+    {
+      "caption": "scarf, red scarf, red eyes, full body, boots, pants, white hair, black footwear, long sleeves, looking at viewer, standing, black pants, short hair, coat, medium hair",
+      "tags": [
+        {
+          "tag": "scarf",
+          "confidence": 0.9603219032287598
+        },
+        {
+          "tag": "red scarf",
+          "confidence": 0.9563339948654175
+        },
+        {
+          "tag": "red eyes",
+          "confidence": 0.9536489248275757
+        },
+        {
+          "tag": "full body",
+          "confidence": 0.8991060853004456
+        },
+        {
+          "tag": "boots",
+          "confidence": 0.8429512977600098
+        },
+        {
+          "tag": "pants",
+          "confidence": 0.8373813629150391
+        },
+        {
+          "tag": "white hair",
+          "confidence": 0.8283815383911133
+        },
+        {
+          "tag": "black footwear",
+          "confidence": 0.7857922315597534
+        },
+        {
+          "tag": "long sleeves",
+          "confidence": 0.7715426683425903
+        },
+        {
+          "tag": "looking at viewer",
+          "confidence": 0.7251228094100952
+        },
+        {
+          "tag": "standing",
+          "confidence": 0.6863423585891724
+        },
+        {
+          "tag": "black pants",
+          "confidence": 0.6812427639961243
+        },
+        {
+          "tag": "short hair",
+          "confidence": 0.5601465702056885
+        },
+        {
+          "tag": "coat",
+          "confidence": 0.5578152537345886
+        },
+        {
+          "tag": "medium hair",
+          "confidence": 0.3841499090194702
+        }
+      ],
+      "caption_version": "training-caption-v1",
+      "requires_review": true,
+      "asset_id": "97d6ef60-1dc7-4175-bae6-8c2ebf7448f1",
+      "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "observation_id": "156de68e-1cb3-4d52-8b0a-99b15dbcafa5",
+      "model_manifest_sha256": "7e95e8ddb226fe53d512698f9589cbe37d7d1a26f53a78f63fa31010e4ddccf5",
+      "tagger_sha256": "b714db5eeab0dac043528a953c54fb86030ffbd0f6676de545fb739615548f13",
+      "seconds": 4.547,
+      "fixture_name": "Aster base"
+    },
+    {
+      "caption": "red eyes, scarf, gloves, red scarf, boots, pants, black gloves, white hair, short hair, long sleeves, black pants, black footwear, standing, coat, from behind, looking back",
+      "tags": [
+        {
+          "tag": "red eyes",
+          "confidence": 0.9407792091369629
+        },
+        {
+          "tag": "scarf",
+          "confidence": 0.9329216480255127
+        },
+        {
+          "tag": "gloves",
+          "confidence": 0.8950619697570801
+        },
+        {
+          "tag": "red scarf",
+          "confidence": 0.882431149482727
+        },
+        {
+          "tag": "boots",
+          "confidence": 0.8271713852882385
+        },
+        {
+          "tag": "pants",
+          "confidence": 0.8198181390762329
+        },
+        {
+          "tag": "black gloves",
+          "confidence": 0.7967374324798584
+        },
+        {
+          "tag": "white hair",
+          "confidence": 0.7956181764602661
+        },
+        {
+          "tag": "short hair",
+          "confidence": 0.7540006637573242
+        },
+        {
+          "tag": "long sleeves",
+          "confidence": 0.623868465423584
+        },
+        {
+          "tag": "black pants",
+          "confidence": 0.6169310808181763
+        },
+        {
+          "tag": "black footwear",
+          "confidence": 0.6120050549507141
+        },
+        {
+          "tag": "standing",
+          "confidence": 0.5724948644638062
+        },
+        {
+          "tag": "coat",
+          "confidence": 0.5613490343093872
+        },
+        {
+          "tag": "from behind",
+          "confidence": 0.5478963255882263
+        },
+        {
+          "tag": "looking back",
+          "confidence": 0.48041215538978577
+        }
+      ],
+      "caption_version": "training-caption-v1",
+      "requires_review": true,
+      "asset_id": "3f68441d-c598-4ff2-98f0-58989e65bd3b",
+      "source_sha256": "7c9b1069fe3246bb13d9c84445ecf5d9e8ecf55330f144c2ba11daf02819ac2b",
+      "observation_id": "c5beb7c5-9fc4-4548-a457-85a97a75f7db",
+      "model_manifest_sha256": "7e95e8ddb226fe53d512698f9589cbe37d7d1a26f53a78f63fa31010e4ddccf5",
+      "tagger_sha256": "b714db5eeab0dac043528a953c54fb86030ffbd0f6676de545fb739615548f13",
+      "seconds": 2.937,
+      "fixture_name": "Aster rear view"
+    },
+    {
+      "caption": "red eyes, sitting, boots, red scarf, white hair, scarf, pants, full body, black footwear, looking at viewer, chair, long sleeves, short hair, black pants, coat",
+      "tags": [
+        {
+          "tag": "red eyes",
+          "confidence": 0.9625892639160156
+        },
+        {
+          "tag": "sitting",
+          "confidence": 0.9440856575965881
+        },
+        {
+          "tag": "boots",
+          "confidence": 0.8998266458511353
+        },
+        {
+          "tag": "red scarf",
+          "confidence": 0.8810438513755798
+        },
+        {
+          "tag": "white hair",
+          "confidence": 0.8414714336395264
+        },
+        {
+          "tag": "scarf",
+          "confidence": 0.8284553289413452
+        },
+        {
+          "tag": "pants",
+          "confidence": 0.8241717219352722
+        },
+        {
+          "tag": "full body",
+          "confidence": 0.8227897882461548
+        },
+        {
+          "tag": "black footwear",
+          "confidence": 0.8059152364730835
+        },
+        {
+          "tag": "looking at viewer",
+          "confidence": 0.7809035778045654
+        },
+        {
+          "tag": "chair",
+          "confidence": 0.7357819676399231
+        },
+        {
+          "tag": "long sleeves",
+          "confidence": 0.6946940422058105
+        },
+        {
+          "tag": "short hair",
+          "confidence": 0.6626680493354797
+        },
+        {
+          "tag": "black pants",
+          "confidence": 0.573808491230011
+        },
+        {
+          "tag": "coat",
+          "confidence": 0.4554704427719116
+        }
+      ],
+      "caption_version": "training-caption-v1",
+      "requires_review": true,
+      "asset_id": "850e68b4-52fd-4d5b-b33c-331db60914fc",
+      "source_sha256": "2e76461194dceac2ad796efdc152f8cf09ba391f94b9e9732f6da59b1f966f11",
+      "observation_id": "1a0df943-17e0-4242-bcbb-514abb2e9a0f",
+      "model_manifest_sha256": "7e95e8ddb226fe53d512698f9589cbe37d7d1a26f53a78f63fa31010e4ddccf5",
+      "tagger_sha256": "b714db5eeab0dac043528a953c54fb86030ffbd0f6676de545fb739615548f13",
+      "seconds": 3.062,
+      "fixture_name": "Aster seated, anatomy reviewed"
+    },
+    {
+      "caption": "scarf, red scarf, red eyes, boots, full body, white hair, black footwear, pants, looking at viewer, coat, long sleeves, short hair, standing, black pants, blue coat",
+      "tags": [
+        {
+          "tag": "scarf",
+          "confidence": 0.9639102220535278
+        },
+        {
+          "tag": "red scarf",
+          "confidence": 0.9610350131988525
+        },
+        {
+          "tag": "red eyes",
+          "confidence": 0.9520907402038574
+        },
+        {
+          "tag": "boots",
+          "confidence": 0.9211980700492859
+        },
+        {
+          "tag": "full body",
+          "confidence": 0.9046130776405334
+        },
+        {
+          "tag": "white hair",
+          "confidence": 0.8918821811676025
+        },
+        {
+          "tag": "black footwear",
+          "confidence": 0.8849276900291443
+        },
+        {
+          "tag": "pants",
+          "confidence": 0.8099826574325562
+        },
+        {
+          "tag": "looking at viewer",
+          "confidence": 0.7297117114067078
+        },
+        {
+          "tag": "coat",
+          "confidence": 0.7249852418899536
+        },
+        {
+          "tag": "long sleeves",
+          "confidence": 0.6991989612579346
+        },
+        {
+          "tag": "short hair",
+          "confidence": 0.617053210735321
+        },
+        {
+          "tag": "standing",
+          "confidence": 0.5998410582542419
+        },
+        {
+          "tag": "black pants",
+          "confidence": 0.5056664347648621
+        },
+        {
+          "tag": "blue coat",
+          "confidence": 0.41938120126724243
+        }
+      ],
+      "caption_version": "training-caption-v1",
+      "requires_review": true,
+      "asset_id": "e16dbfd3-7464-4b0d-ba2f-7c79762329f8",
+      "source_sha256": "5b1d4aef5108b125795b7b47ee1b711c31327b71e51cd5a93541da3a04234d9a",
+      "observation_id": "8d209f49-4f2a-4bd8-a0e1-40891a32ebe0",
+      "model_manifest_sha256": "7e95e8ddb226fe53d512698f9589cbe37d7d1a26f53a78f63fa31010e4ddccf5",
+      "tagger_sha256": "b714db5eeab0dac043528a953c54fb86030ffbd0f6676de545fb739615548f13",
+      "seconds": 3.391,
+      "fixture_name": "Aster wave"
+    }
+  ],
+  "scope": "real API and pinned CPU tagger on owned synthetic fixtures; no quality calibration",
+  "manual_edit_during_read_preserved": true,
+  "project_style_and_character_confirmations_reset_on_apply": true,
+  "phone_widths": [
+    390,
+    390
+  ],
+  "accessibility": {
+    "desktop": {
+      "inapplicable": 69,
+      "incomplete": 0,
+      "passes": 19,
+      "violations": 0
+    },
+    "mobile": {
+      "inapplicable": 68,
+      "incomplete": 0,
+      "passes": 20,
+      "violations": 0
+    }
+  }
+}

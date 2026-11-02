@@ -6,8 +6,8 @@ import {useLookReviewFlags} from './CandidateLookReview';
 import type {CharacterLook} from './lookModel';
 import {anatomyFailures,lookReferences} from './lookModel';
 import {useApprovedAssets} from './libraryAssets';
-import {styleBody,styleStatus,trainingAssets} from './styleModel';
-import type {StyleHistory,TrainingSelection} from './styleModel';
+import {applyCaptionSuggestion,styleBody,styleStatus,trainingAssets} from './styleModel';
+import type {StyleHistory,TrainingSelection,TrainingCaptionSuggestion} from './styleModel';
 import './styles.css';
 
 export function useStyleJobs(tenantId:string,projectId:string,enabled=true){
@@ -35,11 +35,16 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
  const [sameLook,setSameLook]=useState(false);const [anatomy,setAnatomy]=useState(false);
  const suggestedCaption=characterLook?[...characterLook.identity_tags,...characterLook.clothing_tags].join(', '):'';
  const [selected,setSelected]=useState<TrainingSelection[]>([]);
+ const [suggestions,setSuggestions]=useState<Record<string,TrainingCaptionSuggestion>>({});
+ const [reading,setReading]=useState<string|null>(null);
+ const captionRequest=useRef<AbortController|null>(null);
+ useEffect(()=>()=>captionRequest.current?.abort(),[]);
  const [name,setName]=useState('');const [rights,setRights]=useState(false);
  useEffect(()=>{
   setSelected(characterLook&&characterLook.asset.status==='approved'?[{asset:characterLook.asset,caption:suggestedCaption.length<=600?suggestedCaption:''}]:[]);
   setName(characterLook?characterLook.name+' version':'');setRights(false);setSameLook(false);setAnatomy(false);
- },[characterLook?.id]);
+  captionRequest.current?.abort();setReading(null);setSuggestions({});
+ },[tenantId,projectId,characterLook?.id]);
  const [steps,setSteps]=useState(200);const [seed,setSeed]=useState(42);
  const [busy,setBusy]=useState(false);const [notice,setNotice]=useState<string|null>(null);
  const pending=useRef<{signature:string;key:string}|null>(null);
@@ -58,6 +63,23 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
  async function cancel(id:string){
   setBusy(true);try{await api.cancelStyleJob(tenantId,projectId,id);refresh();}
   catch(error){setNotice(error instanceof Error?error.message:'Could not cancel training.');}finally{setBusy(false);}
+ }
+ async function suggestCaption(assetId:string){
+  if(disabled||reading)return;
+  const controller=new AbortController();captionRequest.current=controller;setReading(assetId);setNotice(null);
+  try{
+   const proposal=await api.suggestTrainingCaption(tenantId,projectId,assetId,controller.signal);
+   if(!controller.signal.aborted)setSuggestions(current=>({...current,[assetId]:proposal}));
+  }catch(error){if(!controller.signal.aborted)setNotice(error instanceof Error?error.message:'Could not read image tags. Enter the caption manually.');}
+  finally{if(!controller.signal.aborted)setReading(null);}
+ }
+ function useCaption(proposal:TrainingCaptionSuggestion){
+  try{
+   // Applying is explicit; an asynchronous suggestion never overwrites typed text.
+   const next=applyCaptionSuggestion(selected,proposal);setSelected(next);
+   setRights(false);setSameLook(false);setAnatomy(false);
+   setSuggestions(current=>{const next={...current};delete next[proposal.asset_id];return next;});
+  }catch(error){setNotice(error instanceof Error?error.message:'Review the source image and caption again.');}
  }
  return <section className="studio-look-panel style-studio" aria-label={characterLook?"Character look training":"Project art style"}>
   <h3>{characterLook?"Character look training":"Project art style"}</h3>
@@ -83,6 +105,16 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
     {selected.map(item=><div className="style-caption" key={item.asset.id}>
      <LookImage tenantId={tenantId} projectId={projectId} asset={item.asset} label={item.asset.name} />
      <Field label={`Content caption: ${item.asset.name}`}><textarea rows={3} maxLength={600} value={item.caption} onChange={e=>{setRights(false);setSameLook(false);setAnatomy(false);setSelected(current=>current.map(i=>i.asset.id===item.asset.id?{...i,caption:e.target.value}:i));}} placeholder="White hair, red scarf, navy coat, sitting on a chair…" /></Field>
+     {history.caption_suggestions&&<div className="style-caption-suggestion">
+      <button type="button" className="studio-link" disabled={!!reading} onClick={()=>void suggestCaption(item.asset.id)}>{reading===item.asset.id?'Reading image tags…':`Suggest caption for ${item.asset.name}`}</button>
+      {suggestions[item.asset.id]&&<div role="region" aria-label={`Caption suggestion: ${item.asset.name}`}>
+       <p>{suggestions[item.asset.id].caption||'No confident content tags were found. Enter the caption manually.'}</p>
+       {!!suggestions[item.asset.id].tags.length&&<details><summary>Tag confidence</summary><ul>{suggestions[item.asset.id].tags.map(tag=><li key={tag.tag}>{tag.tag}: {Math.round(tag.confidence*100)}%</li>)}</ul></details>}
+       <p className="studio-hint">Check what is visible, and add missing pose or scene details. Suggestions can be wrong. Applying replaces this image’s caption and resets the training confirmations.</p>
+       <button type="button" className="studio-secondary" disabled={!suggestions[item.asset.id].caption} onClick={()=>useCaption(suggestions[item.asset.id])}>Use suggested caption</button>
+       <button type="button" className="studio-link" onClick={()=>setSuggestions(current=>{const next={...current};delete next[item.asset.id];return next;})}>Dismiss suggestion</button>
+      </div>}
+     </div>}
     </div>)}
     <div className="style-settings"><Field label="Training steps"><input type="number" min={20} max={400} value={steps} onChange={e=>setSteps(Number(e.target.value))} /></Field>
      <Field label="Random seed"><input type="number" min={0} max={4294967295} value={seed} onChange={e=>setSeed(Number(e.target.value))} /></Field></div>

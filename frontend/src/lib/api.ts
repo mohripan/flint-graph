@@ -434,6 +434,9 @@ export const api = {
   listStyleJobs(tenantId:string,projectId:string,signal?:AbortSignal):Promise<StyleHistory>{
     return jsonRequest(`${projectPath(projectId)}/style-jobs`,{headers:tenantHeaders(tenantId),signal,cache:"no-store"});
   },
+  suggestTrainingCaption(tenantId:string,projectId:string,assetId:string,signal?:AbortSignal):Promise<import('../narrative/styleModel').TrainingCaptionSuggestion>{
+    return jsonRequest(`${projectPath(projectId)}/style-jobs/caption-suggestions`,{method:"POST",headers:tenantHeaders(tenantId),signal,json:{asset_id:assetId}});
+  },
   createStyleJob(tenantId:string,projectId:string,body:ReturnType<typeof styleBody>):Promise<StyleJob>{
     return jsonRequest(`${projectPath(projectId)}/style-jobs`,{method:"POST",headers:tenantHeaders(tenantId),json:body});
   },

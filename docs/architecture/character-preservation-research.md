@@ -4,8 +4,12 @@ Status: research and implementation design for M40 #180–#186. The offline lab 
 implemented. [ADR 0047](../adr/0047-reviewed-character-looks-and-advisory-feedback.md)
 delivers the first Studio slice: immutable looks, optional WD suggestions and
 garment-tag comparison, and manual advisory feedback. Multi-view looks, automatic
-identity scoring/ranking and LoRA training below remain
-designs, **not shipped features**.
+identity scoring/ranking and the broader comparative research below remain
+unfinished. [ADRs 0050–0052](../adr/0050-private-project-style-adapters.md) now
+deliver private project-style/character-look training and bounded pose adapter
+stacking; [ADR 0056](../adr/0056-reviewed-training-caption-suggestions.md) adds
+reviewed per-image caption proposals. Research training matrices below describe
+remaining qualification, not the absence of these implemented product features.
 [ADR 0048](../adr/0048-character-pose-model-worker.md) delivers model-backed poses;
 [ADR 0049](../adr/0049-approved-pose-reference-views.md) adds one explicit approved
 view and primary-rendering guidance. This is not a qualified style/lighting lock.

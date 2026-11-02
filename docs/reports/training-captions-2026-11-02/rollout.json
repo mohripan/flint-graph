@@ -1,0 +1,23 @@
+{
+  "schema_revision": "0042_pose_guides",
+  "scoped_guide_foreign_keys": 2,
+  "main_and_earlier_qa_healthy": true,
+  "guide_enabled": true,
+  "caption_suggestions_enabled": true,
+  "guide_ids": [
+    "seated-front-v1",
+    "standing-front-v1",
+    "walking-three-quarter-v1"
+  ],
+  "health_urls": [
+    "http://127.0.0.1:8101/health/live",
+    "http://localhost:5173/",
+    "http://127.0.0.1:5192/index.html",
+    "http://127.0.0.1:8276/health/live",
+    "http://localhost:5276/",
+    "http://127.0.0.1:5296/index.html",
+    "http://127.0.0.1:8278/health/live",
+    "http://localhost:5278/",
+    "http://127.0.0.1:5298/index.html"
+  ]
+}

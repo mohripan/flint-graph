@@ -31,3 +31,14 @@ test('training refuses a selected image explicitly flagged for anatomy',()=>{
  assert.equal(model.styleBody('Travel coat',images,true,200,42,'key',undefined,new Set(['other'])).images.length,4);
  assert.match(model.styleStatus({status:'failed',error_code:'anatomy_review_failed'}),/anatomy/i);
 });
+
+test('a caption proposal changes only the explicitly selected unchanged source',()=>{
+ const proposal={asset_id:'1',source_sha256:'1',caption:'white hair, sitting, chair'};
+ const next=model.applyCaptionSuggestion(images,proposal);
+ assert.equal(next[1].caption,proposal.caption);
+ assert.equal(next[0].caption,images[0].caption);
+ assert.equal(images[1].caption,' navy coat ');
+ for(const invalid of [{...proposal,source_sha256:'changed'},{...proposal,asset_id:'gone'},{...proposal,caption:''},{...proposal,caption:'x'.repeat(601)}]){
+  assert.throws(()=>model.applyCaptionSuggestion(images,invalid));
+ }
+});

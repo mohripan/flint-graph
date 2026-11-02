@@ -116,6 +116,9 @@ within a bounded strength budget. Training is a local worker job; optional MLflo
 tracking records numeric metrics and hashes. Training images and weights stay out
 of exported games.
 
+Optional per-image tag suggestions help prepare content captions. Review and edit
+each proposal before applying it; manual entry remains available.
+
 Check anatomy, costume details, linework and lighting before approval. Known
 anatomically flawed images are excluded from training, but guides and trained
 versions do not guarantee a correct result. Automatic calibrated CCIP identity

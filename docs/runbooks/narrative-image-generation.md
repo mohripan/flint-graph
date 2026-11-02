@@ -677,3 +677,30 @@ are not a general pose editor, learned anatomy validator or promise that every
 output has correct anatomy. See the
 [seated report](../reports/2026-11-02-seated-pose-guidance.md) and the
 [standing/walking report](../reports/2026-11-02-standing-and-walking-guides.md).
+
+### Per-image training captions (ADR 0056)
+
+In **Look → Project art style**, or **Characters → Poses → Character look
+training**, select the approved images and review each content caption. When the
+existing local look tagger is configured, **Suggest caption for…** reads that
+specific image. Inspect the proposed words and optional tag confidences, then
+choose **Use suggested caption** or dismiss it. Reading never overwrites typed
+text. Applying replaces only that caption and clears the training confirmations;
+edit mistakes, add missing pose/scene details and confirm the dataset again.
+
+These are coarse content suggestions, not an identity/anatomy check or a style
+quality score. Ratings, character names, inferred gender/counts and style/quality
+tags never become suggested caption text. Missing or busy taggers leave manual
+entry available. The same pinned WD installation and
+`FLINT_GRAPH_NARRATIVE_LOOK_TAGGER_PYTHON` and
+`FLINT_GRAPH_NARRATIVE_LOOK_TAGGER_MODEL_DIR` settings used for reviewed
+looks are reused; no new model, migration or training recipe is required.
+
+`POST /v1/narrative/projects/{project}/style-jobs/caption-suggestions` accepts only
+`asset_id`. It requires membership and an approved PNG in that project, bounded
+to 8 MiB and 64–2560 pixels per side. The response includes source hash,
+observation ID, model/tagger hashes, `training-caption-v1`, proposed text and tag
+confidences. The initial request transaction is released before CPU inference;
+discard/archive and source changes are rechecked before observation persistence.
+Actual training still freezes the creator-reviewed text, not a future rerun of
+the tagger. See the [report](../reports/2026-11-02-training-caption-suggestions.md).

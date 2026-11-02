@@ -8,8 +8,20 @@ export interface StyleJob {
  cancel_requested:boolean;error_code:string|null;losses:number[]|null;runtime:Record<string,string>|null;
  tracking_run_id:string|null;created_at:string;
 }
-export interface StyleHistory {jobs:StyleJob[];available:boolean}
+export interface StyleHistory {jobs:StyleJob[];available:boolean;caption_suggestions?:boolean}
 export interface TrainingSelection {asset:NarrativeImage;caption:string}
+export interface TrainingCaptionSuggestion {
+ asset_id:string;source_sha256:string;observation_id:string;caption:string;
+ tags:{tag:string;confidence:number}[];caption_version:string;requires_review:boolean;
+ model_manifest_sha256:string;tagger_sha256:string;
+}
+export function applyCaptionSuggestion(images:TrainingSelection[],proposal:Pick<TrainingCaptionSuggestion,'asset_id'|'source_sha256'|'caption'>):TrainingSelection[]{
+ const selected=images.find(item=>item.asset.id===proposal.asset_id);
+ if(!selected||selected.asset.sha256!==proposal.source_sha256||selected.asset.status!=='approved')throw new Error('This caption belongs to a different or unavailable source image.');
+ const caption=proposal.caption.trim();
+ if(!caption||caption.length>600)throw new Error('No usable content tags were suggested. Enter and review the caption manually.');
+ return images.map(item=>item.asset.id===proposal.asset_id?{...item,caption}:item);
+}
 export function trainingAssets(assets:NarrativeImage[]):NarrativeImage[]{
  return assets.filter(a=>a.status==='approved'&&a.media_type==='image/png'&&(a.width??0)>=64&&(a.height??0)>=64);
 }

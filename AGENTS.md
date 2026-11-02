@@ -618,3 +618,15 @@ migration, prompt or game runtime pin. Read
 `docs/reports/2026-11-02-standing-and-walking-guides.md` for real output review and
 verification. Properly composite RGBA images before judging cutout edges: hidden
 RGB bleed at alpha zero can look striped in raw image-tool previews.
+
+[ADR 0056](docs/adr/0056-reviewed-training-caption-suggestions.md) adds optional
+per-image training-caption proposals from the existing pinned CPU look tagger.
+Project members can read tags for an approved bounded PNG; raw observations keep
+source/model hashes. Release the authentication/read transaction before tagging,
+then lock/recheck the project and source before writes. Suggestions exclude
+rating/gender/count/name/style instructions, stay separate from edited text, and
+apply only explicitly, resetting training confirmations. Manual entry survives
+unavailable taggers. No migration, recipe, prompt/policy or game runtime change;
+this is training-input assistance, not calibrated scoring or a quality guarantee.
+Read `docs/reports/2026-11-02-training-caption-suggestions.md`. Broader #184/M40
+acceptance remains open beyond this slice.

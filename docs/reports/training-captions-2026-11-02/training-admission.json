@@ -1,0 +1,42 @@
+{
+  "id": "0a6a861f-dee3-41da-bae0-ff94cbfd895c",
+  "name": "Caption proposal QA",
+  "steps": 20,
+  "seed": 42,
+  "images": [
+    {
+      "asset_id": "e16dbfd3-7464-4b0d-ba2f-7c79762329f8",
+      "sha256": "5b1d4aef5108b125795b7b47ee1b711c31327b71e51cd5a93541da3a04234d9a",
+      "name": "Aster wave",
+      "caption": "white hair, navy coat, red scarf, standing with a raised hand",
+      "policy_sha256": "a0551a86767d8291b04f692a018bb62e04644fc7c94dbf7da49dc7b43728c2ee"
+    },
+    {
+      "asset_id": "850e68b4-52fd-4d5b-b33c-331db60914fc",
+      "sha256": "2e76461194dceac2ad796efdc152f8cf09ba391f94b9e9732f6da59b1f966f11",
+      "name": "Aster seated, anatomy reviewed",
+      "caption": "white bob hair, red eyes, navy coat with gold trim, red scarf, black trousers and boots, sitting on a wooden chair",
+      "policy_sha256": "a0551a86767d8291b04f692a018bb62e04644fc7c94dbf7da49dc7b43728c2ee"
+    },
+    {
+      "asset_id": "3f68441d-c598-4ff2-98f0-58989e65bd3b",
+      "sha256": "7c9b1069fe3246bb13d9c84445ecf5d9e8ecf55330f144c2ba11daf02819ac2b",
+      "name": "Aster rear view",
+      "caption": "white hair, navy coat, red scarf, back view",
+      "policy_sha256": "a0551a86767d8291b04f692a018bb62e04644fc7c94dbf7da49dc7b43728c2ee"
+    },
+    {
+      "asset_id": "97d6ef60-1dc7-4175-bae6-8c2ebf7448f1",
+      "sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "name": "Aster base",
+      "caption": "white hair, navy coat, red scarf, full body standing",
+      "policy_sha256": "a0551a86767d8291b04f692a018bb62e04644fc7c94dbf7da49dc7b43728c2ee"
+    }
+  ],
+  "dataset_sha256": "d6504868d82ab08636aa47a277c0d72a4d716e9e8663b9441742cc827ee5373b",
+  "recipe_sha256": "262c38600c9b9fa625fbde31c51b5c6b45006496e31bc89d5f759fbefdaa5eb6",
+  "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+  "status": "cancelled",
+  "progress": 0,
+  "model_executed": false
+}
