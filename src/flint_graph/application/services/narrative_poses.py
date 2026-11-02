@@ -51,6 +51,8 @@ async def queue_pose_job(
     max_references: int = 1,
     style_adapter: dict[str, Any] | None = None,
     styles_enabled: bool = False,
+    character_adapter: dict[str, Any] | None = None,
+    max_adapters: int = 1,
 ) -> NarrativeImageJob:
     try:
         pose = clean_appearance(pose)
@@ -79,6 +81,16 @@ async def queue_pose_job(
                         }
                     }
                     if style_adapter
+                    else {}
+                ),
+                **(
+                    {
+                        "character_adapter": {
+                            "id": str(character_adapter["id"]),
+                            "strength": character_adapter["strength"],
+                        }
+                    }
+                    if character_adapter
                     else {}
                 ),
                 "character_id": character_id,
@@ -113,38 +125,30 @@ async def queue_pose_job(
             "Additional pose views are not enabled on this server.",
             "pose-reference-unavailable",
         )
-    from flint_graph.application.services.narrative_character_adapters import verify_target
-    from flint_graph.application.services.narrative_styles import get_style
+    if character_adapter and max_adapters < 2:
+        raise DomainError(
+            503,
+            "Character adapters unavailable",
+            "Separate character and style adapters are not enabled on this server.",
+            "pose-adapters-unavailable",
+        )
+    from flint_graph.application.services.narrative_pose_adapters import resolve_adapters
+    from flint_graph.infrastructure.db.narrative_character_adapter_models import (
+        NarrativePoseCharacterAdapter,
+    )
     from flint_graph.infrastructure.db.narrative_style_models import NarrativePoseStyle
 
-    style = None
-    if style_adapter:
-        if not styles_enabled:
-            raise DomainError(
-                503,
-                "Style adapters unavailable",
-                "Style adapters are not enabled on this server.",
-                "style-unavailable",
-            )
-        style = await get_style(
-            session,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            job_id=UUID(str(style_adapter["id"])),
-        )
-        if (
-            style.status != "completed"
-            or not style.weights_sha256
-            or style.model_manifest_sha256 != model_manifest_sha256
-        ):
-            raise DomainError(
-                422,
-                "Style unavailable",
-                "Choose a completed style version for this installed model.",
-                "invalid-style-adapter",
-            )
-
-        await verify_target(session, style, character_id=character_id, look_id=look_id)
+    character, style = await resolve_adapters(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        character_id=character_id,
+        look_id=look_id,
+        model_hash=model_manifest_sha256,
+        enabled=styles_enabled,
+        style_input=style_adapter,
+        character_input=character_adapter,
+    )
 
     def build() -> ImageRequest:
         request = pose_request(
@@ -153,7 +157,10 @@ async def queue_pose_job(
             policy=policy,
             additional_view=extras[0]["view"] if extras else None,
         )
-        return replace(request, prompt=style.trigger + ", " + request.prompt) if style else request
+        triggers = [item.trigger for item in (character, style) if item]
+        return (
+            replace(request, prompt=", ".join([*triggers, request.prompt])) if triggers else request
+        )
 
     look = await get_look(
         session,
@@ -235,6 +242,17 @@ async def queue_pose_job(
                 style_id=style.id,
                 strength=style_adapter["strength"],
                 weights_sha256=style.weights_sha256,
+            )
+        )
+    if character and character_adapter:
+        session.add(
+            NarrativePoseCharacterAdapter(
+                job_id=job.id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                adapter_id=character.id,
+                strength=character_adapter["strength"],
+                weights_sha256=character.weights_sha256,
             )
         )
     for position, (asset, view) in enumerate(sources):

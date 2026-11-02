@@ -150,3 +150,42 @@ async def test_additional_view_is_transferred_with_ordered_hashes_and_private_fi
         replace(request(), additional_references=(png(96, 128),)), on_progress=update
     )
     assert len(result.images) == 1
+
+
+async def test_both_adapters_transfer_as_verified_private_files_in_character_then_style_order(
+    tmp_path,
+):
+    from dataclasses import replace
+
+    from test_narrative_style_weights import weights
+
+    from flint_graph.infrastructure.narrative_posegen import PoseStyleAdapter
+
+    code = FAKE.replace(
+        "r=json.load(sys.stdin)",
+        "r=json.load(sys.stdin)\nimport hashlib\nassert r['schema_version']==4\n"
+        "assert [a['role'] for a in r['adapters']]==['character','style']\n"
+        "assert [a['strength'] for a in r['adapters']]==[0.6,0.4]\n"
+        "for a in r['adapters']:\n"
+        " data=Path(a['role']+'.safetensors').read_bytes()\n"
+        " assert hashlib.sha256(data).hexdigest()==a['sha256']\n"
+        "assert 'style' not in r\nassert Path('reference.png').is_file()",
+    )
+    blob = weights().replace(b"b" * 64, b"a" * 64)
+    character = PoseStyleAdapter(blob, "c" * 64, "d" * 64, 0.6)
+    style = PoseStyleAdapter(blob.replace(b"c" * 64, b"e" * 64), "e" * 64, "d" * 64, 0.4)
+
+    async def update(_done):
+        pass
+
+    result = await generator(tmp_path, code).generate(
+        replace(request(), character_adapter=character, style_adapter=style), on_progress=update
+    )
+    assert len(result.images) == 1
+    with pytest.raises(ImageGenerationError, match="bad_request"):
+        await generator(tmp_path).generate(
+            replace(
+                request(), character_adapter=character, style_adapter=replace(style, strength=0.6)
+            ),
+            on_progress=update,
+        )

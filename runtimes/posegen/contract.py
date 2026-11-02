@@ -41,9 +41,9 @@ def parse_request(data):
             if set(request) != common | {"reference_sha256"}:
                 raise ValueError
             hashes = [request["reference_sha256"]]
-        elif version in (2, 3):
+        elif version in (2, 3, 4):
             if set(request) != common | {"reference_sha256s"} | (
-                {"style"} if version == 3 else set()
+                {"style"} if version == 3 else {"adapters"} if version == 4 else set()
             ):
                 raise ValueError
             hashes = request["reference_sha256s"]
@@ -56,14 +56,22 @@ def parse_request(data):
                 raise ValueError
         else:
             raise ValueError
-        if version == 3:
-            style = request["style"]
+        adapters = [request["style"]] if version == 3 else request.get("adapters", [])
+        if version == 4:
+            if type(adapters) is not list or len(adapters) not in (1, 2):
+                raise ValueError
+            if [item.get("role") if type(item) is dict else None for item in adapters] not in (
+                ["character"],
+                ["character", "style"],
+            ):
+                raise ValueError
+        for style in adapters:
             if type(style) is not dict or set(style) != {
                 "sha256",
                 "strength",
                 "dataset_sha256",
                 "recipe_sha256",
-            }:
+            } | ({"role"} if version == 4 else set()):
                 raise ValueError
             if type(style["strength"]) not in (int, float) or not 0.1 <= style["strength"] <= 1:
                 raise ValueError
@@ -72,6 +80,11 @@ def parse_request(data):
                 for k in ("sha256", "dataset_sha256", "recipe_sha256")
             ):
                 raise ValueError
+        if version == 4 and (
+            sum(item["strength"] for item in adapters) > 1 + 1e-9
+            or len({item["sha256"] for item in adapters}) != len(adapters)
+        ):
+            raise ValueError
         for value in [request["model_manifest_sha256"], *hashes]:
             if type(value) is not str or not SHA.fullmatch(value):
                 raise ValueError

@@ -33,7 +33,15 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
   const styles=useStyleJobs(tenantId,projectId,!!history?.capabilities.styles);
   const [styleId,setStyleId]=useState("");
   const [strength,setStrength]=useState(0.5);
-  const style=compatibleAdapters(styles.history?.jobs??[],looks.look).find(j=>j.id===styleId);
+  const stacked=(history?.capabilities.max_adapters??1)>1;
+  const adapters=compatibleAdapters(styles.history?.jobs??[],looks.look);
+  const styleChoices=adapters.filter(j=>!stacked||j.kind!=="character_look");
+  const characterChoices=adapters.filter(j=>j.kind==="character_look");
+  const style=styleChoices.find(j=>j.id===styleId);
+  const [characterId,setCharacterId]=useState("");
+  const [characterStrength,setCharacterStrength]=useState(0.5);
+  const character=stacked?characterChoices.find(j=>j.id===characterId):undefined;
+  const strengthConflict=!!character&&!!style&&strength+characterStrength>1+1e-9;
   const [notice,setNotice]=useState<string|null>(null);
   const [failed,setFailed]=useState(false);
   const [revision,setRevision]=useState(0);
@@ -59,13 +67,13 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
   const reviews=useLookReviewFlags(tenantId,projectId,results.map(item=>item.asset));
   const refresh=()=>setRevision(value=>value+1);
   async function generate(){
-    if(busy||readOnly||active||failed||!history?.capabilities.available)return;
+    if(busy||readOnly||active||failed||strengthConflict||!history?.capabilities.available)return;
     setBusy(true);setNotice(null);
     try{
-      const signature=JSON.stringify([looks.look?.id,pose.trim(),count,transparent,extra?.id,view,confirmed,style?.id,strength]);
+      const signature=JSON.stringify([looks.look?.id,pose.trim(),count,transparent,extra?.id,view,confirmed,style?.id,strength,character?.id,characterStrength]);
       if(pending.current?.signature!==signature)pending.current={signature,key:crypto.randomUUID()};
       const next=await api.createPoseJob(tenantId,projectId,id,poseBody(looks.look,pose,count,
-        transparent&&history.capabilities.transparent,pending.current.key,extra?{asset:extra,view,confirmed}:undefined,style?{style,strength}:undefined));
+        transparent&&history.capabilities.transparent,pending.current.key,extra?{asset:extra,view,confirmed}:undefined,style?{style,strength}:undefined,character?{style:character,strength:characterStrength}:undefined));
       pending.current=null;
       setHistory(current=>current?{...current,jobs:[next,...current.jobs]}:current);refresh();
     }catch(error){setNotice(error instanceof Error?error.message:"Could not start this pose.");}
@@ -126,19 +134,28 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
           <p className="studio-hint">The primary image guides linework, colors, shading and lighting. An extra view supplies missing shape and garment details. Check the result for style drift.</p>
         </div>}
         {history?.capabilities.styles&&<div>
-          <Field label="Trained rendering version"><select value={styleId} disabled={styles.failed} onChange={event=>setStyleId(event.target.value)}>
+          {stacked&&<>
+            <Field label="Trained character look"><select value={character?.id??""} disabled={styles.failed} onChange={event=>setCharacterId(event.target.value)}>
+              <option value="">Use the reference character only</option>
+              {characterChoices.map(j=><option key={j.id} value={j.id}>{j.name} · {j.id.slice(0,8)}</option>)}
+            </select></Field>
+            {character&&<Field label={`Character strength · ${characterStrength.toFixed(1)}`}><input type="range" min={0.1} max={1} step={0.1} value={characterStrength} onChange={event=>setCharacterStrength(Number(event.target.value))} /></Field>}
+          </>}
+          <Field label={stacked?"Project style":"Trained rendering version"}><select value={style?.id??""} disabled={styles.failed} onChange={event=>setStyleId(event.target.value)}>
             <option value="">Use reference rendering only</option>
-            {compatibleAdapters(styles.history?.jobs??[],looks.look).map(j=><option key={j.id} value={j.id}>{j.kind==="character_look"?"This look: ":"Style: "}{j.name} · {j.id.slice(0,8)}</option>)}
+            {styleChoices.map(j=><option key={j.id} value={j.id}>{j.kind==="character_look"?"This look: ":"Style: "}{j.name} · {j.id.slice(0,8)}</option>)}
           </select></Field>
           {styles.failed&&<p role="alert">Style versions could not be loaded. <button type="button" onClick={styles.refresh}>Retry</button></p>}
           {style&&<Field label={`Style strength · ${strength.toFixed(1)}`}><input type="range" min={0.1} max={1} step={0.1} value={strength} onChange={event=>setStrength(Number(event.target.value))} /></Field>}
+          {stacked&&<p className="studio-hint">Combine this exact character look with a project style. When both are selected, their strengths must total at most 1.</p>}
+          {strengthConflict&&<p role="alert">Reduce the character or style strength so they total at most 1.</p>}
           <p className="studio-hint">Train a project style in Look, or this character below. Check anatomy, light and linework in every result.</p>
         </div>}
         <Field label="Pose"><textarea rows={3} maxLength={300} value={active?.pose??pose} onChange={event=>setPose(event.target.value)} /></Field>
         <div className="pose-presets" role="group" aria-label="Pose ideas">{POSE_PRESETS.map(value=><button type="button" className="studio-link" key={value} onClick={()=>setPose(value)}>{value}</button>)}</div>
         <Field label="Candidates"><select value={count} onChange={event=>setCount(Number(event.target.value))}>{[1,2,3,4].map(n=><option key={n}>{n}</option>)}</select></Field>
         <label className="pose-transparent"><input type="checkbox" checked={transparent&&!!history?.capabilities.transparent} disabled={!history?.capabilities.transparent} onChange={event=>setTransparent(event.target.checked)} />Transparent stage sprite</label>
-        <button type="button" className="studio-primary" disabled={!pose.trim()||(!!extra&&!confirmed)} onClick={()=>void generate()}>{active?"Generating…":`Generate ${count===1?"pose":`${count} poses`}`}</button>
+        <button type="button" className="studio-primary" disabled={!pose.trim()||(!!extra&&!confirmed)||strengthConflict} onClick={()=>void generate()}>{active?"Generating…":`Generate ${count===1?"pose":`${count} poses`}`}</button>
       </fieldset>
     </div>
     {active&&<div className="studio-job" role="status"><progress max={active.job.count} value={active.job.progress} aria-label="Pose generation progress" /><span>{poseStatus(active.job)}</span>
@@ -154,6 +171,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
         {!!item.references?.length&&<details><summary>References used</summary><div className="pose-source-list">
           {item.references.map(reference=><FrozenReference key={reference.asset_id} tenantId={tenantId} projectId={projectId} reference={reference} />)}
         </div></details>}
+        {item.character_adapter&&<small>Character: {item.character_adapter.name} · strength {item.character_adapter.strength}</small>}
         {item.style_adapter&&<small>Style: {item.style_adapter.name} · strength {item.style_adapter.strength}</small>}
         <small>Look: {item.look.name} · seed {String(asset.provenance.seed??"—")}</small>
         <CandidateLookReview tenantId={tenantId} projectId={projectId} asset={asset} readOnly={readOnly} flags={reviews.flags} />

@@ -4,16 +4,18 @@ import type { CharacterLook } from "./lookModel";
 export type PoseView = "front" | "side" | "back" | "detail";
 export interface PoseReference {asset_id:string;sha256:string;view:string;name:string}
 export interface AdditionalPoseView {asset:NarrativeImage;view:PoseView;confirmed:boolean}
+export interface PoseAdapter {id:string;name:string;strength:number;weights_sha256:string;kind?:"project_style"|"character_look"}
 export interface PoseJob {
   references?:PoseReference[];
-  style_adapter?:{id:string;name:string;strength:number;weights_sha256:string}|null;
+  style_adapter?:PoseAdapter|null;
+  character_adapter?:PoseAdapter|null;
   operation: "pose"; model_id: string; model_manifest_sha256: string; pose: string;
   look: { id: string; name: string; asset_id: string; source_sha256: string; sha256: string };
   job: ImageJob;
 }
-export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;styles?:boolean;character_training?:boolean} }
+export interface PoseHistory { jobs: PoseJob[]; capabilities: {available:boolean; transparent:boolean; model_id:string; max_references?:number;max_adapters?:number;styles?:boolean;character_training?:boolean} }
 export const POSE_PRESETS = ["standing, arms relaxed", "sitting on a chair, hands in lap", "walking, three-quarter view", "back view, looking over shoulder"];
-export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string, extra?:AdditionalPoseView, selected?:{style:StyleJob;strength:number}) {
+export function poseBody(look: CharacterLook | null, instruction:string, count:number, transparent:boolean, key:string, extra?:AdditionalPoseView, selected?:{style:StyleJob;strength:number}, character?:{style:StyleJob;strength:number}) {
   const pose=instruction.replace(/\s+/g," ").trim();
   if (!look || look.asset.status!=="approved") throw new Error("Choose an approved reviewed look first.");
   if (!pose || pose.length>300 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(pose)) throw new Error("Describe the pose in 1–300 characters.");
@@ -21,9 +23,14 @@ export function poseBody(look: CharacterLook | null, instruction:string, count:n
   if(extra&&(!extra.confirmed||extra.asset.status!=="approved"||extra.asset.media_type!=="image/png"
     ||extra.asset.id===look.asset.id||extra.asset.sha256===look.source_sha256
     ||!["front","side","back","detail"].includes(extra.view)))throw new Error("Choose another approved view and confirm it shows the same character and outfit.");
-  if(selected?.style.kind==="character_look"&&(selected.style.look?.id!==look.id||selected.style.look.sha256!==look.sha256))throw new Error("Choose a trained version for this exact reviewed character look.");
-  if(selected&&(selected.style.status!=="completed"||!selected.style.weights_sha256||!Number.isFinite(selected.strength)||selected.strength<0.1||selected.strength>1))throw new Error("Choose a ready style version and a strength from 0.1 to 1.");
+  for(const chosen of [selected,character]){
+    if(chosen?.style.kind==="character_look"&&(chosen.style.look?.id!==look.id||chosen.style.look.sha256!==look.sha256))throw new Error("Choose a trained version for this exact reviewed character look.");
+    if(chosen&&(chosen.style.status!=="completed"||!chosen.style.weights_sha256||!Number.isFinite(chosen.strength)||chosen.strength<0.1||chosen.strength>1))throw new Error("Choose a ready trained version and a strength from 0.1 to 1.");
+  }
+  if(character&&(character.style.kind!=="character_look"||(selected&&selected.style.kind==="character_look")))throw new Error("Choose a character version for Character and a project style for Style.");
+  if(character&&selected&&(character.style.id===selected.style.id||character.strength+selected.strength>1+1e-9))throw new Error("Combined character and style strengths must total at most 1.");
   return {look_id:look.id,pose,count,transparent,idempotency_key:key,
+    ...(character?{character_adapter:{id:character.style.id,strength:character.strength}}:{}),
     ...(selected?{style_adapter:{id:selected.style.id,strength:selected.strength}}:{}),
     ...(extra?{additional_references:[{asset_id:extra.asset.id,view:extra.view}]}:{})};
 }

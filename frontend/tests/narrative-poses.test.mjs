@@ -39,3 +39,19 @@ test('poses pin only a completed style version and bounded strength',()=>{
  assert.deepEqual(model.poseBody(look,'sitting',1,false,'key',undefined,{style,strength:0.5}).style_adapter,{id:'version',strength:0.5});
  for(const selected of [{style:{...style,status:'running'},strength:0.5},{style,strength:2}])assert.throws(()=>model.poseBody(look,'sitting',1,false,'key',undefined,selected));
 });
+
+test('a pose can select this exact trained character look alongside a project style',()=>{
+ const look={id:'look',sha256:'lookhash',asset:{status:'approved'}};
+ const character={id:'character',kind:'character_look',status:'completed',weights_sha256:'c',look:{id:'look',sha256:'lookhash'}};
+ const style={id:'style',kind:'project_style',status:'completed',weights_sha256:'s'};
+ const body=model.poseBody(look,'walking',1,false,'key',undefined,{style,strength:0.4},{style:character,strength:0.6});
+ assert.deepEqual(body.character_adapter,{id:'character',strength:0.6});
+ assert.deepEqual(body.style_adapter,{id:'style',strength:0.4});
+ for(const [chosen,identity] of [
+  [{style,strength:0.6},{style:character,strength:0.6}],
+  [{style:character,strength:0.4},{style:character,strength:0.6}],
+  [{style,strength:0.4},{style,strength:0.6}],
+  [{style,strength:0.4},{style:{...character,look:{id:'other',sha256:'other'}},strength:0.6}],
+ ])assert.throws(()=>model.poseBody(look,'walking',1,false,'key',undefined,chosen,identity));
+ assert.equal(model.poseBody(look,'walking',1,false,'key',undefined,undefined,{style:character,strength:0.6}).character_adapter.id,'character');
+});

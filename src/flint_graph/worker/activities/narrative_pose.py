@@ -17,6 +17,9 @@ from flint_graph.application.services.narrative_character_adapters import detail
 from flint_graph.application.services.narrative_images import ImageWork
 from flint_graph.domain.errors import DomainError
 from flint_graph.infrastructure.db.models import NarrativeAsset
+from flint_graph.infrastructure.db.narrative_character_adapter_models import (
+    NarrativePoseCharacterAdapter,
+)
 from flint_graph.infrastructure.db.narrative_look_models import NarrativeLookJob
 from flint_graph.infrastructure.db.narrative_pose_models import (
     NarrativePoseJob,
@@ -113,9 +116,17 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     )
             data = await self._image(work, asset.id, asset.size_bytes, asset.sha256)
             binding = await session.get(NarrativePoseStyle, work.job_id)
-            style_adapter = None
-            if binding:
-                style = await session.get(NarrativeStyleJob, binding.style_id)
+            character_binding = await session.get(NarrativePoseCharacterAdapter, work.job_id)
+            adapters = {}
+            for role, chosen in (("character", character_binding), ("style", binding)):
+                if chosen is None:
+                    continue
+                adapter_id = (
+                    chosen.adapter_id
+                    if isinstance(chosen, NarrativePoseCharacterAdapter)
+                    else chosen.style_id
+                )
+                style = await session.get(NarrativeStyleJob, adapter_id)
                 if (
                     not style
                     or style.project_id != work.project_id
@@ -123,7 +134,7 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     or style.status != "completed"
                     or not style.weights_key
                     or not style.weights_size
-                    or style.weights_sha256 != binding.weights_sha256
+                    or style.weights_sha256 != chosen.weights_sha256
                     or style.model_manifest_sha256 != plan.model_manifest_sha256
                 ):
                     raise ImageGenerationError("style_unavailable")
@@ -131,12 +142,17 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     await verify_target(
                         session, style, character_id=plan.character_id, look_id=plan.look_id
                     )
+                    kind = (await details(session, style))["kind"]
+                    if character_binding and kind != (
+                        "character_look" if role == "character" else "project_style"
+                    ):
+                        raise ImageGenerationError("style_unavailable")
                 except DomainError:
                     raise ImageGenerationError("reference_unavailable") from None
                 weights = await self.store.get_verified(
                     style.weights_key,
                     expected_size=style.weights_size,
-                    expected_sha256=binding.weights_sha256,
+                    expected_sha256=chosen.weights_sha256,
                     max_bytes=MAX_ADAPTER_BYTES,
                 )
                 validate_adapter(
@@ -145,14 +161,15 @@ class NarrativePoseActivities(NarrativeImageActivities):
                     dataset_hash=style.dataset_sha256,
                     recipe_hash=style.recipe_sha256,
                 )
-                style_adapter = PoseStyleAdapter(
-                    weights, style.dataset_sha256, style.recipe_sha256, binding.strength
+                adapters[role] = PoseStyleAdapter(
+                    weights, style.dataset_sha256, style.recipe_sha256, chosen.strength
                 )
         return PoseGenerationRequest(
             **{item.name: getattr(work.request, item.name) for item in fields(work.request)},
             reference=data,
             additional_references=tuple(additional),
-            style_adapter=style_adapter,
+            style_adapter=adapters.get("style"),
+            character_adapter=adapters.get("character"),
         )
 
     async def _generate(
@@ -213,11 +230,23 @@ class NarrativePoseActivities(NarrativeImageActivities):
                 if binding
                 else {}
             )
+            character_binding = await session.get(NarrativePoseCharacterAdapter, job_id)
+            character_meta = (
+                {
+                    "character_adapter_id": str(character_binding.adapter_id),
+                    "character_weights_sha256": character_binding.weights_sha256,
+                    "character_strength": str(character_binding.strength),
+                    "character_look_sha256": look.snapshot["sha256"],
+                }
+                if character_binding
+                else {}
+            )
             return replace(
                 result,
                 runtime={
                     **result.runtime,
                     **style_meta,
+                    **character_meta,
                     "operation": "pose",
                     "references_sha256": sha256(canonical_json(manifest)).hexdigest(),
                     "reference_count": str(len(manifest) or 1),

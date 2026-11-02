@@ -42,6 +42,7 @@ class PoseGenerationRequest(GenerationRequest):
     reference: bytes
     additional_references: tuple[bytes, ...] = ()
     style_adapter: PoseStyleAdapter | None = None
+    character_adapter: PoseStyleAdapter | None = None
 
 
 def verify_pose_model(root: Path, manifest: str, runtime: Path) -> ModelIdentity:
@@ -230,30 +231,55 @@ class LocalPoseGenerator:
                 payload["reference_sha256s"] = [
                     hashlib.sha256(item).hexdigest() for item in references
                 ]
-            if request.style_adapter:
+            selected = [
+                (role, item)
+                for role, item in (
+                    ("character", request.character_adapter),
+                    ("style", request.style_adapter),
+                )
+                if item is not None
+            ]
+            if selected:
                 from flint_graph.narrative.style_weights import validate_adapter
 
-                style = request.style_adapter
-                validate_adapter(
-                    style.weights,
-                    base_hash=self.model_manifest_sha256,
-                    dataset_hash=style.dataset_hash,
-                    recipe_hash=style.recipe_hash,
-                )
-                if type(style.strength) not in (float, int) or not 0.1 <= style.strength <= 1:
+                if sum(item.strength for _, item in selected) > 1 + 1e-9:
                     raise ImageGenerationError("bad_request")
-                (work / "style.safetensors").write_bytes(style.weights)
-                payload["schema_version"] = 3
+                adapters = []
+                for role, adapter in selected:
+                    validate_adapter(
+                        adapter.weights,
+                        base_hash=self.model_manifest_sha256,
+                        dataset_hash=adapter.dataset_hash,
+                        recipe_hash=adapter.recipe_hash,
+                    )
+                    if (
+                        type(adapter.strength) not in (float, int)
+                        or not 0.1 <= adapter.strength <= 1
+                    ):
+                        raise ImageGenerationError("bad_request")
+                    (work / (role + ".safetensors")).write_bytes(adapter.weights)
+                    adapters.append(
+                        {
+                            "role": role,
+                            "sha256": hashlib.sha256(adapter.weights).hexdigest(),
+                            "dataset_sha256": adapter.dataset_hash,
+                            "recipe_sha256": adapter.recipe_hash,
+                            "strength": adapter.strength,
+                        }
+                    )
+                if len({item["sha256"] for item in adapters}) != len(adapters):
+                    raise ImageGenerationError("bad_request")
+                payload["schema_version"] = 4 if request.character_adapter else 3
                 payload.pop("reference_sha256", None)
                 payload["reference_sha256s"] = [
                     hashlib.sha256(item).hexdigest() for item in references
                 ]
-                payload["style"] = {
-                    "sha256": hashlib.sha256(style.weights).hexdigest(),
-                    "dataset_sha256": style.dataset_hash,
-                    "recipe_sha256": style.recipe_hash,
-                    "strength": style.strength,
-                }
+                if request.character_adapter:
+                    payload["adapters"] = adapters
+                else:
+                    payload["style"] = {
+                        key: value for key, value in adapters[0].items() if key != "role"
+                    }
             env = {
                 key: value
                 for key, value in os.environ.items()

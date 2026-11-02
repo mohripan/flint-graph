@@ -555,3 +555,17 @@ and replacement candidates remain subject to review. See
 `docs/reports/2026-11-02-character-look-adapters.md`. Preserve the existing Studio
 and the Aster QA on 5276 while they are in use; this delivery uses another
 isolated fixture on 8278/5278/5298. Do not close all of #184 or M40 from this slice.
+
+
+[ADR 0052](docs/adr/0052-character-and-style-pose-adapters.md), migration 0039,
+adds an explicit character adapter beside the existing pose style selection.
+`NARRATIVE_POSE_MAX_ADAPTERS=2` enables separate Studio controls and protocol 4;
+the default/older API keeps one chooser and protocols 1–3. Both frozen versions
+must be completed for this exact base pin, and the character version must match
+the exact reviewed look/approved base. Strengths are 0.1–1 with a combined total
+at most 1. Worker/parent/child verify private bytes and record both hashes/roles;
+weights never enter assets, games or tracking artifacts. See
+`docs/reports/2026-11-02-combined-pose-adapters.md` for real qualification and
+limits. Preserve main Studio, Aster QA on 5276 and character QA on 5278; this
+qualification uses a new random database/queues and 8280/5280/5300. Candidate
+anatomy/style/lighting review remains manual.

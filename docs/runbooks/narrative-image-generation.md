@@ -499,8 +499,8 @@ this exact reviewed look. A different outfit/look needs a compatible version;
 it never silently reuses another look's weights. Admission and training/render
 retries validate the immutable target and the still-approved base. Generated
 PNG provenance records the adapter kind and reviewed-look hash as well as the
-existing version/weight hash/strength. The renderer still selects one adapter;
-stacking independent character and style adapters is not enabled.
+existing version/weight hash/strength. The default deployment selects one adapter;
+ADR 0052 below enables separate character and project-style selections.
 
 MLflow uses `flint-character-look` for these runs and keeps project styles in
 `flint-project-style`, adding only an allowlisted `kind` parameter. It uploads
@@ -513,3 +513,40 @@ complete #184's Animagine training, creator-calibrated comparisons or cross-mode
 CG support. It also does not guarantee anatomy, exact costume trim, lighting or
 style fidelity. Keep candidate review manual. Read the [delivery report](../reports/2026-11-02-character-look-adapters.md)
 for the real four-image run and the extra-leg regression example.
+
+
+### Character plus project style in one pose (ADR 0052)
+
+Apply migration 0039 and deploy the API and pose worker together. Then set
+`FLINT_GRAPH_NARRATIVE_POSE_MAX_ADAPTERS=2` (default 1). This advertises
+`max_adapters=2` on pose history. Older/default APIs keep the existing single
+**Trained rendering version** chooser and old request hashes/protocols 1–3.
+Do not restart an owned Studio without coordinating with its owner.
+
+In **Characters → Poses**, select **Trained character look** for this exact
+reviewed look and optionally **Project style**. Either may be omitted. Completed
+versions are immutable; each selection and strength is frozen in the new job.
+Both strengths are 0.1–1 and, when combined, must total at most 1. The form blocks
+Generate above that total and explains how to reduce it. Start with 0.5/0.5 and
+review the result; this is an initial bounded control, not an optimal recipe.
+
+`POST /characters/{character}/looks/pose-jobs` adds optional
+`character_adapter: {id, strength}` beside `style_adapter`. The character role
+requires a completed character-look version for this exact approved base/look;
+when it is present, the style role accepts only a project-style version. Both
+must belong to this workspace/project and match the pinned klein model. Foreign,
+wrong-look, wrong-role, duplicate, unfinished and wrong-model versions are refused.
+Legacy jobs that put a character version in `style_adapter` remain valid.
+
+A scoped sidecar freezes the character version and weight hash separately from
+the existing style binding. The worker verifies both private weights and training
+metadata before rendering. Protocol 4 transfers one character followed by an
+optional style under fixed local filenames, with hashes and strengths only.
+The child loads named Diffusers/PEFT adapters and applies their individual weights.
+History and PNG provenance disclose both roles. Weights remain private, never in
+ordinary image assets, games or MLflow artifacts. No Godot runtime bump is needed.
+
+Inspect face, outfit details, hands/limbs, linework and scene lighting separately.
+Combining adapters does not fix an extra leg or guarantee identical rendering.
+See [ADR 0052](../adr/0052-character-and-style-pose-adapters.md) and the
+[qualification report](../reports/2026-11-02-combined-pose-adapters.md).

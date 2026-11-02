@@ -274,6 +274,7 @@ class Settings(BaseSettings):
     narrative_pose_generation_enabled: bool = False
     narrative_pose_worker_enabled: bool = False
     narrative_pose_max_references: int = Field(default=1, ge=1, le=2)
+    narrative_pose_max_adapters: int = Field(default=1, ge=1, le=2)
     narrative_pose_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_pose_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_pose_task_queue: str = Field(

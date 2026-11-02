@@ -87,6 +87,35 @@ class PoseContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_request(data)
 
+    def test_character_and_style_protocol_has_closed_unique_roles_and_a_total_strength(self):
+        value = self.request(schema_version=4)
+        value["reference_sha256s"] = [value.pop("reference_sha256")]
+        value["adapters"] = [
+            {
+                "role": role,
+                "sha256": digest * 64,
+                "strength": strength,
+                "dataset_sha256": "d" * 64,
+                "recipe_sha256": "e" * 64,
+            }
+            for role, digest, strength in (("character", "a", 0.6), ("style", "b", 0.4))
+        ]
+        self.assertEqual(
+            parse_request(json.dumps(value).encode())["adapters"][0]["role"], "character"
+        )
+        for changes in (
+            {"adapters": []},
+            {"adapters": value["adapters"] * 2},
+            {"adapters": [value["adapters"][0]] * 2},
+            {"adapters": list(reversed(value["adapters"]))},
+            {"adapters": [{**value["adapters"][0], "path": "private"}]},
+            {"adapters": [{**value["adapters"][0], "strength": True}]},
+            {"adapters": [{**value["adapters"][0], "strength": float("nan")}]},
+            {"adapters": [{**a, "strength": 0.6} for a in value["adapters"]]},
+        ):
+            with self.assertRaises(ValueError):
+                parse_request(json.dumps({**value, **changes}).encode())
+
 
 if __name__ == "__main__":
     unittest.main()

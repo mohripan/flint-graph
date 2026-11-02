@@ -61,14 +61,16 @@ def run(request):
             or digest(reference) != expected
         ):
             raise PoseFailure("reference_unavailable")
-    style = request.get("style")
-    if style:
-        weight = Path("style.safetensors")
+    adapters = request.get("adapters", [])
+    if request.get("style"):
+        adapters = [{**request["style"], "role": "style"}]
+    for adapter in adapters:
+        weight = Path(adapter["role"] + ".safetensors")
         if (
             weight.is_symlink()
             or not weight.is_file()
             or weight.stat().st_size > 32 * 1024**2
-            or digest(weight) != style["sha256"]
+            or digest(weight) != adapter["sha256"]
         ):
             raise PoseFailure("reference_unavailable")
     import psutil
@@ -148,14 +150,18 @@ def run(request):
     pipe = Flux2KleinPipeline.from_pretrained(
         request["model_dir"], text_encoder=None, tokenizer=None, **options
     )
-    if style:
+    for adapter in adapters:
         pipe.load_lora_weights(
             ".",
-            weight_name="style.safetensors",
-            adapter_name="project_style",
+            weight_name=adapter["role"] + ".safetensors",
+            adapter_name="character" if adapter["role"] == "character" else "project_style",
             local_files_only=True,
         )
-        pipe.set_adapters("project_style", adapter_weights=style["strength"])
+    if adapters:
+        pipe.set_adapters(
+            ["character" if a["role"] == "character" else "project_style" for a in adapters],
+            adapter_weights=[a["strength"] for a in adapters],
+        )
     pipe.to("cuda")
     pipe.vae.enable_tiling()
     pipe.set_progress_bar_config(disable=True)
@@ -219,6 +225,10 @@ def run(request):
         "host_rss_bytes": str(psutil.Process().memory_info().rss),
         "seconds": str(round(time.monotonic() - began, 3)),
     }
+    runtime["adapter_count"] = str(len(adapters))
+    for adapter in adapters:
+        for key in ("sha256", "strength", "dataset_sha256", "recipe_sha256"):
+            runtime[adapter["role"] + "_adapter_" + key] = str(adapter[key])
     if helper_path:
         runtime.update(cutout_code_sha256=digest(helper_path), onnxruntime=onnx_version)
     emit("result", images=images, prompt_tokens=tokens, runtime=runtime)

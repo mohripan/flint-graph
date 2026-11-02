@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "selection": "agent-selected synthetic QA, not creator calibration",
+  "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+  "look_sha256": "323460b3284ec4847b980eb09cc790695c3421c91e77bdd9863904556f2e6e63",
+  "excluded_anatomy_sha256": "587b6abe922eecad17f82ae55b38a3d85ef916e3e571662f3af7f597b3ed138e",
+  "training": {
+    "character": {
+      "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+      "kind": "character_look",
+      "steps": 200,
+      "seed": 42,
+      "dataset_sha256": "2a0e5bf15274557e259c98ed828e1f5751fd4d9744ba9d49975304c64c3845fd",
+      "recipe_sha256": "262c38600c9b9fa625fbde31c51b5c6b45006496e31bc89d5f759fbefdaa5eb6",
+      "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+      "runtime": {
+        "torch": "2.11.0+cu128",
+        "diffusers": "0.42.1",
+        "peft": "0.21.2",
+        "bitsandbytes": "0.50.2",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "peak_allocated_bytes": "8448426496",
+        "dedicated_used_bytes_after": "9070284800",
+        "host_rss_bytes": "1372307456",
+        "seconds": "286.297",
+        "child_sha256": "71e9b5569ebc9502ba77eaf42e225948abbac143f67173024638fbf557165b6c",
+        "protocol_sha256": "78b253469709090cf75a1195ebaf7e24c2270e8c0fa144ff180ec39fd67fe249",
+        "lock_sha256": "1c1ed00ba080375dfa6290428bd64d437e776584c430e727a1ba756e864a2c24",
+        "bucket_sizes": "[[416, 608], [416, 608], [416, 608], [384, 640]]"
+      },
+      "tracking_run_id": "c2c12a6d079f40af80fa38939f170d21",
+      "source_sha256s": [
+        "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+        "7c9b1069fe3246bb13d9c84445ecf5d9e8ecf55330f144c2ba11daf02819ac2b",
+        "2e76461194dceac2ad796efdc152f8cf09ba391f94b9e9732f6da59b1f966f11",
+        "5b1d4aef5108b125795b7b47ee1b711c31327b71e51cd5a93541da3a04234d9a"
+      ]
+    },
+    "style": {
+      "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+      "kind": "project_style",
+      "steps": 200,
+      "seed": 42,
+      "dataset_sha256": "348217adc621fe7d1cd5eeaeb19526a8cb4d9dab8fab9f265233848244148d74",
+      "recipe_sha256": "262c38600c9b9fa625fbde31c51b5c6b45006496e31bc89d5f759fbefdaa5eb6",
+      "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+      "runtime": {
+        "torch": "2.11.0+cu128",
+        "diffusers": "0.42.1",
+        "peft": "0.21.2",
+        "bitsandbytes": "0.50.2",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "peak_allocated_bytes": "8448426496",
+        "dedicated_used_bytes_after": "9070284800",
+        "host_rss_bytes": "1635123200",
+        "seconds": "272.469",
+        "child_sha256": "71e9b5569ebc9502ba77eaf42e225948abbac143f67173024638fbf557165b6c",
+        "protocol_sha256": "78b253469709090cf75a1195ebaf7e24c2270e8c0fa144ff180ec39fd67fe249",
+        "lock_sha256": "1c1ed00ba080375dfa6290428bd64d437e776584c430e727a1ba756e864a2c24",
+        "bucket_sizes": "[[416, 608], [416, 608], [416, 608], [384, 640]]"
+      },
+      "tracking_run_id": "4b3fff2af64b4580896e1c826f8993d3",
+      "source_sha256s": [
+        "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+        "7c9b1069fe3246bb13d9c84445ecf5d9e8ecf55330f144c2ba11daf02819ac2b",
+        "32281e0522dc737850dde6d83ddf60ae9f1a779ec94f04c047266d86937b5c81",
+        "5b1d4aef5108b125795b7b47ee1b711c31327b71e51cd5a93541da3a04234d9a"
+      ]
+    }
+  },
+  "pose": {
+    "character_adapter": {
+      "kind": "character_look",
+      "look": {
+        "id": "1ae74c8b-ed78-4b7b-be51-3f77acee9395",
+        "sha256": "323460b3284ec4847b980eb09cc790695c3421c91e77bdd9863904556f2e6e63",
+        "name": "Blue travel coat",
+        "character_id": "aster",
+        "asset_id": "97d6ef60-1dc7-4175-bae6-8c2ebf7448f1",
+        "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+        "identity_tags": [
+          "adult",
+          "white bob hair",
+          "red eyes"
+        ],
+        "clothing_tags": [
+          "navy coat with gold trim",
+          "red scarf",
+          "black trousers",
+          "black boots"
+        ],
+        "character_type": "other",
+        "prompt_bundle_sha256": "8f6d90fe01b52f338c512ac759043554560cba5d5081b549c88a130d7515bd1c",
+        "policy_sha256": "a0551a86767d8291b04f692a018bb62e04644fc7c94dbf7da49dc7b43728c2ee"
+      },
+      "id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+      "name": "Blue travel coat identity",
+      "strength": 0.6,
+      "weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127"
+    },
+    "style_adapter": {
+      "kind": "project_style",
+      "look": null,
+      "id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+      "name": "QA ink and palette",
+      "strength": 0.4,
+      "weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921"
+    },
+    "runtime": {
+      "operation": "pose",
+      "torch": "2.11.0+cu128",
+      "diffusers": "0.42.1",
+      "cuda": "12.8",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+      "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "reference_sha256s": "[\"873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42\"]",
+      "reference_count": "1",
+      "additional_reference_preprocessing": "fit-512-lanczos-v1",
+      "reference_sizes": "[[832,1216]]",
+      "pose_child_sha256": "7b32310ff28c98ce758b118f93812e2f9fa4ad6a5014ac8758e0aef226e7e10f",
+      "protocol_sha256": "ba36b0e04f3427d0a9021129aa908c9968fefd0291ad666678164e5c81b56646",
+      "text_encoder_released_before_transformer": "true",
+      "peak_allocated_bytes": "9885839360",
+      "dedicated_used_bytes_after": "11280683008",
+      "host_available_at_start_bytes": "7301238784",
+      "direct_cuda_loading": "true",
+      "host_rss_bytes": "1349980160",
+      "seconds": "80.844",
+      "adapter_count": "2",
+      "character_adapter_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+      "character_adapter_strength": "0.6",
+      "character_adapter_dataset_sha256": "2a0e5bf15274557e259c98ed828e1f5751fd4d9744ba9d49975304c64c3845fd",
+      "character_adapter_recipe_sha256": "262c38600c9b9fa625fbde31c51b5c6b45006496e31bc89d5f759fbefdaa5eb6",
+      "style_adapter_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+      "style_adapter_strength": "0.4",
+      "style_adapter_dataset_sha256": "348217adc621fe7d1cd5eeaeb19526a8cb4d9dab8fab9f265233848244148d74",
+      "style_adapter_recipe_sha256": "262c38600c9b9fa625fbde31c51b5c6b45006496e31bc89d5f759fbefdaa5eb6",
+      "adapter_kind": "project_style",
+      "adapter_look_sha256": "",
+      "style_id": "4318ff3b-1e15-4f21-a6ff-f3ab27fe43a5",
+      "style_weights_sha256": "ccc3186e4a3fcb24a19d40aa8976784fd15d6927a27f593ea2098ee3f347e921",
+      "style_strength": "0.4",
+      "character_id": "69f397a3-217c-4dbc-9895-28f4510f6897",
+      "character_weights_sha256": "369b4717bd928514d2d88ce833e03083b016e6c2c85de414a1ab699679d4f127",
+      "character_strength": "0.6",
+      "character_look_sha256": "323460b3284ec4847b980eb09cc790695c3421c91e77bdd9863904556f2e6e63",
+      "references_sha256": "b284d09a352c8e206c9ff105736b84b646631d16b54f035c0398d5762681cd13",
+      "look_sha256": "323460b3284ec4847b980eb09cc790695c3421c91e77bdd9863904556f2e6e63"
+    },
+    "assets": [
+      {
+        "sha256": "e7ef83dddf2bfdcbafd3fd5a197ca22e05f20a543d762a96a126a978fe1a81ee",
+        "seed": 192130996,
+        "status": "candidate"
+      },
+      {
+        "sha256": "51cd74d4cca76a5cffc83021f14144414099ac9bdc52fe7b7814493c590b126c",
+        "seed": 1990425996,
+        "status": "candidate"
+      }
+    ]
+  },
+  "reviews": [
+    {
+      "identity": "same",
+      "clothes": "same",
+      "notes": "Agent manual QA, not creator calibration: broad identity and outfit match; two visible legs/boots and both hands visible. Gold trim, chair geometry and fingers still require creator review. Left unapproved."
+    },
+    {
+      "identity": "same",
+      "clothes": "same",
+      "notes": "Agent manual QA, not creator calibration: broad identity and outfit match and two legs/boots visible, but the left hand merges into the thigh. Anatomy fails review; exclude from training. Left unapproved."
+    }
+  ],
+  "accessibility": {
+    "stack-result-a11y.json": {
+      "inapplicable": 66,
+      "incomplete": 0,
+      "passes": 22,
+      "violations": 0
+    },
+    "stack-mobile-a11y.json": {
+      "inapplicable": 66,
+      "incomplete": 0,
+      "passes": 22,
+      "violations": 0
+    }
+  }
+}

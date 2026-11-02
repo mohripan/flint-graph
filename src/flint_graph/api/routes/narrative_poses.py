@@ -51,6 +51,7 @@ class PoseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     look_id: UUID
     style_adapter: PoseStyleInput | None = None
+    character_adapter: PoseStyleInput | None = None
     additional_references: list[PoseReferenceInput] = Field(default_factory=list, max_length=1)
     pose: str = Field(min_length=1, max_length=300)
     count: int = Field(default=1, ge=1, le=4)
@@ -107,7 +108,26 @@ async def pose_response(session: AsyncSession, job: NarrativeImageJob) -> dict[s
     from flint_graph.application.services.narrative_character_adapters import details
 
     target = await details(session, style) if style else {}
+    from flint_graph.infrastructure.db.narrative_character_adapter_models import (
+        NarrativePoseCharacterAdapter,
+    )
+
+    character_binding = await session.get(NarrativePoseCharacterAdapter, job.id)
+    character = (
+        await session.get(NarrativeStyleJob, character_binding.adapter_id)
+        if character_binding
+        else None
+    )
     return {
+        "character_adapter": {
+            **(await details(session, character)),
+            "id": str(character.id),
+            "name": character.name,
+            "strength": character_binding.strength,
+            "weights_sha256": character_binding.weights_sha256,
+        }
+        if character and character_binding
+        else None,
         "style_adapter": {
             **target,
             "id": str(style.id),
@@ -150,6 +170,7 @@ async def create_pose_endpoint(
             available=settings.narrative_pose_generation_enabled,
             styles_enabled=settings.narrative_style_training_enabled,
             max_references=settings.narrative_pose_max_references,
+            max_adapters=settings.narrative_pose_max_adapters,
             max_active_jobs=settings.narrative_image_max_active_jobs_per_workspace,
             policy=content_policy(settings.narrative_image_content_policy),
             model_manifest_sha256=settings.narrative_pose_model_manifest_sha256,
@@ -190,6 +211,7 @@ async def list_pose_endpoint(
             "transparent": bool(settings.narrative_image_cutout_manifest_sha256),
             "model_id": MODEL_ID,
             "max_references": settings.narrative_pose_max_references,
+            "max_adapters": settings.narrative_pose_max_adapters,
             "styles": settings.narrative_style_training_enabled,
             "character_training": settings.narrative_style_training_enabled,
         },
