@@ -61,7 +61,8 @@ async def test_character_training_requires_same_look_confirmation_and_base(studi
     assert result.status_code in (404, 422), result.text
 
 
-async def test_trained_character_version_only_renders_its_frozen_look(studio):  # noqa: F811
+@pytest.mark.parametrize("conditioning", ["text", "reference"])
+async def test_trained_character_version_only_renders_its_frozen_look(studio, conditioning):  # noqa: F811
     import json
     import struct
     from dataclasses import replace
@@ -79,6 +80,15 @@ async def test_trained_character_version_only_renders_its_frozen_look(studio):  
 
     client, factory, store, headers, base, *_ = studio
     body, look = await look_request(studio)
+    if conditioning == "reference":
+        from flint_graph.config import get_settings
+        from flint_graph.main import app
+
+        settings = app.dependency_overrides[get_settings]().model_copy(
+            update={"narrative_style_reference_training_enabled": True}
+        )
+        app.dependency_overrides[get_settings] = lambda: settings
+        body = {**body, "conditioning": conditioning, "images": list(reversed(body["images"]))}
     job = (await client.post(base + "/style-jobs", headers=headers, json=body)).json()
     dispatcher = Dispatcher()
     await relay_style_batch(factory, dispatcher=dispatcher)
@@ -87,6 +97,7 @@ async def test_trained_character_version_only_renders_its_frozen_look(studio):  
         model_hash = "b" * 64
 
         async def train(self, request, *, on_progress):
+            assert request.reference_index == (3 if conditioning == "reference" else None)
             await on_progress(20)
             header = {
                 "__metadata__": {

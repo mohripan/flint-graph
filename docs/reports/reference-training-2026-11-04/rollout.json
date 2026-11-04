@@ -1,0 +1,7 @@
+{
+  "http://127.0.0.1:8101/health/live": 200,
+  "http://localhost:5173/": 200,
+  "http://127.0.0.1:5192/index.html": 200,
+  "reference_training_available": true,
+  "scope": "Owned synthetic fixture and health endpoints only"
+}

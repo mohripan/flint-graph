@@ -630,3 +630,16 @@ unavailable taggers. No migration, recipe, prompt/policy or game runtime change;
 this is training-input assistance, not calibrated scoring or a quality guarantee.
 Read `docs/reports/2026-11-02-training-caption-suggestions.md`. Broader #184/M40
 acceptance remains open beyond this slice.
+
+[ADR 0057](docs/adr/0057-reference-conditioned-character-training.md) adds optional
+approved-image conditioning to private character LoRA training. The default-off
+`NARRATIVE_STYLE_REFERENCE_TRAINING_ENABLED` admits explicit `conditioning:
+"reference"` only with a reviewed character/look target. Deploy API, style worker
+and stylegen together. Recipe/protocol 2 finds the frozen base by hash, caches a
+white-composited reference within 512 pixels, appends clean reference tokens with
+separate position IDs and computes loss only on target tokens. Parent checks the
+reference/helper provenance before publication. Legacy recipe/protocol 1,
+idempotency and weights stay valid; no migration, prompt/policy/model or Godot
+change. Character training exposes the option and records its mode. See
+`docs/reports/2026-11-04-reference-conditioned-training.md`; broader #184 and
+creator-calibrated anatomy/style/identity evaluation remain open.

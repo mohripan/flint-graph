@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from contract import bucket_size, parse_request
+from contract import bucket_size, parse_request, reference_size
 
 
 class TrainingContractTests(unittest.TestCase):
@@ -44,6 +44,23 @@ class TrainingContractTests(unittest.TestCase):
             self.assertLessEqual(max(w, h), 768)
             self.assertEqual(w % 32, 0)
             self.assertEqual(h % 32, 0)
+
+    def test_reference_protocol_selects_one_existing_frozen_source(self):
+        value = {**self.request(), "schema_version": 2, "reference_index": 2}
+        self.assertEqual(parse_request(json.dumps(value).encode())["reference_index"], 2)
+        for update in [
+            {"reference_index": True},
+            {"reference_index": -1},
+            {"reference_index": 4},
+            {"schema_version": 1},
+            {"reference_path": "somewhere.png"},
+        ]:
+            with self.assertRaises(ValueError):
+                parse_request(json.dumps({**value, **update}).encode())
+
+    def test_reference_preprocessing_fits_without_upscaling(self):
+        self.assertEqual(reference_size(832, 1216), (336, 512))
+        self.assertEqual(reference_size(80, 120), (80, 112))
 
 
 if __name__ == "__main__":

@@ -704,3 +704,32 @@ confidences. The initial request transaction is released before CPU inference;
 discard/archive and source changes are rechecked before observation persistence.
 Actual training still freezes the creator-reviewed text, not a future rerun of
 the tagger. See the [report](../reports/2026-11-02-training-caption-suggestions.md).
+
+### Approved-image training input (ADR 0057)
+
+Deploy API, style worker and `runtimes/stylegen` together, then explicitly enable
+`FLINT_GRAPH_NARRATIVE_STYLE_REFERENCE_TRAINING_ENABLED=true` after local
+qualification. Existing training/model settings and resource guards still apply.
+No migration, model download or game-runtime rebuild is needed. Default is off.
+
+In **Characters → Poses → Character look training**, the optional **Use the
+approved base as an image reference during training** checkbox selects the new
+recipe. Review 4–12 images and their captions, including the approved base, and
+confirm same look, anatomy and training rights again after changing the mode.
+Completed history states whether training used captions or captions plus the
+approved reference. Select the version through the existing character adapter
+picker and inspect generated candidates before approving them.
+
+`POST /style-jobs` accepts optional `conditioning: "text" | "reference"`.
+Omission preserves caption-only requests and their idempotency identities.
+Reference mode requires `character_look`; project-style reference training is
+refused with `invalid-training-conditioning`. Disabled admission returns
+`reference-training-unavailable`; already admitted requests replay even after
+disablement. Keep the new worker/runtime installed until admitted work finishes.
+
+The new recipe freezes the approved image hash, uses a white-composited reference
+of at most 512 pixels per side, clean reference tokens and target-only loss.
+The approved base is found by hash even when the dataset is reordered. Existing
+caption-only versions remain usable. This is a training option, not a calibrated
+quality filter or anatomy guarantee. The [report](../reports/2026-11-04-reference-conditioned-training.md)
+records actual GPU use, output comparisons and limitations.

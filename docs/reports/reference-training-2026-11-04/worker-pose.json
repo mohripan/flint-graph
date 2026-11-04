@@ -1,0 +1,166 @@
+{
+  "id": "2f876c79-798d-49c6-9e5d-88ad9dd7dc8b",
+  "status": "completed",
+  "guide": {
+    "id": "walking-three-quarter-v1",
+    "label": "Walking \u2014 three-quarter view",
+    "width": 768,
+    "height": 1152,
+    "points": [
+      [
+        360,
+        170
+      ],
+      [
+        375,
+        285
+      ],
+      [
+        320,
+        300
+      ],
+      [
+        290,
+        455
+      ],
+      [
+        275,
+        640
+      ],
+      [
+        435,
+        300
+      ],
+      [
+        465,
+        455
+      ],
+      [
+        485,
+        635
+      ],
+      [
+        355,
+        590
+      ],
+      [
+        310,
+        790
+      ],
+      [
+        245,
+        1080
+      ],
+      [
+        415,
+        590
+      ],
+      [
+        455,
+        800
+      ],
+      [
+        530,
+        1010
+      ],
+      [
+        345,
+        165
+      ],
+      [
+        375,
+        165
+      ],
+      [
+        330,
+        180
+      ],
+      [
+        397,
+        180
+      ]
+    ],
+    "sha256": "afb4c6dec9f58778af85f6be3d93808248e550f2f8a86df663fa6b2159ba5080",
+    "control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460"
+  },
+  "character_adapter": {
+    "kind": "character_look",
+    "look": {
+      "id": "cf12a9cc-0928-4a51-87a1-72d2c592c224",
+      "sha256": "baa454125b64af225475ade0c821556390ae533cc0b87d524d23dab6defd9158",
+      "name": "Blue travel coat",
+      "character_id": "aster",
+      "asset_id": "da132134-04c8-47c2-81a4-8448c6698851",
+      "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+      "identity_tags": [
+        "adult",
+        "white bob hair",
+        "red eyes"
+      ],
+      "clothing_tags": [
+        "navy coat with gold trim",
+        "red scarf",
+        "black trousers",
+        "black boots"
+      ],
+      "character_type": "other",
+      "prompt_bundle_sha256": "5a46a5fb57616bcec4c7f955d7beb3fb10077db7b43738a64dba43f9123760b9",
+      "policy_sha256": "a0551a86767d8291b04f692a018bb62e04644fc7c94dbf7da49dc7b43728c2ee"
+    },
+    "id": "916bd91f-02b5-4976-8d4f-4d128a99e1fc",
+    "name": "Reference training 200",
+    "strength": 0.6,
+    "weights_sha256": "76ddf00ddf0e8712efade5af59bb553b5239ccc1ac7a95e116a065ffe1500f41"
+  },
+  "seeds": [
+    3172465147
+  ],
+  "asset_sha256": "16aee07b5f2d4dd5a5587f903d51d2a90deec530621ad542fda4edb9ed2feae5",
+  "width": 511,
+  "height": 1091,
+  "runtime": {
+    "operation": "pose",
+    "torch": "2.11.0+cu128",
+    "diffusers": "0.42.1",
+    "cuda": "12.8",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "model_manifest_sha256": "db6868d1878df243bdd8db2b8e8fb15472a1f06d2fa04763580e3031f42358ff",
+    "source_sha256": "873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42",
+    "reference_sha256s": "[\"873bf18e482a78ef7c99242a2426bb32d4042f87ae6beea4d32b674d7d569b42\"]",
+    "reference_count": "1",
+    "additional_reference_preprocessing": "fit-512-lanczos-v1",
+    "reference_sizes": "[[768,1152],[350,512]]",
+    "pose_child_sha256": "92a208aa20491b650e637c4f2ef114b8fc644e2d29c1acd65c0fc28159536fa2",
+    "protocol_sha256": "8869899922cd6b6c4cb65888f9a102812229e08252a5f1bd5f14c427e0ca79e4",
+    "text_encoder_released_before_transformer": "true",
+    "peak_allocated_bytes": "9975921664",
+    "dedicated_used_bytes_after": "12457185280",
+    "host_available_at_start_bytes": "12731527168",
+    "direct_cuda_loading": "true",
+    "host_rss_bytes": "3142774784",
+    "seconds": "67.296",
+    "adapter_count": "1",
+    "character_adapter_sha256": "76ddf00ddf0e8712efade5af59bb553b5239ccc1ac7a95e116a065ffe1500f41",
+    "character_adapter_strength": "0.6",
+    "character_adapter_dataset_sha256": "fee02f25b73c746a1614414b62e7308859fc55f82cb68f2074b5df61a166b1f6",
+    "character_adapter_recipe_sha256": "465b266fb274c8156090df113827cafbff709ffc7b1738fac9da59a555f7330b",
+    "pose_control_strength": "0.8",
+    "pose_control_manifest_sha256": "8dadc212b55432ef49f4b1b9089eb11d6c2bc56eb23ef1ddd7bdc534f47aa460",
+    "pose_control_weights_sha256": "f9880f9070576ff1603c0988ed2afc9957deb0d7dd7c52cf15decbd4087f1339",
+    "pose_guide_sha256": "afb4c6dec9f58778af85f6be3d93808248e550f2f8a86df663fa6b2159ba5080",
+    "pose_guide_id": "walking-three-quarter-v1",
+    "pose_guide_renderer_sha256": "96d63aaed78d5bd09390a3719628eba538e69766fb3fcb4d6bc6a8a95222570c",
+    "cutout_code_sha256": "fbe06761236bc588aa92a36ebbf2ce9b4f0a757c5fb6f048fb97a494724014db",
+    "onnxruntime": "1.31.1",
+    "character_adapter_id": "916bd91f-02b5-4976-8d4f-4d128a99e1fc",
+    "character_weights_sha256": "76ddf00ddf0e8712efade5af59bb553b5239ccc1ac7a95e116a065ffe1500f41",
+    "character_strength": "0.6",
+    "character_look_sha256": "baa454125b64af225475ade0c821556390ae533cc0b87d524d23dab6defd9158",
+    "references_sha256": "b66cd76e1e52bb06e1ba1c0dacee45b08cb00a5a1dedd49ee2e0c934ce825643",
+    "look_sha256": "baa454125b64af225475ade0c821556390ae533cc0b87d524d23dab6defd9158",
+    "pose_control_repo": "xocialize/refcontrol-FLUX.2-klein-4B-pose-lora",
+    "pose_control_revision": "b2b0edf2622f2abd980bf868441149d71b3eb7b0",
+    "pose_control_applied": "true"
+  },
+  "approved": false
+}

@@ -42,6 +42,17 @@ RECIPE = {
     "runtime_lock": "stylegen-v1",
 }
 RECIPE_SHA = sha256(canonical_json(RECIPE)).hexdigest()
+REFERENCE_RECIPE = {
+    **RECIPE,
+    "schema": 2,
+    "conditioning": "approved_look_image",
+    "reference_preprocess": "fit512_floor16_rgb_white",
+    "reference_ids": "time10_target0",
+    "reference_vae": "mode_bn_normalized",
+    "loss_tokens": "target_only",
+    "runtime_lock": "stylegen-reference-v1",
+}
+REFERENCE_RECIPE_SHA = sha256(canonical_json(REFERENCE_RECIPE)).hexdigest()
 
 
 def workflow_id(payload: ImageJobPayload) -> str:
@@ -76,6 +87,7 @@ def response(row: NarrativeStyleJob) -> dict[str, Any]:
         "dataset_sha256": row.dataset_sha256,
         "model_manifest_sha256": row.model_manifest_sha256,
         "recipe_sha256": row.recipe_sha256,
+        "conditioning": "reference" if row.recipe_sha256 == REFERENCE_RECIPE_SHA else "text",
         "weights_sha256": row.weights_sha256,
         "cancel_requested": row.cancel_requested,
         "error_code": row.error_code,
@@ -103,6 +115,8 @@ async def queue_style(
     model_manifest_sha256: str | None,
     policy: ContentPolicy,
     character_look: dict[str, Any] | None = None,
+    conditioning: str = "text",
+    reference_training_available: bool = False,
 ) -> NarrativeStyleJob:
     if not rights_confirmed:
         raise DomainError(
@@ -119,6 +133,7 @@ async def queue_style(
         canonical_json(
             {
                 "name": name,
+                **({"conditioning": "reference"} if conditioning == "reference" else {}),
                 **(
                     {
                         "character_look": {
@@ -158,6 +173,22 @@ async def queue_style(
     if project.archived_at:
         raise DomainError(
             409, "Project archived", "Restore the project before training.", "project-archived"
+        )
+    if conditioning not in {"text", "reference"} or (
+        conditioning == "reference" and not character_look
+    ):
+        raise DomainError(
+            422,
+            "Invalid training conditioning",
+            "Reference training requires a reviewed character look.",
+            "invalid-training-conditioning",
+        )
+    if conditioning == "reference" and not reference_training_available:
+        raise DomainError(
+            503,
+            "Reference training unavailable",
+            "Reference-conditioned training is not enabled.",
+            "reference-training-unavailable",
         )
     if not available or not model_manifest_sha256:
         raise DomainError(
@@ -271,7 +302,7 @@ async def queue_style(
         request_hash=request_hash,
         model_manifest_sha256=model_manifest_sha256,
         dataset_sha256=sha256(canonical_json(frozen)).hexdigest(),
-        recipe_sha256=RECIPE_SHA,
+        recipe_sha256=REFERENCE_RECIPE_SHA if conditioning == "reference" else RECIPE_SHA,
         trigger="fgstyle_" + job_id.hex,
         steps=steps,
         seed=seed,

@@ -1,0 +1,34 @@
+[
+  {
+    "checked": true,
+    "label": "Aster wave\nAster wave"
+  },
+  {
+    "checked": true,
+    "label": "Aster seated, anatomy reviewed\nAster seated, anatomy reviewed"
+  },
+  {
+    "checked": true,
+    "label": "Aster rear view\nAster rear view"
+  },
+  {
+    "checked": true,
+    "label": "Aster base\nAster base"
+  },
+  {
+    "checked": true,
+    "label": "Use the approved base as an image reference during training. The model learns the selected poses with that reference available. Check the generated results before use."
+  },
+  {
+    "checked": false,
+    "label": "Every selected image shows this same character and outfit, including the reviewed base."
+  },
+  {
+    "checked": false,
+    "label": "I checked anatomy, hands, feet and limb count in every selected image."
+  },
+  {
+    "checked": false,
+    "label": "I reviewed these images and captions and have rights to train on them."
+  }
+]

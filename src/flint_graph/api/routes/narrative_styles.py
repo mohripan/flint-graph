@@ -1,6 +1,6 @@
 """Authenticated private style training; weights have no public download route."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -56,6 +56,7 @@ class StyleCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     name: str = Field(min_length=1, max_length=80, pattern=r"\S")
     character_look: CharacterTrainingTarget | None = None
+    conditioning: Literal["text", "reference"] = "text"
     images: list[TrainingImage] = Field(min_length=4, max_length=12)
     rights_confirmed: StrictBool
     steps: int = Field(default=200, ge=20, le=400)
@@ -165,6 +166,7 @@ async def create(
             project_id=project_id,
             author_user_id=user.user.id,
             available=settings.narrative_style_training_enabled,
+            reference_training_available=settings.narrative_style_reference_training_enabled,
             model_manifest_sha256=settings.narrative_pose_model_manifest_sha256,
             policy=content_policy(settings.narrative_image_content_policy),
             **payload.model_dump(),
@@ -195,6 +197,7 @@ async def listing(
         "caption_suggestions": bool(
             settings.narrative_look_tagger_python and settings.narrative_look_tagger_model_dir
         ),
+        "reference_training": settings.narrative_style_reference_training_enabled,
     }
 
 

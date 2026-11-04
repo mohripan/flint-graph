@@ -22,6 +22,7 @@ from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.narrative_styles import (
     ACTIVE,
     RECIPE_SHA,
+    REFERENCE_RECIPE_SHA,
     WORKFLOW,
     workflow_id,
 )
@@ -150,16 +151,28 @@ class NarrativeStyleActivities:
                 await asyncio.sleep(3)
 
         async def train() -> StyleTrainingResult:
-            if (
-                row.model_manifest_sha256 != self.trainer.model_hash
-                or row.recipe_sha256 != RECIPE_SHA
-            ):
+            if row.model_manifest_sha256 != self.trainer.model_hash or row.recipe_sha256 not in {
+                RECIPE_SHA,
+                REFERENCE_RECIPE_SHA,
+            }:
                 raise ValueError("model_pin_mismatch")
             images = []
+            reference_index = None
             async with self.factory() as session:
                 await check_anatomy(session)
                 try:
-                    await verify_target(session, row)
+                    target = await verify_target(session, row)
+                    if row.recipe_sha256 == REFERENCE_RECIPE_SHA:
+                        if target is None:
+                            raise ValueError("reference_unavailable")
+                        matches = [
+                            i
+                            for i, image in enumerate(row.images)
+                            if image["sha256"] == target.snapshot["source_sha256"]
+                        ]
+                        if len(matches) != 1:
+                            raise ValueError("reference_unavailable")
+                        reference_index = matches[0]
                 except DomainError:
                     raise ValueError("reference_unavailable") from None
                 for item in row.images:
@@ -193,6 +206,7 @@ class NarrativeStyleActivities:
                     row.trigger,
                     row.steps,
                     row.seed,
+                    reference_index=reference_index,
                 ),
                 on_progress=progress,
             )

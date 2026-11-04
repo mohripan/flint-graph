@@ -266,6 +266,7 @@ class Settings(BaseSettings):
     narrative_look_tagger_python: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_look_tagger_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_style_training_enabled: bool = False
+    narrative_style_reference_training_enabled: bool = False
     narrative_style_worker_enabled: bool = False
     narrative_style_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_style_task_queue: str = Field(default="narrative-style", min_length=1, max_length=128)

@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from contract import LIMIT, bucket_size, parse_request
+from contract import LIMIT, bucket_size, parse_request, reference_size
 
 OUT = sys.stdout
 
@@ -136,6 +136,28 @@ def run(request):
         with torch.no_grad():
             raw = vae.encode(pixels).latent_dist.mode()
             latents.append(((Flux2KleinPipeline._patchify_latents(raw) - mean) / std).cpu())
+    reference = None
+    reference_shape = None
+    if request["schema_version"] == 2:
+        with Image.open(paths[request["reference_index"]]) as source:
+            reference_shape = reference_size(*source.size)
+            rgba = source.convert("RGBA")
+            image = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert(
+                "RGB"
+            )
+            image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            image = image.resize(reference_shape, Image.Resampling.LANCZOS)
+            pixels = (
+                torch.from_numpy(np.array(image))
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                .to(device="cuda", dtype=torch.bfloat16)
+                / 127.5
+                - 1
+            )
+        with torch.no_grad():
+            raw = vae.encode(pixels).latent_dist.mode()
+            reference = ((Flux2KleinPipeline._patchify_latents(raw) - mean) / std).cpu()
     peak = max(peak, torch.cuda.max_memory_allocated())
     del vae, mean, std, pixels, raw
     gc.collect()
@@ -173,10 +195,15 @@ def run(request):
         noise = torch.randn_like(latent)
         noisy = (1 - sigma) * latent + sigma * noise
         image_ids = Flux2KleinPipeline._prepare_latent_ids(latent).to("cuda")
+        model_input = Flux2KleinPipeline._pack_latents(noisy)
+        if reference is not None:
+            from conditioning import training_inputs
+
+            model_input, image_ids = training_inputs(noisy, reference.to("cuda"))
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             prediction = transformer(
-                hidden_states=Flux2KleinPipeline._pack_latents(noisy),
+                hidden_states=model_input,
                 timestep=timestep,
                 guidance=None,
                 encoder_hidden_states=context,
@@ -184,7 +211,12 @@ def run(request):
                 img_ids=image_ids,
                 return_dict=False,
             )[0]
-            prediction = Flux2KleinPipeline._unpack_latents_with_ids(prediction, image_ids)
+            if reference is not None:
+                from conditioning import target_prediction
+
+                prediction = target_prediction(prediction, latent)
+            else:
+                prediction = Flux2KleinPipeline._unpack_latents_with_ids(prediction, image_ids)
             loss = torch.nn.functional.mse_loss(prediction.float(), (noise - latent).float())
         if not torch.isfinite(loss):
             raise ValueError("nonfinite_training")
@@ -227,6 +259,14 @@ def run(request):
         lock_sha256=pins.digest(Path(__file__).with_name("uv.lock")),
         bucket_sizes=json.dumps(sizes),
     )
+    if reference is not None:
+        runtime.update(
+            conditioning="approved_look_image",
+            reference_sha256=request["images"][request["reference_index"]]["sha256"],
+            reference_size=json.dumps(reference_shape),
+            loss_tokens="target_only",
+            conditioning_sha256=pins.digest(Path(__file__).with_name("conditioning.py")),
+        )
     emit(
         "result",
         sha256=pins.digest(Path("out/adapter.safetensors")),

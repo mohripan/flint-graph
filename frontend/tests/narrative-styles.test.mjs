@@ -42,3 +42,10 @@ test('a caption proposal changes only the explicitly selected unchanged source',
   assert.throws(()=>model.applyCaptionSuggestion(images,invalid));
  }
 });
+
+test('reference training is explicit and requires a reviewed character target',()=>{
+ const look={id:'look',sha256:'lookhash',character_id:'mira',source_sha256:'0',asset:images[0].asset};
+ const target={look,characterId:'mira',sameLook:true,anatomyReviewed:true,referenceConditioned:true};
+ assert.equal(model.styleBody('Travel coat',images,true,200,42,'key',target).conditioning,'reference');
+ assert.equal('conditioning' in model.styleBody('Travel coat',images,true,200,42,'key',{...target,referenceConditioned:false}),false);
+});

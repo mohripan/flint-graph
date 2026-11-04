@@ -33,6 +33,7 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
  const reviews=useLookReviewFlags(tenantId,projectId,choices);
  const blocked=anatomyFailures(choices,reviews.flags);
  const [sameLook,setSameLook]=useState(false);const [anatomy,setAnatomy]=useState(false);
+ const [referenceConditioned,setReferenceConditioned]=useState(false);
  const suggestedCaption=characterLook?[...characterLook.identity_tags,...characterLook.clothing_tags].join(', '):'';
  const [selected,setSelected]=useState<TrainingSelection[]>([]);
  const [suggestions,setSuggestions]=useState<Record<string,TrainingCaptionSuggestion>>({});
@@ -44,6 +45,7 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
   setSelected(characterLook&&characterLook.asset.status==='approved'?[{asset:characterLook.asset,caption:suggestedCaption.length<=600?suggestedCaption:''}]:[]);
   setName(characterLook?characterLook.name+' version':'');setRights(false);setSameLook(false);setAnatomy(false);
   captionRequest.current?.abort();setReading(null);setSuggestions({});
+  setReferenceConditioned(false);
  },[tenantId,projectId,characterLook?.id]);
  const [steps,setSteps]=useState(200);const [seed,setSeed]=useState(42);
  const [busy,setBusy]=useState(false);const [notice,setNotice]=useState<string|null>(null);
@@ -53,9 +55,9 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
  async function train(){
    if(disabled)return;setBusy(true);setNotice(null);
   try{
-   const signature=JSON.stringify([name,selected.map(i=>[i.asset.id,i.caption]),rights,steps,seed,characterLook?.id,sameLook,anatomy]);
+   const signature=JSON.stringify([name,selected.map(i=>[i.asset.id,i.caption]),rights,steps,seed,characterLook?.id,sameLook,anatomy,referenceConditioned]);
    if(pending.current?.signature!==signature)pending.current={signature,key:crypto.randomUUID()};
-   await api.createStyleJob(tenantId,projectId,styleBody(name,selected,rights,steps,seed,pending.current.key,characterLook?{look:characterLook,characterId:characterId??'',sameLook,anatomyReviewed:anatomy}:undefined,blocked));
+   await api.createStyleJob(tenantId,projectId,styleBody(name,selected,rights,steps,seed,pending.current.key,characterLook?{look:characterLook,characterId:characterId??'',sameLook,anatomyReviewed:anatomy,referenceConditioned}:undefined,blocked));
    pending.current=null;setSelected([]);setRights(false);refresh();
   }catch(error){setNotice(error instanceof Error?error.message:'Could not start training.');}
   finally{setBusy(false);}
@@ -119,6 +121,7 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
     <div className="style-settings"><Field label="Training steps"><input type="number" min={20} max={400} value={steps} onChange={e=>setSteps(Number(e.target.value))} /></Field>
      <Field label="Random seed"><input type="number" min={0} max={4294967295} value={seed} onChange={e=>setSeed(Number(e.target.value))} /></Field></div>
     {characterLook&&<>
+     {history.reference_training&&<label className="studio-check"><input type="checkbox" checked={referenceConditioned} onChange={e=>{setReferenceConditioned(e.target.checked);setRights(false);setSameLook(false);setAnatomy(false);}} /><span>Use the approved base as an image reference during training. The model learns the selected poses with that reference available. Check the generated results before use.</span></label>}
      <label className="studio-check"><input type="checkbox" checked={sameLook} onChange={e=>setSameLook(e.target.checked)} /><span>Every selected image shows this same character and outfit, including the reviewed base.</span></label>
      <label className="studio-check"><input type="checkbox" checked={anatomy} onChange={e=>setAnatomy(e.target.checked)} /><span>I checked anatomy, hands, feet and limb count in every selected image.</span></label>
     </>}
@@ -130,6 +133,7 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
   {notice&&<p role="status">{notice}</p>}
   {history?.jobs.filter(job=>characterLook?job.kind==="character_look"&&job.look?.id===characterLook.id:job.kind!=="character_look").map(job=><article className="style-version" key={job.id}>
    <div><strong>{job.name}</strong><small>{job.images.length} images · {job.steps} steps · {new Date(job.created_at).toLocaleString()}</small></div>
+   {job.kind==='character_look'&&<p className="studio-hint">Training input: {job.conditioning==='reference'?'captions and the approved image reference':'captions'}</p>}
    <p role={job.status==='running'?'status':undefined}>{styleStatus(job)}</p>
    {['queued','running'].includes(job.status)&&<><progress value={job.progress} max={job.steps} aria-label={`Training progress: ${job.name}`} />
     {!readOnly&&!job.cancel_requested&&<button type="button" className="studio-link" disabled={busy} onClick={()=>void cancel(job.id)}>Cancel training</button>}</>}

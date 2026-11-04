@@ -35,7 +35,12 @@ def parse_request(raw):
         if len(raw) > LIMIT:
             raise ValueError
         value = json.loads(raw, object_pairs_hook=_object)
-        if type(value) is not dict or set(value) != {
+        if type(value) is not dict:
+            raise ValueError
+        version = value.get("schema_version")
+        if type(version) is not int or version not in (1, 2):
+            raise ValueError
+        if set(value) != {
             "schema_version",
             "model_dir",
             "model_manifest_sha256",
@@ -45,9 +50,7 @@ def parse_request(raw):
             "steps",
             "seed",
             "images",
-        }:
-            raise ValueError
-        if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        } | ({"reference_index"} if version == 2 else set()):
             raise ValueError
         for key in ["model_manifest_sha256", "dataset_sha256", "recipe_sha256"]:
             if type(value[key]) is not str or not SHA.fullmatch(value[key]):
@@ -64,6 +67,11 @@ def parse_request(raw):
             raise ValueError
         images = value["images"]
         if type(images) is not list or not 4 <= len(images) <= 12:
+            raise ValueError
+        if version == 2 and (
+            type(value["reference_index"]) is not int
+            or not 0 <= value["reference_index"] < len(images)
+        ):
             raise ValueError
         seen = set()
         for image in images:
@@ -85,3 +93,9 @@ def parse_request(raw):
         return value
     except (ValueError, TypeError, KeyError, UnicodeError, RecursionError):
         raise ValueError("invalid_request") from None
+
+
+def reference_size(width, height):
+    bucket_size(width, height)  # The same bounded source dimensions.
+    scale = min(1, 512 / max(width, height))
+    return max(16, int(width * scale) // 16 * 16), max(16, int(height * scale) // 16 * 16)

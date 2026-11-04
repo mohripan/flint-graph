@@ -1,6 +1,7 @@
 import type {CharacterLook} from './lookModel';
 import type {NarrativeImage} from '../lib/api';
 export interface StyleJob {
+ conditioning?:"text"|"reference";
  kind?:"project_style"|"character_look";look?:{id:string;sha256:string;character_id:string;name:string}|null;
  id:string;name:string;status:string;progress:number;steps:number;seed:number;
  images:{asset_id:string;sha256:string;name:string;caption:string}[];
@@ -8,7 +9,7 @@ export interface StyleJob {
  cancel_requested:boolean;error_code:string|null;losses:number[]|null;runtime:Record<string,string>|null;
  tracking_run_id:string|null;created_at:string;
 }
-export interface StyleHistory {jobs:StyleJob[];available:boolean;caption_suggestions?:boolean}
+export interface StyleHistory {jobs:StyleJob[];available:boolean;caption_suggestions?:boolean;reference_training?:boolean}
 export interface TrainingSelection {asset:NarrativeImage;caption:string}
 export interface TrainingCaptionSuggestion {
  asset_id:string;source_sha256:string;observation_id:string;caption:string;
@@ -25,7 +26,7 @@ export function applyCaptionSuggestion(images:TrainingSelection[],proposal:Pick<
 export function trainingAssets(assets:NarrativeImage[]):NarrativeImage[]{
  return assets.filter(a=>a.status==='approved'&&a.media_type==='image/png'&&(a.width??0)>=64&&(a.height??0)>=64);
 }
-export interface CharacterTraining {look:CharacterLook;characterId:string;sameLook:boolean;anatomyReviewed:boolean}
+export interface CharacterTraining {look:CharacterLook;characterId:string;sameLook:boolean;anatomyReviewed:boolean;referenceConditioned?:boolean}
 export function compatibleAdapters(jobs:StyleJob[],look:Pick<CharacterLook,'id'|'sha256'>|null):StyleJob[]{
  return jobs.filter(job=>job.status==='completed'&&(job.kind!=='character_look'||(look&&job.look?.id===look.id&&job.look.sha256===look.sha256)));
 }
@@ -43,6 +44,7 @@ export function styleBody(name:string,images:TrainingSelection[],rights:boolean,
  });
  if(target&&(!target.characterId||!target.sameLook||!target.anatomyReviewed||target.look.asset.status!=='approved'||!images.some(i=>i.asset.sha256===target.look.source_sha256)))throw new Error('Include the reviewed base and check the same character, outfit and anatomy in every selected image.');
  return {name,images:captions,rights_confirmed:true,steps,seed,idempotency_key:key,
+    ...(target?.referenceConditioned?{conditioning:'reference' as const}:{}),
   ...(target?{character_look:{character_id:target.characterId,look_id:target.look.id,same_look_confirmed:true,anatomy_reviewed:true}}:{})};
 }
 export function styleStatus(job:StyleJob):string{

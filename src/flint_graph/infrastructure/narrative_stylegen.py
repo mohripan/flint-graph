@@ -24,6 +24,7 @@ class StyleTrainingRequest:
     trigger: str
     steps: int
     seed: int
+    reference_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,11 @@ class LocalStyleTrainer:
     async def train(
         self, request: StyleTrainingRequest, *, on_progress: Callable[[int], Awaitable[None]]
     ) -> StyleTrainingResult:
+        if request.reference_index is not None and (
+            type(request.reference_index) is not int
+            or not 0 <= request.reference_index < len(request.images)
+        ):
+            raise ValueError("invalid_reference")
         with tempfile.TemporaryDirectory(prefix="flint-style-") as directory:
             work = Path(directory)
             images = []
@@ -50,7 +56,12 @@ class LocalStyleTrainer:
                 (work / f"image-{index}.png").write_bytes(data)
                 images.append({"sha256": hashlib.sha256(data).hexdigest(), "caption": caption})
             payload = {
-                "schema_version": 1,
+                "schema_version": 2 if request.reference_index is not None else 1,
+                **(
+                    {"reference_index": request.reference_index}
+                    if request.reference_index is not None
+                    else {}
+                ),
                 "model_dir": str(self.model_dir.resolve()),
                 "model_manifest_sha256": self.model_hash,
                 "dataset_sha256": request.dataset_hash,
@@ -155,6 +166,17 @@ class LocalStyleTrainer:
                             or len(v) > 512
                             for k, v in runtime.items()
                         )
+                    ):
+                        raise ValueError("invalid_output")
+                    if request.reference_index is not None and (
+                        runtime.get("conditioning") != "approved_look_image"
+                        or runtime.get("loss_tokens") != "target_only"
+                        or runtime.get("reference_sha256")
+                        != hashlib.sha256(request.images[request.reference_index][0]).hexdigest()
+                        or runtime.get("conditioning_sha256")
+                        != hashlib.sha256(
+                            self.script.with_name("conditioning.py").read_bytes()
+                        ).hexdigest()
                     ):
                         raise ValueError("invalid_output")
                     output = work / "out" / "adapter.safetensors"

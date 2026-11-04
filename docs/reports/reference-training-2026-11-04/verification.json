@@ -1,0 +1,263 @@
+{
+  "phase": "before commit",
+  "environment": "FLINT_GRAPH_ENV=test",
+  "godot": "Godot 4.7.2 pinned binary and templates",
+  "commands": [
+    {
+      "name": "reference-tensors",
+      "command": [
+        "C:\\Projects\\flint-graph-codex-character-studio\\runtimes\\stylegen\\.venv\\Scripts\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "runtimes/stylegen",
+        "-p",
+        "test_conditioning.py"
+      ],
+      "exit_code": 0,
+      "seconds": 9.22
+    },
+    {
+      "name": "guide-raster",
+      "command": [
+        "C:\\Projects\\flint-graph-codex-character-studio\\runtimes\\posegen\\.venv\\Scripts\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "runtimes/posegen",
+        "-p",
+        "test_guidance.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.11
+    },
+    {
+      "name": "repair-pixels",
+      "command": [
+        "C:\\Projects\\flint-graph-codex-character-studio\\runtimes\\posegen\\.venv\\Scripts\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "runtimes/posegen",
+        "-p",
+        "test_repair.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.12
+    },
+    {
+      "name": "pytest",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "--tb=short"
+      ],
+      "exit_code": 0,
+      "seconds": 579.05
+    },
+    {
+      "name": "postgres",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "notes/run-stack-postgres.py",
+        "tests/integration/test_prompt_snapshots.py",
+        "tests/integration/test_ingestion_activities.py",
+        "tests/integration/test_provenance_extraction_persistence.py",
+        "tests/integration/test_query_orchestration.py",
+        "tests/integration/test_query_run_ledger.py",
+        "tests/integration/test_narrative_assistant_execution.py",
+        "tests/integration/test_narrative_characters_api.py",
+        "tests/integration/test_usage_accounting.py",
+        "tests/integration/test_narrative_looks_api.py",
+        "tests/integration/test_rate_limit_state.py",
+        "tests/integration/test_narrative_request_boundary.py",
+        "tests/integration/test_security_boundary.py",
+        "tests/integration/test_metrics_recording.py",
+        "tests/integration/test_narrative_assistant_events.py",
+        "tests/integration/test_narrative_poses_api.py",
+        "tests/integration/test_narrative_styles_api.py",
+        "tests/integration/test_narrative_character_adapters.py",
+        "tests/integration/test_narrative_pose_adapters.py",
+        "tests/integration/test_narrative_anatomy_reviews.py",
+        "tests/integration/test_narrative_pose_repairs.py",
+        "tests/integration/test_narrative_pose_guides.py",
+        "tests/integration/test_narrative_training_captions.py",
+        "tests/integration/test_narrative_reference_training.py",
+        "-q",
+        "--tb=short"
+      ],
+      "exit_code": 0,
+      "seconds": 456.34
+    },
+    {
+      "name": "godot",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "tests/integration/test_narrative_godot_live.py",
+        "tests/integration/test_narrative_preview_live.py",
+        "tests/integration/test_narrative_event_cgs_live.py",
+        "-q",
+        "--tb=short"
+      ],
+      "exit_code": 0,
+      "seconds": 108.28
+    },
+    {
+      "name": "ruff",
+      "command": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "seconds": 0.69
+    },
+    {
+      "name": "mypy",
+      "command": [
+        "uv",
+        "run",
+        "mypy"
+      ],
+      "exit_code": 0,
+      "seconds": 2.03
+    },
+    {
+      "name": "alembic",
+      "command": [
+        "uv",
+        "run",
+        "alembic",
+        "upgrade",
+        "head",
+        "--sql"
+      ],
+      "exit_code": 0,
+      "seconds": 1.25
+    },
+    {
+      "name": "compose",
+      "command": [
+        "docker",
+        "compose",
+        "config"
+      ],
+      "exit_code": 0,
+      "seconds": 0.2
+    },
+    {
+      "name": "frontend-test",
+      "command": [
+        "npm.cmd",
+        "test",
+        "--prefix",
+        "frontend"
+      ],
+      "exit_code": 0,
+      "seconds": 1.42
+    },
+    {
+      "name": "frontend-types",
+      "command": [
+        "npm.cmd",
+        "run",
+        "typecheck",
+        "--prefix",
+        "frontend"
+      ],
+      "exit_code": 0,
+      "seconds": 3.34
+    },
+    {
+      "name": "frontend-build",
+      "command": [
+        "npm.cmd",
+        "run",
+        "build",
+        "--prefix",
+        "frontend"
+      ],
+      "exit_code": 0,
+      "seconds": 3.81
+    },
+    {
+      "name": "prompt-lock",
+      "command": [
+        "uv",
+        "run",
+        "flint-graph-prompts",
+        "check",
+        "--base-ref",
+        "origin/master"
+      ],
+      "exit_code": 0,
+      "seconds": 1.31
+    },
+    {
+      "name": "eval",
+      "command": [
+        "uv",
+        "run",
+        "flint-graph-eval",
+        "run",
+        "--dataset",
+        "evals/datasets/acme-smoke",
+        "--evaluations",
+        "evals/reports/acme-smoke/deterministic-recorded.jsonl",
+        "--experiment",
+        "evals/experiments/acme-smoke.yaml",
+        "--baseline",
+        "evals/reports/acme-smoke/baselines.json",
+        "--config-name",
+        "deterministic"
+      ],
+      "exit_code": 0,
+      "seconds": 0.48
+    },
+    {
+      "name": "style-contract",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "runtimes/stylegen",
+        "-p",
+        "test_contract.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.16
+    },
+    {
+      "name": "pose-contract",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "runtimes/posegen",
+        "-p",
+        "test_contract.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.19
+    }
+  ]
+}
