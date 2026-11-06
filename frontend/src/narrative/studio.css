@@ -1,5 +1,7 @@
 @font-face { font-family:StudioLora; src:url('./Lora.ttf') format('truetype'); font-weight:400 700; font-display:swap; }
-.narrative-studio { height:100%; overflow:auto; padding:28px; color:#182635; background:#eaf0f3; }
+/* Positioned so the panel clips absolutely positioned descendants, such as visually hidden
+   inputs far down a long form. Without it they stretch the page and add a second scrollbar. */
+.narrative-studio { position:relative; height:100%; overflow:auto; padding:28px; color:#182635; background:#eaf0f3; }
 .studio-heading { display:flex; justify-content:space-between; gap:20px; align-items:center; margin-bottom:24px; }
 .studio-heading h1 { font-family:StudioLora,Georgia,serif; font-size:34px; line-height:1.15; margin:4px 0 8px; overflow-wrap:anywhere; }
 .studio-heading p,.studio-hint { color:#4e6577; font-size:14px; line-height:1.6; }

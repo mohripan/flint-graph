@@ -18,3 +18,13 @@ test("Tailwind explicitly loads the existing brand theme and preserves base form
   assert.match(css, /input::placeholder/);
   assert.match(css, /cursor: pointer/);
 });
+
+test("the Studio panel clips what it contains, so the page never gets a second scrollbar", () => {
+  const css = readFileSync(new URL("../src/narrative/studio.css", import.meta.url), "utf8");
+  const panel = css.match(/^\.narrative-studio \{([^}]*)\}/m);
+  assert.ok(panel, "the panel's rule exists");
+  // Absolutely positioned descendants, such as hidden radios in a long form, are only clipped
+  // by an overflow container that is also positioned.
+  assert.match(panel[1], /position:relative/);
+  assert.match(panel[1], /overflow:auto/);
+});
