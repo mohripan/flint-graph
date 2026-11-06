@@ -25,6 +25,7 @@ from flint_graph.api.dependencies import (
 )
 from flint_graph.api.narrative_assistant_schemas import (
     AssistantActionResponse,
+    AssistantAttachmentResponse,
     AssistantDecision,
     AssistantProposalResponse,
     AssistantProposalSummary,
@@ -181,6 +182,7 @@ def turn_response(
         base_revision_id=turn.base_revision_id,
         focus_node=turn.focus_node,
         auto_generate=turn.auto_generate,
+        attachments=[AssistantAttachmentResponse(**item) for item in turn.attachments or []],
         status=turn.status,
         cancel_requested=turn.cancel_requested,
         reply=turn.reply,
@@ -308,6 +310,7 @@ async def post_turn_endpoint(
             max_active_turns=settings.narrative_assistant_max_active_turns_per_workspace,
             provider=settings.narrative_assistant_provider,
             auto_generate=payload.auto_generate,
+            attachments=[item.model_dump() for item in payload.attachments],
         ),
     )
     return turn_response(turn, None)

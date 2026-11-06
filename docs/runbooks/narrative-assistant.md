@@ -41,7 +41,7 @@ API and worker settings (environment variables):
 | `FLINT_GRAPH_NARRATIVE_ASSISTANT_MAX_OUTPUT_TOKENS` | 4096 | |
 | `FLINT_GRAPH_NARRATIVE_ASSISTANT_CONTEXT_CHARS` | 24000 | Story outline budget; farthest scenes from the focus are omitted first |
 | `FLINT_GRAPH_NARRATIVE_ASSISTANT_TURN_DEADLINE_SECONDS` | 180 | Per provider call, streaming included |
-| `FLINT_GRAPH_NARRATIVE_ASSISTANT_THINKING` | true | Ollama only: think when the model reports the capability; `false` answers directly |
+| `FLINT_GRAPH_NARRATIVE_ASSISTANT_THINKING` | false | Ollama only: `true` thinks when the model reports the capability, and is far slower |
 | `FLINT_GRAPH_NARRATIVE_ASSISTANT_THINKING_TOKENS` | 8192 | Added to the output budget and the context window while thinking |
 | `FLINT_GRAPH_NARRATIVE_ASSISTANT_MAX_ACTIVE_TURNS_PER_WORKSPACE` | 1 | Admission limit and worker concurrency |
 | `FLINT_GRAPH_NARRATIVE_ASSISTANT_WORKER_ENABLED` | false | Worker process opt-in |
@@ -55,13 +55,14 @@ Choose a local model that fits your GPU. A 12B instruction model quantized to
 about 7 GB (for example a Gemma 12B QAT build) produced valid proposals in
 14–60 seconds on a 12 GB laptop GPU; a 24B model will spill out of 12 GB.
 
-Thinking is the main latency switch. Ollama 0.32 thinks by default on
-thinking-capable models when a request does not say otherwise, and thinking
-tokens count against the output budget; the adapter therefore always sends
-`think` explicitly and budgets thinking separately. On the same request the Gemma
-12B QAT model took about 99 s with thinking and 11 s without, both valid. Set
-`FLINT_GRAPH_NARRATIVE_ASSISTANT_THINKING=false` for faster replies without the
-visible reasoning.
+Thinking is the main latency switch, and it is off by default. Ollama thinks by default on
+thinking-capable models when a request does not say otherwise, and thinking tokens count
+against the output budget, so the adapter always sends `think` explicitly and budgets
+thinking separately. Measured on a Gemma 12B QAT model over nine request types with the
+exact output grammar: thinking off got 27 of 27 right with a 3 s median and 17 s worst
+case; thinking on got 8 of 9 right with a 43 s median and 137 s worst case. That measured
+doing the right thing, not prose quality, so `true` may still suit long creative writing.
+See [the report](../reports/2026-11-06-assistant-library.md).
 
 ## Run
 
@@ -166,6 +167,15 @@ gets a question first (prompt v3's clarification rules are kept in v4).
   ID. The server adds each library file it uses to the story's assets and pins it by
   SHA-256. The model sees up to 120 approved library files and each character's
   saved appearance.
+
+## The library
+
+**Library** in the composer attaches characters and approved files to the next message
+([ADR 0062](../adr/0062-attach-library-items-to-assistant-messages.md)). The model gets their
+details under the IDs it must use, and files attached are never dropped by the 120-file limit
+on what it otherwise sees. Up to 12 items per message. Approved results in the chat have
+**Attach to message**. An item that is not in the story or not approved is refused with a
+reason, and a refused message charges nothing.
 
 ## Conversation history
 

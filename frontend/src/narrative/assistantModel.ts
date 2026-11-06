@@ -3,10 +3,13 @@ import type { AssistantAction, AssistantTurn, ProposalStatus, StoryDraft, StoryO
 export interface TurnIntent extends TurnWrite {}
 // A lost acknowledgement resends the same key; any change to the message is a new turn.
 export function prepareTurn(previous: TurnIntent | null, request: string, baseRevisionId: string,
-  focus: string | null, key = () => crypto.randomUUID(), autoGenerate = false): TurnIntent {
+  focus: string | null, key = () => crypto.randomUUID(), autoGenerate = false,
+  attachments: Array<{ kind: "character" | "asset"; id: string }> = []): TurnIntent {
+  const chosen = attachments.map(({ kind, id }) => ({ kind, id }));
   return previous && previous.request === request && previous.base_revision_id === baseRevisionId
-    && previous.focus_node === focus && Boolean(previous.auto_generate) === autoGenerate ? previous
-    : { request, base_revision_id: baseRevisionId, focus_node: focus, idempotency_key: key(), auto_generate: autoGenerate };
+    && previous.focus_node === focus && Boolean(previous.auto_generate) === autoGenerate
+    && JSON.stringify(previous.attachments ?? []) === JSON.stringify(chosen) ? previous
+    : { request, base_revision_id: baseRevisionId, focus_node: focus, idempotency_key: key(), auto_generate: autoGenerate, attachments: chosen };
 }
 export function sendBlocker(state: { canWrite: boolean; dirty: boolean; saving: boolean; sending: boolean;
   active: boolean; text: string }): string | null {

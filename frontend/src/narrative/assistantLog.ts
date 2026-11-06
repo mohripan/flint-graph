@@ -24,7 +24,10 @@ export function mergeLog(current: ThreadEvent[], incoming: ThreadEvent[]): Threa
 function describe(kind: string, data: Record<string, unknown>): Pick<LogLine, "label" | "detail" | "tone"> {
   switch (kind) {
     case "thread.created": return { label: "Conversation started", detail: short(data.title), tone: "neutral" };
-    case "turn.requested": return { label: "Request", detail: short(data.request), tone: "neutral" };
+    case "turn.requested": {
+      const attached = Array.isArray(data.attached) && data.attached.length ? ` · with ${data.attached.join(", ")}` : "";
+      return { label: "Request", detail: short(`${String(data.request ?? "")}${attached}`), tone: "neutral" };
+    }
     case "turn.completed": return { label: "Reply", detail: short(data.reply), tone: "neutral" };
     case "turn.failed": return { label: "Reply failed", detail: words(data.error_code), tone: "bad" };
     case "turn.cancelled": return { label: "Reply stopped", tone: "muted" };

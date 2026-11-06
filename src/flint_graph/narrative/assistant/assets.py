@@ -9,7 +9,7 @@ save path binds it to the same approved file.
 
 import re
 import unicodedata
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,13 +61,18 @@ def slug(name: str) -> str:
     return f"asset_{text}" if text in _RESERVED else text
 
 
-def library_entries(story: dict[str, Any], rows: Iterable[LibraryRow]) -> tuple[LibraryEntry, ...]:
-    """Approved files the story does not use yet, each under one unused ID."""
+def library_entries(
+    story: dict[str, Any], rows: Iterable[LibraryRow], *, attached: Collection[str] = ()
+) -> tuple[LibraryEntry, ...]:
+    """Approved files the story does not use yet, each under one unused ID.
+
+    Files the creator attached (by SHA-256) come first, so the limit never drops them.
+    """
     known = {item.get("sha256") for item in story["assets"].values() if type(item) is dict}
     used = set(story["assets"])
     entries: list[LibraryEntry] = []
     # Pictures first: a project with many voice clips must not crowd out its art.
-    for row in sorted(rows, key=lambda item: item.media_type == "audio/wav"):
+    for row in sorted(rows, key=lambda r: (r.sha256 not in attached, r.media_type == "audio/wav")):
         extension = _EXTENSIONS.get(row.media_type)
         if extension is None or row.sha256 in known:
             continue

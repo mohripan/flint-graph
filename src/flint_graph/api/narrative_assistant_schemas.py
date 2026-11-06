@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +22,21 @@ class AssistantActionResponse(BaseModel):
     voice_job: VoiceJobResponse | None
 
 
+class AssistantAttachment(BaseModel):
+    """A library item the creator attached: a character's ID or an approved file's ID."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["character", "asset"]
+    id: str = Field(min_length=1, max_length=64)
+
+
+class AssistantAttachmentResponse(BaseModel):
+    kind: str
+    id: str
+    name: str
+    asset_kind: str | None
+
+
 class AssistantThreadCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=200)
@@ -35,6 +50,7 @@ class AssistantTurnCreate(BaseModel):
     focus_node: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     idempotency_key: UUID
     auto_generate: bool = False
+    attachments: list[AssistantAttachment] = Field(default_factory=list, max_length=12)
 
 
 class AssistantDecision(BaseModel):
@@ -86,6 +102,7 @@ class AssistantTurnResponse(BaseModel):
     base_revision_id: UUID
     focus_node: str | None
     auto_generate: bool
+    attachments: list[AssistantAttachmentResponse]
     status: str
     cancel_requested: bool
     reply: str | None

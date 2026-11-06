@@ -6,6 +6,7 @@ import { useAccessRefresh } from "../site/accessContext";
 import { imageItem, voiceItem } from "../site/creditsModel";
 import { actionClick, actionJob, actionState, actionWatching, clipUse, imageUse, mergeAction } from "./assistantActions";
 import type { ActionStatus, ImageUse } from "./assistantActions";
+import type { Attachment } from "./assistantLibrary";
 import { proposalActions } from "./assistantModel";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { refreshLibrary } from "./libraryAssets";
@@ -65,9 +66,10 @@ function Candidate({ tenantId, projectId, asset, label, cutOut }: {
 
 // A generation action in the chat: what it is, where it has got to, and its results to
 // approve. A suggestion has a stable server identity, so remounting only reads its job.
-export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply }: {
+export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onAttach }: {
   proposal: AssistantProposal; story: StoryDraft | null; tenantId: string; projectId: string; canWrite: boolean;
   dirty: boolean; onApply: (change: (story: StoryDraft) => StoryDraft, notice: string) => Promise<void>;
+  onAttach?: (item: Attachment) => void;
 }) {
   const profiles = useContext(CharacterProfilesContext);
   const refreshAccess = useAccessRefresh();
@@ -161,6 +163,8 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
           : asset.status === "approved" ? <small className="studio-hint">Approved</small>
           : canWrite && <button type="button" className="studio-secondary" aria-disabled={busy[key]}
             onClick={() => { if (!busy[key]) approve(asset); }}>Approve</button>}
+        {canWrite && onAttach && asset.status === "approved" && <button type="button" className="studio-link"
+          onClick={() => onAttach({ kind: "asset", id: asset.id, name: asset.name, asset_kind: asset.kind })}>Attach to message</button>}
         {errors[key] && <small className="studio-error" role="alert">{errors[key]}</small>}
       </li>;
     })}</ul>;

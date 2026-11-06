@@ -388,17 +388,31 @@ def _action_problems(story: dict[str, Any], operations: Sequence[Operation]) -> 
 
 
 def _keep_voice(node: Any, previous: Any) -> None:
-    """Rewording a voiced line keeps its voice (ADR 0043); the assistant cannot set voices
-    yet, so a line rewritten for the same speaker without ``voice`` keeps the old one."""
+    """Rewriting a voiced line keeps its voice (ADR 0043). A line rewritten for the same speaker
+    without ``voice`` keeps the old one, and an unchanged line keeps its clip."""
     if (
-        isinstance(node, dict)
-        and isinstance(previous, dict)
-        and node.get("type") == previous.get("type") == "line"
-        and "voice" not in node
-        and "voice" in previous
-        and node.get("speaker") == previous.get("speaker")
+        not isinstance(node, dict)
+        or not isinstance(previous, dict)
+        or node.get("type") != previous.get("type")
+        or node.get("type") != "line"
+        or "voice" not in previous
+        or node.get("speaker") != previous.get("speaker")
     ):
+        return
+    if "voice" not in node:
         node["voice"] = copy.deepcopy(previous["voice"])
+        return
+    voice, earlier = node["voice"], previous["voice"]
+    if (
+        isinstance(voice, dict)
+        and isinstance(earlier, dict)
+        and "audio" not in voice
+        and "audio" in earlier
+        and voice.get("mode") == earlier.get("mode")
+        and voice.get("text") == earlier.get("text")
+        and node.get("text") == previous.get("text")
+    ):
+        voice["audio"] = earlier["audio"]
 
 
 def _inherit_text_ids(node: dict[str, Any], previous: Any) -> None:

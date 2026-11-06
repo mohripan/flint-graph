@@ -8,6 +8,7 @@ Audit metadata and outbox payloads carry identifiers, never story or chat text.
 """
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -67,7 +68,7 @@ from flint_graph.narrative.assistant.assets import (
     LibraryRow,
     library_entries,
 )
-from flint_graph.narrative.assistant.context import HistoryTurn
+from flint_graph.narrative.assistant.context import HistoryTurn, attached_lines
 from flint_graph.narrative.assistant.log import (
     PROPOSAL_ACCEPTED,
     PROPOSAL_CREATED,
@@ -110,6 +111,8 @@ class TurnWork:
     # Folded from the thread log (ADR 0060): recent turns verbatim, older ones as one line.
     history: tuple[HistoryTurn, ...]
     earlier: tuple[str, ...] = ()
+    # What the creator attached from the library, described for the model (ADR 0062).
+    attached: tuple[str, ...] = ()
     # Story format 2: approved library files under story-ready IDs, and each
     # character's described looks (editor metadata the model may reuse).
     library: tuple[LibraryEntry, ...] = ()
@@ -255,6 +258,7 @@ async def post_turn(
     max_active_turns: int,
     provider: str | None = None,
     auto_generate: bool = False,
+    attachments: Sequence[dict[str, str]] = (),
 ) -> NarrativeAssistantTurn:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -278,8 +282,12 @@ async def post_turn(
         "base_revision_id": str(base_revision_id),
         "focus_node": focus_node,
     }
-    if auto_generate:  # Only when set, so earlier messages keep their hashes.
+    # Only when set, so earlier messages keep their hashes.
+    if auto_generate:
         identity["auto_generate"] = True
+    chosen = list({(item["kind"], item["id"]): item for item in attachments}.values())
+    if chosen:
+        identity["attachments"] = chosen
     request_hash = _fingerprint(identity)
     existing = await session.scalar(
         select(NarrativeAssistantTurn).where(
@@ -291,7 +299,7 @@ async def post_turn(
         if existing.request_hash != request_hash:
             raise ConflictError("This message key was already used for a different message.")
         return existing
-    await get_revision(
+    base = await get_revision(
         session, tenant_id=tenant_id, project_id=project_id, revision_id=base_revision_id
     )
     if project.archived_at is not None or thread.archived_at is not None:
@@ -303,6 +311,13 @@ async def post_turn(
             "The story assistant is not configured. Manual writing still works.",
             "assistant-unavailable",
         )
+    resolved = await _resolve_attachments(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        story_json=base.story_json,
+        items=chosen,
+    )
     active = (
         await session.scalar(
             select(func.count(NarrativeAssistantTurn.id)).where(
@@ -328,6 +343,7 @@ async def post_turn(
         idempotency_key=idempotency_key,
         request_hash=request_hash,
         auto_generate=auto_generate,
+        attachments=resolved,
         status="queued",
         cancel_requested=False,
     )
@@ -355,6 +371,7 @@ async def post_turn(
             "request": request,
             "base_revision_id": str(base_revision_id),
             "focus_node": focus_node,
+            "attached": [item["name"] for item in resolved],
         },
         actor_user_id=author_user_id,
     )
@@ -382,6 +399,54 @@ async def post_turn(
     )
     await session.refresh(turn)
     return turn
+
+
+def _invalid_attachment(detail: str) -> DomainError:
+    return DomainError(422, "Invalid attachment", detail, "invalid-attachment")
+
+
+async def _resolve_attachments(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    story_json: str,
+    items: Sequence[dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Check what was attached belongs to this project, and freeze its name."""
+    if not items:
+        return []
+    characters = json.loads(story_json).get("characters") or {}
+    resolved: list[dict[str, Any]] = []
+    for item in items:
+        if item["kind"] == "character":
+            character = characters.get(item["id"])
+            if character is None:
+                raise _invalid_attachment(f"There is no character {item['id']} in this story.")
+            name = character.get("name") or item["id"]
+            resolved.append(
+                {"kind": "character", "id": item["id"], "name": name, "asset_kind": None}
+            )
+            continue
+        try:
+            asset_id = UUID(item["id"])
+        except ValueError:
+            raise _invalid_attachment("Attach a file from this project's library.") from None
+        asset = await session.scalar(
+            select(NarrativeAsset).where(
+                NarrativeAsset.tenant_id == tenant_id,
+                NarrativeAsset.project_id == project_id,
+                NarrativeAsset.id == asset_id,
+            )
+        )
+        if asset is None:
+            raise _invalid_attachment("Attach a file from this project's library.")
+        if asset.status != "approved":
+            raise _invalid_attachment(f"Approve {asset.name} before attaching it.")
+        resolved.append(
+            {"kind": "asset", "id": str(asset.id), "name": asset.name, "asset_kind": asset.kind}
+        )
+    return resolved
 
 
 async def list_turns(
@@ -810,6 +875,21 @@ async def claim_turn(
     story = json.loads(base.story_json)
     library: tuple[LibraryEntry, ...] = ()
     profiles: dict[str, str] = {}
+    files: dict[str, LibraryRow] = {}
+    attached_ids = [UUID(item["id"]) for item in turn.attachments or [] if item["kind"] == "asset"]
+    if attached_ids:
+        # Still approved, or it is no longer the creator's to use.
+        for row in await session.scalars(
+            select(NarrativeAsset).where(
+                NarrativeAsset.tenant_id == turn.tenant_id,
+                NarrativeAsset.project_id == turn.project_id,
+                NarrativeAsset.id.in_(attached_ids),
+                NarrativeAsset.status == "approved",
+            )
+        ):
+            files[str(row.id)] = LibraryRow(
+                row.name, row.kind, row.media_type, row.sha256, row.character_id
+            )
     if story.get("schema_version") == "2":
         rows = await session.scalars(
             select(NarrativeAsset)
@@ -821,12 +901,14 @@ async def claim_turn(
             .order_by(NarrativeAsset.created_at.desc(), NarrativeAsset.id)
             .limit(4 * LIBRARY_LIMIT)
         )
+        listed = [
+            LibraryRow(row.name, row.kind, row.media_type, row.sha256, row.character_id)
+            for row in rows
+        ]
         library = library_entries(
             story,
-            (
-                LibraryRow(row.name, row.kind, row.media_type, row.sha256, row.character_id)
-                for row in rows
-            ),
+            [*files.values(), *(row for row in listed if row not in files.values())],
+            attached={row.sha256 for row in files.values()},
         )
     looks = list(
         await session.scalars(
@@ -842,6 +924,14 @@ async def claim_turn(
         for row in looks
         if row.voice or row.voice_reference_id
     }
+    attached = attached_lines(
+        story,
+        turn.attachments or [],
+        files=files,
+        library=library,
+        profiles=profiles,
+        voices=voices,
+    )
     await session.flush()
     return TurnWork(
         tenant_id=turn.tenant_id,
@@ -852,6 +942,7 @@ async def claim_turn(
         focus=turn.focus_node,
         history=conversation.recent,
         earlier=conversation.earlier,
+        attached=attached,
         library=library,
         profiles=profiles,
         voices=voices,

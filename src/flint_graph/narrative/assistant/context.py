@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from flint_graph.narrative.assistant.assets import LibraryEntry
+from flint_graph.narrative.assistant.assets import LibraryEntry, LibraryRow
 from flint_graph.narrative.assistant.prompts import system_prompt
 from flint_graph.narrative.voices import VOICES
 from flint_graph.prompts.source import render
@@ -64,13 +64,14 @@ def build_turn_messages(
     earlier: Sequence[str] = (),
     voices: Mapping[str, str] | None = None,
     capabilities: Sequence[str] = (),
+    attached: Sequence[str] = (),
 ) -> tuple[list[dict[str, str]], ContextStats]:
     messages = [{"role": "system", "content": system_prompt()}]
     recent = list(history)[-HISTORY_TURNS:]
     for turn in recent:
         messages.append({"role": turn.role, "content": turn.content[:HISTORY_CHARS]})
     context, outlined, shown = _render(
-        story, focus, budget, library, profiles or {}, earlier, voices or {}, capabilities
+        story, focus, budget, library, profiles or {}, earlier, voices or {}, capabilities, attached
     )
     messages.append(
         {
@@ -189,6 +190,44 @@ def _character(key: str, item: dict[str, Any], looks: str | None, voice: str | N
     return f"  {key}: {_quote(item.get('name'))}" + (f" ({'; '.join(details)})" if details else "")
 
 
+def attached_lines(
+    story: dict[str, Any],
+    attachments: Sequence[Mapping[str, Any]],
+    *,
+    files: Mapping[str, LibraryRow],
+    library: Sequence[LibraryEntry],
+    profiles: Mapping[str, str],
+    voices: Mapping[str, str],
+) -> tuple[str, ...]:
+    """What the creator attached, in detail, under the IDs the model must use.
+
+    Anything removed or no longer approved since it was attached is left out.
+    """
+    in_story = {
+        item.get("sha256"): key
+        for key, item in (story.get("assets") or {}).items()
+        if type(item) is dict
+    }
+    offered = {entry.sha256: entry.key for entry in library}
+    lines: list[str] = []
+    for item in attachments:
+        if item["kind"] == "character":
+            character = story["characters"].get(item["id"])
+            if character is not None:
+                described = _character(
+                    item["id"], character, profiles.get(item["id"]), voices.get(item["id"])
+                )
+                lines.append("  character " + described.strip())
+            continue
+        row = files.get(item["id"])
+        if row is None:
+            continue
+        key = in_story.get(row.sha256) or offered.get(row.sha256) or item["id"]
+        owner = f" of {row.character_id}" if row.character_id else ""
+        lines.append(f"  {key}: {row.kind} {_quote(row.name[:60])}{owner}")
+    return tuple(lines)
+
+
 def _render(
     story: dict[str, Any],
     focus: str | None,
@@ -198,6 +237,7 @@ def _render(
     earlier: Sequence[str] = (),
     voices: Mapping[str, str] | None = None,
     capabilities: Sequence[str] = (),
+    attached: Sequence[str] = (),
 ) -> tuple[str, int, str | None]:
     """Return the context text, the number of outlined scenes and the shown focus scene."""
     nodes: dict[str, Any] = story["nodes"]
@@ -210,6 +250,15 @@ def _render(
         f"format: {story.get('schema_version')}"
         + (" (stage, expressions, sprites and theme)" if staged else " (text only)"),
         f"entry: {story['entry']}",
+        *(
+            [
+                "attached by the creator for this request "
+                '(when they say "this", "here", "her" or "that", they mean these):',
+                *attached,
+            ]
+            if attached
+            else []
+        ),
         "characters:",
         *(
             _character(key, item, looks.get(key), spoken.get(key))

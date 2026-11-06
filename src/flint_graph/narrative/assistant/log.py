@@ -88,6 +88,7 @@ class TurnRecord:
     reply: str | None = None
     error_code: str | None = None
     proposal: ProposalRecord | None = None
+    attached: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,12 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
             title = str(data.get("title"))
         elif event.kind == TURN_REQUESTED:
             key = str(data["turn_id"])
-            turns[key] = TurnRecord(key, int(data["turn_sequence"]), str(data["request"]))
+            turns[key] = TurnRecord(
+                key,
+                int(data["turn_sequence"]),
+                str(data["request"]),
+                attached=tuple(str(name) for name in data.get("attached") or ()),
+            )
         elif event.kind == TURN_COMPLETED and turn is not None:
             reply = data.get("reply")
             turns[turn.turn_id] = replace(
@@ -289,7 +295,10 @@ def conversation_from_log(
     recent = finished[-recent_turns:] if recent_turns else []
     messages: list[HistoryTurn] = []
     for turn in recent:
-        messages.append(HistoryTurn("user", turn.request))
+        asked = turn.request
+        if turn.attached:
+            asked += f"\n[Attached: {', '.join(turn.attached)}]"
+        messages.append(HistoryTurn("user", asked))
         answer = _assistant_text(turn)
         if answer:
             messages.append(HistoryTurn("assistant", answer))

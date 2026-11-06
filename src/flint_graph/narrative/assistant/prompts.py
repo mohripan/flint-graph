@@ -16,7 +16,18 @@ def system_prompt() -> str:
 # model that means to write {"op": "generate_backgrounds"} gets funnelled into the few
 # operations that may start with "op", and writes set_title instead. These go first; the
 # reply first of all, so the creator sees it streaming before the proposal.
-_WRITTEN_FIRST = ("reply", "op", "type", "summary", "id", "character", "characters")
+_WRITTEN_FIRST = (
+    "reply",
+    "op",
+    "type",
+    "summary",
+    "id",
+    "character",
+    "characters",
+    "speaker",
+    "text",
+    "next",
+)
 
 
 def _written_order(schema: Any) -> Any:
@@ -66,4 +77,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v3": "5caef1eeab73bcb1531fbbda1a267e52ef750d8cab9129d0db720da0636551b5",
     # Actions run for real: expressions, CGs and voices; stage CGs and line voices (ADR 0061).
     "narrative-assistant/v4": "eba010f6361e42dc3e107faa9236c74398cb4c4936246d4e52ca74e83b63de5f",
+    # What the creator attached, and asset IDs versus expression names (ADR 0062).
+    "narrative-assistant/v5": "36230c672aeb313f1910430e215a0cb1789fab30d3dca6fcd38f6a7f55424bb7",
 }

@@ -334,7 +334,7 @@ def test_test_env_is_offline_and_other_envs_are_disabled_unless_chosen():
         narrative_assistant_ollama_model="gemma-local",
     )
     assert isinstance(build_narrative_assistant(chosen), OllamaNarrativeAssistant)
-    assert chosen.narrative_assistant_thinking is True
+    assert chosen.narrative_assistant_thinking is False
     assert chosen.narrative_assistant_thinking_tokens == 8192
 
 

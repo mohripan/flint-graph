@@ -9,6 +9,9 @@ import {
 } from "./assistantModel";
 import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnIntent } from "./assistantModel";
 import { followTurnEvents, listTurnEvents, streamTurnEvents } from "./assistantStream";
+import { attachmentKind, toggleAttachment } from "./assistantLibrary";
+import type { Attachment } from "./assistantLibrary";
+import { LibraryPicker } from "./LibraryPicker";
 import { ProposalActions } from "./ProposalActions";
 import { releaseErrorMessage, useReleaseRequests } from "./releaseRequests";
 import { ThreadHistory } from "./ThreadHistory";
@@ -109,6 +112,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const [drawer, setDrawer] = useState(false), [withFocus, setWithFocus] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(readAuto);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [attached, setAttached] = useState<Attachment[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const intent = useRef<TurnIntent | null>(null), threadIntent = useRef<ThreadIntent | null>(null);
   const decisionKeys = useRef(new Map<string, string>()), composer = useRef<HTMLTextAreaElement>(null);
@@ -238,7 +243,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
     event?.preventDefault();
     if (blocker) return;
     setSending(true); setError(null); stick.current = true;
-    const message = text.trim(), next = prepareTurn(intent.current, message, revision.id, target, undefined, autoGenerate);
+    const message = text.trim(), next = prepareTurn(intent.current, message, revision.id, target, undefined, autoGenerate, attached);
     intent.current = next;
     void run("send", async signal => {
       let id = threadRef.current;
@@ -248,7 +253,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
       }
       return { id, turn: await api.postAssistantTurn(tenantId, projectId, id, next, signal) };
     }, ({ id, turn }) => {
-      intent.current = null; threadIntent.current = null; setText("");
+      intent.current = null; threadIntent.current = null; setText(""); setAttached([]); setLibraryOpen(false);
       if (threadRef.current !== id) {
         threadRef.current = id; setThreadId(id); writeSelection(selectionKey, id); linkThread(projectId, id);
         setThreads(current => current.some(row => row.id === id) ? current
@@ -383,7 +388,10 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             const status = turnStatus(turn), calls = Object.keys(activity.calls).map(Number).sort((a, b) => a - b);
             const thinking = calls.filter(call => activity.calls[call].thinking);
             return <li key={turn.id} className="assistant-turn" aria-busy={running}>
-              <p className="assistant-user">{turn.request}</p>
+              <div className="assistant-user">{turn.request}
+                {!!turn.attachments?.length && <ul className="assistant-attached" aria-label="Attached from the library">
+                  {turn.attachments.map(item => <li key={`${item.kind}:${item.id}`}><small>{attachmentKind(item)}</small> {item.name}</li>)}</ul>}
+              </div>
               <div className="assistant-answer">
                 <details className="assistant-activity" open={running}
                   onToggle={event => { if (event.currentTarget.open) loadActivity(turn.id); }}>
@@ -415,7 +423,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                         {!change.after && change.before && <q className="studio-change-before">{change.before.slice(0, 240)}</q>}
                       </li>)}</ul>
                     <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite}
-                      dirty={dirty} onApply={applyToStory} />
+                      dirty={dirty} onApply={applyToStory}
+                      onAttach={item => { setAttached(current => current.some(known => known.id === item.id) ? current : toggleAttachment(current, item)); compose(text); }} />
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules
                       ({detail.diagnostics.slice(0, 3).map(item => `${item.code.replaceAll("_", " ")} at ${item.location}`).join("; ")}).
                       Ask again or rephrase.</p>}
@@ -444,7 +453,16 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
         {dirty && <div className="studio-notice studio-release-dirty"><span>Save your changes so the assistant sees them.</span>
           <button type="button" className="studio-secondary" aria-disabled={saving} onClick={() => { if (!saving) void onSave(); }}>
             {saving ? "Saving…" : "Save revision"}</button></div>}
+        {libraryOpen && <LibraryPicker tenantId={tenantId} projectId={projectId} story={story} attached={attached}
+          onChange={setAttached} onClose={() => { setLibraryOpen(false); composer.current?.focus(); }} />}
+        {!!attached.length && <ul className="assistant-chips" aria-label="Attached to this message">
+          {attached.map(item => <li key={`${item.kind}:${item.id}`}>
+            <small>{attachmentKind(item)}</small> {item.name}
+            <button type="button" aria-label={`Remove ${item.name}`} onClick={() => setAttached(current => toggleAttachment(current, item))}>×</button>
+          </li>)}</ul>}
         <div className="assistant-input">
+          <button type="button" className="assistant-library-open" aria-expanded={libraryOpen} title="Attach characters and files from your library"
+            onClick={() => setLibraryOpen(open => !open)}>Library</button>
           <label className="studio-visually-hidden" htmlFor="assistant-message">Message the assistant</label>
           <textarea id="assistant-message" ref={composer} rows={1} value={text} maxLength={8000}
             placeholder="Describe a scene, a choice or a question…"

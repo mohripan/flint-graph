@@ -23,7 +23,10 @@ from flint_graph.narrative.assistant.context import HistoryTurn, build_turn_mess
 from flint_graph.narrative.assistant.operations import (
     ACTIONS,
     AddAsset,
+    GenerateBackgrounds,
+    GenerateCg,
     GenerateCharacterImages,
+    GenerateExpressions,
     Proposal,
     UpsertCharacter,
     UpsertNode,
@@ -175,7 +178,7 @@ def _without_pending_sprites(
 _NARRATION_SPEAKERS = {"narrator", "narration", "none", "system"}
 
 
-def _tidied_line(node: dict[str, Any], known: set[str]) -> dict[str, Any]:
+def _tidied_line(node: dict[str, Any], known: set[str], assets: set[str]) -> dict[str, Any]:
     """Correct the line mistakes local models keep making, whose meaning is unambiguous."""
     speaker = node.get("speaker")
     if isinstance(speaker, str) and speaker.lower() in _NARRATION_SPEAKERS and speaker not in known:
@@ -183,20 +186,80 @@ def _tidied_line(node: dict[str, Any], known: set[str]) -> dict[str, Any]:
     voice = node.get("voice")
     if "voice" in node and "speaker" not in node:
         node = {k: v for k, v in node.items() if k != "voice"}  # Narration is silent.
-    elif isinstance(voice, dict) and voice.get("mode") == "full" and "text" in voice:
-        node = {**node, "voice": {k: v for k, v in voice.items() if k != "text"}}
+    elif isinstance(voice, dict):
+        # A clip that does not exist yet is simply not there; models write the voice's name.
+        drop = {"audio"} if voice.get("audio") not in assets else set()
+        if voice.get("mode") == "full":
+            drop.add("text")
+        if drop.intersection(voice):
+            node = {**node, "voice": {k: v for k, v in voice.items() if k not in drop}}
     return node
 
 
-def _with_tidied_lines(story: dict[str, Any], proposal: Proposal) -> Proposal:
-    """Each round trip to correct these costs about a minute, so correct them here."""
-    known = set(story.get("characters") or {}) | {
-        item.id for item in proposal.operations if isinstance(item, UpsertCharacter)
+def _tidied_stage(
+    node: dict[str, Any],
+    sprites: Mapping[str, Mapping[str, str]],
+    assets: set[str],
+    generating: set[str],
+    pending: Mapping[str, set[str]],
+) -> dict[str, Any]:
+    """A stage entry names an expression, so an asset ID has one meaning; and a file still
+    being generated has no ID yet, so a made-up one for it can only be left out."""
+    changed = dict(node)
+    for field in ("background", "cg"):
+        if field in generating and isinstance(node.get(field), str) and node[field] not in assets:
+            del changed[field]
+    show = node.get("show")
+    if isinstance(show, list):
+        entries = []
+        for entry in show:
+            if isinstance(entry, dict):
+                character = str(entry.get("character"))
+                own = sprites.get(character) or {}
+                wanted = entry.get("sprite")
+                if wanted not in own and wanted in own.values():
+                    named = next(name for name, key in own.items() if key == wanted)
+                    entry = {**entry, "sprite": named}
+                elif wanted not in own and wanted in pending.get(character, ()) and own:
+                    # An expression still being generated: the usual face until it is approved.
+                    entry = {**entry, "sprite": "neutral" if "neutral" in own else next(iter(own))}
+            entries.append(entry)
+        changed["show"] = entries
+    return changed
+
+
+def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
+    """Each round trip to correct these costs seconds to minutes, so correct them here."""
+    upserted = {item.id: item for item in proposal.operations if isinstance(item, UpsertCharacter)}
+    characters = story.get("characters") or {}
+    known = set(characters) | set(upserted)
+    sprites: dict[str, Mapping[str, str]] = {
+        key: (upserted[key].sprites if key in upserted and upserted[key].sprites else None)
+        or (characters.get(key) or {}).get("sprites")
+        or {}
+        for key in known
     }
+    assets = set(story.get("assets") or {}) | {
+        item.id for item in proposal.operations if isinstance(item, AddAsset)
+    }
+    generating = {
+        field
+        for field, kind in (("background", GenerateBackgrounds), ("cg", GenerateCg))
+        if any(isinstance(item, kind) for item in proposal.operations)
+    }
+    pending: dict[str, set[str]] = {}
+    for item in proposal.operations:
+        if isinstance(item, GenerateExpressions):
+            pending.setdefault(item.character, set()).update(item.expressions)
     operations = []
     for item in proposal.operations:
-        if isinstance(item, UpsertNode) and item.node.get("type") == "line":
-            item = item.model_copy(update={"node": _tidied_line(item.node, known)})
+        if isinstance(item, UpsertNode):
+            kind = item.node.get("type")
+            if kind == "line":
+                item = item.model_copy(update={"node": _tidied_line(item.node, known, assets)})
+            elif kind == "stage":
+                node = _tidied_stage(item.node, sprites, assets, generating, pending)
+                item = item.model_copy(update={"node": node})
         operations.append(item)
     return proposal.model_copy(update={"operations": operations})
 
@@ -279,10 +342,20 @@ def _problem_reasons(
         edited = story
     characters, nodes = list(edited["characters"]), list(edited["nodes"])
     assets = list(edited.get("assets") or {})
+    expressions = "; ".join(
+        f"{key}: {_listed(list(item.get('sprites') or {}))}"
+        for key, item in edited["characters"].items()
+        if isinstance(item, dict)
+    )
     reasons: dict[str, str] = {}
     for item in diagnostics:
         field = item.location.rsplit(".", 1)[-1]
-        if field in ("speaker", "character", "characters", "show", "hide"):
+        if field == "show" or ".show." in item.location:
+            reasons[item.location] = (
+                "each entry names a character and the name of one of their expressions, "
+                f"not an asset id. Expressions: {expressions or 'none'}"
+            )
+        elif field in ("speaker", "character", "characters", "hide"):
             reasons[item.location] = (
                 f"no character has this id. Characters: {_listed(characters)}. "
                 "Leave out speaker for narration."
@@ -290,7 +363,10 @@ def _problem_reasons(
         elif field in ("next", "target", "if_true", "if_false", "entry"):
             reasons[item.location] = f"no scene has this id. Scenes: {_listed(nodes)}"
         elif field in ("background", "cg", "audio", "asset") or item.code == "invalid_asset_kind":
-            reasons[item.location] = f"no asset of that kind has this id. Assets: {_listed(assets)}"
+            reasons[item.location] = (
+                f"no asset of that kind has this id. Assets: {_listed(assets)}. "
+                "A file still being generated has no id yet, so leave it out for now."
+            )
         elif field in ("expression", "sprite"):
             reasons[item.location] = "this character has no such sprite; use one it lists"
         elif item.code == "invalid_voice":
@@ -378,6 +454,7 @@ async def run_turn(
     earlier: Sequence[str] = (),
     voices: Mapping[str, str] | None = None,
     capabilities: Sequence[str] = (),
+    attached: Sequence[str] = (),
 ) -> TurnResult:
     watch = observer or _Silent()
     messages, stats = build_turn_messages(
@@ -391,6 +468,7 @@ async def run_turn(
         earlier=earlier,
         voices=voices,
         capabilities=capabilities,
+        attached=attached,
     )
     await watch.step(
         "context",
@@ -438,7 +516,7 @@ async def run_turn(
             parsed = _without_pending_sprites(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
-            parsed = _with_tidied_lines(story, parsed)
+            parsed = _with_tidied_nodes(story, parsed)
             check = check_proposal(story, parsed.operations)
             if check.diagnostics and attempt == calls:
                 # Repairs are spent: keep the story edits if only actions are unusable.

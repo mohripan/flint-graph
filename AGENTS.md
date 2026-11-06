@@ -248,6 +248,15 @@ Ollama's grammar writes fields in schema order, and the lock's sorted keys funne
 into `set_title`. New story fields the model may write must be added to that schema too. Read
 `docs/reports/2026-11-06-assistant-generation.md`.
 
+[ADR 0062](docs/adr/0062-attach-library-items-to-assistant-messages.md) (migration 0047, prompt
+v5) adds the composer's Library: characters and approved files attached to a message, frozen on
+the turn, described to the model under the IDs it must use, and always offered regardless of
+the 120-file limit. Assistant thinking is now off by default: with the exact grammar it made turns
+about 14 times slower without more right answers. Exact line shapes require a spoken line's
+speaker. Read `docs/reports/2026-11-06-assistant-library.md`. Separation between people comes
+from sign-in, not invitation keys: `dev` auth makes everyone one user, and an owner of any
+workspace they name, so never expose it (`tests/integration/test_narrative_assistant_isolation.py`).
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

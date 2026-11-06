@@ -127,6 +127,10 @@ class NarrativeAssistantTurn(PromptBundleReference, UUIDPrimaryKeyMixin, Timesta
     request_hash: Mapped[str] = mapped_column(String(64))
     # The creator let this turn's generation actions start by themselves (ADR 0061).
     auto_generate: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Library items attached to this message, frozen with their names (ADR 0062).
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'")
+    )
     status: Mapped[str] = mapped_column(String(16), default="queued")
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     execution_token: Mapped[UUID | None]

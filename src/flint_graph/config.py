@@ -263,7 +263,9 @@ class Settings(BaseSettings):
     narrative_assistant_turn_deadline_seconds: int = Field(default=180, ge=10, le=1800)
     # Ollama thinks by default on capable models; keep it explicit and separately
     # budgeted. False is the latency switch (measured ~9x faster on a 12B model).
-    narrative_assistant_thinking: bool = True
+    # Off: the output grammar already guarantees structure, and thinking made turns about 14
+    # times slower with no more right answers (docs/reports/2026-11-06-assistant-library.md).
+    narrative_assistant_thinking: bool = False
     narrative_assistant_thinking_tokens: int = Field(default=8192, ge=512, le=65536)
     narrative_assistant_context_chars: int = Field(default=24000, ge=4000, le=400000)
     narrative_assistant_max_active_turns_per_workspace: int = Field(default=1, ge=1, le=20)

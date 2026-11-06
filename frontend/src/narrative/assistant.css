@@ -112,6 +112,40 @@
   .narrative-studio.is-assistant .studio-heading > .studio-actions > * { flex:none; }
 }
 
+/* The project's library, attached to a message (ADR 0062). */
+.assistant-composer { position:relative; }
+.assistant-library-open { flex:none; align-self:flex-end; min-height:44px; padding:0 12px; border:1px solid #c2d0d8; border-radius:9px; background:#f0f4f6; color:#26445a; font-size:13px; font-weight:600; cursor:pointer; margin-left:-8px; }
+.assistant-library-open:hover,.assistant-library-open[aria-expanded="true"] { border-color:#9d7330; background:#fbf7ee; }
+.assistant-library { position:absolute; left:20px; right:20px; bottom:calc(100% - 4px); z-index:20; max-width:800px; margin:0 auto; display:flex; flex-direction:column; gap:8px; max-height:min(420px,56vh); padding:12px; border:1px solid #b4c4ce; border-radius:12px; background:#fff; box-shadow:0 12px 32px #18263533; }
+.assistant-library-head { display:flex; align-items:center; gap:10px; }
+.assistant-library-head strong { font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:#4e6577; }
+.assistant-library-head input { flex:1; min-width:0; min-height:36px; padding:4px 10px; border:1px solid #c2d0d8; border-radius:8px; font-size:14px; }
+.assistant-library-tabs { display:flex; gap:4px; border-bottom:1px solid #dbe4ea; }
+.assistant-library-tabs button { padding:6px 12px; border:0; border-bottom:2px solid transparent; background:transparent; color:#4e6577; font-size:13px; font-weight:600; cursor:pointer; }
+.assistant-library-tabs button.selected { border-bottom-color:#9d7330; color:#182635; }
+.assistant-library > .studio-hint,.assistant-library > .studio-error { margin:4px 0; }
+.assistant-library-items { list-style:none; margin:0; padding:2px; flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:6px; align-content:start; }
+.assistant-library-items li { display:flex; flex-direction:column; min-width:0; border:1px solid #dbe4ea; border-radius:9px; }
+.assistant-library-items li.selected { border-color:#9d7330; background:#fbf7ee; box-shadow:inset 0 0 0 1px #9d7330; }
+.assistant-library-items li > button { display:flex; align-items:center; gap:8px; width:100%; min-width:0; padding:6px; border:0; background:transparent; text-align:left; cursor:pointer; color:#182635; }
+.assistant-library-items li > button:disabled { opacity:.5; cursor:not-allowed; }
+.assistant-library-items li > button > span:last-child { display:flex; flex-direction:column; min-width:0; }
+.assistant-library-items strong { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.assistant-library-items small { color:#4e6577; font-size:11px; }
+.assistant-library-items .studio-thumb { flex:none; width:44px; height:44px; }
+.assistant-library-items .studio-thumb img { width:100%; height:100%; object-fit:cover; }
+.assistant-library-clip { flex:none; display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:7px; background:#e3eaef; font-size:18px; }
+.assistant-chips,.assistant-attached { list-style:none; padding:0; display:flex; flex-wrap:wrap; gap:6px; }
+.assistant-chips { margin:0 auto 6px; }
+.assistant-chips li { display:inline-flex; align-items:center; gap:5px; padding:3px 4px 3px 9px; border:1px solid #d5ae68; border-radius:999px; background:#fbf7ee; font-size:13px; }
+.assistant-chips small { color:#6d5323; font-size:11px; font-weight:600; }
+.narrative-studio .assistant-chips button { width:20px; height:20px; min-height:20px; padding:0; border:0; border-radius:50%; background:transparent; color:#6d5323; font-size:15px; line-height:1; cursor:pointer; }
+.narrative-studio .assistant-chips button:hover { background:#efe2c6; }
+.assistant-attached { margin:8px 0 0; }
+.assistant-attached li { padding:2px 9px; border-radius:999px; background:#2c4257; font-size:12px; }
+.assistant-attached small { color:#c9d6de; font-size:10px; font-weight:600; }
+.assistant-candidates .studio-link { align-self:center; min-height:24px; font-size:12px; }
+
 /* Generation results in the chat (ADR 0061). */
 .assistant-action-start { display:inline-flex; align-items:center; gap:8px; }
 .assistant-actions li > ul { grid-column:1 / -1; }

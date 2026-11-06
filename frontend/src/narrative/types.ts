@@ -1,3 +1,4 @@
+import type { Attachment } from "./assistantLibrary";
 // Drafts may contain invalid intermediate scalar values; the server validates saves.
 export type Scalar = string | number | boolean | null;
 export type Condition =
@@ -115,7 +116,7 @@ export interface AssistantProposalSummary {
 }
 export interface AssistantTurn {
   id: string; thread_id: string; sequence: number; request: string; base_revision_id: string;
-  focus_node: string | null; auto_generate?: boolean; status: TurnStatus; cancel_requested: boolean; reply: string | null;
+  focus_node: string | null; auto_generate?: boolean; attachments?: Attachment[]; status: TurnStatus; cancel_requested: boolean; reply: string | null;
   error_code: string | null; model: string | null; attempts: number | null;
   created_at: string; updated_at: string; finished_at: string | null; proposal: AssistantProposalSummary | null;
 }
@@ -146,4 +147,6 @@ export interface TurnWrite {
   request: string; base_revision_id: string; focus_node: string | null; idempotency_key: string;
   /** Let this turn's generation actions start by themselves (ADR 0061). */
   auto_generate?: boolean;
+  /** Library items the creator attached to this message (ADR 0062). */
+  attachments?: Array<Pick<Attachment, "kind" | "id">>;
 }

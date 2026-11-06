@@ -243,6 +243,144 @@ async def test_common_voice_slips_are_corrected_without_another_model_call(
 
 
 @pytest.mark.anyio
+async def test_an_asset_id_where_an_expression_belongs_needs_no_repair():
+    """The live model wrote sprite: mira_neutral, and then repeated it through both repairs."""
+    node = {
+        "type": "stage",
+        "next": "opening",
+        "show": [{"character": "mira", "sprite": "mira_neutral", "position": "center"}],
+    }
+    model = Scripted(answer({"op": "upsert_node", "id": "enter", "node": node}))
+    result = await run_turn(model, story(), "Bring her on.")
+    assert result.diagnostics == () and len(model.calls) == 1
+    assert result.story["nodes"]["enter"]["show"][0]["sprite"] == "neutral"
+
+
+@pytest.mark.anyio
+async def test_a_repair_about_the_stage_lists_each_characters_expressions():
+    broken = {
+        "type": "stage",
+        "next": "opening",
+        "show": [{"character": "mira", "sprite": "grinning", "position": "center"}],
+    }
+    fixed = {**broken, "show": [{"character": "mira", "sprite": "neutral", "position": "center"}]}
+    model = Scripted(
+        answer({"op": "upsert_node", "id": "enter", "node": broken}),
+        answer({"op": "upsert_node", "id": "enter", "node": fixed}),
+    )
+    result = await run_turn(model, story(), "Bring her on.")
+    assert result.attempts == 2 and result.diagnostics == ()
+    repair = model.calls[1][-1]["content"]
+    assert "mira: neutral" in repair and "not an asset id" in repair
+
+
+@pytest.mark.anyio
+async def test_a_cg_still_being_generated_is_not_used_by_a_made_up_id():
+    node = {
+        "type": "stage",
+        "next": "opening",
+        "cg": "bell_cg",
+        "show": [{"character": "mira", "sprite": "neutral", "position": "center"}],
+    }
+    model = Scripted(
+        answer(
+            {"op": "upsert_node", "id": "bell", "node": node},
+            {"op": "generate_cg", "characters": ["mira"], "description": "Mira at the bell"},
+        )
+    )
+    result = await run_turn(model, story(), "A CG of her at the bell.")
+    assert result.diagnostics == () and len(model.calls) == 1
+    assert "cg" not in result.story["nodes"]["bell"]
+    assert [op.op for op in result.proposal.operations] == ["upsert_node", "generate_cg"]
+
+
+@pytest.mark.anyio
+async def test_an_invented_cg_with_nothing_generating_is_still_a_mistake():
+    node = {
+        "type": "stage",
+        "next": "opening",
+        "cg": "bell_cg",
+        "show": [{"character": "mira", "sprite": "neutral", "position": "center"}],
+    }
+    fixed = {key: value for key, value in node.items() if key != "cg"}
+    model = Scripted(
+        answer({"op": "upsert_node", "id": "bell", "node": node}),
+        answer({"op": "upsert_node", "id": "bell", "node": fixed}),
+    )
+    result = await run_turn(model, story(), "A stage.")
+    assert result.attempts == 2
+    assert "no asset of that kind" in model.calls[1][-1]["content"]
+
+
+@pytest.mark.anyio
+async def test_a_voices_name_in_the_clip_field_is_dropped_without_another_call():
+    node = {
+        "type": "line",
+        "speaker": "mira",
+        "text": "Hi.",
+        "next": "ending",
+        "voice": {"mode": "full", "audio": "af_jessica"},
+    }
+    model = Scripted(answer({"op": "upsert_node", "id": "hi", "node": node}))
+    result = await run_turn(model, story(), "Add a voiced line.")
+    assert result.diagnostics == () and len(model.calls) == 1
+    assert result.story["nodes"]["hi"]["voice"] == {"mode": "full"}
+
+
+def voiced_story() -> dict:
+    current = story()
+    current["assets"]["clip"] = {"kind": "audio", "path": "assets/clip.wav", "sha256": sha("9")}
+    current["nodes"]["opening"]["voice"] = {"mode": "full", "audio": "clip"}
+    return current
+
+
+def test_rewriting_a_line_with_the_same_words_keeps_its_clip():
+    node = {
+        "type": "line",
+        "speaker": "mira",
+        "text": "Fog again.",
+        "next": "narration",
+        "voice": {"mode": "full"},
+    }
+    edit = apply_operations(
+        voiced_story(), proposal({"op": "upsert_node", "id": "opening", "node": node}).operations
+    )
+    assert edit.story["nodes"]["opening"]["voice"] == {"mode": "full", "audio": "clip"}
+
+
+def test_new_words_do_not_keep_a_clip_of_the_old_ones():
+    node = {
+        "type": "line",
+        "speaker": "mira",
+        "text": "Sunshine at last.",
+        "next": "narration",
+        "voice": {"mode": "full"},
+    }
+    edit = apply_operations(
+        voiced_story(), proposal({"op": "upsert_node", "id": "opening", "node": node}).operations
+    )
+    assert edit.story["nodes"]["opening"]["voice"] == {"mode": "full"}
+
+
+@pytest.mark.anyio
+async def test_an_expression_still_being_generated_shows_the_usual_face_for_now():
+    node = {
+        "type": "stage",
+        "next": "opening",
+        "show": [{"character": "mira", "sprite": "nervous", "position": "center"}],
+    }
+    model = Scripted(
+        answer(
+            {"op": "generate_expressions", "character": "mira", "expressions": ["nervous"]},
+            {"op": "upsert_node", "id": "enter", "node": node},
+        )
+    )
+    result = await run_turn(model, story(), "She looks nervous.")
+    assert result.diagnostics == () and len(model.calls) == 1
+    assert result.story["nodes"]["enter"]["show"][0]["sprite"] == "neutral"
+
+
+@pytest.mark.anyio
 async def test_a_narrator_the_story_really_has_keeps_speaking():
     current = story()
     current["characters"]["narrator"] = {"name": "The Narrator"}
