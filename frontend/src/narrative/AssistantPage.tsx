@@ -4,7 +4,7 @@ import { ApiError, api } from "../lib/api";
 import { CreditCost } from "../components/CreditCost";
 import { useAccess } from "../site/accessContext";
 import {
-  activeTurn, activitySteps, assistantError, emptyActivity, foldEvents, mergeTurns, prepareThread, prepareTurn, proposalChanges,
+  activeTurn, activitySteps, assistantError, emptyActivity, foldEvents, mergeTurns, prepareThread, prepareTurn, proposalChanges, proposalNotes,
   proposalStatus, sendBlocker, streamedReply, threadTitle, turnStatus, workedFor,
 } from "./assistantModel";
 import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnIntent } from "./assistantModel";
@@ -390,7 +390,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules
                       ({detail.diagnostics.slice(0, 3).map(item => `${item.code.replaceAll("_", " ")} at ${item.location}`).join("; ")}).
                       Ask again or rephrase.</p>}
-                    {detail.warnings.length > 0 && <p className="studio-hint">Some scenes would be unreachable or loop; review the map after accepting.</p>}
+                    {proposalNotes(detail.warnings).map(note => <p key={note} className="studio-hint">{note}</p>)}
                     <div className="studio-actions">
                       {canWrite && detail.status === "ready" && <>
                         <button type="button" className="studio-primary" aria-disabled={dirty || deciding !== null}

@@ -9,7 +9,7 @@ import copy
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -92,6 +92,17 @@ class AddAsset(_Operation):
 _Appearance = Annotated[str, Field(min_length=1, max_length=600)]
 
 
+def _renamed(data: Any, used: str, expected: str) -> Any:
+    """Accept the other image action's field name when only that one was given.
+
+    Local models sometimes write a character's look under the background action's
+    ``description``, or a place under ``appearance``; the meaning is unambiguous.
+    """
+    if isinstance(data, dict) and expected not in data and isinstance(data.get(used), str):
+        return {**{key: value for key, value in data.items() if key != used}, expected: data[used]}
+    return data
+
+
 class GenerateCharacterImages(_Operation):
     """An action, not an edit: the Studio offers it as a one-click portrait job."""
 
@@ -106,6 +117,7 @@ class GenerateCharacterImages(_Operation):
     @model_validator(mode="before")
     @classmethod
     def _cutout_is_full_body(cls, data: Any) -> Any:
+        data = _renamed(data, "description", "appearance")
         # A transparent cut-out is a stage sprite, and those are always full-body.
         if isinstance(data, dict) and data.get("transparent") is True:
             return {**data, "framing": "full_body", "hires": data.get("hires", True)}
@@ -117,6 +129,11 @@ class GenerateBackgrounds(_Operation):
 
     op: Literal["generate_backgrounds"]
     description: _Appearance
+
+    @model_validator(mode="before")
+    @classmethod
+    def _place_is_a_description(cls, data: Any) -> Any:
+        return _renamed(data, "appearance", "description")
 
 
 ACTIONS = (GenerateCharacterImages, GenerateBackgrounds)
@@ -136,6 +153,16 @@ Operation = Annotated[
     | GenerateBackgrounds,
     Field(discriminator="op"),
 ]
+
+
+def field_choices(op: str, field: str) -> tuple[str, ...]:
+    """The allowed values of an operation field with a fixed set of choices, if any."""
+    for kind in _Operation.__subclasses__():
+        if get_args(kind.model_fields["op"].annotation) == (op,):
+            info = kind.model_fields.get(field)
+            if info is not None and get_origin(info.annotation) is Literal:
+                return tuple(str(value) for value in get_args(info.annotation))
+    return ()
 
 
 class Proposal(BaseModel):
