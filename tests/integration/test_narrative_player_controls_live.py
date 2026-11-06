@@ -67,7 +67,7 @@ def test_real_player_controls_never_change_where_the_story_goes(tmp_path) -> Non
         ["Oren", "Then we should go down to the pier."],
         [None, "Rain began to fall."],
         [None, "What do you do?"],
-        [None, "› Stay"],
+        [None, "› Stay"],  # noqa: RUF001
         ["Mira", "A line [b]nobody[/b] has read."],
     ]
     assert result["log"]["pauses"] == {"advanced": False, "continue_disabled": True}
