@@ -124,6 +124,10 @@ def _outline(key: str, node: dict[str, Any]) -> str:
         parts = []
         if "background" in node:
             parts.append(f"background {node['background'] or 'none'}")
+        if "transition" in node:
+            parts.append(f"transition {node['transition']}")
+        if "effect" in node:
+            parts.append(f"effect {node['effect']}")
         if node.get("hide"):
             parts.append("hide " + ", ".join(str(item) for item in node["hide"]))
         if node.get("show"):

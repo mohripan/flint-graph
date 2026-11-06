@@ -92,4 +92,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v5": "36230c672aeb313f1910430e215a0cb1789fab30d3dca6fcd38f6a7f55424bb7",
     # Child sessions: the assistant can split large work up (ADR 0063).
     "narrative-assistant/v6": "d9888931438f5a6f57c738c7bc65d06864a0b59d3d7815caba466ed867493f24",
+    # Stage transitions and effects, used sparingly (ADR 0065).
+    "narrative-assistant/v7": "3be93c56725998b4a76097b56c8037e1552840df8815b27eadf6cadfa06df2cf",
 }

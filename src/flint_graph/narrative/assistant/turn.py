@@ -27,6 +27,7 @@ from flint_graph.narrative.assistant.operations import (
     GenerateCg,
     GenerateCharacterImages,
     GenerateExpressions,
+    GenerateVoice,
     Proposal,
     StartChildSession,
     UpsertCharacter,
@@ -263,6 +264,36 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
                 item = item.model_copy(update={"node": node})
         operations.append(item)
     return proposal.model_copy(update={"operations": operations})
+
+
+def _with_voice_actions(proposal: Proposal, capabilities: Sequence[str]) -> Proposal:
+    """A line marked for voice stays silent without its action, and local models often write
+    only the mark. The mark comes from a request for voice, so it can stand for the action."""
+    if "voices" not in capabilities:
+        return proposal
+    covered = {
+        line
+        for item in proposal.operations
+        if isinstance(item, GenerateVoice)
+        for line in item.lines
+    }
+    wanted: dict[str, list[str]] = {}
+    for item in proposal.operations:
+        if isinstance(item, UpsertNode) and item.id not in covered:
+            node = item.node
+            voice = node.get("voice")
+            if node.get("type") == "line" and isinstance(voice, dict) and "audio" not in voice:
+                speaker = node.get("speaker")
+                if isinstance(speaker, str):
+                    wanted.setdefault(speaker, []).append(item.id)
+    added = [
+        GenerateVoice(op="generate_voice", character=speaker, lines=lines[start : start + 24])
+        for speaker, lines in wanted.items()
+        for start in range(0, len(lines), 24)
+    ]
+    if not added:
+        return proposal
+    return proposal.model_copy(update={"operations": [*proposal.operations, *added]})
 
 
 _ACTION_PROBLEM = re.compile(r"proposal\.operations\.(\d+)\.generate_[a-z_]+(\.|$)")
@@ -519,7 +550,7 @@ async def run_turn(
             parsed = _without_pending_sprites(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
-            parsed = _with_tidied_nodes(story, parsed)
+            parsed = _with_voice_actions(_with_tidied_nodes(story, parsed), capabilities)
             if child_session:
                 # A provider without a grammar could still write one; it can only be refused.
                 parsed = parsed.model_copy(

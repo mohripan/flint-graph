@@ -283,6 +283,14 @@ def _characters_v2(value: Any, assets: dict[str, Any]) -> dict[str, Any]:
     return characters
 
 
+TRANSITIONS = frozenset({"cut", "fade", "dissolve", "slide"})
+EFFECTS = frozenset({"shake", "flash"})
+
+
+def _closed(value: Any, allowed: frozenset[str]) -> bool:
+    return type(value) is str and value in allowed
+
+
 def _theme(value: Any, assets: dict[str, Any]) -> None:
     """A closed presentation theme; every part is optional (defaults: ADR 0040 design)."""
     theme = fields(value, set(), {"textbox", "name", "choices", "font"}, "theme")
@@ -464,8 +472,18 @@ class _Nodes:
                     reference(node[slot], assets, location + "." + slot)
             targets.append(reference(node["next"], nodes, location + ".next"))
         elif kind == "stage" and self.v2:
-            fields(node, {"type", "next"}, {"background", "cg", "show", "hide"}, location)
-            effect = False
+            fields(
+                node,
+                {"type", "next"},
+                {"background", "cg", "show", "hide", "transition", "effect"},
+                location,
+            )
+            # Closed sets (ADR 0065); these change how a step looks, never what it does.
+            if "transition" in node and not _closed(node["transition"], TRANSITIONS):
+                raise PackageError("invalid_transition", location + ".transition")
+            if "effect" in node and not _closed(node["effect"], EFFECTS):
+                raise PackageError("invalid_effect", location + ".effect")
+            effect = "effect" in node
             if "cg" in node:
                 effect = True
                 if node["cg"] is not None:

@@ -451,3 +451,8 @@
 .studio-cg-pick-head { display:flex; gap:12px; align-items:end; flex-wrap:wrap; }
 .studio-cg-pick-head .studio-field { flex:1 1 220px; }
 .studio-cg-two { margin:8px 0; }
+.studio-stage-motion { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:end; }
+.studio-stage-motion-field { display:flex; flex-direction:column; gap:4px; min-width:180px; }
+.studio-stage-motion select { min-height:40px; padding:6px 10px; border:1px solid #c2d0d8; border-radius:7px; background:#fff; color:#182635; }
+.studio-stage-motion select:disabled { opacity:.55; }
+.studio-stage-motion .studio-hint { flex:1 1 100%; margin:0; }

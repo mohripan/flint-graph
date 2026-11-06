@@ -38,7 +38,8 @@ Compatibility renderer. The bootstrap verifies captured content and starts the
 player. Use Continue/Enter/Space, numbered choices or click/tap. Format 2 stories also have Log,
 Auto, Skip, Hide and Menu (keys L, A, S, H and Esc; see ADR 0064), and Menu holds Save, Load, Quick
 save, Quick load, Restart and the settings. In a browser the first press finishes a line that is
-still appearing, and the next one moves on.
+still appearing, and the next one moves on. Stage changes play a transition unless the player turns
+on Reduce motion in the menu (ADR 0065).
 Tab focus has an outline. Long passages scroll inside the fixed toolbar.
 
 Downloaded source is yours to customize under its runtime/content/font/engine

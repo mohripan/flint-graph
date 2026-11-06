@@ -59,6 +59,7 @@ func _initialize() -> void:
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
 		stage._set_text_speed("instant")
+		stage._set_reduced_motion(true)
 		await process_frame
 		await process_frame
 		if config["case"] == "cg_keyboard_gallery":
@@ -99,6 +100,7 @@ func _initialize() -> void:
 			stage.size = Vector2(1280, 720)
 			stage.configure(checked["story"], checked["package_hash"], checked["assets"], text)
 			stage._set_text_speed("instant")
+			stage._set_reduced_motion(true)
 			await process_frame
 			await process_frame
 			var first: String = stage._player.state["node_id"]
@@ -149,6 +151,7 @@ func _initialize() -> void:
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
 		stage._set_text_speed("instant")
+		stage._set_reduced_motion(true)
 		await process_frame
 		await process_frame
 		var clips: Array = [stage.current_voice()]
@@ -191,6 +194,7 @@ func _initialize() -> void:
 			stage.size = Vector2(1280, 720)
 			stage.configure(story, checked["package_hash"], checked["assets"])
 			stage._set_text_speed("instant")
+			stage._set_reduced_motion(true)
 			await process_frame
 			await process_frame
 			var first: String = stage._player.state["node_id"]
@@ -235,6 +239,7 @@ func _initialize() -> void:
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
 		stage._set_text_speed("instant")
+		stage._set_reduced_motion(true)
 		stage._toolbar("Save")  # Save before seeing a CG.
 		_find(stage, "Continue").pressed.emit()
 		await process_frame
@@ -279,6 +284,7 @@ func _initialize() -> void:
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
 		stage._set_text_speed("instant")
+		stage._set_reduced_motion(true)
 		var screens: Array = []
 		for step: String in ["", "Continue", "Go", "Continue"]:
 			if step != "":
@@ -304,6 +310,10 @@ func _initialize() -> void:
 		return
 	if config["case"] == "controls":
 		await _probe_controls(checked)
+		quit(0)
+		return
+	if config["case"] == "transitions":
+		await _probe_transitions(checked)
 		quit(0)
 		return
 	if config["case"] == "controls_settings":
@@ -581,4 +591,129 @@ func _probe_controls_preview(checked: Dictionary) -> void:
 			written.append(path)
 	out["files_written"] = written
 	out["overlay_calls"] = stage.calls
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _settle_screen(stage: Control) -> void:
+	stage._process(30.0)
+	stage._process(30.0)
+	await process_frame
+
+
+func _screen_of(stage: Control) -> Dictionary:
+	var figures: Array = []
+	for id: String in stage._sprites:
+		figures.append([id, stage._sprites[id].position, stage._sprites[id].size])
+	var background: Texture2D = stage._background.texture
+	return {"node": _node_of(stage), "background": background.get_size() if background != null else null,
+		"figures": figures, "text": stage._text.text}
+
+
+func _walk_to(stage: Control, node: String) -> void:
+	for step in range(40):
+		if _node_of(stage) == node:
+			return
+		await _settle_screen(stage)
+		stage._request_advance()
+
+
+func _probe_transitions(checked: Dictionary) -> void:
+	var out := {}
+	var stage: Control = await _controls_stage("res://runtime/vn_view.gd", checked)
+	stage._set_text_speed("instant")
+	var names := ["", "dissolve", "fade", "slide", "cut", "soft", "", ""]
+	var presentation: Array = []
+	var ran := {}
+	var leftovers: Array = []
+	var screens: Array = []
+	for index in range(8):
+		var current: Dictionary = stage._player.view
+		presentation.append([current["transition"], current["effect"]])
+		if names[index] != "":
+			ran[names[index]] = stage._transitioning()
+		await _settle_screen(stage)
+		if stage._leaving != null or stage._curtain.color.a != 0.0 or stage._flash.color.a != 0.0 or stage._stage_root.position != Vector2.ZERO:
+			leftovers.append(index)
+		screens.append(_screen_of(stage))
+		stage._request_advance()
+	out["presentation"] = presentation
+	out["ran"] = ran
+	out["settled_leftovers"] = leftovers
+	# A press during a transition, and a save during one.
+	stage._toolbar("Restart")
+	await _walk_to(stage, "l1")
+	await _settle_screen(stage)
+	stage._request_advance()
+	var saved: Dictionary = JSON.parse_string(stage._player.save().get_string_from_utf8())
+	out["save_mid_transition"] = {"node": saved["node_id"], "background": saved["stage"]["background"]}
+	stage._request_advance()
+	out["press_finishes"] = {"node": _node_of(stage), "transitioning": stage._transitioning()}
+	# Auto waits for a transition.
+	stage._toolbar("Restart")
+	await _walk_to(stage, "l1")
+	await _settle_screen(stage)
+	stage._request_advance()
+	stage._toolbar("Auto")
+	stage._process(0.2)
+	out["auto_waits"] = {"during": _node_of(stage), "transitioning_then": stage._transitioning()}
+	stage._toolbar("Auto")
+	# Shake and flash.
+	await _walk_to(stage, "l6")
+	var shake := {}
+	stage._process(0.1)
+	shake["moved"] = stage._stage_root.position != Vector2.ZERO
+	stage._process(30.0)
+	shake["settled_at_origin"] = stage._stage_root.position == Vector2.ZERO
+	out["shake"] = shake
+	stage._request_advance()
+	var flash := {}
+	stage._process(0.05)
+	var first: float = stage._flash.color.a
+	flash["visible"] = first > 0.0
+	stage._process(0.1)
+	var second: float = stage._flash.color.a
+	stage._process(0.1)
+	var third: float = stage._flash.color.a
+	flash["once"] = first > second and second > third
+	stage._process(30.0)
+	flash["settled_clear"] = stage._flash.color.a == 0.0
+	out["flash"] = flash
+	# Restart and Load are cuts.
+	stage._toolbar("Restart")
+	stage._toolbar("Save")
+	await _walk_to(stage, "l1")
+	await _settle_screen(stage)
+	stage._request_advance()
+	stage._toolbar("Restart")
+	out["restart_transitioned"] = stage._transitioning()
+	await _walk_to(stage, "l1")
+	stage._toolbar("Load")
+	out["load_transitioned"] = stage._transitioning()
+	# Skip shows none of it: everything up to l6 was read above.
+	stage._toolbar("Restart")
+	stage._toolbar("Skip")
+	var skipped := false
+	for tick in range(12):
+		stage._process(1.0)
+		skipped = skipped or stage._transitioning()
+	out["skip_transitioned"] = skipped
+	root.remove_child(stage)
+	stage.queue_free()
+	# Reduced motion: the same screens, with nothing moving.
+	var calm: Control = await _controls_stage("res://runtime/vn_view.gd", checked)
+	calm._set_text_speed("instant")
+	calm._set_reduced_motion(true)
+	var reduced := {"transitioned": false, "shook": false, "flashed": false}
+	var calm_screens: Array = []
+	for index in range(8):
+		reduced["transitioned"] = reduced["transitioned"] or calm._transitioning()
+		calm._process(0.05)
+		reduced["shook"] = reduced["shook"] or calm._stage_root.position != Vector2.ZERO
+		reduced["flashed"] = reduced["flashed"] or calm._flash.color.a != 0.0
+		await _settle_screen(calm)
+		calm_screens.append(_screen_of(calm))
+		calm._request_advance()
+	out["reduced"] = reduced
+	out["settled_screens_match"] = var_to_str(screens) == var_to_str(calm_screens)
+	out["stored_reduced_motion"] = load("res://runtime/save_store.gd").read_settings()["reduced_motion"]
 	print("UI_RESULT:" + JSON.stringify(out))

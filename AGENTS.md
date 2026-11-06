@@ -273,6 +273,15 @@ change the launcher rebuilds the playtest and release builder itself, into `note
 Adding a runtime file means updating `pyproject.toml`, `export/__init__.py`, `build_child.py` and
 `build_preview.py`. Read `docs/reports/2026-11-07-player-controls.md`.
 
+[ADR 0065](docs/adr/0065-stage-transitions-and-effects.md) (runtime 0.9.0, prompt v7) adds closed
+`transition` (cut, fade, dissolve, slide) and `effect` (shake, flash) fields to format 2 stage steps.
+They appear in `view`, never in saves or route traces, so check them through `view`. Keep Python
+`player.py`, `player.gd` and `validate_story.gd` in step. A change with no transition plays a 0.2 s
+dissolve, so probes that compare mid-screen state call `_process` to settle it. Native UI probes
+with many awaits need `native_ui_probe(..., frames=...)`, or the engine quits first. Prompt v7 also
+adds a missing `generate_voice` when a new line is marked for voice. Read
+`docs/reports/2026-11-07-transitions.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

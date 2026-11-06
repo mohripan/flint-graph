@@ -583,6 +583,8 @@ def native_ui_probe(
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SCRIPT ERROR" not in result.stderr
+    # The engine logs this and carries on; every layout would log it again.
+    assert "does not have any 'meta'" not in result.stderr
     return json.loads(
         next(
             line.removeprefix("UI_RESULT:")

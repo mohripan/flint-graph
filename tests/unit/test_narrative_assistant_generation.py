@@ -473,6 +473,87 @@ async def test_a_broken_action_is_left_out_once_repairs_are_spent_and_the_edits_
     assert Diagnostic("image_action_dropped", "proposal.operations.1") in result.warnings
 
 
+def voiced(key="hi", speaker="mira", **voice):
+    return {
+        "op": "upsert_node",
+        "id": key,
+        "node": {
+            "type": "line",
+            "speaker": speaker,
+            "text": "Hi.",
+            "next": "ending",
+            "voice": {"mode": "full", **voice},
+        },
+    }
+
+
+@pytest.mark.anyio
+async def test_a_line_marked_for_voice_gets_its_action_when_the_model_forgets():
+    """Without one the line would stay silent, which is not what anyone asked for."""
+    result = await run_turn(
+        Scripted(answer(voiced("hi"), voiced("again"))),
+        story(),
+        "Add two lines and voice them.",
+        capabilities=("voices",),
+    )
+    actions = [item for item in result.proposal.operations if isinstance(item, GenerateVoice)]
+    assert [(item.character, item.lines) for item in actions] == [("mira", ["hi", "again"])]
+    assert result.diagnostics == ()
+
+
+@pytest.mark.anyio
+async def test_a_voice_action_the_model_wrote_is_not_repeated():
+    action = {"op": "generate_voice", "character": "mira", "lines": ["hi"], "voice": "af_bella"}
+    result = await run_turn(
+        Scripted(answer(voiced("hi"), action)),
+        story(),
+        "Add a line and voice it.",
+        capabilities=("voices",),
+    )
+    actions = [item for item in result.proposal.operations if isinstance(item, GenerateVoice)]
+    assert [(item.lines, item.voice) for item in actions] == [(["hi"], "af_bella")]
+
+
+@pytest.mark.anyio
+async def test_only_lines_the_voice_action_missed_get_a_new_one():
+    action = {"op": "generate_voice", "character": "mira", "lines": ["hi"]}
+    result = await run_turn(
+        Scripted(answer(voiced("hi"), voiced("again"), action)),
+        story(),
+        "Add two lines and voice them.",
+        capabilities=("voices",),
+    )
+    actions = [item for item in result.proposal.operations if isinstance(item, GenerateVoice)]
+    assert [item.lines for item in actions] == [["hi"], ["again"]]
+
+
+@pytest.mark.anyio
+async def test_no_voice_action_appears_where_voices_are_unavailable():
+    result = await run_turn(Scripted(answer(voiced())), story(), "Add a line.", capabilities=())
+    assert [item.op for item in result.proposal.operations] == ["upsert_node"]
+
+
+@pytest.mark.anyio
+async def test_a_line_that_already_has_its_clip_needs_no_action():
+    source = story()
+    source["assets"]["clip"] = {"kind": "audio", "path": "assets/clip.wav", "sha256": sha("2")}
+    result = await run_turn(
+        Scripted(answer(voiced(audio="clip"))), source, "Add a line.", capabilities=("voices",)
+    )
+    assert [item.op for item in result.proposal.operations] == ["upsert_node"]
+
+
+@pytest.mark.anyio
+async def test_unvoiced_lines_never_cost_the_creator_credits():
+    plain = {
+        "op": "upsert_node",
+        "id": "hi",
+        "node": {"type": "line", "speaker": "mira", "text": "Hi.", "next": "ending"},
+    }
+    result = await run_turn(Scripted(answer(plain)), story(), "Add.", capabilities=("voices",))
+    assert [item.op for item in result.proposal.operations] == ["upsert_node"]
+
+
 def test_context_tells_the_model_what_can_be_generated_and_each_characters_voice():
     row = LibraryRow("Mira", "sprite", "image/png", sha("c"), "mira")
     entries = library_entries(story(), [row])

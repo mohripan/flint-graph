@@ -1,4 +1,4 @@
-import type { Condition, StoryDraft, StoryNode, VariableDeclaration } from "./types";
+import type { Condition, StageEffect, StageTransition, StoryDraft, StoryNode, VariableDeclaration } from "./types";
 
 export function own<T>(record: Record<string, T>, key: string): T | undefined {
   return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
@@ -172,6 +172,11 @@ export function deleteVariable(story: StoryDraft, id: string): StoryDraft {
 }
 
 // One readable line for a stage step in the script (ADR 0040).
+export const TRANSITION_LABELS: Record<StageTransition, string> = {
+  cut: "Cut", fade: "Fade through black", dissolve: "Dissolve", slide: "Slide",
+};
+export const EFFECT_LABELS: Record<StageEffect, string> = { shake: "Shake", flash: "Flash" };
+
 export function describeStage(story: StoryDraft, node: Extract<StoryNode, { type: "stage" }>): string {
   const name = (id: string) => story.characters[id]?.name || id;
   const parts: string[] = [];
@@ -181,6 +186,8 @@ export function describeStage(story: StoryDraft, node: Extract<StoryNode, { type
   else if (node.background !== undefined) parts.push(`Background ${node.background}`);
   for (const id of node.hide ?? []) parts.push(`${name(id)} leaves`);
   for (const entry of node.show ?? []) parts.push(`${name(entry.character)} (${entry.sprite}) at ${entry.position}`);
+  if (node.transition) parts.push(TRANSITION_LABELS[node.transition]);
+  if (node.effect) parts.push(EFFECT_LABELS[node.effect]);
   return parts.join(" · ");
 }
 

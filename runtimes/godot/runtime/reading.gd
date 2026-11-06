@@ -16,6 +16,13 @@ const FLUSH_SECONDS := 5.0
 const MAX_REVEAL_SECONDS := 8.0
 const MAX_AUTO_SECONDS := 14.0
 const MAX_READ_MARKS := 20000
+# How long each way of arriving at a screen lasts (ADR 0065). "soft" is what a change
+# of stage gets when the creator asked for nothing in particular.
+const TRANSITION_SECONDS := {"soft": 0.2, "dissolve": 0.5, "fade": 1.0, "slide": 0.6}
+# One flash that only ever fades, never a repeated flicker, for photosensitive players.
+const EFFECT_SECONDS := {"shake": 0.45, "flash": 0.35}
+const SHAKE_PIXELS := 12.0
+const FLASH_ALPHA := 0.7
 
 
 static func reveal_seconds(text: String, speed: String) -> float:

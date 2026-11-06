@@ -1,7 +1,7 @@
 // Editor operations for story format 2 (ADR 0040): library assets bound into the story,
 // the theme, a scene's opening stage step, line expressions and character sprites.
 // Everything edits the same story nodes the runtimes play; the server validates saves.
-import type { CharacterFraming, StagePosition, StageShow, StoryDraft, StoryNode, StoryTheme } from "./types";
+import type { CharacterFraming, StageEffect, StagePosition, StageShow, StageTransition, StoryDraft, StoryNode, StoryTheme } from "./types";
 
 type StageNode = Extract<StoryNode, { type: "stage" }>;
 /** Describe the effective image without writing inherited state into the story. */
@@ -269,14 +269,24 @@ export function describeSnapshot(story: StoryDraft, snapshot: StageSnapshot | un
 
 // ---- A scene's opening stage step --------------------------------------------------------
 
-export interface StageEdit { background?: string | null; cg?: string | null; show: StageShow[]; hide: string[] }
+export interface StageEdit {
+  background?: string | null; cg?: string | null; show: StageShow[]; hide: string[];
+  transition?: StageTransition; effect?: StageEffect;
+}
 
 export function sceneStage(story: StoryDraft, head: string): StageEdit {
   const node = story.nodes[head];
   if (node?.type !== "stage") return { show: [], hide: [] };
   return { ...(node.background !== undefined ? { background: node.background } : {}),
     ...(node.cg !== undefined ? { cg: node.cg } : {}),
+    ...(node.transition ? { transition: node.transition } : {}),
+    ...(node.effect ? { effect: node.effect } : {}),
     show: node.show ?? [], hide: node.hide ?? [] };
+}
+
+/** Whether a step changes what is on stage, which is what a transition shows. */
+export function stageChanges(edit: StageEdit): boolean {
+  return edit.background !== undefined || edit.cg !== undefined || edit.show.length > 0 || edit.hide.length > 0;
 }
 
 export function stageProblem(edit: StageEdit): string | null {
@@ -314,8 +324,12 @@ export function setSceneStage(story: StoryDraft, head: string, edit: StageEdit):
   if (problem) throw new Error(problem);
   const current = story.nodes[head];
   if (!current) throw new Error("Scene no longer exists.");
-  const effect = edit.background !== undefined || edit.cg !== undefined || edit.show.length > 0 || edit.hide.length > 0;
+  // A transition shows a change, so it goes when the change does; an effect stands alone.
+  const changes = stageChanges(edit);
+  const effect = changes || edit.effect !== undefined;
   const step = (next: string): StageNode => ({ type: "stage",
+    ...(edit.transition && changes ? { transition: edit.transition } : {}),
+    ...(edit.effect ? { effect: edit.effect } : {}),
     ...(edit.background !== undefined ? { background: edit.background } : {}),
     ...(edit.cg !== undefined ? { cg: edit.cg } : {}),
     ...(edit.hide.length ? { hide: edit.hide } : {}), ...(edit.show.length ? { show: edit.show } : {}), next });

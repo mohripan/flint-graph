@@ -18,6 +18,24 @@ test("inherited image choices show the effective asset without making a scene ch
 });
 const cgs = JSON.parse(await readFile(new URL("../../tests/fixtures/narrative/event_cgs.json", import.meta.url), "utf8"));
 
+test("a transition follows a change on stage, and an effect can stand alone", () => {
+  const value = structuredClone(cgs.story);
+  const withFade = { background: "z_train", show: [], hide: [], transition: "fade", effect: "shake" };
+  const staged = stage.setSceneStage(value, "before", withFade);
+  assert.equal(staged.nodes.before.transition, "fade");
+  assert.equal(staged.nodes.before.effect, "shake");
+  assert.deepEqual(stage.sceneStage(staged, "before"), withFade);
+  assert.equal(stage.stageChanges({ show: [], hide: [] }), false);
+  // With nothing changing, the transition has nothing to show and goes; the effect stays.
+  const shakeOnly = stage.setSceneStage(staged, "before", { show: [], hide: [], transition: "fade", effect: "shake" });
+  assert.equal(shakeOnly.nodes.before.type, "stage");
+  assert.equal(shakeOnly.nodes.before.transition, undefined);
+  assert.equal(shakeOnly.nodes.before.effect, "shake");
+  // With neither, the step is removed as before.
+  const none = stage.setSceneStage(shakeOnly, "before", { show: [], hide: [] });
+  assert.notEqual(none.nodes.before.type, "stage");
+});
+
 test("CGs share the player contract: first-use catalogue, carried state, explicit clear and asset retention", () => {
   const value = structuredClone(cgs.story);
   assert.deepEqual(stage.cgGalleryAssets(value), cgs.gallery);

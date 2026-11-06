@@ -295,7 +295,19 @@ def test_dynamic_preview_validates_v2_stage_rules_and_asset_identity(tmp_path: P
         return lambda s: s["nodes"].__setitem__(name, value)
 
     show = {"character": "mira", "sprite": "neutral", "position": "left"}
+    # The closed sets of ADR 0065 agree with the server, and neither is a change by itself.
+    for presentation in [{"transition": "fade"}, {"effect": "flash"}, {"transition": "cut"}]:
+        showy = copy.deepcopy(story)
+        showy["nodes"]["s1"].update(presentation)
+        add(showy, True)
+    alone = copy.deepcopy(story)
+    alone["nodes"]["s1"] = {"type": "stage", "effect": "shake", "next": "e"}
+    add(alone, True)
     for change in [
+        node("s1", {"type": "stage", "transition": "fade", "next": "e"}),
+        node("s1", {"type": "stage", "background": None, "transition": "wipe", "next": "e"}),
+        node("s1", {"type": "stage", "background": None, "transition": None, "next": "e"}),
+        node("s1", {"type": "stage", "effect": "strobe", "next": "e"}),
         node("s1", {"type": "stage", "next": "e"}),
         node("s1", {"type": "stage", "hide": [], "next": "e"}),
         node("s1", {"type": "stage", "hide": ["mira", "mira"], "next": "e"}),

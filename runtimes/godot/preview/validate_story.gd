@@ -137,8 +137,10 @@ static func _theme(theme: Variant, assets: Dictionary) -> bool:
 	return true
 
 static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary, nodes: Dictionary) -> bool:
-	if not _fields(node, ["type", "next"], ["background", "cg", "show", "hide"]): return false
-	if not node.has("background") and not node.has("cg") and not node.has("show") and not node.has("hide"): return false
+	if not _fields(node, ["type", "next"], ["background", "cg", "show", "hide", "transition", "effect"]): return false
+	if not node.has("background") and not node.has("cg") and not node.has("show") and not node.has("hide") and not node.has("effect"): return false
+	if node.has("transition") and (not node["transition"] is String or not node["transition"] in ["cut", "fade", "dissolve", "slide"]): return false
+	if node.has("effect") and (not node["effect"] is String or not node["effect"] in ["shake", "flash"]): return false
 	if node.has("cg") and node["cg"] != null and not _asset(node["cg"], assets, "image"): return false
 	if node.has("background") and node["background"] != null and not _asset(node["background"], assets, "image"): return false
 	var hidden := {}

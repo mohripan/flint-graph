@@ -179,7 +179,11 @@ const SETTINGS_PATH := "user://flint_graph/settings.json"
 
 static func default_settings() -> Dictionary:
 	return {"voice_volume": 100, "text_speed": Reading.DEFAULT_TEXT_SPEED,
-		"auto_speed": Reading.DEFAULT_AUTO_SPEED, "speaker_focus": true}
+		"auto_speed": Reading.DEFAULT_AUTO_SPEED, "speaker_focus": true, "reduced_motion": false}
+
+
+static func settings_saved() -> bool:
+	return FileAccess.file_exists(SETTINGS_PATH)
 
 
 static func read_settings() -> Dictionary:
@@ -196,13 +200,16 @@ static func read_settings() -> Dictionary:
 		return settings
 	if value.get("schema_version") == "1" and value.size() == 2:
 		settings["voice_volume"] = volume
-	elif value.get("schema_version") == "2" and value.size() == 5:
+	elif value.get("schema_version") == "2" and value.size() in [5, 6]:
 		if not value.get("text_speed") in Reading.TEXT_SPEEDS or not value.get("auto_speed") in Reading.AUTO_SPEEDS:
 			return settings
-		if not value.get("speaker_focus") is bool:
+		# Runtime 0.8.0 wrote these files without reduced_motion.
+		var reduced: Variant = value.get("reduced_motion", false)
+		if not value.get("speaker_focus") is bool or not reduced is bool:
 			return settings
 		settings = {"voice_volume": volume, "text_speed": value["text_speed"],
-			"auto_speed": value["auto_speed"], "speaker_focus": value["speaker_focus"]}
+			"auto_speed": value["auto_speed"], "speaker_focus": value["speaker_focus"],
+			"reduced_motion": reduced}
 	return settings
 
 

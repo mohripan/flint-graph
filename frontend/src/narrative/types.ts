@@ -25,7 +25,7 @@ export interface StageShow { character: string; sprite: string; position: StageP
 export interface LineVoice { mode: "full" | "vocalization"; text?: string; audio?: string }
 export type StoryNode =
   | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string; voice?: LineVoice })
-  | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[] }
+  | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[]; transition?: StageTransition; effect?: StageEffect }
   | (Display & { type: "choice"; options: ChoiceOption[] })
   | { type: "set"; next: string; operations: Array<{ op: "set" | "increment"; variable: string; value: Scalar }> }
   | { type: "branch"; condition: Condition; if_true: string; if_false: string }
@@ -154,3 +154,7 @@ export interface TurnWrite {
   /** Library items the creator attached to this message (ADR 0062). */
   attachments?: Array<Pick<Attachment, "kind" | "id">>;
 }
+
+// How a stage step looks when it plays (ADR 0065). It never changes what the step does.
+export type StageTransition = "cut" | "fade" | "dissolve" | "slide";
+export type StageEffect = "shake" | "flash";

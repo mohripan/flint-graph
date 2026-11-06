@@ -1,9 +1,10 @@
 import { useContext, useState } from "react";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { AssetThumb, IMAGE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
-import { POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage, stageImageChoice } from "./stageModel";
+import { POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage, stageChanges, stageImageChoice } from "./stageModel";
 import type { StageEdit, StageSnapshot } from "./stageModel";
-import type { StagePosition, StoryDraft } from "./types";
+import { EFFECT_LABELS, TRANSITION_LABELS } from "./model";
+import type { StageEffect, StagePosition, StageTransition, StoryDraft } from "./types";
 
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not change the stage.";
 
@@ -74,6 +75,25 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
           {edit.cg !== null && <button type="button" className="studio-link" onClick={() => apply({ ...edit, cg: null })}>Clear CG</button>}
         </div>
         <p className="studio-hint">Covers the stage while dialogue continues. Clearing it reveals the background and characters.</p>
+      </div>
+      <div className="studio-stage-motion">
+        <label className="studio-stage-motion-field"><span className="studio-stage-label">Transition</span>
+          <select value={edit.transition ?? ""} disabled={!stageChanges(edit)} onChange={event => {
+            const { transition: _, ...rest } = edit;
+            apply(event.target.value ? { ...rest, transition: event.target.value as StageTransition } : rest);
+          }}>
+            <option value="">Quick dissolve (usual)</option>
+            {Object.entries(TRANSITION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>
+        <label className="studio-stage-motion-field"><span className="studio-stage-label">Effect</span>
+          <select value={edit.effect ?? ""} onChange={event => {
+            const { effect: _, ...rest } = edit;
+            apply(event.target.value ? { ...rest, effect: event.target.value as StageEffect } : rest);
+          }}>
+            <option value="">None</option>
+            {Object.entries(EFFECT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>
+        <p className="studio-hint">{stageChanges(edit) ? "How this change appears when the game plays it. Players can turn motion off." : "Change the background, CG or characters to choose a transition."}</p>
       </div>
       {picking && <div className="studio-stage-picker" role="listbox" aria-label={picking === "cg" ? "CG images" : "Backgrounds"}>
         {Object.entries(story.assets).filter(([, asset]) => asset.kind === "image").map(([id, asset]) =>

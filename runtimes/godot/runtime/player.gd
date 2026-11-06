@@ -18,6 +18,8 @@ var _v2 := false
 var _stage: Dictionary = {"background": null, "cg": null, "characters": []}
 var _cg_assets: Array = []
 var _seen_cgs: Dictionary = {}
+var _transition: Variant = null
+var _effect: Variant = null
 
 var gallery: Array:
 	get:
@@ -73,7 +75,7 @@ func _view_v2() -> Dictionary:
 	if _status == "fault":
 		return {"type": "fault", "text_id": null, "text": "The game cannot continue.",
 			"speaker": null, "speaker_name": null, "speaker_color": null,
-			"stage": _stage.duplicate(true), "voice": null, "options": []}
+			"stage": _stage.duplicate(true), "transition": null, "effect": null, "voice": null, "options": []}
 	var node: Dictionary = _story["nodes"][_node_id]
 	var speaker: Variant = node.get("speaker") if node["type"] == "line" else null
 	var character: Variant = _story["characters"][speaker] if speaker != null else null
@@ -84,7 +86,8 @@ func _view_v2() -> Dictionary:
 		"speaker": speaker,
 		"speaker_name": character["name"] if character != null else null,
 		"speaker_color": character.get("color") if character != null else null,
-		"stage": _stage.duplicate(true), "voice": _voice(node), "options": options}
+		"stage": _stage.duplicate(true), "transition": _transition, "effect": _effect,
+		"voice": _voice(node), "options": options}
 
 
 func _voice(node: Dictionary) -> Variant:
@@ -227,6 +230,8 @@ func _settle(target: String) -> void:
 	_status = "playing"
 	_ending = null
 	_fault = null
+	_transition = null
+	_effect = null
 	while true:
 		_node_id = target
 		var node: Dictionary = _story["nodes"][target]
@@ -252,6 +257,9 @@ func _settle(target: String) -> void:
 			target = node["if_true"] if _condition(node["condition"], _variables) else node["if_false"]
 		elif kind == "stage":
 			_stage = _staged(node)
+			# How to show arriving here (ADR 0065). Not state: no saves, no route traces.
+			_transition = node.get("transition", _transition)
+			_effect = node.get("effect", _effect)
 			target = node["next"]
 		else:
 			var assigned := _assigned(node, _variables)
@@ -396,6 +404,8 @@ func load_save(data: PackedByteArray) -> String:
 	_status = saved["status"]
 	_ending = saved["ending"]
 	_fault = saved["fault"]
+	_transition = null
+	_effect = null
 	if _v2:
 		_stage = stage
 		_unlock_cg()

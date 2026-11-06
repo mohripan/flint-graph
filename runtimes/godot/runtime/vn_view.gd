@@ -96,6 +96,20 @@ var _menu_disabled: Dictionary = {}
 var _speed_buttons: Dictionary = {}
 var _auto_speed_buttons: Dictionary = {}
 var _focus_toggle: CheckButton
+var _motion_toggle: CheckButton
+# Transitions and effects (ADR 0065): the old screen stays above the new one until it
+# has gone, so the stage underneath is always the settled one.
+var _stage_root: Control
+var _leaving: Control
+var _curtain: ColorRect
+var _flash: ColorRect
+var _last_stage: Variant = null
+var _fx_kind := ""
+var _fx_elapsed := 0.0
+var _fx_total := 0.0
+var _pending_effect: Variant = null
+var _effect_kind := ""
+var _effect_elapsed := 0.0
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary, notices: String = "") -> void:
@@ -107,6 +121,8 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary, not
 	_font = _story_font()
 	_gallery_saved = _read_gallery()
 	_settings = _read_settings()
+	if not _settings_saved() and _browser_wants_less_motion():
+		_settings["reduced_motion"] = true
 	_voice_volume = _settings["voice_volume"]
 	_read = _read_marks()
 	_player = PlayerScript.new(source, package_hash, _gallery_saved)
@@ -210,23 +226,29 @@ func _build() -> void:
 	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ground.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(ground)
+	_stage_root = Control.new()  # What a shake moves: everything but the text and controls.
+	_stage_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_stage_root)
 	_background = TextureRect.new()
 	_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_background)
+	_stage_root.add_child(_background)
 	_figures = Control.new()
 	_figures.clip_contents = true  # Framed figures continue below the screen edge.
 	_figures.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_figures.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_figures)
+	_stage_root.add_child(_figures)
 	_cg = TextureRect.new()
 	_cg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_cg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_cg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_cg)  # Over the stage; text, choices and controls are drawn above it.
+	_stage_root.add_child(_cg)  # Over the stage; text, choices and controls are drawn above it.
+	_curtain = _cover(Color(0, 0, 0, 0))
+	_flash = _cover(Color(1, 1, 1, 0))
 	var box: Dictionary = _theme["textbox"]
 	_box = PanelContainer.new()
 	_box.mouse_filter = Control.MOUSE_FILTER_PASS  # A click on the text box advances too.
@@ -438,6 +460,16 @@ func _build_menu_panel() -> void:
 	_focus_toggle.set_pressed_no_signal(_settings["speaker_focus"])
 	_focus_toggle.toggled.connect(_set_speaker_focus)
 	column.add_child(_focus_toggle)
+	_motion_toggle = CheckButton.new()
+	_motion_toggle.text = "Reduce motion (no transitions, shake or flash)"
+	_motion_toggle.focus_mode = Control.FOCUS_ALL
+	_motion_toggle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	for role: String in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color", "font_focus_color"]:
+		_motion_toggle.add_theme_color_override(role, PAPER)
+	_motion_toggle.add_theme_font_size_override("font_size", 14)
+	_motion_toggle.set_pressed_no_signal(_settings["reduced_motion"])
+	_motion_toggle.toggled.connect(_set_reduced_motion)
+	column.add_child(_motion_toggle)
 
 
 func _setting_row(parent: Container, title: String, values: Array, current: String, apply: Callable) -> Dictionary:
@@ -523,7 +555,11 @@ func _finish_reveal() -> void:
 
 
 func _request_advance() -> void:
-	# The first press finishes a line that is still appearing; the next one moves on.
+	# One press finishes what is still happening; the next one moves on.
+	if _transitioning():
+		_finish_transition()
+		_publish_qa.call_deferred()
+		return
 	if _revealing():
 		_finish_reveal()
 		_publish_qa.call_deferred()
@@ -545,6 +581,7 @@ func _set_skip(on: bool) -> void:
 	_skip_button.set_pressed_no_signal(on)
 	if on:
 		_set_auto(false)
+		_finish_transition()
 		_wait = 0.0
 	_publish_qa.call_deferred()
 
@@ -630,6 +667,10 @@ func _process(delta: float) -> void:
 	_flush_read_marks(delta)
 	if _overlay_open() or _ui_hidden:
 		return
+	_tick_effect(delta)
+	if _transitioning():
+		_tick_transition(delta)
+		return
 	if _revealing():
 		if _skip:
 			_finish_reveal()
@@ -678,6 +719,137 @@ func _begin_screen(current: Dictionary) -> void:
 	_text.visible_ratio = 0.0 if _reveal_total > 0.0 else 1.0
 	if current["type"] in ["line", "choice", "end"] and current["text"] != "":
 		_note_backlog(current["speaker_name"], current["text"], current["speaker_color"])
+
+
+func _cover(color: Color) -> ColorRect:
+	var cover := ColorRect.new()
+	cover.color = color
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(cover)
+	return cover
+
+
+func _settings_saved() -> bool:
+	return SaveStore.settings_saved()
+
+
+func _browser_wants_less_motion() -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var browser: Variant = JavaScriptBridge.get_interface("window")
+	if browser == null:
+		return false
+	var query: Variant = browser.matchMedia("(prefers-reduced-motion: reduce)")
+	return query != null and query.matches == true
+
+
+func _transitioning() -> bool:
+	return _fx_kind != ""
+
+
+func _present(current: Dictionary, stage: Dictionary) -> void:
+	# Called before the new stage is drawn, while the old one can still be copied.
+	_finish_transition()
+	_finish_effect()
+	var quiet: bool = _last_stage == null or _skip or _settings["reduced_motion"]
+	var wanted: Variant = current["transition"]
+	var kind := ""
+	if not quiet:
+		if wanted == null:
+			kind = "soft" if stage != _last_stage else ""
+		elif wanted != "cut":
+			kind = wanted
+	_last_stage = stage
+	var effect: Variant = null if quiet else current["effect"]
+	if kind != "":
+		_pending_effect = effect
+		_start_transition(kind)
+	elif effect != null:
+		_start_effect(effect)
+
+
+func _start_transition(kind: String) -> void:
+	_leaving = Control.new()
+	_leaving.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_leaving.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_stage_root.add_child(_leaving)
+	for layer: Control in [_background, _figures, _cg]:
+		_leaving.add_child(layer.duplicate())
+	_fx_kind = kind
+	_fx_elapsed = 0.0
+	_fx_total = Reading.TRANSITION_SECONDS[kind]
+	if kind in ["fade", "slide"]:
+		_box.modulate.a = 0.0
+		_choices.modulate.a = 0.0
+
+
+func _tick_transition(delta: float) -> void:
+	_fx_elapsed += delta
+	var progress := clampf(_fx_elapsed / _fx_total, 0.0, 1.0)
+	if _fx_kind == "fade":
+		if progress < 0.5:
+			_curtain.color.a = progress * 2.0
+		else:
+			_leaving.hide()
+			_curtain.color.a = 2.0 - progress * 2.0
+	elif _fx_kind == "slide":
+		_leaving.position.x = -size.x * progress * progress * (3.0 - 2.0 * progress)
+	else:
+		_leaving.modulate.a = 1.0 - progress
+	if progress >= 1.0:
+		_finish_transition()
+
+
+func _finish_transition() -> void:
+	if not _transitioning():
+		return
+	_stage_root.remove_child(_leaving)
+	_leaving.queue_free()
+	_leaving = null
+	_fx_kind = ""
+	_curtain.color.a = 0.0
+	_box.modulate.a = 1.0
+	_choices.modulate.a = 1.0
+	var effect: Variant = _pending_effect
+	_pending_effect = null
+	if effect != null:
+		_start_effect(effect)
+
+
+func _start_effect(kind: String) -> void:
+	_effect_kind = kind
+	_effect_elapsed = 0.0
+
+
+func _tick_effect(delta: float) -> void:
+	if _effect_kind == "":
+		return
+	_effect_elapsed += delta
+	var progress: float = _effect_elapsed / Reading.EFFECT_SECONDS[_effect_kind]
+	if progress >= 1.0:
+		_finish_effect()
+	elif _effect_kind == "shake":
+		var reach: float = Reading.SHAKE_PIXELS * (1.0 - progress)
+		_stage_root.position = Vector2(sin(_effect_elapsed * 70.0) * reach, cos(_effect_elapsed * 53.0) * reach * 0.6)
+	else:
+		_flash.color.a = Reading.FLASH_ALPHA * (1.0 - progress)
+
+
+func _finish_effect() -> void:
+	_effect_kind = ""
+	_stage_root.position = Vector2.ZERO
+	_flash.color.a = 0.0
+
+
+func _set_reduced_motion(on: bool) -> void:
+	_settings["reduced_motion"] = on
+	_motion_toggle.set_pressed_no_signal(on)
+	if on:
+		_finish_transition()
+		_finish_effect()
+	_persist_settings()
+	_publish_qa.call_deferred()
 
 
 func _build_terms() -> void:
@@ -995,6 +1167,8 @@ func _texture(id: Variant) -> Texture2D:
 func _render() -> void:
 	var current: Dictionary = _player.view
 	var stage: Dictionary = current["stage"]
+	if _player.generation != _screen_generation or _player != _screen_session:
+		_present(current, stage)
 	_play_voice(current)
 	var in_use := {}
 	_cg.texture = _texture(stage["cg"])
@@ -1166,7 +1340,7 @@ func _layout() -> void:
 			var scale_percent: int = framing.get("scale", 92)
 			drawn = natural * (size.y * scale_percent / 100.0 / natural.y)
 			top = size.y * framing.get("top", maxi(0, 100 - scale_percent)) / 100.0
-		var place: Variant = figure.get_meta("x", null)  # set_meta(null) removes the key.
+		var place: Variant = figure.get_meta("x") if figure.has_meta("x") else null  # set_meta(null) removes the key.
 		var center: float = (place / 100.0 if place != null else SLOTS[figure.get_meta("position")]) * size.x
 		figure.position = Vector2(center - drawn.x / 2.0, top)
 		figure.size = drawn
@@ -1221,6 +1395,7 @@ func _toolbar(action: String) -> void:
 		_set_auto(false)
 		_set_skip(false)
 		_backlog.clear()
+		_last_stage = null  # A new start is a cut, whatever the first scene asks for.
 		_player = PlayerScript.new(_source, _hash, _player.seen_cgs)
 		_notice.text = "Started over. Your saved game is still available."
 		_render()
@@ -1258,6 +1433,7 @@ func _load_slot(saved: Dictionary, missing: String, loaded: String) -> void:
 	_set_auto(false)
 	_set_skip(false)
 	_note_backlog(null, "— " + loaded.trim_suffix(".") + " —")
+	_last_stage = null  # So is arriving from a save.
 	_notice.text = loaded
 	_render()
 
@@ -1411,6 +1587,7 @@ func _publish_qa() -> void:
 		"volume_slider": _rect(_volume_slider), "sound_gate": _sound_gate != null and _sound_gate.visible,
 		"text_speed": _settings["text_speed"], "auto_speed": _settings["auto_speed"], "speaker_focus": _settings["speaker_focus"],
 		"auto": _auto, "skip": _skip, "ui_hidden": _ui_hidden, "revealing": _revealing(),
+		"transition": _fx_kind, "effect": _effect_kind, "reduced_motion": _settings["reduced_motion"],
 		"log_open": _log_panel.visible, "menu_open": _menu_panel.visible, "backlog": backlog_rows().size(), "read_marks": _read.size()}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")

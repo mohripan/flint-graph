@@ -24,6 +24,9 @@ func _read_gallery() -> Array:
 func _read_settings() -> Dictionary:
 	return SaveStore.default_settings()
 
+func _settings_saved() -> bool:
+	return false  # Each playtest starts from the player's defaults and browser preference.
+
 func _persist_settings() -> void:
 	pass  # Settings and read marks last only as long as this playtest.
 
