@@ -47,6 +47,6 @@
   "invalid_assets": [
     {"key": "hello", "asset": {"kind": "audio", "path": "assets/hello.ogg", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "unsafe_path", "location": "assets.hello"},
     {"key": "hello", "asset": {"kind": "audio", "path": "assets/hello.png", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "unsafe_path", "location": "assets.hello"},
-    {"key": "hello", "asset": {"kind": "music", "path": "assets/hello.wav", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "invalid_value", "location": "assets.hello.kind"}
+    {"key": "hello", "asset": {"kind": "video", "path": "assets/hello.wav", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "code": "invalid_value", "location": "assets.hello.kind"}
   ]
 }

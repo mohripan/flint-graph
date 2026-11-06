@@ -18,6 +18,7 @@ TEMPLATE_FILES = (
     "runtime/vn_view.gd",
     "runtime/save_store.gd",
     "runtime/reading.gd",
+    "runtime/sound_channel.gd",
     "runtime/player_terms.gd",
     "fonts/Lora.ttf",
     "fonts/LICENSE-Lora.txt",

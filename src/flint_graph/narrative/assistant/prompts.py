@@ -27,6 +27,17 @@ _WRITTEN_FIRST = (
     "speaker",
     "text",
     "next",
+    # A stage step: what is seen before what is heard. Sorted, "ambience" would come before
+    # "background", and a model that had written the background could only reach "music".
+    "background",
+    "cg",
+    "show",
+    "hide",
+    "music",
+    "ambience",
+    "sound",
+    "transition",
+    "effect",
 )
 
 
@@ -94,4 +105,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v6": "d9888931438f5a6f57c738c7bc65d06864a0b59d3d7815caba466ed867493f24",
     # Stage transitions and effects, used sparingly (ADR 0065).
     "narrative-assistant/v7": "3be93c56725998b4a76097b56c8037e1552840df8815b27eadf6cadfa06df2cf",
+    # Music, ambience and sound effects from the library (ADR 0066).
+    "narrative-assistant/v8": "64b8ef67405cc57c8ef40754ed6c4bbd6c42ea707d1ad2295fae8c24c6eb27e8",
 }

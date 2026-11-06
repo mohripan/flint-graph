@@ -24,8 +24,14 @@ _RESERVED = {
     *(f"com{i}" for i in range(1, 10)),
     *(f"lpt{i}" for i in range(1, 10)),
 }
-_EXTENSIONS = {"image/png": "png", "font/ttf": "ttf", "font/otf": "otf", "audio/wav": "wav"}
-_STORY_KINDS = {"png": "image", "ttf": "font", "otf": "font", "wav": "audio"}
+_EXTENSIONS = {
+    "image/png": "png",
+    "font/ttf": "ttf",
+    "font/otf": "otf",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+}
+_STORY_KINDS = {"png": "image", "ttf": "font", "otf": "font", "wav": "audio", "ogg": "music"}
 LIBRARY_LIMIT = 120
 
 
@@ -61,6 +67,12 @@ def slug(name: str) -> str:
     return f"asset_{text}" if text in _RESERVED else text
 
 
+def _list_order(row: LibraryRow) -> int:
+    if row.kind == "voice":
+        return 2
+    return 1 if row.media_type in ("audio/wav", "audio/ogg") else 0
+
+
 def library_entries(
     story: dict[str, Any], rows: Iterable[LibraryRow], *, attached: Collection[str] = ()
 ) -> tuple[LibraryEntry, ...]:
@@ -71,8 +83,8 @@ def library_entries(
     known = {item.get("sha256") for item in story["assets"].values() if type(item) is dict}
     used = set(story["assets"])
     entries: list[LibraryEntry] = []
-    # Pictures first: a project with many voice clips must not crowd out its art.
-    for row in sorted(rows, key=lambda r: (r.sha256 not in attached, r.media_type == "audio/wav")):
+    # Pictures first, then music and sounds: many voice clips must not crowd them out.
+    for row in sorted(rows, key=lambda r: (r.sha256 not in attached, _list_order(r))):
         extension = _EXTENSIONS.get(row.media_type)
         if extension is None or row.sha256 in known:
             continue
@@ -105,7 +117,9 @@ def _referenced(story: dict[str, Any]) -> set[str]:
             continue
         if node.get("type") == "stage":
             keys.update(
-                node[field] for field in ("background", "cg") if type(node.get(field)) is str
+                node[field]
+                for field in ("background", "cg", "music", "ambience", "sound")
+                if type(node.get(field)) is str
             )
         voice = node.get("voice") if node.get("type") == "line" else None
         if type(voice) is dict and type(voice.get("audio")) is str:

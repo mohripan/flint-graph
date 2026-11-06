@@ -25,7 +25,7 @@ export interface StageShow { character: string; sprite: string; position: StageP
 export interface LineVoice { mode: "full" | "vocalization"; text?: string; audio?: string }
 export type StoryNode =
   | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string; voice?: LineVoice })
-  | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[]; transition?: StageTransition; effect?: StageEffect }
+  | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[]; transition?: StageTransition; effect?: StageEffect; music?: string | null; ambience?: string | null; sound?: string }
   | (Display & { type: "choice"; options: ChoiceOption[] })
   | { type: "set"; next: string; operations: Array<{ op: "set" | "increment"; variable: string; value: Scalar }> }
   | { type: "branch"; condition: Condition; if_true: string; if_false: string }
@@ -48,7 +48,7 @@ export interface StoryDraft {
   entry: string;
   characters: Record<string, StoryCharacter>;
   variables: Record<string, VariableDeclaration>;
-  assets: Record<string, { kind?: "image" | "font" | "audio"; path: string; sha256: string }>;
+  assets: Record<string, { kind?: "image" | "font" | "audio" | "music"; path: string; sha256: string }>;
   theme?: StoryTheme;
   nodes: Record<string, StoryNode>;
 }
@@ -131,7 +131,7 @@ export type StoryOperation =
   | { op: "upsert_variable"; id: string; declaration: VariableDeclaration }
   | { op: "set_title"; title: string }
   | { op: "set_theme"; theme: StoryTheme | null }
-  | { op: "add_asset"; id: string; asset: { kind: "image" | "font" | "audio"; path: string; sha256: string } }
+  | { op: "add_asset"; id: string; asset: { kind: "image" | "font" | "audio" | "music"; path: string; sha256: string } }
   | AssistantAction;
 // Generation (story format 2): never applied with the proposal; each becomes a job (ADR 0061).
 export type AssistantAction =

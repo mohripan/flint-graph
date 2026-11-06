@@ -208,6 +208,9 @@ def _tidied_stage(
     """A stage entry names an expression, so an asset ID has one meaning; and a file still
     being generated has no ID yet, so a made-up one for it can only be left out."""
     changed = dict(node)
+    for field in ("show", "hide"):
+        if node.get(field) == []:
+            del changed[field]  # Models write an empty list to mean none, which is not allowed.
     for field in ("background", "cg"):
         if field in generating and isinstance(node.get(field), str) and node[field] not in assets:
             del changed[field]
@@ -226,7 +229,8 @@ def _tidied_stage(
                     # An expression still being generated: the usual face until it is approved.
                     entry = {**entry, "sprite": "neutral" if "neutral" in own else next(iter(own))}
             entries.append(entry)
-        changed["show"] = entries
+        if entries:
+            changed["show"] = entries
     return changed
 
 
@@ -365,7 +369,10 @@ def _listed(values: Sequence[str]) -> str:
 
 
 def _problem_reasons(
-    story: dict[str, Any], proposal: Proposal, diagnostics: Sequence[Diagnostic]
+    story: dict[str, Any],
+    proposal: Proposal,
+    diagnostics: Sequence[Diagnostic],
+    library: Sequence[LibraryEntry] = (),
 ) -> dict[str, str]:
     """Say what exists, so a repair can fix a bad reference on its first try."""
     try:
@@ -394,6 +401,23 @@ def _problem_reasons(
             )
         elif field in ("next", "target", "if_true", "if_false", "entry"):
             reasons[item.location] = f"no scene has this id. Scenes: {_listed(nodes)}"
+        elif item.code == "invalid_stage":
+            reasons[item.location] = (
+                "a stage step must change something: a background, cg, show, hide, effect, "
+                "music, ambience or sound. If yours changes nothing, leave the step out and "
+                "point the scene before it straight at the next one."
+            )
+        elif field in ("music", "ambience", "sound"):
+            wanted = "audio" if field == "sound" else "music"
+            files = [
+                key
+                for key, asset in (edited.get("assets") or {}).items()
+                if isinstance(asset, dict) and asset.get("kind") == wanted
+            ] + [entry.key for entry in library if entry.kind == wanted]
+            reasons[item.location] = (
+                f"no file of that kind has this id. Files you can use: {_listed(files)}. "
+                f'If none fits, leave out "{field}" and tell the creator to upload one in Assets.'
+            )
         elif field in ("background", "cg", "audio", "asset") or item.code == "invalid_asset_kind":
             reasons[item.location] = (
                 f"no asset of that kind has this id. Assets: {_listed(assets)}. "
@@ -571,7 +595,7 @@ async def run_turn(
                     check = check_proposal(story, parsed.operations)
             proposal = parsed
             diagnostics = check.diagnostics
-            reasons = {**reasons, **_problem_reasons(story, parsed, diagnostics)}
+            reasons = {**reasons, **_problem_reasons(story, parsed, diagnostics, library)}
         if parsed is not None or diagnostics:
             await watch.step(
                 "validating",

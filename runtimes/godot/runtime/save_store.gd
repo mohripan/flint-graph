@@ -179,7 +179,8 @@ const SETTINGS_PATH := "user://flint_graph/settings.json"
 
 static func default_settings() -> Dictionary:
 	return {"voice_volume": 100, "text_speed": Reading.DEFAULT_TEXT_SPEED,
-		"auto_speed": Reading.DEFAULT_AUTO_SPEED, "speaker_focus": true, "reduced_motion": false}
+		"auto_speed": Reading.DEFAULT_AUTO_SPEED, "speaker_focus": true, "reduced_motion": false,
+		"music_volume": 80, "ambience_volume": 80, "effects_volume": 100, "muted": false}
 
 
 static func settings_saved() -> bool:
@@ -200,16 +201,22 @@ static func read_settings() -> Dictionary:
 		return settings
 	if value.get("schema_version") == "1" and value.size() == 2:
 		settings["voice_volume"] = volume
-	elif value.get("schema_version") == "2" and value.size() in [5, 6]:
+	elif value.get("schema_version") == "2":
 		if not value.get("text_speed") in Reading.TEXT_SPEEDS or not value.get("auto_speed") in Reading.AUTO_SPEEDS:
 			return settings
-		# Runtime 0.8.0 wrote these files without reduced_motion.
-		var reduced: Variant = value.get("reduced_motion", false)
-		if not value.get("speaker_focus") is bool or not reduced is bool:
+		var read := settings.duplicate()
+		for key: String in value:
+			if key != "schema_version" and not read.has(key):
+				return settings
+			if key in ["speaker_focus", "reduced_motion", "muted"] and not value[key] is bool:
+				return settings
+			if key.ends_with("_volume") and (not value[key] is int or value[key] < 0 or value[key] > 100):
+				return settings
+			if key != "schema_version":
+				read[key] = value[key]  # Files from older players lack the newer settings.
+		if not value.get("speaker_focus") is bool:
 			return settings
-		settings = {"voice_volume": volume, "text_speed": value["text_speed"],
-			"auto_speed": value["auto_speed"], "speaker_focus": value["speaker_focus"],
-			"reduced_motion": reduced}
+		settings = read
 	return settings
 
 

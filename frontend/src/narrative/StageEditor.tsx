@@ -3,10 +3,12 @@ import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { AssetThumb, IMAGE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
 import { POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage, stageChanges, stageImageChoice } from "./stageModel";
 import type { StageEdit, StageSnapshot } from "./stageModel";
+import type { NarrativeImage } from "../lib/api";
 import { EFFECT_LABELS, TRANSITION_LABELS } from "./model";
 import type { StageEffect, StagePosition, StageTransition, StoryDraft } from "./types";
 
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not change the stage.";
+const SILENCE = "__silence__", LIBRARY = "__library__:";
 
 /** Story format 1 cannot hold a stage; this offers the explicit upgrade instead. */
 export function UpgradeNotice({ onUpgrade, readOnly }: { onUpgrade: () => void; readOnly: boolean }) {
@@ -76,6 +78,7 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
         </div>
         <p className="studio-hint">Covers the stage while dialogue continues. Clearing it reveals the background and characters.</p>
       </div>
+      <SoundChoices story={story} edit={edit} assets={assets} inherited={inherited} apply={apply} onError={onError} />
       <div className="studio-stage-motion">
         <label className="studio-stage-motion-field"><span className="studio-stage-label">Transition</span>
           <select value={edit.transition ?? ""} disabled={!stageChanges(edit)} onChange={event => {
@@ -162,6 +165,51 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
       </div>}
     </fieldset>
   </section>;
+}
+
+/** Music and ambience carry on until changed; a sound effect plays once on arrival. */
+function SoundChoices({ story, edit, assets, inherited, apply, onError }: {
+  story: StoryDraft; edit: StageEdit; assets: NarrativeImage[] | null; inherited: StageSnapshot | undefined;
+  apply: (next: StageEdit, base?: StoryDraft) => void; onError: (message: string) => void;
+}) {
+  const inStory = (kind: "music" | "audio") => Object.entries(story.assets).filter(([, asset]) => asset.kind === kind);
+  const known = (kind: "music" | "audio") => new Set(inStory(kind).map(([, asset]) => asset.sha256));
+  const library = (kind: "music" | "audio") => (assets ?? []).filter(asset =>
+    (kind === "music" ? asset.media_type === "audio/ogg" : asset.kind === "sound") && !known(kind).has(asset.sha256));
+  const choose = (field: "music" | "ambience" | "sound", value: string) => {
+    const { [field]: _, ...rest } = edit;
+    if (!value) { apply(rest); return; }
+    if (value === SILENCE) { apply({ ...rest, [field]: null }); return; }
+    if (!value.startsWith(LIBRARY)) { apply({ ...rest, [field]: value }); return; }
+    const asset = (assets ?? []).find(item => item.id === value.slice(LIBRARY.length));
+    if (!asset) return;
+    try {
+      const bound = bindAsset(story, asset);
+      apply({ ...rest, [field]: bound.key }, bound.story);
+    } catch (error) { onError(message(error)); }
+  };
+  const selection = (value: string | null | undefined) => value === null ? SILENCE : value ?? "";
+  const hasMusic = inStory("music").length > 0 || library("music").length > 0;
+  const hasSounds = inStory("audio").length > 0 || library("audio").length > 0;
+  const options = (kind: "music" | "audio") => <>
+    {inStory(kind).map(([id]) => <option key={id} value={id}>{id}</option>)}
+    {library(kind).map(asset => <option key={asset.id} value={LIBRARY + asset.id}>{asset.name}</option>)}
+  </>;
+  return <div className="studio-stage-motion studio-stage-sound">
+    {(["music", "ambience"] as const).map(field => <label key={field} className="studio-stage-motion-field">
+      <span className="studio-stage-label">{field === "music" ? "Music" : "Ambience"}</span>
+      <select value={selection(edit[field])} onChange={event => choose(field, event.target.value)}>
+        <option value="">{inherited?.[field] && inherited[field] !== "?" ? `Keep ${inherited[field]}` : inherited?.[field] === "?" ? "Keep what is playing" : "Stay silent"}</option>
+        <option value={SILENCE}>Stop</option>
+        {options("music")}
+      </select></label>)}
+    <label className="studio-stage-motion-field"><span className="studio-stage-label">Sound effect</span>
+      <select value={edit.sound ?? ""} onChange={event => choose("sound", event.target.value)}>
+        <option value="">None</option>
+        {options("audio")}
+      </select></label>
+    {!hasMusic && !hasSounds && <p className="studio-hint">Upload music (Ogg Vorbis) or sound effects (WAV) in Assets to use them here.</p>}
+  </div>;
 }
 
 /** A scene's actual stage, including inherited CGs and changes underneath the overlay. */

@@ -1,11 +1,12 @@
 """Saving story package v2 revisions: gate, upgrade, asset binding and NOTICES (ADR 0040)."""
 
+import copy
 import json
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import update
-from test_narrative_asset_library_api import rgba_png, static_font, upload
+from test_narrative_asset_library_api import MUSIC, rgba_png, static_font, upload
 from test_narrative_characters_api import MemoryStore, run_job
 
 from flint_graph.api.dependencies import get_narrative_artifact_store
@@ -323,6 +324,59 @@ async def bound_story(client, headers, base):
 
 
 @pytest.mark.anyio
+async def test_music_binds_into_a_revision_and_is_served_as_bound(v2):
+    client, _, _, headers, project = v2
+    base, _ = await project(schema="2")
+    music = (
+        await upload(
+            client,
+            headers,
+            base,
+            kind="music",
+            name="Theme",
+            data=MUSIC,
+            filename="theme.ogg",
+            media="audio/ogg",
+        )
+    ).json()
+    story = json.loads((await head(client, headers, base))["story_json"])
+    story["assets"]["theme"] = {
+        "kind": "music",
+        "path": "assets/theme.ogg",
+        "sha256": music["sha256"],
+    }
+    entry = story["entry"]
+    story["nodes"]["music_step"] = {"type": "stage", "music": "theme", "next": entry}
+    story["entry"] = "music_step"
+    saved = await save(client, headers, base, story)
+    assert saved.status_code == 201, saved.text
+    assert "theme (music" in saved.json()["notices"], "Server-built notices credit every file"
+    revision = saved.json()["id"]
+    played = await client.get(f"{base}/revisions/{revision}/assets/theme", headers=headers)
+    assert played.status_code == 200 and played.content == MUSIC
+    assert played.headers["content-type"] == "audio/ogg"
+
+    # A file that claims to be music has to be music.
+    wrong = copy.deepcopy(story)
+    image = (
+        await upload(
+            client,
+            headers,
+            base,
+            kind="background",
+            name="Dusk",
+            data=rgba_png(),
+            filename="dusk.png",
+            media="image/png",
+        )
+    ).json()
+    wrong["assets"]["theme"]["sha256"] = image["sha256"]
+    refused = await save(client, headers, base, wrong)
+    assert refused.status_code == 422
+    assert refused.json()["type"].endswith("asset-kind")
+
+
+@pytest.mark.anyio
 async def test_revision_assets_are_served_as_bound_even_after_discard(v2):
     client, _, _, headers, project = v2
     base, _ = await project()
@@ -366,7 +420,7 @@ async def test_v2_release_input_resolves_bound_assets_and_rechecks_notices(v2):
             json={"revision_id": revision["id"], "idempotency_key": str(uuid4())},
         )
     ).json()
-    assert release["build_identity"]["runtime_version"] == "0.9.0"
+    assert release["build_identity"]["runtime_version"] == "0.10.0"
     scope = {
         "tenant_id": UUID(headers["X-Tenant-ID"]),
         "release_id": UUID(release["id"]),

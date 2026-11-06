@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flint_graph.narrative.font import validate_font
 from flint_graph.narrative.json_format import parse_json
+from flint_graph.narrative.ogg import validate_ogg
 from flint_graph.narrative.player_terms import player_terms
 from flint_graph.narrative.png import validate_png
 from flint_graph.narrative.validation import validate_story
@@ -60,6 +61,8 @@ def _checked_asset(kind: str, path: str, data: bytes, location: str) -> None:
             raise PackageError("unsafe_path", location)
     elif kind == "audio":
         validate_wav(data, location)
+    elif kind == "music":
+        validate_ogg(data, location)
     else:
         validate_png(data, location)
 

@@ -312,6 +312,18 @@ func _initialize() -> void:
 		await _probe_controls(checked)
 		quit(0)
 		return
+	if config["case"] == "sound":
+		await _probe_sound(checked)
+		quit(0)
+		return
+	if config["case"] == "sound_gate":
+		await _probe_sound_gate(checked)
+		quit(0)
+		return
+	if config["case"] == "sound_preview":
+		await _probe_sound_preview(checked)
+		quit(0)
+		return
 	if config["case"] == "transitions":
 		await _probe_transitions(checked)
 		quit(0)
@@ -717,3 +729,126 @@ func _probe_transitions(checked: Dictionary) -> void:
 	out["settled_screens_match"] = var_to_str(screens) == var_to_str(calm_screens)
 	out["stored_reduced_motion"] = load("res://runtime/save_store.gd").read_settings()["reduced_motion"]
 	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _sound_state(stage: Control) -> Dictionary:
+	return {"music": stage._music.current, "ambience": stage._ambience.current,
+		"fading": stage._music.fading(), "playing": stage._music.playing()}
+
+
+func _next_line(stage: Control) -> void:
+	stage._process(30.0)
+	stage._process(30.0)
+	await process_frame
+	stage._request_advance()
+	await process_frame
+
+
+func _probe_sound(checked: Dictionary) -> void:
+	var out := {}
+	var stage: Control = await _controls_stage("res://runtime/vn_view.gd", checked)
+	stage._set_text_speed("instant")
+	await process_frame
+	var state := _sound_state(stage)
+	out["opening"] = {"music": state["music"], "playing": state["playing"], "ambience": state["ambience"]}
+	await _next_line(stage)
+	state = _sound_state(stage)
+	out["ambience"] = {"music": state["music"], "ambience": state["ambience"], "fading": state["fading"]}
+	stage._toolbar("Save")
+	# The track changes and a bell rings.
+	await _next_line(stage)
+	var crossfade := {"music": stage._music.current, "both_during": stage._music.audible_players()}
+	var played: bool = stage._effects_player.playing
+	stage._music.tick(30.0)
+	crossfade["one_after"] = stage._music.audible_players()
+	out["crossfade"] = crossfade
+	stage._effects_player.stop()
+	stage._render()
+	await process_frame
+	out["effect"] = {"played": played, "replayed_on_settle": stage._effects_player.playing}
+	stage._music.tick(30.0)
+	stage._ambience.tick(30.0)
+	# Null stops both.
+	await _next_line(stage)
+	stage._music.tick(30.0)
+	stage._ambience.tick(30.0)
+	await process_frame
+	state = _sound_state(stage)
+	out["silence"] = {"music": state["music"], "ambience": state["ambience"], "playing": state["playing"]}
+	# The save holds the theme with rain.
+	stage._toolbar("Load")
+	await process_frame
+	state = _sound_state(stage)
+	out["load"] = {"music": state["music"], "ambience": state["ambience"], "fading": state["fading"], "playing": state["playing"]}
+	stage._toolbar("Restart")
+	await process_frame
+	stage._music.tick(30.0)
+	stage._ambience.tick(30.0)
+	state = _sound_state(stage)
+	out["restart"] = {"music": state["music"], "ambience": state["ambience"]}
+	# Skip through everything read above, back to the bell line and past it.
+	stage._toolbar("Skip")
+	var skip := {"fading": false, "effect_played": false}
+	for tick in range(10):
+		stage._process(1.0)
+		await process_frame
+		skip["fading"] = skip["fading"] or stage._music.fading()
+		skip["effect_played"] = skip["effect_played"] or stage._effects_player.playing
+	stage._set_skip(false)
+	stage._toolbar("Restart")
+	await process_frame
+	stage._music.tick(30.0)
+	skip["music"] = stage._music.current
+	out["skip"] = skip
+	# Volumes and mute.
+	var volumes := {}
+	var loud: float = stage._music.front_volume_db()
+	stage._set_channel_volume(30.0, "music_volume")
+	volumes["quieter"] = stage._music.front_volume_db() < loud
+	stage._set_muted(true)
+	volumes["muted_is_silent"] = stage._music.front_volume_db() <= -80.0
+	volumes["voice_muted_too"] = stage._voice_player.volume_db <= -80.0
+	volumes["stored"] = load("res://runtime/save_store.gd").read_settings()
+	stage._unhandled_key_input(_key(KEY_M))
+	volumes["m_key_toggles"] = stage._settings["muted"]
+	out["volumes"] = volumes
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _probe_sound_gate(checked: Dictionary) -> void:
+	var muted := GDScript.new()
+	muted.source_code = "extends \"res://runtime/vn_view.gd\"\nfunc _sound_blocked() -> bool:\n\treturn true\n"
+	muted.reload()
+	var stage: Control = muted.new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	await process_frame
+	var out := {"gate_shown": stage._sound_gate != null and stage._sound_gate.visible}
+	var first := _node_of(stage)
+	out["label"] = stage._sound_gate.get_child(0).text if out["gate_shown"] else ""
+	out["before"] = {"music": stage._music.current, "playing": stage._music.playing()}
+	var click := _mouse(MOUSE_BUTTON_LEFT)
+	stage._input(click)
+	await process_frame
+	await process_frame
+	out["after"] = {"music": stage._music.current, "playing": stage._music.playing(), "same_line": _node_of(stage) == first}
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _probe_sound_preview(checked: Dictionary) -> void:
+	var before := _list_user_files()
+	var stage: Control = load("res://preview/vn_view.gd").new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	await process_frame
+	stage._set_channel_volume(30.0, "music_volume")
+	stage._set_muted(true)
+	var written: Array = []
+	for path: String in _list_user_files():
+		if not path in before:
+			written.append(path)
+	print("UI_RESULT:" + JSON.stringify({"music": stage._music.current, "files_written": written}))

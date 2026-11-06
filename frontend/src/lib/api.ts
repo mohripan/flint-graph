@@ -27,7 +27,7 @@ export type CharacterType = "girl" | "boy" | "woman" | "man" | "other";
 export type CharacterFraming = "portrait" | "full_body";
 export interface NarrativeImage {
   id: string; character_id: string | null; kind: string; source: "generated" | "uploaded"; name: string;
-  status: "candidate" | "approved" | "discarded"; media_type: "image/png" | "font/ttf" | "font/otf" | "audio/wav";
+  status: "candidate" | "approved" | "discarded"; media_type: "image/png" | "font/ttf" | "font/otf" | "audio/wav" | "audio/ogg";
   folder_id?: string | null; duration_ms?: number | null;
   width: number | null; height: number | null; sha256: string; size_bytes: number;
   thumbnail_width: number | null; thumbnail_height: number | null; seed: number | null; job_id: string | null;
@@ -35,7 +35,7 @@ export interface NarrativeImage {
   approved_at: string | null; rights_declared_at: string | null;
 }
 export interface AssetUpload {
-  file: File; kind: "background" | "sprite" | "image" | "font" | "voice"; name: string; license: string; notice: string;
+  file: File; kind: "background" | "sprite" | "image" | "font" | "voice" | "music" | "sound"; name: string; license: string; notice: string;
   character_id?: string;
 }
 // Voices (ADR 0043/0044): catalog models with their licenses, stock voices or private
@@ -685,7 +685,7 @@ export const api = {
       { headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error" });
     if (!response.ok) throw await parseError(response);
     const blob = await response.blob();
-    if (blob.type !== "audio/wav") throw new ApiError("The voice clip could not be loaded.", 502);
+    if (blob.type !== "audio/wav" && blob.type !== "audio/ogg") throw new ApiError("The sound could not be loaded.", 502);
     return blob;
   },
 

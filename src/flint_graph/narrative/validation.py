@@ -231,8 +231,11 @@ def _assets_v2(value: Any) -> dict[str, Any]:
         elif asset["kind"] == "font":
             paths = {f"assets/{key}.ttf", f"assets/{key}.otf"}
         elif asset["kind"] == "audio":
-            # Canonical 16-bit PCM WAV voice clips (ADR 0043).
+            # Canonical 16-bit PCM WAV voice clips and sound effects (ADR 0043, ADR 0066).
             paths = {f"assets/{key}.wav"}
+        elif asset["kind"] == "music":
+            # Ogg Vorbis music and ambience, which can run for minutes (ADR 0066).
+            paths = {f"assets/{key}.ogg"}
         else:
             raise PackageError("invalid_value", location + ".kind")
         if asset["path"] not in paths:
@@ -475,7 +478,17 @@ class _Nodes:
             fields(
                 node,
                 {"type", "next"},
-                {"background", "cg", "show", "hide", "transition", "effect"},
+                {
+                    "background",
+                    "cg",
+                    "show",
+                    "hide",
+                    "transition",
+                    "effect",
+                    "music",
+                    "ambience",
+                    "sound",
+                },
                 location,
             )
             # Closed sets (ADR 0065); these change how a step looks, never what it does.
@@ -484,6 +497,15 @@ class _Nodes:
             if "effect" in node and not _closed(node["effect"], EFFECTS):
                 raise PackageError("invalid_effect", location + ".effect")
             effect = "effect" in node
+            # Music and ambience carry on until changed; null stops them (ADR 0066).
+            for field in ("music", "ambience"):
+                if field in node:
+                    effect = True
+                    if node[field] is not None:
+                        asset_of(node[field], assets, "music", f"{location}.{field}")
+            if "sound" in node:
+                effect = True
+                asset_of(node["sound"], assets, "audio", location + ".sound")
             if "cg" in node:
                 effect = True
                 if node["cg"] is not None:

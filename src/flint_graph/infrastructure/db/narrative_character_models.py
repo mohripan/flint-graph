@@ -194,18 +194,20 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "status IN ('candidate','approved','discarded')", name="ck_narrative_asset_status"
         ),
         CheckConstraint(
-            "kind IN ('character_portrait','background','sprite','image','font','voice')",
+            "kind IN ('character_portrait','background','sprite','image','font','voice',"
+            "'music','sound')",
             name="ck_narrative_asset_kind",
         ),
         CheckConstraint(
-            "media_type IN ('image/png','font/ttf','font/otf','audio/wav')",
+            "media_type IN ('image/png','font/ttf','font/otf','audio/wav','audio/ogg')",
             name="ck_narrative_asset_media_type",
         ),
         # Voice clips (ADR 0043) are canonical WAV with a duration and no size.
         CheckConstraint(
             "size_bytes > 0 AND ((media_type = 'image/png' AND width > 0 AND height > 0 "
-            "AND duration_ms IS NULL) OR (media_type = 'audio/wav' AND width IS NULL "
-            "AND height IS NULL AND duration_ms > 0) OR (media_type IN ('font/ttf','font/otf') "
+            "AND duration_ms IS NULL) OR (media_type IN ('audio/wav','audio/ogg') "
+            "AND width IS NULL AND height IS NULL AND duration_ms > 0) "
+            "OR (media_type IN ('font/ttf','font/otf') "
             "AND width IS NULL AND height IS NULL AND duration_ms IS NULL))",
             name="ck_narrative_asset_shape",
         ),

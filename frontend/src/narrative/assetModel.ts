@@ -1,7 +1,7 @@
 // Library filters, upload checks and naming for the Assets tab (ADR 0040).
 
 export type AssetFilter = "all" | "background" | "sprite" | "image" | "font" | "character_portrait" | "candidates";
-export type UploadKind = "background" | "sprite" | "image" | "font" | "voice";
+export type UploadKind = "background" | "sprite" | "image" | "font" | "voice" | "music" | "sound";
 
 export const FILTERS: Array<[AssetFilter, string]> = [
   ["all", "All"], ["background", "Backgrounds"], ["sprite", "Sprites"], ["image", "CGs"],
@@ -9,11 +9,11 @@ export const FILTERS: Array<[AssetFilter, string]> = [
 ];
 export const UPLOAD_KINDS: Array<[UploadKind, string]> = [
   ["background", "Background"], ["sprite", "Character sprite"], ["image", "CG / image"], ["font", "Font"],
-  ["voice", "Voice clip (WAV)"],
+  ["voice", "Voice clip (WAV)"], ["music", "Music or ambience (Ogg Vorbis)"], ["sound", "Sound effect (WAV)"],
 ];
 export const KIND_LABELS: Record<string, string> = {
   background: "Background", sprite: "Sprite", image: "CG / image", font: "Font", character_portrait: "Portrait",
-  voice: "Voice clip",
+  voice: "Voice clip", music: "Music", sound: "Sound effect",
 };
 const MB = 1024 * 1024;
 
@@ -31,6 +31,16 @@ export function uploadKindForFilter(filter: AssetFilter): UploadKind {
 // Mirrors the server's limits so creators hear about a wrong file before uploading.
 export function uploadProblem(file: { name: string; size: number }, kind: UploadKind): string | null {
   const extension = file.name.toLowerCase().split(".").pop() ?? "";
+  if (kind === "music") {
+    if (extension !== "ogg") return "Music must be an Ogg Vorbis file (.ogg). Audio editors such as Audacity can export one.";
+    if (file.size > 10 * MB) return "Music can be at most 10 MB.";
+    return null;
+  }
+  if (kind === "sound") {
+    if (extension !== "wav") return "Sound effects must be WAV files (16-bit PCM).";
+    if (file.size > 10 * MB) return "Sound effects can be at most 10 MB.";
+    return null;
+  }
   if (kind === "voice") {
     if (extension !== "wav") return "Voice clips must be WAV files (16-bit PCM).";
     if (file.size > 10 * MB) return "Voice clips can be at most 10 MB.";
@@ -47,7 +57,7 @@ export function uploadProblem(file: { name: string; size: number }, kind: Upload
 }
 
 export function kindForFile(name: string): UploadKind {
-  return /\.(ttf|otf)$/i.test(name) ? "font" : /\.wav$/i.test(name) ? "voice" : "image";
+  return /\.(ttf|otf)$/i.test(name) ? "font" : /\.wav$/i.test(name) ? "voice" : /\.ogg$/i.test(name) ? "music" : "image";
 }
 
 export function suggestName(fileName: string): string {

@@ -85,7 +85,7 @@ class MemoryStore:
         self.objects = {}
 
     async def put_once(self, key, data, *, expected_sha256, content_type, max_bytes):
-        assert content_type in ("image/png", "font/ttf", "font/otf", "audio/wav")
+        assert content_type in ("image/png", "font/ttf", "font/otf", "audio/wav", "audio/ogg")
         assert len(data) <= max_bytes
         assert hashlib.sha256(data).hexdigest() == expected_sha256
         self.objects[key] = data

@@ -26,8 +26,8 @@ function available(base: string, used: (key: string) => boolean): string {
 // ---- Library assets bound by SHA-256 ----------------------------------------------------
 
 export interface LibraryAsset { sha256: string; media_type: string; name: string }
-const EXTENSIONS: Record<string, string> = { "image/png": "png", "font/ttf": "ttf", "font/otf": "otf", "audio/wav": "wav" };
-const KINDS: Record<string, "image" | "font" | "audio"> = { png: "image", ttf: "font", otf: "font", wav: "audio" };
+const EXTENSIONS: Record<string, string> = { "image/png": "png", "font/ttf": "ttf", "font/otf": "otf", "audio/wav": "wav", "audio/ogg": "ogg" };
+const KINDS: Record<string, "image" | "font" | "audio" | "music"> = { png: "image", ttf: "font", otf: "font", wav: "audio", ogg: "music" };
 
 export function slug(name: string): string {
   let text = name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -44,7 +44,7 @@ export function assetKeyFor(story: StoryDraft, sha256: string): string | undefin
 /** Reuse or add the story asset for a library file: one key per file, named after it. */
 export function bindAsset(story: StoryDraft, asset: LibraryAsset): { story: StoryDraft; key: string } {
   const extension = EXTENSIONS[asset.media_type];
-  if (!extension) throw new Error("Only PNG images, TTF/OTF fonts and WAV voice clips can be used in a story.");
+  if (!extension) throw new Error("Only PNG images, TTF/OTF fonts, WAV clips and Ogg Vorbis music can be used in a story.");
   const kind = KINDS[extension];
   const existing = Object.entries(story.assets).find(([, item]) =>
     item.sha256 === asset.sha256 && (item.kind ?? "image") === kind && item.path.endsWith(`.${extension}`));
@@ -60,6 +60,9 @@ export function usedAssets(story: StoryDraft): Set<string> {
   for (const node of Object.values(story.nodes)) {
     if (node.type === "stage" && typeof node.background === "string") used.add(node.background);
     if (node.type === "stage" && typeof node.cg === "string") used.add(node.cg);
+    if (node.type === "stage" && typeof node.music === "string") used.add(node.music);
+    if (node.type === "stage" && typeof node.ambience === "string") used.add(node.ambience);
+    if (node.type === "stage" && node.sound) used.add(node.sound);
     if (node.type === "line" && node.voice?.audio) used.add(node.voice.audio);
   }
   for (const character of Object.values(story.characters)) {
@@ -131,7 +134,15 @@ export function inkOn(color: string): string {
 // ---- What is on stage when each node is reached -------------------------------------------
 
 export type Placed = { position: StagePosition; sprite: string; x?: number };
-export interface StageSnapshot { background: string | null | "?"; cg: string | null | "?"; characters: Record<string, Placed | "?"> }
+export interface StageSnapshot {
+  background: string | null | "?"; cg: string | null | "?"; characters: Record<string, Placed | "?">;
+  // What keeps playing (ADR 0066). Absent while silent, as in the players' saves.
+  music?: string | "?"; ambience?: string | "?";
+}
+const playing = (field: "music" | "ambience", state: StageSnapshot, node: Extract<StoryNode, { type: "stage" }>) => {
+  const value = node[field] !== undefined ? node[field] : state[field];
+  return value ? { [field]: value } : {};
+};
 const EMPTY: StageSnapshot = { background: null, cg: null, characters: {} };
 
 export function applyStageNode(state: StageSnapshot, node: StoryNode): StageSnapshot {
@@ -145,7 +156,8 @@ export function applyStageNode(state: StageSnapshot, node: StoryNode): StageSnap
       characters[entry.character] = { position: entry.position, sprite: entry.sprite, ...(entry.x !== undefined ? { x: entry.x } : {}) };
     }
     return { background: node.background !== undefined ? node.background : state.background,
-      cg: node.cg !== undefined ? node.cg : state.cg, characters };
+      cg: node.cg !== undefined ? node.cg : state.cg, characters,
+      ...playing("music", state, node), ...playing("ambience", state, node) };
   }
   if (node.type === "line" && node.expression && node.speaker) {
     const placed = has(state.characters, node.speaker) ? state.characters[node.speaker] : undefined;
@@ -167,8 +179,10 @@ function join(left: StageSnapshot, right: StageSnapshot): StageSnapshot {
   for (const id of Object.keys(right.characters)) if (!has(left.characters, id)) vary(id);
   const background = left.background === right.background ? left.background : "?";
   const cg = left.cg === right.cg ? left.cg : "?";
-  return !changed && background === left.background && cg === left.cg ? left
-    : { background, cg, characters: changed ?? left.characters };
+  const music = left.music === right.music ? left.music : "?";
+  const ambience = left.ambience === right.ambience ? left.ambience : "?";
+  return !changed && background === left.background && cg === left.cg && music === left.music && ambience === left.ambience ? left
+    : { background, cg, characters: changed ?? left.characters, ...(music ? { music } : {}), ...(ambience ? { ambience } : {}) };
 }
 
 function targets(node: StoryNode): string[] {
@@ -259,6 +273,8 @@ export function describeSnapshot(story: StoryDraft, snapshot: StageSnapshot | un
   const parts = [snapshot.background === "?" ? "Background varies by path"
     : snapshot.background === null ? "No background" : `Background ${snapshot.background}`];
   if (snapshot.cg !== null) parts.push(snapshot.cg === "?" ? "CG varies by path" : `CG ${snapshot.cg}`);
+  if (snapshot.music) parts.push(snapshot.music === "?" ? "Music varies by path" : `Music ${snapshot.music}`);
+  if (snapshot.ambience) parts.push(snapshot.ambience === "?" ? "Ambience varies by path" : `Ambience ${snapshot.ambience}`);
   const placed = Object.entries(snapshot.characters).sort(([, a], [, b]) =>
     (a === "?" ? 3 : POSITIONS.indexOf(a.position)) - (b === "?" ? 3 : POSITIONS.indexOf(b.position)));
   for (const [id, value] of placed) {
@@ -272,6 +288,7 @@ export function describeSnapshot(story: StoryDraft, snapshot: StageSnapshot | un
 export interface StageEdit {
   background?: string | null; cg?: string | null; show: StageShow[]; hide: string[];
   transition?: StageTransition; effect?: StageEffect;
+  music?: string | null; ambience?: string | null; sound?: string;
 }
 
 export function sceneStage(story: StoryDraft, head: string): StageEdit {
@@ -281,6 +298,9 @@ export function sceneStage(story: StoryDraft, head: string): StageEdit {
     ...(node.cg !== undefined ? { cg: node.cg } : {}),
     ...(node.transition ? { transition: node.transition } : {}),
     ...(node.effect ? { effect: node.effect } : {}),
+    ...(node.music !== undefined ? { music: node.music } : {}),
+    ...(node.ambience !== undefined ? { ambience: node.ambience } : {}),
+    ...(node.sound ? { sound: node.sound } : {}),
     show: node.show ?? [], hide: node.hide ?? [] };
 }
 
@@ -326,10 +346,13 @@ export function setSceneStage(story: StoryDraft, head: string, edit: StageEdit):
   if (!current) throw new Error("Scene no longer exists.");
   // A transition shows a change, so it goes when the change does; an effect stands alone.
   const changes = stageChanges(edit);
-  const effect = changes || edit.effect !== undefined;
+  const effect = changes || edit.effect !== undefined || edit.music !== undefined || edit.ambience !== undefined || edit.sound !== undefined;
   const step = (next: string): StageNode => ({ type: "stage",
     ...(edit.transition && changes ? { transition: edit.transition } : {}),
     ...(edit.effect ? { effect: edit.effect } : {}),
+    ...(edit.music !== undefined ? { music: edit.music } : {}),
+    ...(edit.ambience !== undefined ? { ambience: edit.ambience } : {}),
+    ...(edit.sound ? { sound: edit.sound } : {}),
     ...(edit.background !== undefined ? { background: edit.background } : {}),
     ...(edit.cg !== undefined ? { cg: edit.cg } : {}),
     ...(edit.hide.length ? { hide: edit.hide } : {}), ...(edit.show.length ? { show: edit.show } : {}), next });

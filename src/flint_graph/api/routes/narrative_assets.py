@@ -35,6 +35,7 @@ from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
 from flint_graph.application.services.narrative_asset_folders import move_assets
 from flint_graph.application.services.narrative_asset_library import (
+    UPLOAD_KINDS,
     approve_asset,
     check_uploadable,
     find_duplicate,
@@ -57,7 +58,9 @@ from flint_graph.infrastructure.narrative_artifact_store import (
 from flint_graph.narrative.imagegen import content_policy
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}/assets", tags=["narrative"])
-Kind = Literal["character_portrait", "background", "sprite", "image", "font", "voice"]
+Kind = Literal[
+    "character_portrait", "background", "sprite", "image", "font", "voice", "music", "sound"
+]
 
 
 def _text(value: str, field: str, *, limit: int, required: bool) -> str:
@@ -122,11 +125,11 @@ async def upload_asset_endpoint(
     clean_name = _text(name, "name", limit=120, required=True)
     clean_license = _text(license, "license", limit=120, required=True)
     clean_notice = _text(notice, "notice", limit=4000, required=False)
-    if kind not in ("background", "sprite", "image", "font", "voice"):
+    if kind not in UPLOAD_KINDS:
         raise DomainError(
             422,
             "Invalid asset",
-            "Choose background, sprite, image, font or voice.",
+            "Choose background, sprite, image, font, voice, music or sound.",
             "invalid-asset",
         )
     limit = upload_limit(kind)
@@ -149,7 +152,15 @@ async def upload_asset_endpoint(
                 tenant_id=tenant_id,
                 project_id=project_id,
                 asset_id=asset_id,
-                variant="font" if kind == "font" else "audio" if kind == "voice" else "image",
+                variant=(
+                    "font"
+                    if kind == "font"
+                    else "music"
+                    if kind == "music"
+                    else "audio"
+                    if kind in ("voice", "sound")
+                    else "image"
+                ),
             ),
             upload.data,
             expected_sha256=upload.sha256,

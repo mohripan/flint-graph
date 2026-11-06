@@ -282,6 +282,14 @@ with many awaits need `native_ui_probe(..., frames=...)`, or the engine quits fi
 adds a missing `generate_voice` when a new line is marked for voice. Read
 `docs/reports/2026-11-07-transitions.md`.
 
+[ADR 0066](docs/adr/0066-music-ambience-and-sound-effects.md) (runtime 0.10.0, prompt v8, migration
+0050) adds Ogg Vorbis `music` assets and WAV sound effects, with stage fields `music`, `ambience` (null
+stops; in `stage`, left out while silent) and `sound` (view only). A new asset kind must be added to
+`validation.py`, `package.py`, `validate_story.gd`, `player.gd`, `bootstrap.gd`, `export_presets.cfg`,
+`build_child.py`, `previewProtocol.ts`, `bridge.js`, the asset routes and `narrative_package_v2.py`. Only a
+real playtest and a real release prove them all. `prompts.py` orders stage fields seen before heard, because
+a grammar cannot go back for an earlier field. Read `docs/reports/2026-11-07-music-and-sound.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

@@ -113,6 +113,10 @@ def test_real_player_controls_never_change_where_the_story_goes(tmp_path) -> Non
         "speaker_focus": False,
         "voice_volume": 40,
         "reduced_motion": False,
+        "music_volume": 80,
+        "ambience_volume": 80,
+        "effects_volume": 100,
+        "muted": False,
     }
     assert result["read_marks_kept"] is True
 
@@ -128,6 +132,10 @@ def test_real_saved_voice_volume_from_an_older_player_still_loads(tmp_path) -> N
         "speaker_focus": True,
         "voice_volume": 35,
         "reduced_motion": False,
+        "music_volume": 80,
+        "ambience_volume": 80,
+        "effects_volume": 100,
+        "muted": False,
     }
     assert result["bad_file"]["voice_volume"] == 100
     assert result["bad_file"]["text_speed"] == "normal"

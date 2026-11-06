@@ -25,12 +25,13 @@ from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.domain.errors import ConflictError, DomainError, NotFoundError
 from flint_graph.infrastructure.db.models import NarrativeAsset
 from flint_graph.narrative.font import FONT_LIMIT, validate_font
+from flint_graph.narrative.ogg import MUSIC_LIMIT, ogg_info
 from flint_graph.narrative.png import normalize_png, validate_png
 from flint_graph.narrative.values import PackageError
 from flint_graph.narrative.wav import AUDIO_LIMIT, normalize_wav, wav_info
 
 IMAGE_KINDS = ("background", "sprite", "image")
-UPLOAD_KINDS = (*IMAGE_KINDS, "font", "voice")
+UPLOAD_KINDS = (*IMAGE_KINDS, "font", "voice", "music", "sound")
 IMAGE_LIMIT = 10 * 1024 * 1024
 
 
@@ -62,8 +63,19 @@ class Upload:
 def inspect_upload(kind: str, data: bytes) -> Upload:
     """Validate an upload for its kind; nothing is stored before this passes."""
     if kind not in UPLOAD_KINDS:
-        raise _invalid("Choose background, sprite, image, font or voice.")
-    if kind == "voice":
+        raise _invalid("Choose background, sprite, image, font, voice, music or sound.")
+    if kind == "music":
+        try:
+            # Kept byte for byte: re-encoding would only lose quality.
+            duration = ogg_info(data).duration_ms
+        except PackageError:
+            raise _invalid(
+                "Upload an Ogg Vorbis file (.ogg, mono or stereo, at most 10 minutes and 10 MiB)."
+            ) from None
+        return Upload(
+            kind, "audio/ogg", data, sha256(data).hexdigest(), None, None, max(1, duration)
+        )
+    if kind in ("voice", "sound"):
         try:
             # Players read one exact WAV form (ADR 0043); metadata chunks are dropped.
             data = normalize_wav(data, "file")
@@ -96,7 +108,11 @@ def inspect_upload(kind: str, data: bytes) -> Upload:
 
 
 def upload_limit(kind: str) -> int:
-    return FONT_LIMIT if kind == "font" else AUDIO_LIMIT if kind == "voice" else IMAGE_LIMIT
+    if kind == "music":
+        return MUSIC_LIMIT
+    if kind == "font":
+        return FONT_LIMIT
+    return AUDIO_LIMIT if kind in ("voice", "sound") else IMAGE_LIMIT
 
 
 # Decompressing a large PNG costs CPU and up to ~128 MiB; keep it off the event loop

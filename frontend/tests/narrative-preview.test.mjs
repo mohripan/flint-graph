@@ -59,3 +59,16 @@ test("v1 revisions keep message version 1; v2 transfers its asset buffers", () =
   assert.deepEqual(v2.transfer, [buffer]);
 });
 function revision_id() { return revision; }
+
+test("playtests carry music and sound effects, within the same limits as other files", async () => {
+  const data = new ArrayBuffer(8);
+  const digest = async () => "a".repeat(64);
+  const declared = {
+    theme: { kind: "music", path: "assets/theme.ogg", sha256: "a".repeat(64) },
+    bell: { kind: "audio", path: "assets/bell.wav", sha256: "a".repeat(64) },
+  };
+  const checked = await protocol.checkedAssets(declared, { theme: data, bell: data }, digest);
+  assert.deepEqual(Object.keys(checked), ["bell", "theme"]);
+  const huge = new ArrayBuffer(protocol.ASSET_CAPS.music + 1);
+  await assert.rejects(protocol.checkedAssets(declared, { theme: huge, bell: data }, digest));
+});

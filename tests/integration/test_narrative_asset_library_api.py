@@ -18,6 +18,7 @@ from test_narrative_characters_api import (  # noqa: F401 - shared fixture and f
 
 from flint_graph.application.narrative_image_workflow import ImageJobPayload
 from flint_graph.infrastructure.db.models import NarrativeAsset
+from flint_graph.narrative.wav import canonical_wav
 
 VARIABLE_FONT = (Path(__file__).parents[2] / "runtimes/godot/fonts/Lora.ttf").read_bytes()
 DECLARED = {"license": "Own work", "notice": "Drawn by the creator.", "rights_declared": "true"}
@@ -121,6 +122,68 @@ async def test_png_and_font_uploads_store_verified_bytes_with_rights_metadata(st
     )
     assert no_thumb.status_code == 404
     assert len(store.objects) == 2
+
+
+MUSIC = (Path(__file__).parents[1] / "fixtures/narrative/audio/tone_a.ogg").read_bytes()
+
+
+@pytest.mark.anyio
+async def test_music_and_sound_uploads_store_and_serve_their_exact_bytes(studio):  # noqa: F811
+    client, _, _, headers, base, *_ = studio
+    music = await upload(
+        client,
+        headers,
+        base,
+        kind="music",
+        name="Harbor theme",
+        data=MUSIC,
+        filename="theme.ogg",
+        media="audio/ogg",
+    )
+    assert music.status_code == 201, music.text
+    body = music.json()
+    assert (body["kind"], body["media_type"], body["duration_ms"]) == ("music", "audio/ogg", 2000)
+    assert (body["width"], body["height"], body["status"]) == (None, None, "approved")
+    served = await client.get(f"{base}/assets/{body['id']}/content", headers=headers)
+    assert served.status_code == 200 and served.content == MUSIC
+    assert served.headers["content-type"] == "audio/ogg"
+    assert (
+        await client.get(f"{base}/assets/{body['id']}/content?variant=thumbnail", headers=headers)
+    ).status_code == 404
+
+    clip = canonical_wav(1, 24000, struct.pack("<h", 100) * 2400)
+    sound = await upload(
+        client,
+        headers,
+        base,
+        kind="sound",
+        name="Bell",
+        data=clip,
+        filename="bell.wav",
+        media="audio/wav",
+    )
+    assert sound.status_code == 201, sound.text
+    assert (sound.json()["kind"], sound.json()["media_type"]) == ("sound", "audio/wav")
+    listed = await client.get(f"{base}/assets", params={"kind": "music"}, headers=headers)
+    assert [item["name"] for item in listed.json()["assets"]] == ["Harbor theme"]
+
+
+@pytest.mark.anyio
+async def test_music_that_is_not_ogg_vorbis_is_refused_with_what_to_do(studio):  # noqa: F811
+    client, _, store, headers, base, *_ = studio
+    refused = await upload(
+        client,
+        headers,
+        base,
+        kind="music",
+        name="An mp3",
+        data=b"ID3 this is not vorbis",
+        filename="theme.ogg",
+        media="audio/ogg",
+    )
+    assert refused.status_code == 422
+    assert "Ogg Vorbis" in refused.json()["detail"]
+    assert store.objects == {}
 
 
 @pytest.mark.anyio

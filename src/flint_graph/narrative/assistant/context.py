@@ -128,6 +128,11 @@ def _outline(key: str, node: dict[str, Any]) -> str:
             parts.append(f"transition {node['transition']}")
         if "effect" in node:
             parts.append(f"effect {node['effect']}")
+        for field in ("music", "ambience"):
+            if field in node:
+                parts.append(f"{field} {node[field] or 'none'}")
+        if "sound" in node:
+            parts.append(f"sound {node['sound']}")
         if node.get("hide"):
             parts.append("hide " + ", ".join(str(item) for item in node["hide"]))
         if node.get("show"):

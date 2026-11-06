@@ -6,6 +6,7 @@ extends RefCounted
 const StrictJson = preload("res://runtime/strict_json.gd")
 const SAVE_LIMIT := 6291456
 const POSITIONS := ["left", "center", "right"]
+const PLAYING := ["music", "ambience"]  # What keeps playing between screens (ADR 0066).
 var _story: Dictionary
 var _package_hash: String
 var _variables: Dictionary = {}
@@ -20,6 +21,7 @@ var _cg_assets: Array = []
 var _seen_cgs: Dictionary = {}
 var _transition: Variant = null
 var _effect: Variant = null
+var _sound: Variant = null
 
 var gallery: Array:
 	get:
@@ -75,7 +77,7 @@ func _view_v2() -> Dictionary:
 	if _status == "fault":
 		return {"type": "fault", "text_id": null, "text": "The game cannot continue.",
 			"speaker": null, "speaker_name": null, "speaker_color": null,
-			"stage": _stage.duplicate(true), "transition": null, "effect": null, "voice": null, "options": []}
+			"stage": _stage.duplicate(true), "transition": null, "effect": null, "sound": null, "voice": null, "options": []}
 	var node: Dictionary = _story["nodes"][_node_id]
 	var speaker: Variant = node.get("speaker") if node["type"] == "line" else null
 	var character: Variant = _story["characters"][speaker] if speaker != null else null
@@ -86,7 +88,7 @@ func _view_v2() -> Dictionary:
 		"speaker": speaker,
 		"speaker_name": character["name"] if character != null else null,
 		"speaker_color": character.get("color") if character != null else null,
-		"stage": _stage.duplicate(true), "transition": _transition, "effect": _effect,
+		"stage": _stage.duplicate(true), "transition": _transition, "effect": _effect, "sound": _sound,
 		"voice": _voice(node), "options": options}
 
 
@@ -167,7 +169,13 @@ func _staged(node: Dictionary) -> Dictionary:
 		for item: Dictionary in present.values():
 			if item["position"] == position:
 				ordered.append(item)
-	return {"background": background, "cg": node.get("cg", _stage["cg"]), "characters": ordered}
+	var staged := {"background": background, "cg": node.get("cg", _stage["cg"]), "characters": ordered}
+	for key: String in PLAYING:
+		# Absent when silent, so stories without sound save exactly as they always have.
+		var track: Variant = node[key] if node.has(key) else _stage.get(key)
+		if track != null:
+			staged[key] = track
+	return staged
 
 
 func _expressed(speaker: String, expression: String) -> Dictionary:
@@ -232,6 +240,7 @@ func _settle(target: String) -> void:
 	_fault = null
 	_transition = null
 	_effect = null
+	_sound = null
 	while true:
 		_node_id = target
 		var node: Dictionary = _story["nodes"][target]
@@ -260,6 +269,7 @@ func _settle(target: String) -> void:
 			# How to show arriving here (ADR 0065). Not state: no saves, no route traces.
 			_transition = node.get("transition", _transition)
 			_effect = node.get("effect", _effect)
+			_sound = node.get("sound", _sound)
 			target = node["next"]
 		else:
 			var assigned := _assigned(node, _variables)
@@ -314,7 +324,16 @@ func save() -> PackedByteArray:
 
 func _checked_stage(value: Variant) -> Variant:
 	# A saved stage: known image background and characters in canonical slots.
-	if not value is Dictionary or value.size() != (3 if value.has("cg") else 2) or not value.has("background") or not value.has("characters"):
+	if not value is Dictionary:
+		return null
+	var known := 2 + (1 if value.has("cg") else 0)
+	for key: String in PLAYING:
+		if value.has(key):
+			known += 1
+			var track: Variant = value[key]
+			if track != null and (not track is String or not _story["assets"].has(track) or _story["assets"][track]["kind"] != "music"):
+				return null
+	if value.size() != known or not value.has("background") or not value.has("characters"):
 		return null
 	var background: Variant = value["background"]
 	var assets: Dictionary = _story["assets"]
@@ -345,6 +364,9 @@ func _checked_stage(value: Variant) -> Variant:
 		last = index
 	var normalized: Dictionary = value.duplicate(true)
 	normalized["cg"] = cg  # Saves from runtime <= 0.4.0 omit it.
+	for key: String in PLAYING:
+		if normalized.get(key) == null:
+			normalized.erase(key)
 	return normalized
 
 
@@ -406,6 +428,7 @@ func load_save(data: PackedByteArray) -> String:
 	_fault = saved["fault"]
 	_transition = null
 	_effect = null
+	_sound = null
 	if _v2:
 		_stage = stage
 		_unlock_cg()

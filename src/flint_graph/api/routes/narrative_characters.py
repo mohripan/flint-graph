@@ -431,13 +431,22 @@ async def asset_content(
     await get_project(session, tenant_id=tenant_id, project_id=project_id)
     asset = await get_asset(session, tenant_id=tenant_id, project_id=project_id, asset_id=asset_id)
     audio = asset.media_type == "audio/wav"
-    font = asset.media_type not in ("image/png", "audio/wav")
-    if (font or audio) and variant == "thumbnail":
+    music = asset.media_type == "audio/ogg"
+    font = asset.media_type not in ("image/png", "audio/wav", "audio/ogg")
+    if (font or audio or music) and variant == "thumbnail":
         raise NotFoundError("Only images have a thumbnail.")
     # Uploads keep only the original; generated images also carry a thumbnail.
     thumbnail = variant == "thumbnail" and asset.thumbnail_sha256 is not None
-    stored: Literal["image", "thumbnail", "font", "audio"] = (
-        "font" if font else "audio" if audio else "thumbnail" if thumbnail else "image"
+    stored: Literal["image", "thumbnail", "font", "audio", "music"] = (
+        "font"
+        if font
+        else "audio"
+        if audio
+        else "music"
+        if music
+        else "thumbnail"
+        if thumbnail
+        else "image"
     )
     size = asset.thumbnail_size_bytes if thumbnail else asset.size_bytes
     digest = asset.thumbnail_sha256 if thumbnail else asset.sha256
@@ -455,9 +464,13 @@ async def asset_content(
         raise DomainError(
             503, "Service unavailable", "This asset is unavailable.", "asset-unavailable"
         ) from None
-    extension = {"image/png": "png", "font/ttf": "ttf", "font/otf": "otf", "audio/wav": "wav"}[
-        asset.media_type
-    ]
+    extension = {
+        "image/png": "png",
+        "font/ttf": "ttf",
+        "font/otf": "otf",
+        "audio/wav": "wav",
+        "audio/ogg": "ogg",
+    }[asset.media_type]
     return Response(
         content=data,
         media_type=asset.media_type,

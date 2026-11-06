@@ -8,6 +8,7 @@ const PlayerScript = preload("res://runtime/player.gd")
 const SaveStore = preload("res://runtime/save_store.gd")
 const PlayerTerms = preload("res://runtime/player_terms.gd")
 const Reading = preload("res://runtime/reading.gd")
+const SoundChannel = preload("res://runtime/sound_channel.gd")
 const DisplayFont = preload("res://fonts/Lora.ttf")
 const INK := Color("182635")
 const PAPER := Color("f0f4f6")
@@ -110,6 +111,12 @@ var _fx_total := 0.0
 var _pending_effect: Variant = null
 var _effect_kind := ""
 var _effect_elapsed := 0.0
+# Music, ambience and sound effects (ADR 0066).
+var _music: RefCounted
+var _ambience: RefCounted
+var _effects_player: AudioStreamPlayer
+var _tracks: Dictionary = {}
+var _mute_toggle: CheckButton
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary, notices: String = "") -> void:
@@ -131,7 +138,7 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary, not
 		_build_terms()
 		if _read_terms() != _digest(_terms):
 			_open_terms(true)
-	if _has_voice_clips():
+	if _has_sound():
 		# Deferred: playtests configure inside the browser callback that delivers the
 		# story, where the probe cannot run. It still runs before the first clip starts.
 		_gate_sound.call_deferred()
@@ -299,6 +306,11 @@ func _build() -> void:
 			_skip_button = button
 	_voice_player = AudioStreamPlayer.new()
 	add_child(_voice_player)
+	_effects_player = AudioStreamPlayer.new()
+	add_child(_effects_player)
+	_music = SoundChannel.new(self)
+	_ambience = SoundChannel.new(self)
+	_apply_volume()
 	_notice = Label.new()
 	_anchored(_notice, 0.55, 1.0, 0.0, 0.0)
 	_notice.offset_right = -12
@@ -435,18 +447,20 @@ func _build_menu_panel() -> void:
 		_menu_buttons.append(button)
 	_speed_buttons = _setting_row(column, "Text speed", Reading.TEXT_SPEEDS.keys(), _settings["text_speed"], _set_text_speed)
 	_auto_speed_buttons = _setting_row(column, "Auto speed", Reading.AUTO_SPEEDS.keys(), _settings["auto_speed"], _set_auto_speed)
-	column.add_child(_panel_label("Voice volume"))
-	_volume_slider = HSlider.new()
-	_volume_slider.min_value = 0
-	_volume_slider.max_value = 100
-	_volume_slider.step = 10
-	_volume_slider.value = _voice_volume
-	_volume_slider.custom_minimum_size = Vector2(200, 24)
-	_volume_slider.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_volume_slider.focus_mode = Control.FOCUS_ALL
-	_volume_slider.tooltip_text = "Voice volume"
-	_volume_slider.value_changed.connect(_set_volume)
-	column.add_child(_volume_slider)
+	_volume_slider = _volume_row(column, "Voice volume", _voice_volume, _set_volume)
+	_volume_row(column, "Music volume", _settings["music_volume"], _set_channel_volume.bind("music_volume"))
+	_volume_row(column, "Ambience volume", _settings["ambience_volume"], _set_channel_volume.bind("ambience_volume"))
+	_volume_row(column, "Sound effects volume", _settings["effects_volume"], _set_channel_volume.bind("effects_volume"))
+	_mute_toggle = CheckButton.new()
+	_mute_toggle.text = "Mute all sound"
+	_mute_toggle.focus_mode = Control.FOCUS_ALL
+	_mute_toggle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	for role: String in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color", "font_focus_color"]:
+		_mute_toggle.add_theme_color_override(role, PAPER)
+	_mute_toggle.add_theme_font_size_override("font_size", 14)
+	_mute_toggle.set_pressed_no_signal(_settings["muted"])
+	_mute_toggle.toggled.connect(_set_muted)
+	column.add_child(_mute_toggle)
 	_focus_toggle = CheckButton.new()
 	_focus_toggle.text = "Dim characters who are not speaking"
 	_focus_toggle.focus_mode = Control.FOCUS_ALL
@@ -470,6 +484,22 @@ func _build_menu_panel() -> void:
 	_motion_toggle.set_pressed_no_signal(_settings["reduced_motion"])
 	_motion_toggle.toggled.connect(_set_reduced_motion)
 	column.add_child(_motion_toggle)
+
+
+func _volume_row(parent: Container, title: String, value: int, apply: Callable) -> HSlider:
+	parent.add_child(_panel_label(title))
+	var slider := HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 100
+	slider.step = 10
+	slider.value = value
+	slider.custom_minimum_size = Vector2(200, 24)
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	slider.focus_mode = Control.FOCUS_ALL
+	slider.tooltip_text = title
+	slider.value_changed.connect(apply)
+	parent.add_child(slider)
+	return slider
 
 
 func _setting_row(parent: Container, title: String, values: Array, current: String, apply: Callable) -> Dictionary:
@@ -665,6 +695,8 @@ func _process(delta: float) -> void:
 	if _player == null:
 		return
 	_flush_read_marks(delta)
+	_music.tick(delta)
+	_ambience.tick(delta)
 	if _overlay_open() or _ui_hidden:
 		return
 	_tick_effect(delta)
@@ -750,6 +782,7 @@ func _transitioning() -> bool:
 
 func _present(current: Dictionary, stage: Dictionary) -> void:
 	# Called before the new stage is drawn, while the old one can still be copied.
+	_play_stage_sound.call_deferred(current, _last_stage == null, _player, _player.generation)
 	_finish_transition()
 	_finish_effect()
 	var quiet: bool = _last_stage == null or _skip or _settings["reduced_motion"]
@@ -852,6 +885,72 @@ func _set_reduced_motion(on: bool) -> void:
 	_publish_qa.call_deferred()
 
 
+func _set_channel_volume(value: float, key: String) -> void:
+	_settings[key] = clampi(int(round(value)), 0, 100)
+	_apply_volume()
+	_persist_settings()
+	_publish_qa.call_deferred()
+
+
+func _set_muted(on: bool) -> void:
+	_settings["muted"] = on
+	_mute_toggle.set_pressed_no_signal(on)
+	_apply_volume()
+	_persist_settings()
+	_publish_qa.call_deferred()
+
+
+func _sound_allowed() -> bool:
+	return not (_sound_gate != null and _sound_gate.visible) and not (_terms_open() and _terms_required)
+
+
+func _track(id: Variant) -> AudioStream:
+	if id == null or not _assets.has(id):
+		return null
+	if not _tracks.has(id):
+		var stream := AudioStreamOggVorbis.load_from_buffer(_assets[id])
+		if stream == null:
+			return null
+		stream.loop = true
+		_tracks[id] = stream
+	return _tracks[id]
+
+
+func _play_stage_sound(current: Dictionary, instantly: bool, session: RefCounted, generation: int) -> void:
+	# Deferred like the voice clip, because the start screen is built after the first render.
+	if not _sound_allowed() or session != _player or generation != _player.generation:
+		return
+	var stage: Dictionary = current["stage"]
+	var at_once: bool = instantly or _skip
+	_music.change(stage.get("music"), _track(stage.get("music")), at_once)
+	_ambience.change(stage.get("ambience"), _track(stage.get("ambience")), at_once)
+	var kept := {}
+	for id: Variant in [_music.current, _ambience.current]:
+		if id != null and _tracks.has(id):
+			kept[id] = _tracks[id]
+	_tracks = kept  # Only what is playing stays decoded.
+	var sound: Variant = current["sound"]
+	if sound != null and not _skip and _assets.has(sound):
+		var clip := wav_stream(_assets[sound])
+		if clip != null:
+			_effects_player.stream = clip
+			_effects_player.play()
+
+
+func _resume_stage_sound() -> void:
+	# The input that opened the start screen or license also lets the page play sound.
+	_play_stage_sound(_player.view, true, _player, _player.generation)
+
+
+func _has_sound() -> bool:
+	if _has_voice_clips():
+		return true
+	for node: Dictionary in _source["nodes"].values():
+		if node.get("music") != null or node.get("ambience") != null or node.get("sound") != null:
+			return true
+	return false
+
+
 func _build_terms() -> void:
 	_terms_panel = PanelContainer.new()
 	_terms_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -913,6 +1012,7 @@ func _close_terms() -> void:
 	if accepted:
 		# The agreeing click also lets the browser play sound: start the first line's clip.
 		_start_voice.call_deferred(_voice_generation, _voice_session)
+		_resume_stage_sound.call_deferred()
 	_publish_qa.call_deferred()
 
 
@@ -1028,7 +1128,11 @@ func _set_volume(value: float) -> void:
 
 
 func _apply_volume() -> void:
-	_voice_player.volume_db = linear_to_db(_voice_volume / 100.0) if _voice_volume > 0 else -80.0
+	var loudness := 0.0 if _settings["muted"] else 1.0
+	_voice_player.volume_db = SoundChannel.decibels(loudness * _voice_volume / 100.0)
+	_effects_player.volume_db = SoundChannel.decibels(loudness * _settings["effects_volume"] / 100.0)
+	_music.set_volume(loudness * _settings["music_volume"] / 100.0)
+	_ambience.set_volume(loudness * _settings["ambience_volume"] / 100.0)
 
 
 static func wav_stream(data: PackedByteArray) -> AudioStreamWAV:
@@ -1128,7 +1232,7 @@ func _build_sound_gate() -> void:
 	_sound_gate.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_sound_gate.add_theme_stylebox_override("panel", _style(Color(INK, 0.82), Color.TRANSPARENT, 0, 0))
 	var label := Label.new()
-	label.text = "Click or press any key to start\nThis story has voice acting."
+	label.text = "Click or press any key to start\n" + ("This story has voice acting." if _has_voice_clips() else "This story has sound.")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1143,6 +1247,7 @@ func _open_sound_gate() -> void:
 	# The engine resumes browser audio on this same input; start the settled line's clip.
 	_sound_gate.hide()
 	_start_voice.call_deferred(_voice_generation, _voice_session)
+	_resume_stage_sound.call_deferred()
 	_publish_qa.call_deferred()
 
 
@@ -1522,6 +1627,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_close_menu()
 		get_viewport().set_input_as_handled()
 		return
+	if event.keycode == KEY_M:
+		_set_muted(not _settings["muted"])
+		get_viewport().set_input_as_handled()
+		return
 	var shortcut: String = {KEY_L: "Log", KEY_A: "Auto", KEY_S: "Skip", KEY_H: "Hide", KEY_ESCAPE: "Menu"}.get(event.keycode, "")
 	if not OS.has_feature("web"):
 		# A browser takes F5 for itself, so web players use the menu.
@@ -1588,6 +1697,7 @@ func _publish_qa() -> void:
 		"text_speed": _settings["text_speed"], "auto_speed": _settings["auto_speed"], "speaker_focus": _settings["speaker_focus"],
 		"auto": _auto, "skip": _skip, "ui_hidden": _ui_hidden, "revealing": _revealing(),
 		"transition": _fx_kind, "effect": _effect_kind, "reduced_motion": _settings["reduced_motion"],
+		"music": _music.current, "ambience": _ambience.current, "music_playing": _music.playing(), "sound_playing": _effects_player.playing, "muted": _settings["muted"],
 		"log_open": _log_panel.visible, "menu_open": _menu_panel.visible, "backlog": backlog_rows().size(), "read_marks": _read.size()}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")

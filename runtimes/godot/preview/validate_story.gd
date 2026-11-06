@@ -96,6 +96,8 @@ static func _assets_v2(assets: Variant) -> bool:
 				if not asset["path"] in ["assets/" + key + ".ttf", "assets/" + key + ".otf"]: return false
 			"audio":
 				if asset["path"] != "assets/" + key + ".wav": return false
+			"music":
+				if asset["path"] != "assets/" + key + ".ogg": return false
 			_: return false
 	return true
 
@@ -137,8 +139,11 @@ static func _theme(theme: Variant, assets: Dictionary) -> bool:
 	return true
 
 static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary, nodes: Dictionary) -> bool:
-	if not _fields(node, ["type", "next"], ["background", "cg", "show", "hide", "transition", "effect"]): return false
-	if not node.has("background") and not node.has("cg") and not node.has("show") and not node.has("hide") and not node.has("effect"): return false
+	if not _fields(node, ["type", "next"], ["background", "cg", "show", "hide", "transition", "effect", "music", "ambience", "sound"]): return false
+	if not node.has("background") and not node.has("cg") and not node.has("show") and not node.has("hide") and not node.has("effect") and not node.has("music") and not node.has("ambience") and not node.has("sound"): return false
+	for field: String in ["music", "ambience"]:
+		if node.has(field) and node[field] != null and not _asset(node[field], assets, "music"): return false
+	if node.has("sound") and not _asset(node["sound"], assets, "audio"): return false
 	if node.has("transition") and (not node["transition"] is String or not node["transition"] in ["cut", "fade", "dissolve", "slide"]): return false
 	if node.has("effect") and (not node["effect"] is String or not node["effect"] in ["shake", "flash"]): return false
 	if node.has("cg") and node["cg"] != null and not _asset(node["cg"], assets, "image"): return false

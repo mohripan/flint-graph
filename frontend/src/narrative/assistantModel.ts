@@ -121,7 +121,7 @@ export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" |
       case "set_theme":
         return { kind: operation.theme ? "changed" : "removed", target: "theme", label: "Look (theme)" };
       case "add_asset":
-        return { kind: "added", target: `assets.${operation.id}`, label: `${{ font: "Font", audio: "Voice clip", image: "Image" }[operation.asset.kind]} ${operation.id} from the library` };
+        return { kind: "added", target: `assets.${operation.id}`, label: `${{ font: "Font", audio: "Sound clip", music: "Music", image: "Image" }[operation.asset.kind]} ${operation.id} from the library` };
       default: {
         // A newer server may send an operation this Studio doesn't know yet.
         const op = (operation as { op: string }).op;

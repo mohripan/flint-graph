@@ -188,6 +188,11 @@ export function describeStage(story: StoryDraft, node: Extract<StoryNode, { type
   for (const entry of node.show ?? []) parts.push(`${name(entry.character)} (${entry.sprite}) at ${entry.position}`);
   if (node.transition) parts.push(TRANSITION_LABELS[node.transition]);
   if (node.effect) parts.push(EFFECT_LABELS[node.effect]);
+  if (node.music === null) parts.push("Music stops");
+  else if (node.music !== undefined) parts.push(`Music ${node.music}`);
+  if (node.ambience === null) parts.push("Ambience stops");
+  else if (node.ambience !== undefined) parts.push(`Ambience ${node.ambience}`);
+  if (node.sound) parts.push(`Sound ${node.sound}`);
   return parts.join(" · ");
 }
 

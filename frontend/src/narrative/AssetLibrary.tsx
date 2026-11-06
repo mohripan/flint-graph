@@ -107,7 +107,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
   return <section className="studio-assets" aria-label="Assets">
     <div className="studio-section-heading"><h2>Assets</h2>
       {canWrite && <button type="button" className="studio-primary" onClick={() => setUploading(true)}>Upload</button>}</div>
-    <p className="studio-hint">Backgrounds, character sprites, CGs, fonts and voice clips for this story. Uploads keep transparency; generated items wait here for your approval. Folders only organize the library: stories and games stay the same.</p>
+    <p className="studio-hint">Backgrounds, character sprites, CGs, fonts, voice clips, music and sound effects for this story. Uploads keep transparency; generated items wait here for your approval. Folders only organize the library: stories and games stay the same.</p>
     {canWrite && !cgs && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
       onStarted={job => { imageJobStarted(tenantId, projectId, job); setView({ type: "review" }); }}
       onCancel={job => void act(async () => {
@@ -235,7 +235,7 @@ function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onA
       <span className="studio-visually-hidden">Select {asset.name}</span></label>}
     {image ? <button type="button" className={`studio-asset-preview ${asset.kind}`} onClick={onView} aria-label={`View ${asset.name}`}>
       {url ? <img src={url} alt="" /> : <span>Loading…</span>}</button>
-      : asset.media_type === "audio/wav" ? <div className="studio-asset-preview audio">
+      : asset.media_type === "audio/wav" || asset.media_type === "audio/ogg" ? <div className="studio-asset-preview audio">
         <span aria-hidden="true">♪</span>
         {asset.provenance.text ? <p>“{String(asset.provenance.text)}”</p> : null}
         <ClipPlayButton assetId={asset.id} label="Listen" /></div>
@@ -295,7 +295,7 @@ function UploadDialog({ tenantId, projectId, initialKind, onClose, onUploaded }:
       <div className="studio-section-heading"><h2>{title}</h2>
         <button type="button" className="studio-secondary" onClick={onClose}>Close</button></div>
       <Field label="File" hint="PNG images up to 10 MB (transparency kept), TTF/OTF fonts up to 8 MB, or 16-bit WAV voice clips up to 60 seconds.">
-        <input type="file" accept=".png,.ttf,.otf,.wav,image/png,font/ttf,font/otf,audio/wav" onChange={event => {
+        <input type="file" accept=".png,.ttf,.otf,.wav,.ogg,image/png,font/ttf,font/otf,audio/wav,audio/ogg" onChange={event => {
           const chosen = event.target.files?.[0] ?? null;
           setFile(chosen);
           if (chosen) { setName(suggestName(chosen.name)); const detected = kindForFile(chosen.name);

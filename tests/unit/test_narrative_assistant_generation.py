@@ -21,6 +21,7 @@ from flint_graph.narrative.assistant.operations import (
     apply_operations,
     check_proposal,
 )
+from flint_graph.narrative.assistant.prompts import RESPONSE_SCHEMA
 from flint_graph.narrative.assistant.turn import ModelReply, run_turn
 from flint_graph.narrative.face_box import face_box_from_png
 from flint_graph.narrative.values import Diagnostic
@@ -453,6 +454,82 @@ async def test_a_repair_names_the_scenes_that_exist():
     await run_turn(model, story(), "Add a line.")
     repair = model.calls[1][-1]["content"]
     assert "no scene has this id" in repair and "ending" in repair and "hi" in repair
+
+
+@pytest.mark.anyio
+async def test_a_repair_about_music_lists_the_files_that_exist():
+    invented = {"type": "stage", "music": "piano_track", "next": "ending"}
+    fixed = {"type": "stage", "music": "harbor_theme", "next": "ending"}
+    source = story()
+    rows = [
+        LibraryRow("Harbor theme", "music", "audio/ogg", sha("4")),
+        LibraryRow("Door slam", "sound", "audio/wav", sha("5")),
+    ]
+    model = Scripted(
+        answer({"op": "upsert_node", "id": "hi", "node": invented}),
+        answer({"op": "upsert_node", "id": "hi", "node": fixed}),
+    )
+    await run_turn(model, source, "Add music.", library=library_entries(source, rows))
+    repair = model.calls[1][-1]["content"]
+    assert "harbor_theme" in repair and "upload one in Assets" in repair
+    assert "door_slam" not in repair, "A sound effect is not a music file"
+
+
+@pytest.mark.anyio
+async def test_an_empty_cast_list_on_a_stage_step_needs_no_repair():
+    source = story()
+    source["assets"]["dusk"] = {"kind": "image", "path": "assets/dusk.png", "sha256": sha("7")}
+    node = {"type": "stage", "background": "dusk", "show": [], "hide": [], "next": "ending"}
+    result = await run_turn(
+        Scripted(answer({"op": "upsert_node", "id": "hi", "node": node})), source, "Add a step."
+    )
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    assert result.proposal.operations[0].node == {
+        "type": "stage",
+        "background": "dusk",
+        "next": "ending",
+    }
+
+
+@pytest.mark.anyio
+async def test_a_repair_about_an_empty_stage_step_says_what_to_do():
+    empty = {"type": "stage", "next": "ending"}
+    fixed = {"type": "line", "text": "Hi.", "next": "ending"}
+    model = Scripted(
+        answer({"op": "upsert_node", "id": "hi", "node": empty}),
+        answer({"op": "upsert_node", "id": "hi", "node": fixed}),
+    )
+    await run_turn(model, story(), "Add a step.")
+    assert "must change something" in model.calls[1][-1]["content"]
+
+
+def test_a_stage_step_is_written_seen_things_first_then_sound():
+    """A grammar writes fields in this order, so a model can never go back for an earlier one."""
+    operations = RESPONSE_SCHEMA["properties"]["proposal"]["anyOf"][0]["properties"]["operations"]
+    upsert = next(
+        item
+        for item in operations["items"]["anyOf"]
+        if item["properties"]["op"].get("const") == "upsert_node"
+    )
+    stage = next(
+        item
+        for item in upsert["properties"]["node"]["anyOf"]
+        if item["properties"]["type"].get("const") == "stage"
+    )
+    assert list(stage["properties"]) == [
+        "type",
+        "next",
+        "background",
+        "cg",
+        "show",
+        "hide",
+        "music",
+        "ambience",
+        "sound",
+        "transition",
+        "effect",
+    ]
 
 
 @pytest.mark.anyio

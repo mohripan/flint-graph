@@ -51,11 +51,13 @@ def asset_object_key(
     tenant_id: UUID,
     project_id: UUID,
     asset_id: UUID,
-    variant: Literal["image", "thumbnail", "font", "audio"],
+    variant: Literal["image", "thumbnail", "font", "audio", "music"],
 ) -> str:
-    if variant not in ("image", "thumbnail", "font", "audio"):
+    if variant not in ("image", "thumbnail", "font", "audio", "music"):
         raise ValueError("Invalid asset variant")
-    name = {"font": "font.bin", "audio": "voice.wav"}.get(variant, f"{variant}.png")
+    name = {"font": "font.bin", "audio": "voice.wav", "music": "music.ogg"}.get(
+        variant, f"{variant}.png"
+    )
     return f"tenants/{tenant_id}/narrative/projects/{project_id}/assets/{asset_id}/{name}"
 
 
@@ -209,6 +211,7 @@ class S3NarrativeArtifactStore:
             "font/ttf",
             "font/otf",
             "audio/wav",
+            "audio/ogg",
         ):
             raise ValueError("Invalid narrative artifact content type")
         return await asyncio.to_thread(self._put, key, data, expected_sha256, content_type)

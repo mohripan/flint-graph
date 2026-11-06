@@ -48,6 +48,10 @@ def evaluate_condition(condition: dict[str, Any], variables: dict[str, Any]) -> 
     return bool(left >= right)  # ge; the package boundary rejects unknown operations.
 
 
+# What keeps playing between screens (ADR 0066).
+_PLAYING = ("music", "ambience")
+
+
 def cg_gallery_assets(story: dict[str, Any]) -> list[str]:
     """First structural use: entry-first DFS, declared target order, then orphan IDs.
 
@@ -94,6 +98,7 @@ class Player:
         self._stage: dict[str, Any] = {"background": None, "cg": None, "characters": []}
         self._transition: str | None = None
         self._effect: str | None = None
+        self._sound: str | None = None
         self._cg_assets = cg_gallery_assets(self._story)
         self._seen_cgs = {key for key in seen_cgs if type(key) is str and key in self._cg_assets}
         self._variables = {key: value["initial"] for key, value in self._story["variables"].items()}
@@ -143,6 +148,7 @@ class Player:
         return {
             "background": self._stage["background"],
             "cg": self._stage["cg"],
+            **{key: self._stage[key] for key in _PLAYING if key in self._stage},
             "characters": [dict(item) for item in self._stage["characters"]],
         }
 
@@ -191,6 +197,7 @@ class Player:
                 "stage": self._stage_copy(),
                 "transition": None,
                 "effect": None,
+                "sound": None,
                 "voice": None,
                 "options": [],
             }
@@ -207,6 +214,7 @@ class Player:
             # How to show arriving here (ADR 0065). Not state: no saves, no route traces.
             "transition": self._transition,
             "effect": self._effect,
+            "sound": self._sound,
             # The settled line's voice clip (ADR 0043); a voice without audio is silent.
             "voice": node.get("voice", {}).get("audio") if node["type"] == "line" else None,
             "options": [
@@ -300,7 +308,7 @@ class Player:
             raise PlayerError("invalid_save") from None
         self._node_id, self._variables = node_id, dict(variables)
         self._status, self._ending, self._fault = status, saved["ending"], saved["fault"]
-        self._transition = self._effect = None
+        self._transition = self._effect = self._sound = None
         if stage is not None:
             self._stage = stage
             self._unlock_cg()
@@ -309,7 +317,10 @@ class Player:
 
     def _checked_stage(self, value: Any) -> dict[str, Any]:
         """A saved stage: known image background and characters in canonical slots."""
-        stage = fields(value, {"background", "characters"}, {"cg"}, "save.stage")
+        stage = fields(value, {"background", "characters"}, {"cg", *_PLAYING}, "save.stage")
+        playing = {key: stage[key] for key in _PLAYING if stage.get(key) is not None}
+        for track in playing.values():
+            asset_of(track, self._story["assets"], "music", "save.stage")
         cg = stage.get("cg")
         if cg is not None:
             asset_of(cg, self._story["assets"], "image", "save.stage.cg")
@@ -340,6 +351,7 @@ class Player:
         return {
             "background": background,
             "cg": cg,
+            **playing,
             "characters": [dict(item) for item in characters],
         }
 
@@ -400,6 +412,12 @@ class Player:
         return {
             "background": background,
             "cg": node.get("cg", self._stage["cg"]),
+            # Absent when silent, so stories without sound save exactly as they always have.
+            **{
+                key: track
+                for key in _PLAYING
+                if (track := node[key] if key in node else self._stage.get(key)) is not None
+            },
             "characters": ordered,
         }
 
@@ -413,7 +431,7 @@ class Player:
     def _settle(self, node_id: str) -> None:
         transitions = 0
         self._status, self._ending, self._fault = "playing", None, None
-        self._transition = self._effect = None
+        self._transition = self._effect = self._sound = None
         while True:
             self._node_id = node_id
             node = self._story["nodes"][node_id]
@@ -442,6 +460,7 @@ class Player:
                 self._stage = self._staged(node)
                 self._transition = node.get("transition", self._transition)
                 self._effect = node.get("effect", self._effect)
+                self._sound = node.get("sound", self._sound)
                 node_id = node["next"]
             else:
                 updated = dict(self._variables)
