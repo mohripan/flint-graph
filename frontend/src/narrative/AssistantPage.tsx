@@ -382,8 +382,10 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
         <button type="button" className="studio-secondary assistant-drawer-open" aria-expanded={drawer}
           onClick={() => setDrawer(true)}>Conversations</button>
         <div className="assistant-bar-title">
-          {parentThread && <button type="button" className="studio-link assistant-crumb" onClick={() => choose(parentThread.id)}>← {parentThread.title}</button>}
-          {childOf && <button type="button" className="studio-link assistant-crumb" onClick={() => choose(childOf.id)}>← {childOf.title}</button>}
+          {parentThread && <button type="button" className="assistant-crumb" onClick={() => choose(parentThread.id)}>
+            <span aria-hidden="true">←</span> Back to {parentThread.title}</button>}
+          {childOf && <button type="button" className="assistant-crumb" onClick={() => choose(childOf.id)}>
+            <span aria-hidden="true">←</span> Back to {childOf.title}</button>}
           <h2>{childOf ? "New child session" : thread?.title ?? "New chat"}</h2>
         </div>
         {threadId && <button type="button" className="assistant-thread-id" title={`Conversation ${threadId} · copy`}
