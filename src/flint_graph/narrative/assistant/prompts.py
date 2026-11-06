@@ -46,10 +46,21 @@ def _written_order(schema: Any) -> Any:
     return result
 
 
-def response_schema() -> dict[str, Any]:
+def response_schema(*, child_session: bool = False) -> dict[str, Any]:
+    """What a model may write. Inside a child session it cannot start another: asked nicely,
+    the live model tried anyway, and so did no work on its task."""
     schema: dict[str, Any] = _written_order(
         current_snapshot().entry("narrative.assistant.system").data["output_schema"]
     )
+    if child_session:
+        for branch in schema["properties"]["proposal"].get("anyOf", ()):
+            items = (branch.get("properties") or {}).get("operations", {}).get("items", {})
+            if "anyOf" in items:
+                items["anyOf"] = [
+                    shape
+                    for shape in items["anyOf"]
+                    if shape["properties"]["op"].get("const") != "start_child_session"
+                ]
     return schema
 
 
@@ -79,4 +90,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v4": "eba010f6361e42dc3e107faa9236c74398cb4c4936246d4e52ca74e83b63de5f",
     # What the creator attached, and asset IDs versus expression names (ADR 0062).
     "narrative-assistant/v5": "36230c672aeb313f1910430e215a0cb1789fab30d3dca6fcd38f6a7f55424bb7",
+    # Child sessions: the assistant can split large work up (ADR 0063).
+    "narrative-assistant/v6": "d9888931438f5a6f57c738c7bc65d06864a0b59d3d7815caba466ed867493f24",
 }

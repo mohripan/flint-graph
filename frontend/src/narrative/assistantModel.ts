@@ -44,7 +44,7 @@ export interface ProposalChange {
 function text(value: unknown): string | undefined {
   return value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : undefined;
 }
-const ACTION_OPS = new Set(["generate_character_images", "generate_backgrounds", "generate_expressions", "generate_cg", "generate_voice"]);
+const ACTION_OPS = new Set(["generate_character_images", "generate_backgrounds", "generate_expressions", "generate_cg", "generate_voice", "start_child_session"]);
 export function isAction(operation: StoryOperation): operation is AssistantAction {
   return ACTION_OPS.has(operation.op);
 }
@@ -72,6 +72,8 @@ export function proposalActions(story: Pick<StoryDraft, "characters"> | null, op
     switch (action.op) {
       case "generate_backgrounds":
         return [{ index, action, label: `Generate backgrounds: ${action.description}`, ready: true }];
+      case "start_child_session":
+        return [{ index, action, label: `Child session: ${action.title}`, ready: true }];
       case "generate_expressions":
         return [{ index, action, ready: known(action.character),
           label: `Generate expressions for ${named(action.character)}: ${action.expressions.join(", ")}` }];
@@ -256,8 +258,9 @@ export function threadTitle(request: string): string {
 }
 // The server rejects a reused creation key with a different title, so a changed
 // first message (and title) gets a new key; an identical resend replays safely.
-export interface ThreadIntent { title: string; key: string }
+export interface ThreadIntent { title: string; key: string; parent?: string | null }
 export function prepareThread(previous: ThreadIntent | null, title: string,
-  key = () => crypto.randomUUID()): ThreadIntent {
-  return previous?.title === title ? previous : { title, key: key() };
+  key = () => crypto.randomUUID(), parent: string | null = null): ThreadIntent {
+  return previous?.title === title && (previous.parent ?? null) === parent ? previous
+    : { title, key: key(), ...(parent ? { parent } : {}) };
 }

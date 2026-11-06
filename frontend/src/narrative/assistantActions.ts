@@ -1,13 +1,14 @@
 // What the Assistant shows for its generation actions (ADR 0061). The server decides and
 // starts them; this only reads their state and works out what a click would do.
 import type { ImageJob, NarrativeImage, VoiceJob } from "../lib/api";
-import type { StoryDraft } from "./types";
+import type { AssistantThread, StoryDraft } from "./types";
 
 export type ActionState = "offered" | "waiting" | "pending" | "started" | "blocked" | "finished" | "skipped";
 export interface ActionStatus {
   index: number; op: string; label: string; status: ActionState; needs_accept: boolean;
   error_code: string | null; detail: string | null;
   image_job: ImageJob | null; voice_job: VoiceJob | null;
+  child_thread?: AssistantThread | null;
 }
 export type ActionTone = "muted" | "good" | "bad";
 
@@ -58,6 +59,10 @@ export function actionState(action: ActionStatus): { text: string; tone: ActionT
   if (action.status === "offered") {
     return { text: action.needs_accept ? "Accept the proposal before generating this." : "", tone: "muted" };
   }
+  if (action.child_thread) {
+    return action.status === "finished" ? { text: "It has replied. Open it to review.", tone: "good" }
+      : { text: "Working on it…", tone: "muted" };
+  }
   if (!job) return { text: "Starting…", tone: "muted" };
   if (job.status === "queued") return { text: "Queued…", tone: "muted" };
   if (job.status === "running") return { text: `Generating ${job.progress} of ${job.count}…`, tone: "muted" };
@@ -69,7 +74,8 @@ export function actionState(action: ActionStatus): { text: string; tone: ActionT
 }
 export function actionClick(action: ActionStatus): string | null {
   if (action.status === "blocked") return "Try again";
-  return action.status === "offered" && !action.needs_accept ? "Generate" : null;
+  if (action.status !== "offered" || action.needs_accept) return null;
+  return action.op === "start_child_session" ? "Start" : "Generate";
 }
 
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");

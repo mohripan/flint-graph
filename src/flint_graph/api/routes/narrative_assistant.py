@@ -41,6 +41,7 @@ from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
 from flint_graph.api.routes.narrative_voices import voice_job_response
 from flint_graph.application.services.narrative_assistant import (
+    ThreadNode,
     accept_proposal,
     cancel_turn,
     create_thread,
@@ -51,6 +52,7 @@ from flint_graph.application.services.narrative_assistant import (
     list_turns,
     post_turn,
     reject_proposal,
+    thread_nodes,
     turn_status,
 )
 from flint_graph.application.services.narrative_assistant_actions import (
@@ -90,6 +92,11 @@ async def _action_response(
         )
         voice_job = voice_job_response(spoken, clips)
     return AssistantActionResponse(
+        child_thread=(
+            AssistantThreadResponse.model_validate(view.child_thread)
+            if view.child_thread is not None
+            else None
+        ),
         index=view.index,
         op=view.op,
         label=view.label,
@@ -196,6 +203,13 @@ def turn_response(
     )
 
 
+def _thread_response(node: ThreadNode) -> AssistantThreadResponse:
+    response = AssistantThreadResponse.model_validate(node.thread)
+    response.active = node.active
+    response.children = [_thread_response(child) for child in node.children]
+    return response
+
+
 @router.post("/threads", response_model=AssistantThreadResponse, status_code=201)
 async def create_thread_endpoint(
     project_id: UUID,
@@ -215,6 +229,8 @@ async def create_thread_endpoint(
             title=payload.title,
             idempotency_key=payload.idempotency_key,
             actor=actor,
+            parent_thread_id=payload.parent_thread_id,
+            task=payload.task,
         ),
     )
     return AssistantThreadResponse.model_validate(thread)
@@ -237,7 +253,10 @@ async def list_threads_endpoint(
         before_id=before_id,
         include_archived=include_archived,
     )
-    return [AssistantThreadResponse.model_validate(row) for row in rows]
+    return [
+        _thread_response(node)
+        for node in await thread_nodes(session, tenant_id=tenant_id, threads=rows)
+    ]
 
 
 @router.get("/threads/{thread_id}", response_model=AssistantThreadResponse)
@@ -255,7 +274,8 @@ async def get_thread_endpoint(
         thread_id=thread_id,
         include_archived=include_archived,
     )
-    return AssistantThreadResponse.model_validate(thread)
+    [node] = await thread_nodes(session, tenant_id=tenant_id, threads=[thread])
+    return _thread_response(node)
 
 
 @router.get("/threads/{thread_id}/events", response_model=list[AssistantThreadEventResponse])

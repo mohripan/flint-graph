@@ -949,9 +949,9 @@ export const api = {
   },
 
   createAssistantThread(tenantId: string, projectId: string, title: string, key: string,
-    signal?: AbortSignal): Promise<AssistantThread> {
+    signal?: AbortSignal, child?: { parent_thread_id: string; task: string }): Promise<AssistantThread> {
     return jsonRequest(`${assistantPath(projectId)}/threads`, { method: "POST",
-      headers: tenantHeaders(tenantId), signal, json: { title, idempotency_key: key } });
+      headers: tenantHeaders(tenantId), signal, json: { title, idempotency_key: key, ...child } });
   },
 
   listAssistantTurns(tenantId: string, projectId: string, threadId: string, options: {

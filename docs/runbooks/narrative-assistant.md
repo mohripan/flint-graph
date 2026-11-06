@@ -177,6 +177,16 @@ on what it otherwise sees. Up to 12 items per message. Approved results in the c
 **Attach to message**. An item that is not in the story or not approved is refused with a
 reason, and a refused message charges nothing.
 
+## Child sessions
+
+Conversations form a tree one level deep ([ADR 0063](../adr/0063-assistant-child-sessions.md)).
+**New child session** in the chat header makes the next message start one under the current
+conversation. The assistant can also start them with `start_child_session`, up to 8 per proposal,
+when asked or for several large parts. They queue and run on their own, and each costs a reply's
+credits. A child knows its task and what its parent did, and its parent's log and next turn
+know what it did. Proposals in a child are reviewed as usual. Because the per-workspace reply
+limit is shared, a message elsewhere can be told to wait while a session runs.
+
 ## Conversation history
 
 A conversation is a fold over its append-only log, `narrative_assistant_thread_events`

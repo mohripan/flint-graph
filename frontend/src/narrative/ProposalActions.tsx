@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { ImageJob, NarrativeImage, VoiceJob } from "../lib/api";
 import { CreditCost } from "../components/CreditCost";
-import { useAccessRefresh } from "../site/accessContext";
+import { useAccess, useAccessRefresh } from "../site/accessContext";
 import { imageItem, voiceItem } from "../site/creditsModel";
 import { actionClick, actionJob, actionState, actionWatching, clipUse, imageUse, mergeAction } from "./assistantActions";
 import type { ActionStatus, ImageUse } from "./assistantActions";
@@ -21,13 +21,14 @@ const POLL_MS = 1500;
 // Each picture action starts one job of four candidates on the server.
 const CANDIDATES = 4;
 
-function cost(action: AssistantAction, voiceModel: string | null | undefined): [string, number] {
+function cost(action: AssistantAction, voiceModel: string | null | undefined, assistantItem?: string | null): [string, number] {
   switch (action.op) {
     case "generate_character_images":
       return [imageItem({ purpose: "character_portrait", transparent: action.transparent, hires: action.hires ?? action.transparent }), CANDIDATES];
     case "generate_expressions": return [imageItem({ purpose: "character_expression" }), action.expressions.length];
     case "generate_cg": return [imageItem({ purpose: "scene_art" }), CANDIDATES * action.characters.length];
     case "generate_voice": return [voiceItem(voiceModel ?? "kokoro-82m"), action.lines.length];
+    case "start_child_session": return [assistantItem ?? "assistant.ollama", 1];
     default: return [imageItem({ purpose: "background" }), CANDIDATES];
   }
 }
@@ -66,13 +67,14 @@ function Candidate({ tenantId, projectId, asset, label, cutOut }: {
 
 // A generation action in the chat: what it is, where it has got to, and its results to
 // approve. A suggestion has a stable server identity, so remounting only reads its job.
-export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onAttach }: {
+export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onAttach, onOpenThread }: {
   proposal: AssistantProposal; story: StoryDraft | null; tenantId: string; projectId: string; canWrite: boolean;
   dirty: boolean; onApply: (change: (story: StoryDraft) => StoryDraft, notice: string) => Promise<void>;
-  onAttach?: (item: Attachment) => void;
+  onAttach?: (item: Attachment) => void; onOpenThread?: (id: string) => void;
 }) {
   const profiles = useContext(CharacterProfilesContext);
   const refreshAccess = useAccessRefresh();
+  const access = useAccess();
   const mounted = useRef(false), pending = useRef(new Set<number>());
   const [loaded, setLoaded] = useState(false);
   const [statuses, setStatuses] = useState<Record<number, ActionStatus>>({});
@@ -197,12 +199,14 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
       return <li key={index}>
         <span>{label}</span>
         {click && <span className="assistant-action-start">
-          <CreditCost item={cost(action, voice)[0]} quantity={cost(action, voice)[1]} />
+          <CreditCost item={cost(action, voice, access?.assistant_item)[0]} quantity={cost(action, voice, access?.assistant_item)[1]} />
           <button type="button" className="studio-secondary" disabled={busy[`start:${index}`]}
             onClick={() => start(index)}>{busy[`start:${index}`] ? "Starting…" : click}</button></span>}
         {state.text && <small className={state.tone === "bad" ? "studio-error" : "studio-hint"} role="status">
           {state.text}{active && <progress max={job.count} value={job.progress} aria-label="Progress" />}</small>}
         {errors[`start:${index}`] && <small className="studio-error" role="alert">{errors[`start:${index}`]}</small>}
+        {status?.child_thread && onOpenThread && <button type="button" className="studio-link"
+          onClick={() => onOpenThread(status.child_thread!.id)}>Open this session</button>}
         {status?.image_job?.status === "completed" && pictures(status.image_job)}
         {status?.voice_job?.status === "completed" && clips(status.voice_job)}
       </li>;

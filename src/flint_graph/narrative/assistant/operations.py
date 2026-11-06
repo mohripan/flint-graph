@@ -170,12 +170,23 @@ class GenerateVoice(_Operation):
     voice: str | None = None
 
 
+class StartChildSession(_Operation):
+    """An action: a separate conversation under this one, working on a task (ADR 0063)."""
+
+    op: Literal["start_child_session"]
+    title: Annotated[str, Field(min_length=1, max_length=120)]
+    task: Annotated[str, Field(min_length=1, max_length=2000)]
+
+
+MAX_CHILD_SESSIONS = 8
+
 ACTIONS = (
     GenerateCharacterImages,
     GenerateBackgrounds,
     GenerateExpressions,
     GenerateCg,
     GenerateVoice,
+    StartChildSession,
 )
 
 Operation = Annotated[
@@ -193,7 +204,8 @@ Operation = Annotated[
     | GenerateBackgrounds
     | GenerateExpressions
     | GenerateCg
-    | GenerateVoice,
+    | GenerateVoice
+    | StartChildSession,
     Field(discriminator="op"),
 ]
 
@@ -212,6 +224,8 @@ def action_label(action: Any) -> str:
     if isinstance(action, GenerateCharacterImages):
         kind = "sprites" if action.transparent else "portraits"
         return f"{kind} of {action.character}"
+    if isinstance(action, StartChildSession):
+        return f"child session: {action.title}"
     return "generation"
 
 
@@ -223,6 +237,9 @@ def action_needs_accept(story: dict[str, Any], operations: Sequence[Any], action
     rewrites must be spoken with its new words.
     """
     characters = story.get("characters") or {}
+    if isinstance(action, StartChildSession):
+        # It works from the saved story, which must have what this proposal adds.
+        return any(not isinstance(item, ACTIONS) for item in operations)
     if isinstance(action, GenerateCg):
         return any(character not in characters for character in action.characters)
     if isinstance(action, GenerateCharacterImages | GenerateExpressions):
@@ -284,6 +301,8 @@ def _target(operation: Operation, index: int) -> str:
         return f"actions.cg.{index}"
     if isinstance(operation, GenerateVoice):
         return f"actions.voice.{operation.character}.{index}"
+    if isinstance(operation, StartChildSession):
+        return f"actions.child.{index}"
     if isinstance(operation, SetTheme):
         return "theme"
     return "entry" if isinstance(operation, SetEntry) else "title"
@@ -367,6 +386,8 @@ def _action_problems(story: dict[str, Any], operations: Sequence[Operation]) -> 
     """Actions must name what the edited story has, so the model can fix them now."""
     problems: list[Diagnostic] = []
     characters, nodes = story["characters"], story["nodes"]
+    if sum(isinstance(item, StartChildSession) for item in operations) > MAX_CHILD_SESSIONS:
+        problems.append(Diagnostic("too_many_child_sessions", "operations"))
     for index, operation in enumerate(operations):
         location = f"operations.{index}"
         if isinstance(operation, GenerateCharacterImages | GenerateExpressions | GenerateVoice):

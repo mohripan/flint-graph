@@ -80,3 +80,18 @@ test("generation reads as one plain line per step", () => {
     ["Approved", "Rainy street 2", "good"],
   ]);
 });
+
+test("what child sessions do reads in their parent's log", () => {
+  const lines = log.logLines([
+    event(1, "child.started", { title: "Create the cast" }),
+    event(2, "child.updated", { title: "Create the cast", what: "replied" }),
+    event(3, "child.updated", { title: "Create the cast", what: "accepted" }),
+    event(4, "child.updated", { title: "Create the cast", what: "failed" }),
+  ]);
+  assert.deepEqual(lines.map(line => [line.label, line.tone]), [
+    ["Child session started", "neutral"],
+    ["Child session replied", "neutral"],
+    ["Child session accepted", "good"],
+    ["Child session failed", "bad"],
+  ]);
+});

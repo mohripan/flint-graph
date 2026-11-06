@@ -45,6 +45,11 @@ function describe(kind: string, data: Record<string, unknown>): Pick<LogLine, "l
       : data.status === "cancelled" ? { label: "Generation stopped", tone: "muted" }
       : { label: "Generation failed", detail: words(data.error_code), tone: "bad" };
     case "asset.approved": return { label: "Approved", detail: short(data.name), tone: "good" };
+    case "child.started": return { label: "Child session started", detail: short(data.title), tone: "neutral" };
+    case "child.updated": return {
+      label: `Child session ${typeof data.what === "string" ? data.what : "updated"}`,
+      detail: short(data.title), tone: data.what === "failed" ? "bad" : data.what === "accepted" ? "good" : "neutral",
+    };
     default: return { label: kind.replaceAll(/[._]/g, " "), tone: "neutral" };
   }
 }

@@ -23,6 +23,8 @@ ACTION_STARTED = "action.started"
 ACTION_BLOCKED = "action.blocked"
 JOB_FINISHED = "job.finished"
 ASSET_APPROVED = "asset.approved"
+CHILD_STARTED = "child.started"
+CHILD_UPDATED = "child.updated"
 
 ALL_KINDS = frozenset(
     {
@@ -38,12 +40,16 @@ ALL_KINDS = frozenset(
         ACTION_BLOCKED,
         JOB_FINISHED,
         ASSET_APPROVED,
+        CHILD_STARTED,
+        CHILD_UPDATED,
     }
 )
 
 RECENT_TURNS = 4
 _EARLIER_CHARS = 2000
 _EARLIER_LINE_CHARS = 160
+_CHILD_LINES = 10
+_PARENT_LINES = 8
 
 
 class LogOrderError(Exception):
@@ -92,10 +98,21 @@ class TurnRecord:
 
 
 @dataclass(frozen=True)
+class ChildRecord:
+    """A child session as its parent knows it."""
+
+    thread_id: str
+    title: str
+    what: str = "started"
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
 class ThreadState:
     title: str | None = None
     cursor: int = 0
     turns: tuple[TurnRecord, ...] = field(default=())
+    children: tuple[ChildRecord, ...] = field(default=())
 
 
 @dataclass(frozen=True)
@@ -113,6 +130,7 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
     cursor = 0
     turns: dict[str, TurnRecord] = {}
     proposals: dict[str, str] = {}
+    children: dict[str, ChildRecord] = {}
 
     def update_proposal(proposal_id: str, **changes: Any) -> None:
         turn_id = proposals.get(proposal_id)
@@ -207,8 +225,20 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
             )
             if action is not None:
                 update_action(data, approved=(*action.approved, str(data.get("name", ""))))
+        elif event.kind == CHILD_STARTED:
+            key = str(data["child_thread_id"])
+            children[key] = ChildRecord(key, str(data.get("title", "")))
+        elif event.kind == CHILD_UPDATED:
+            key = str(data["child_thread_id"])
+            known_child = children.get(key) or ChildRecord(key, str(data.get("title", "")))
+            summary = data.get("summary")
+            children[key] = replace(
+                known_child,
+                what=str(data.get("what", "")),
+                summary=None if summary is None else str(summary),
+            )
     ordered = tuple(sorted(turns.values(), key=lambda item: item.turn_sequence))
-    return ThreadState(title=title, cursor=cursor, turns=ordered)
+    return ThreadState(title=title, cursor=cursor, turns=ordered, children=tuple(children.values()))
 
 
 def _proposal_outcome(proposal: ProposalRecord) -> str:
@@ -313,4 +343,21 @@ def conversation_from_log(
     lines.reverse()
     if len(lines) < len(older):
         lines.insert(0, f"({len(older) - len(lines)} older requests omitted)")
+    lines += [_child_line(child) for child in state.children[-_CHILD_LINES:]]
     return Conversation(tuple(messages), tuple(lines))
+
+
+def _child_line(child: ChildRecord) -> str:
+    said = f": {child.summary}" if child.summary else ""
+    return _one_line(f'- Child session "{child.title}": {child.what}{said}', _EARLIER_LINE_CHARS)
+
+
+def child_context(parent: ThreadState, *, title: str, task: str | None) -> tuple[str, ...]:
+    """What a child session is told about where it came from (ADR 0063)."""
+    lines = [f'This is a child session of "{title}".']
+    if task:
+        lines.append(_one_line(f"Its task: {task}", 600))
+    done = conversation_from_log(parent, before_turn=2**31, recent_turns=0).earlier
+    if done:
+        lines += ["What the parent conversation did:", *done[-_PARENT_LINES:]]
+    return tuple(lines)

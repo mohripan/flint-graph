@@ -70,6 +70,8 @@ from flint_graph.narrative.assistant.assets import (
 )
 from flint_graph.narrative.assistant.context import HistoryTurn, attached_lines
 from flint_graph.narrative.assistant.log import (
+    CHILD_STARTED,
+    CHILD_UPDATED,
     PROPOSAL_ACCEPTED,
     PROPOSAL_CREATED,
     PROPOSAL_REJECTED,
@@ -78,6 +80,7 @@ from flint_graph.narrative.assistant.log import (
     TURN_COMPLETED,
     TURN_FAILED,
     TURN_REQUESTED,
+    child_context,
     conversation_from_log,
     fold_thread,
 )
@@ -87,6 +90,8 @@ from flint_graph.narrative.values import canonical_json
 from flint_graph.prompts.source import PromptBundle
 
 _ACTIVE = ("queued", "running")
+MAX_CHILDREN = 32
+_CHILD_REPLY_CHARS = 200
 _TURN_ENDED = {"completed": TURN_COMPLETED, "failed": TURN_FAILED, "cancelled": TURN_CANCELLED}
 
 
@@ -113,6 +118,7 @@ class TurnWork:
     earlier: tuple[str, ...] = ()
     # What the creator attached from the library, described for the model (ADR 0062).
     attached: tuple[str, ...] = ()
+    child_session: bool = False
     # Story format 2: approved library files under story-ready IDs, and each
     # character's described looks (editor metadata the model may reuse).
     library: tuple[LibraryEntry, ...] = ()
@@ -130,11 +136,17 @@ async def create_thread(
     title: str,
     idempotency_key: UUID,
     actor: AuditActor,
+    parent_thread_id: UUID | None = None,
+    task: str | None = None,
+    origin: str = "creator",
 ) -> NarrativeAssistantThread:
     project = await get_project(
         session, tenant_id=tenant_id, project_id=project_id, for_update=True
     )
-    request_hash = _fingerprint({"title": title})
+    identity: dict[str, Any] = {"title": title}
+    if parent_thread_id is not None:  # Only when set, so earlier creations keep their hashes.
+        identity |= {"parent_thread_id": str(parent_thread_id), "task": task}
+    request_hash = _fingerprint(identity)
     existing = await session.scalar(
         select(NarrativeAssistantThread).where(
             NarrativeAssistantThread.tenant_id == tenant_id,
@@ -148,6 +160,19 @@ async def create_thread(
         return existing
     if project.archived_at is not None:
         raise ConflictError("Restore this project before starting a new conversation.")
+    if parent_thread_id is not None:
+        parent = await get_thread(
+            session, tenant_id=tenant_id, project_id=project_id, thread_id=parent_thread_id
+        )
+        if parent.parent_thread_id is not None:
+            raise ConflictError("A child session cannot have child sessions of its own.")
+        siblings = await session.scalar(
+            select(func.count(NarrativeAssistantThread.id)).where(
+                NarrativeAssistantThread.parent_thread_id == parent.id
+            )
+        )
+        if (siblings or 0) >= MAX_CHILDREN:
+            raise ConflictError("This conversation has as many child sessions as it can.")
     thread = NarrativeAssistantThread(
         tenant_id=tenant_id,
         project_id=project_id,
@@ -156,6 +181,9 @@ async def create_thread(
         creation_key=idempotency_key,
         request_hash=request_hash,
         next_sequence=1,
+        parent_thread_id=parent_thread_id,
+        task=task,
+        origin=origin,
     )
     session.add(thread)
     await session.flush()
@@ -165,9 +193,26 @@ async def create_thread(
         project_id=project_id,
         thread_id=thread.id,
         kind=THREAD_CREATED,
-        payload={"title": title},
+        payload={
+            "title": title,
+            **(
+                {"parent_thread_id": str(parent_thread_id), "task": task}
+                if parent_thread_id
+                else {}
+            ),
+        },
         actor_user_id=author_user_id,
     )
+    if parent_thread_id is not None:
+        await append_thread_event(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            thread_id=parent_thread_id,
+            kind=CHILD_STARTED,
+            payload={"child_thread_id": str(thread.id), "title": title, "origin": origin},
+            actor_user_id=author_user_id,
+        )
     await session.refresh(thread)
     await record_audit_event(
         session,
@@ -222,7 +267,9 @@ async def list_threads(
         NarrativeAssistantThread.tenant_id == tenant_id,
         NarrativeAssistantThread.project_id == project_id,
     )
-    statement = select(NarrativeAssistantThread).where(*scope)
+    statement = select(NarrativeAssistantThread).where(
+        *scope, NarrativeAssistantThread.parent_thread_id.is_(None)
+    )
     if before_id is not None:
         cursor = await session.scalar(
             select(NarrativeAssistantThread).where(*scope, NarrativeAssistantThread.id == before_id)
@@ -240,6 +287,96 @@ async def list_threads(
         NarrativeAssistantThread.created_at.desc(), NarrativeAssistantThread.id.desc()
     ).limit(limit)
     return list(await session.scalars(statement))
+
+
+@dataclass(frozen=True)
+class ThreadNode:
+    """A conversation with its child sessions, and whether a reply is in progress."""
+
+    thread: NarrativeAssistantThread
+    children: tuple["ThreadNode", ...] = ()
+    active: bool = False
+
+
+async def thread_nodes(
+    session: AsyncSession, *, tenant_id: UUID, threads: Sequence[NarrativeAssistantThread]
+) -> list[ThreadNode]:
+    children = (
+        list(
+            await session.scalars(
+                select(NarrativeAssistantThread)
+                .where(
+                    NarrativeAssistantThread.tenant_id == tenant_id,
+                    NarrativeAssistantThread.parent_thread_id.in_([row.id for row in threads]),
+                )
+                .order_by(NarrativeAssistantThread.created_at, NarrativeAssistantThread.id)
+            )
+        )
+        if threads
+        else []
+    )
+    ids = [row.id for row in (*threads, *children)]
+    busy = (
+        set(
+            await session.scalars(
+                select(NarrativeAssistantTurn.thread_id)
+                .where(
+                    NarrativeAssistantTurn.tenant_id == tenant_id,
+                    NarrativeAssistantTurn.thread_id.in_(ids),
+                    NarrativeAssistantTurn.status.in_(_ACTIVE),
+                )
+                .distinct()
+            )
+        )
+        if ids
+        else set()
+    )
+    return [
+        ThreadNode(
+            thread,
+            tuple(
+                ThreadNode(child, active=child.id in busy)
+                for child in children
+                if child.parent_thread_id == thread.id
+            ),
+            thread.id in busy,
+        )
+        for thread in threads
+    ]
+
+
+async def _tell_parent(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    thread_id: UUID,
+    what: str,
+    summary: str | None,
+) -> None:
+    """A child session reports to the conversation above it, if it has one."""
+    row = (
+        await session.execute(
+            select(NarrativeAssistantThread.parent_thread_id, NarrativeAssistantThread.title).where(
+                NarrativeAssistantThread.id == thread_id
+            )
+        )
+    ).first()
+    if row is None or row[0] is None:
+        return
+    await append_thread_event(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=row[0],
+        kind=CHILD_UPDATED,
+        payload={
+            "child_thread_id": str(thread_id),
+            "title": row[1],
+            "what": what,
+            "summary": summary,
+        },
+    )
 
 
 async def post_turn(
@@ -715,6 +852,14 @@ async def accept_proposal(
         },
         actor_user_id=author_user_id,
     )
+    await _tell_parent(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=proposal.thread_id,
+        what="kept as a conflict copy" if revision.conflicted else "accepted",
+        summary=proposal.summary,
+    )
     if not revision.conflicted:
         await release_waiting_actions(session, proposal.id)
     await record_audit_event(
@@ -767,6 +912,14 @@ async def reject_proposal(
         kind=PROPOSAL_REJECTED,
         payload={"proposal_id": str(proposal.id), "summary": proposal.summary},
         actor_user_id=author_user_id,
+    )
+    await _tell_parent(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=proposal.thread_id,
+        what="rejected",
+        summary=proposal.summary,
     )
     await skip_open_actions(session, proposal.id)
     await record_audit_event(
@@ -872,6 +1025,19 @@ async def claim_turn(
         fold_thread(await read_thread_log(session, thread_id=turn.thread_id)),
         before_turn=turn.sequence,
     )
+    earlier = conversation.earlier
+    thread = await session.get(NarrativeAssistantThread, turn.thread_id)
+    if thread is not None and thread.parent_thread_id is not None:
+        parent = await session.get(NarrativeAssistantThread, thread.parent_thread_id)
+        if parent is not None:
+            earlier = (
+                *child_context(
+                    fold_thread(await read_thread_log(session, thread_id=parent.id)),
+                    title=parent.title,
+                    task=thread.task,
+                ),
+                *earlier,
+            )
     story = json.loads(base.story_json)
     library: tuple[LibraryEntry, ...] = ()
     profiles: dict[str, str] = {}
@@ -941,8 +1107,9 @@ async def claim_turn(
         request=turn.request,
         focus=turn.focus_node,
         history=conversation.recent,
-        earlier=conversation.earlier,
+        earlier=earlier,
         attached=attached,
+        child_session=bool(thread and thread.parent_thread_id),
         library=library,
         profiles=profiles,
         voices=voices,
@@ -975,6 +1142,14 @@ async def _finish(session: AsyncSession, turn: NarrativeAssistantTurn, status: s
         thread_id=turn.thread_id,
         kind=_TURN_ENDED[status],
         payload=payload,
+    )
+    await _tell_parent(
+        session,
+        tenant_id=turn.tenant_id,
+        project_id=turn.project_id,
+        thread_id=turn.thread_id,
+        what={"completed": "replied", "failed": "failed", "cancelled": "stopped"}[status],
+        summary=(turn.reply or "")[:_CHILD_REPLY_CHARS] if status == "completed" else None,
     )
 
 

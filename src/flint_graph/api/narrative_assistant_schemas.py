@@ -20,6 +20,7 @@ class AssistantActionResponse(BaseModel):
     detail: str | None
     image_job: ImageJobResponse | None
     voice_job: VoiceJobResponse | None
+    child_thread: "AssistantThreadResponse | None" = None
 
 
 class AssistantAttachment(BaseModel):
@@ -41,6 +42,8 @@ class AssistantThreadCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=200)
     idempotency_key: UUID
+    parent_thread_id: UUID | None = None
+    task: str | None = Field(default=None, max_length=2000)
 
 
 class AssistantTurnCreate(BaseModel):
@@ -64,6 +67,11 @@ class AssistantThreadResponse(BaseModel):
     tenant_id: UUID
     project_id: UUID
     title: str
+    parent_thread_id: UUID | None = None
+    task: str | None = None
+    origin: str = "creator"
+    active: bool = False
+    children: list["AssistantThreadResponse"] = Field(default_factory=list)
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -135,3 +143,6 @@ class AssistantThreadEventResponse(BaseModel):
     payload: dict[str, Any]
     actor_user_id: UUID | None
     created_at: datetime
+
+
+AssistantActionResponse.model_rebuild()

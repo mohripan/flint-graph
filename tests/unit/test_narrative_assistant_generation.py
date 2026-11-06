@@ -158,6 +158,41 @@ def test_an_action_may_name_what_the_same_proposal_adds():
     assert check.diagnostics == ()
 
 
+class Recording(Scripted):
+    def __init__(self, *answers: str) -> None:
+        super().__init__(*answers)
+        self.schemas: list[dict] = []
+
+    async def respond(self, messages, schema, on_delta=None):
+        self.schemas.append(schema)
+        return await super().respond(messages, schema, on_delta)
+
+
+def _ops(schema: dict) -> set[str]:
+    items = schema["properties"]["proposal"]["anyOf"][0]["properties"]["operations"]["items"]
+    return {shape["properties"]["op"].get("const") for shape in items["anyOf"]}
+
+
+@pytest.mark.anyio
+async def test_a_child_session_cannot_write_another_child_session():
+    """Asked nicely, the live model tried anyway, and so did no work on its task."""
+    child = {"op": "start_child_session", "title": "Deeper", "task": "Do it again."}
+    edit = {
+        "op": "upsert_node",
+        "id": "hi",
+        "node": {"type": "line", "text": "Hi.", "next": "ending"},
+    }
+    inner = Recording(answer(child, edit))
+    result = await run_turn(inner, story(), "Do the task.", child_session=True)
+    assert "start_child_session" not in _ops(inner.schemas[0])
+    assert [item.op for item in result.proposal.operations] == ["upsert_node"]
+
+    outer = Recording(answer(child, edit))
+    result = await run_turn(outer, story(), "Split the work.")
+    assert "start_child_session" in _ops(outer.schemas[0])
+    assert "start_child_session" in [item.op for item in result.proposal.operations]
+
+
 def test_library_keeps_audio_after_pictures_and_says_whose_picture_it_is():
     rows = [
         LibraryRow("line one", "voice", "audio/wav", sha("a")),

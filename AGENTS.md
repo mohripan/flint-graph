@@ -257,6 +257,13 @@ speaker. Read `docs/reports/2026-11-06-assistant-library.md`. Separation between
 from sign-in, not invitation keys: `dev` auth makes everyone one user, and an owner of any
 workspace they name, so never expose it (`tests/integration/test_narrative_assistant_isolation.py`).
 
+[ADR 0063](docs/adr/0063-assistant-child-sessions.md) (migration 0048, prompt v6) adds child
+sessions: conversations one level under a parent, started from the chat header or by the
+`start_child_session` action, which queues through the action dispatcher. The operation is absent
+from the grammar inside a child, because a prompt rule alone did not stop the model delegating
+instead of working. Parents and children stay connected through `child.*` log events and
+`child_context`. Read `docs/reports/2026-11-06-assistant-child-sessions.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

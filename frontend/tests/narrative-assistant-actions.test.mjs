@@ -105,3 +105,14 @@ test("a voice clip can go on its line, and says so once it is", () => {
   assert.equal(model.clipUse(clip("s9"), story).done, true);
   assert.equal(model.clipUse(clip("s3", "gone"), story), null, "the line no longer exists");
 });
+
+test("a child session reads as a conversation, not a job", () => {
+  const session = { id: "t", title: "Create the cast" };
+  const started = action("started", { op: "start_child_session", child_thread: session });
+  assert.equal(model.actionState(started).text, "Working on it…");
+  assert.equal(model.actionWatching(started), true);
+  const done = action("finished", { op: "start_child_session", child_thread: session });
+  assert.deepEqual(model.actionState(done), { text: "It has replied. Open it to review.", tone: "good" });
+  assert.equal(model.actionWatching(done), false);
+  assert.equal(model.actionClick(action("offered", { op: "start_child_session" })), "Start");
+});

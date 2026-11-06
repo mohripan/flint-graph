@@ -41,8 +41,32 @@ class NarrativeAssistantThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_narrative_assistant_thread_project",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["parent_thread_id", "project_id", "tenant_id"],
+            [
+                "narrative_assistant_threads.id",
+                "narrative_assistant_threads.project_id",
+                "narrative_assistant_threads.tenant_id",
+            ],
+            name="fk_narrative_assistant_thread_parent",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("next_sequence > 0", name="ck_narrative_assistant_thread_sequence"),
+        CheckConstraint(
+            "parent_thread_id IS NULL OR parent_thread_id <> id",
+            name="ck_narrative_assistant_thread_parent",
+        ),
+        CheckConstraint(
+            "origin IN ('creator','assistant')", name="ck_narrative_assistant_thread_origin"
+        ),
         Index("ix_narrative_assistant_threads_project", "project_id", "updated_at", "id"),
+        Index(
+            "ix_narrative_assistant_threads_parent",
+            "parent_thread_id",
+            "created_at",
+            postgresql_where=text("parent_thread_id IS NOT NULL"),
+            sqlite_where=text("parent_thread_id IS NOT NULL"),
+        ),
     )
     tenant_id: Mapped[UUID]
     project_id: Mapped[UUID]
@@ -54,6 +78,10 @@ class NarrativeAssistantThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # The position the next log event takes (ADR 0060), held here so an append takes it
     # under this row's lock: two writers can never write the same position.
     next_event_sequence: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # A child session sits under one parent, one level deep (ADR 0063).
+    parent_thread_id: Mapped[UUID | None]
+    task: Mapped[str | None] = mapped_column(Text)
+    origin: Mapped[str] = mapped_column(String(16), default="creator", server_default="creator")
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -243,7 +271,9 @@ class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="ck_narrative_assistant_action_status",
         ),
         CheckConstraint(
-            "image_job_id IS NULL OR voice_job_id IS NULL",
+            "(CASE WHEN image_job_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "+ (CASE WHEN voice_job_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "+ (CASE WHEN child_thread_id IS NOT NULL THEN 1 ELSE 0 END) <= 1",
             name="ck_narrative_assistant_action_one_job",
         ),
         Index(
@@ -279,6 +309,9 @@ class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     voice_job_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("narrative_voice_jobs.id", ondelete="RESTRICT")
+    )
+    child_thread_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("narrative_assistant_threads.id", ondelete="RESTRICT")
     )
     error_code: Mapped[str | None] = mapped_column(String(80))
     detail: Mapped[str | None] = mapped_column(String(300))

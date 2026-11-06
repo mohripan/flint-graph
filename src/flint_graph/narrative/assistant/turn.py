@@ -28,6 +28,7 @@ from flint_graph.narrative.assistant.operations import (
     GenerateCharacterImages,
     GenerateExpressions,
     Proposal,
+    StartChildSession,
     UpsertCharacter,
     UpsertNode,
     apply_operations,
@@ -455,6 +456,7 @@ async def run_turn(
     voices: Mapping[str, str] | None = None,
     capabilities: Sequence[str] = (),
     attached: Sequence[str] = (),
+    child_session: bool = False,
 ) -> TurnResult:
     watch = observer or _Silent()
     messages, stats = build_turn_messages(
@@ -490,7 +492,8 @@ async def run_turn(
             "model", "started", {"call": attempt, "of": calls, "provider": model.provider}
         )
         stream = _CallStream(watch, attempt)
-        answer = await model.respond(messages, response_schema(), stream)
+        schema = response_schema(child_session=child_session)
+        answer = await model.respond(messages, schema, stream)
         done: dict[str, Any] = {"call": attempt}
         if answer.output_tokens is not None:
             done["output_tokens"] = answer.output_tokens
@@ -517,6 +520,17 @@ async def run_turn(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
             parsed = _with_tidied_nodes(story, parsed)
+            if child_session:
+                # A provider without a grammar could still write one; it can only be refused.
+                parsed = parsed.model_copy(
+                    update={
+                        "operations": [
+                            item
+                            for item in parsed.operations
+                            if not isinstance(item, StartChildSession)
+                        ]
+                    }
+                )
             check = check_proposal(story, parsed.operations)
             if check.diagnostics and attempt == calls:
                 # Repairs are spent: keep the story edits if only actions are unusable.

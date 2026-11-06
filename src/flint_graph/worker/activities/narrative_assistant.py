@@ -130,6 +130,7 @@ class NarrativeAssistantActivities:
                     voices=work.voices,
                     capabilities=self.capabilities,
                     attached=work.attached,
+                    child_session=work.child_session,
                 )
             await events.flush()
         except AssistantModelError as error:

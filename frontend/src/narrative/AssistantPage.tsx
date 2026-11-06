@@ -10,6 +10,7 @@ import {
 import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnIntent } from "./assistantModel";
 import { followTurnEvents, listTurnEvents, streamTurnEvents } from "./assistantStream";
 import { attachmentKind, toggleAttachment } from "./assistantLibrary";
+import { appendThreads, findThread, mergeThreads, placeThread, visibleThreads } from "./assistantThreads";
 import type { Attachment } from "./assistantLibrary";
 import { LibraryPicker } from "./LibraryPicker";
 import { ProposalActions } from "./ProposalActions";
@@ -97,6 +98,9 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const selectionKey = `flintgraph.assistant.thread.${tenantId}.${projectId}`;
   const [threads, setThreads] = useState<AssistantThread[]>([]);
   const [threadsMore, setThreadsMore] = useState(false);
+  const [toggled, setToggled] = useState<Set<string>>(() => new Set());
+  // "New child session": the next message starts a conversation under this one.
+  const [childOf, setChildOf] = useState<AssistantThread | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const threadRef = useRef<string | null>(null);
@@ -122,7 +126,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const active = activeTurn(turns);
   const live = [...turns].reverse().find(turn => !terminal.has(turn.status));
   const liveId = live?.id ?? null;
-  const thread = threads.find(row => row.id === threadId);
+  const thread = findThread(threads, threadId);
+  const parentThread = findThread(threads, thread?.parent_thread_id ?? null);
   const target = withFocus ? focus : null;
 
   const apply = useCallback((turnId: string, events: AssistantTurnEvent[]) => {
@@ -143,33 +148,46 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   }, [run, tenantId, projectId]);
   const choose = useCallback((id: string | null) => {
     if (threadRef.current) cancel("turns");
-    threadRef.current = id; setThreadId(id); setTurns([]); setProposals({}); setActivities({}); setConflict(null);
+    threadRef.current = id; setThreadId(id); setTurns([]); setProposals({}); setActivities({}); setConflict(null); setChildOf(null);
     cursors.current.clear(); ended.current.clear(); requested.current.clear(); stick.current = true;
     setDrawer(false); writeSelection(selectionKey, id); linkThread(projectId, id);
     if (id) loadTurns(id);
   }, [cancel, loadTurns, selectionKey, projectId]);
-  const loadThreads = useCallback((older?: string) => {
+  const loadThreads = useCallback((older?: string, select = true) => {
     void run("threads", signal => api.listAssistantThreads(tenantId, projectId, { beforeId: older, signal }), rows => {
       const own = rows.filter(row => row.project_id === projectId);
-      setThreads(current => older ? [...current, ...own.filter(row => !current.some(item => item.id === row.id))] : own);
+      setThreads(current => older ? appendThreads(current, own)
+        : mergeThreads(current, own, { keepIds: new Set(current.map(row => row.id)) }));
       setThreadsMore(rows.length === 25);
-      if (older || threadRef.current) return;
+      if (older || threadRef.current || !select) return;
       // A conversation in the link wins, even one older than the first page of the list.
       const linked = linkedThread();
       if (linked && !own.some(row => row.id === linked)) {
-        void run("linked", signal => api.getAssistantThread(tenantId, projectId, linked, signal), row => {
+        void run("linked", async signal => {
+          const row = await api.getAssistantThread(tenantId, projectId, linked, signal);
+          // A linked child session needs its parent to sit under.
+          const parent = row.parent_thread_id && !own.some(item => item.id === row.parent_thread_id)
+            ? await api.getAssistantThread(tenantId, projectId, row.parent_thread_id, signal) : null;
+          return { row, parent };
+        }, ({ row, parent }) => {
           if (row.project_id !== projectId || threadRef.current) return;
-          setThreads(current => current.some(item => item.id === row.id) ? current : [row, ...current]);
+          setThreads(current => placeThread(parent ? placeThread(current, parent) : current, row));
           choose(row.id);
         }, () => { if (!threadRef.current && own[0]) choose(own[0].id); });
         return;
       }
       const stored = linked ?? readSelection(selectionKey);
-      const initial = own.find(row => row.id === stored) ?? own[0];
+      const initial = findThread(own, stored) ?? own[0];
       if (initial) choose(initial.id); else linkThread(projectId, null);
     }, failure => setError(releaseErrorMessage(failure)));
   }, [run, tenantId, projectId, selectionKey, choose]);
   useEffect(() => { loadThreads(); }, [loadThreads]);
+  // The assistant can start child sessions by itself, so keep the tree current.
+  useEffect(() => {
+    if (!visible) return;
+    const timer = window.setInterval(() => loadThreads(undefined, false), 6000);
+    return () => window.clearInterval(timer);
+  }, [visible, loadThreads]);
   useEffect(() => {
     const update = () => setVisible(document.visibilityState !== "hidden");
     document.addEventListener("visibilitychange", update);
@@ -247,18 +265,19 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
     intent.current = next;
     void run("send", async signal => {
       let id = threadRef.current;
+      let created: AssistantThread | null = null;
       if (!id) {
-        const thread = threadIntent.current = prepareThread(threadIntent.current, threadTitle(message));
-        id = (await api.createAssistantThread(tenantId, projectId, thread.title, thread.key, signal)).id;
+        const intended = threadIntent.current = prepareThread(threadIntent.current, threadTitle(message), undefined, childOf?.id ?? null);
+        created = await api.createAssistantThread(tenantId, projectId, intended.title, intended.key, signal,
+          childOf ? { parent_thread_id: childOf.id, task: message.slice(0, 2000) } : undefined);
+        id = created.id;
       }
-      return { id, turn: await api.postAssistantTurn(tenantId, projectId, id, next, signal) };
-    }, ({ id, turn }) => {
+      return { id, created, turn: await api.postAssistantTurn(tenantId, projectId, id, next, signal) };
+    }, ({ id, created, turn }) => {
       intent.current = null; threadIntent.current = null; setText(""); setAttached([]); setLibraryOpen(false);
       if (threadRef.current !== id) {
-        threadRef.current = id; setThreadId(id); writeSelection(selectionKey, id); linkThread(projectId, id);
-        setThreads(current => current.some(row => row.id === id) ? current
-          : [{ id, tenant_id: tenantId, project_id: projectId, title: threadTitle(message), archived_at: null,
-            created_at: turn.created_at, updated_at: turn.created_at }, ...current]);
+        threadRef.current = id; setThreadId(id); setChildOf(null); writeSelection(selectionKey, id); linkThread(projectId, id);
+        if (created) { const made = created; setThreads(current => placeThread(current, made)); }
       }
       setTurns(current => mergeTurns(current, [turn]));
     }, failure => {
@@ -336,9 +355,21 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
       {canWrite && <button type="button" className="studio-primary assistant-new" disabled={sending}
         onClick={() => { choose(null); compose(""); }}>New chat</button>}
       <ul className="assistant-thread-list">
-        {threads.map(row => <li key={row.id}><button type="button" aria-current={row.id === threadId ? "true" : undefined}
-          className={row.id === threadId ? "selected" : ""} onClick={() => choose(row.id)}>
-          <span>{row.title}</span><small>{shortDate(row.created_at)}</small></button></li>)}
+        {visibleThreads(threads, toggled, threadId).map(row => <li key={row.id}
+          className={`${row.depth ? "is-child" : ""} ${row.last ? "is-last" : ""}`}>
+          <button type="button" aria-current={row.id === threadId ? "true" : undefined}
+            className={row.id === threadId ? "selected" : ""} onClick={() => choose(row.id)}>
+            <span>{row.active && <span className="assistant-spinner assistant-thread-busy" role="img" aria-label="Working" />}{row.title}</span>
+            {!row.depth && <small>{shortDate(row.created_at)}</small>}
+          </button>
+          {row.childCount > 0 && <button type="button" className="assistant-thread-toggle" aria-expanded={row.open}
+            aria-label={`${row.open ? "Hide" : "Show"} ${row.childCount} child ${row.childCount === 1 ? "session" : "sessions"} of ${row.title}`}
+            onClick={() => setToggled(current => {
+              const next = new Set(current);
+              if (next.has(row.id)) next.delete(row.id); else next.add(row.id);
+              return next;
+            })}><span aria-hidden="true">{row.open ? "▾" : "▸"}</span></button>}
+        </li>)}
       </ul>
       {!threads.length && <p className="studio-hint">No conversations yet.</p>}
       {threadsMore && <button type="button" className="studio-link" onClick={() => loadThreads(threads[threads.length - 1]?.id)}>
@@ -350,7 +381,11 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
       <header className="assistant-bar">
         <button type="button" className="studio-secondary assistant-drawer-open" aria-expanded={drawer}
           onClick={() => setDrawer(true)}>Conversations</button>
-        <h2>{thread?.title ?? "New chat"}</h2>
+        <div className="assistant-bar-title">
+          {parentThread && <button type="button" className="studio-link assistant-crumb" onClick={() => choose(parentThread.id)}>← {parentThread.title}</button>}
+          {childOf && <button type="button" className="studio-link assistant-crumb" onClick={() => choose(childOf.id)}>← {childOf.title}</button>}
+          <h2>{childOf ? "New child session" : thread?.title ?? "New chat"}</h2>
+        </div>
         {threadId && <button type="button" className="assistant-thread-id" title={`Conversation ${threadId} · copy`}
           aria-label="Copy this conversation's ID" onClick={() => {
             void navigator.clipboard?.writeText(threadId).then(() => {
@@ -358,6 +393,9 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             }, () => undefined);
           }}><code>{copied ? "Copied" : threadId.slice(0, 8)}</code></button>}
         <span className="studio-hint">Revision {revision.revision_number}{dirty ? " · unsaved edits" : ""}</span>
+        {canWrite && thread && !thread.parent_thread_id && <button type="button" className="studio-link"
+          title="Start a separate conversation under this one"
+          onClick={() => { const parent = thread; choose(null); setChildOf(parent); compose(""); }}>New child session</button>}
         {threadId && <button type="button" className="studio-link" aria-expanded={historyOpen}
           onClick={() => setHistoryOpen(open => !open)}>Activity log</button>}
       </header>
@@ -373,7 +411,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             <p>It was kept as a conflict revision. Your current story is unchanged.</p>
             <button type="button" className="studio-secondary" onClick={() => onInspect(conflict)}>View conflict copy</button></div>}
           {!turns.length && <div className="assistant-welcome">
-            <h3>What should we write next?</h3>
+            <h3>{childOf ? `A new session under “${childOf.title}”` : "What should we write next?"}</h3>
             <p>Describe a scene, a choice or a twist, ask for pictures and voices, or ask about your story.
               The assistant proposes changes, and nothing in your story changes until you accept.</p>
             {canWrite && <div className="assistant-suggestions">{suggestions.map(item =>
@@ -424,7 +462,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                       </li>)}</ul>
                     <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite}
                       dirty={dirty} onApply={applyToStory}
-                      onAttach={item => { setAttached(current => current.some(known => known.id === item.id) ? current : toggleAttachment(current, item)); compose(text); }} />
+                      onAttach={item => { setAttached(current => current.some(known => known.id === item.id) ? current : toggleAttachment(current, item)); compose(text); }}
+                      onOpenThread={id => { loadThreads(undefined, false); choose(id); }} />
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules
                       ({detail.diagnostics.slice(0, 3).map(item => `${item.code.replaceAll("_", " ")} at ${item.location}`).join("; ")}).
                       Ask again or rephrase.</p>}

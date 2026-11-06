@@ -110,6 +110,9 @@ export type ProposalStatus = "ready" | "invalid" | "accepted" | "rejected";
 export interface AssistantThread {
   id: string; tenant_id: string; project_id: string; title: string;
   archived_at: string | null; created_at: string; updated_at: string;
+  // A tree one level deep: child sessions sit under their parent (ADR 0063).
+  parent_thread_id?: string | null; task?: string | null; origin?: "creator" | "assistant";
+  active?: boolean; children?: AssistantThread[];
 }
 export interface AssistantProposalSummary {
   id: string; status: ProposalStatus; summary: string; touched: string[]; accepted_revision_id: string | null;
@@ -137,7 +140,8 @@ export type AssistantAction =
   | { op: "generate_backgrounds"; description: string }
   | { op: "generate_expressions"; character: string; expressions: string[] }
   | { op: "generate_cg"; characters: string[]; description: string }
-  | { op: "generate_voice"; character: string; lines: string[]; voice?: string | null };
+  | { op: "generate_voice"; character: string; lines: string[]; voice?: string | null }
+  | { op: "start_child_session"; title: string; task: string };
 export interface AssistantProposal extends AssistantProposalSummary {
   turn_id: string; thread_id: string; base_revision_id: string; operations: StoryOperation[];
   diagnostics: Array<{ code: string; location: string }>; warnings: Array<{ code: string; location: string }>;

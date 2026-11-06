@@ -112,6 +112,24 @@
   .narrative-studio.is-assistant .studio-heading > .studio-actions > * { flex:none; }
 }
 
+/* Conversations as a tree: child sessions under a connector line (ADR 0063). */
+.assistant-thread-list li { position:relative; display:flex; align-items:flex-start; min-width:0; }
+.assistant-thread-list li > button:first-child { flex:1; min-width:0; }
+.assistant-thread-list li.is-child { margin-left:14px; padding-left:12px; border-left:1px solid #b4c4ce; }
+.assistant-thread-list li.is-child.is-last { border-left-color:transparent; }
+.assistant-thread-list li.is-child.is-last::before { content:""; position:absolute; left:-1px; top:0; height:18px; width:8px; border-left:1px solid #b4c4ce; border-bottom:1px solid #b4c4ce; border-bottom-left-radius:6px; }
+.assistant-thread-list li.is-child > button:first-child { padding:6px 8px; font-size:13px; }
+.narrative-studio .assistant-thread-toggle { position:absolute; right:4px; top:4px; width:26px; min-width:26px; height:26px; min-height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:#4e6577; font-size:12px; cursor:pointer; }
+.narrative-studio .assistant-thread-toggle:hover { background:#d4dfe6; color:#182635; }
+.assistant-thread-list li:has(> .selected) > .assistant-thread-toggle { color:#f0f4f6; }
+.assistant-thread-list li:has(> .selected) > .assistant-thread-toggle:hover { background:#36576f; }
+.assistant-thread-list li:has(> .assistant-thread-toggle) > button:first-child { padding-right:32px; }
+.assistant-thread-busy { width:10px; height:10px; margin-right:6px; vertical-align:-1px; }
+.assistant-actions li > .studio-link { grid-column:1 / -1; justify-self:start; min-height:24px; font-size:13px; }
+.assistant-bar-title { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; }
+.assistant-bar-title h2 { width:100%; }
+.narrative-studio .assistant-crumb { min-height:20px; padding:0; font-size:12px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
 /* The project's library, attached to a message (ADR 0062). */
 .assistant-composer { position:relative; }
 .assistant-library-open { flex:none; align-self:flex-end; min-height:44px; padding:0 12px; border:1px solid #c2d0d8; border-radius:9px; background:#f0f4f6; color:#26445a; font-size:13px; font-weight:600; cursor:pointer; margin-left:-8px; }

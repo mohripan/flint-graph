@@ -24,7 +24,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from flint_graph.application.services.audit import AuditActor
-from flint_graph.application.services.narrative_assistant import get_proposal
+from flint_graph.application.services.narrative_assistant import (
+    create_thread,
+    get_proposal,
+    post_turn,
+)
 from flint_graph.application.services.narrative_assistant_action_state import (
     BLOCKED,
     FINISHED,
@@ -65,7 +69,10 @@ from flint_graph.infrastructure.db.models import (
     NarrativeVoiceJob,
     Tenant,
 )
-from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantAction
+from flint_graph.infrastructure.db.narrative_assistant_models import (
+    NarrativeAssistantAction,
+    NarrativeAssistantThread,
+)
 from flint_graph.infrastructure.db.narrative_voice_models import NarrativeLineDelivery
 from flint_graph.infrastructure.narrative_artifact_store import (
     ArtifactStoreError,
@@ -80,6 +87,7 @@ from flint_graph.narrative.assistant.operations import (
     GenerateExpressions,
     GenerateVoice,
     Proposal,
+    StartChildSession,
     action_label,
     action_needs_accept,
 )
@@ -92,7 +100,12 @@ from flint_graph.narrative.voices import VOICE_IDS
 logger = logging.getLogger(__name__)
 
 ActionOp = (
-    GenerateBackgrounds | GenerateCharacterImages | GenerateExpressions | GenerateCg | GenerateVoice
+    GenerateBackgrounds
+    | GenerateCharacterImages
+    | GenerateExpressions
+    | GenerateCg
+    | GenerateVoice
+    | StartChildSession
 )
 _MODELS: dict[str, type[ActionOp]] = {
     "generate_backgrounds": GenerateBackgrounds,
@@ -100,6 +113,7 @@ _MODELS: dict[str, type[ActionOp]] = {
     "generate_expressions": GenerateExpressions,
     "generate_cg": GenerateCg,
     "generate_voice": GenerateVoice,
+    "start_child_session": StartChildSession,
 }
 _CANDIDATES = 4
 _FINISHED_JOB = ("completed", "failed", "cancelled")
@@ -223,6 +237,7 @@ class ActionView:
     detail: str | None
     image_job: NarrativeImageJob | None
     voice_job: NarrativeVoiceJob | None
+    child_thread: NarrativeAssistantThread | None = None
 
 
 async def _head_story(
@@ -273,8 +288,10 @@ async def list_actions(
     views: list[ActionView] = []
     for index, action, raw in parsed:
         row = rows.get(index)
-        image_job = voice_job = None
-        if row is not None and row.image_job_id is not None:
+        image_job = voice_job = child_thread = None
+        if row is not None and row.child_thread_id is not None:
+            child_thread = await session.get(NarrativeAssistantThread, row.child_thread_id)
+        elif row is not None and row.image_job_id is not None:
             image_job = await session.get(NarrativeImageJob, row.image_job_id)
         elif row is not None and row.voice_job_id is not None:
             voice_job = await session.get(NarrativeVoiceJob, row.voice_job_id)
@@ -299,6 +316,7 @@ async def list_actions(
                 detail=row.detail if row is not None else None,
                 image_job=image_job,
                 voice_job=voice_job,
+                child_thread=child_thread,
             )
         )
     return views
@@ -478,8 +496,21 @@ async def _admit(
     actor: AuditActor,
     settings: Settings,
     store: AssetBytes,
-) -> NarrativeImageJob | NarrativeVoiceJob:
+) -> NarrativeImageJob | NarrativeVoiceJob | NarrativeAssistantThread:
     key = action_key(proposal.id, index)
+    if isinstance(action, StartChildSession):
+        # Nothing is left behind if the slot is taken: the whole transaction rolls back.
+        return await _start_child(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            proposal=proposal,
+            action=action,
+            key=key,
+            author_user_id=author_user_id,
+            actor=actor,
+            settings=settings,
+        )
     if isinstance(action, GenerateVoice):
         model_id = await _ensure_voice(
             session,
@@ -594,6 +625,53 @@ async def _admit(
     )
 
 
+async def _start_child(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    proposal: NarrativeAssistantProposal,
+    action: StartChildSession,
+    key: UUID,
+    author_user_id: UUID,
+    actor: AuditActor,
+    settings: Settings,
+) -> NarrativeAssistantThread:
+    project = await get_project(session, tenant_id=tenant_id, project_id=project_id)
+    if project.head_revision_id is None:
+        raise ConflictError("The story has no saved revision.")
+    asking = await session.get(NarrativeAssistantTurn, proposal.turn_id)
+    child = await create_thread(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        author_user_id=author_user_id,
+        title=action.title,
+        idempotency_key=key,
+        actor=actor,
+        parent_thread_id=proposal.thread_id,
+        task=action.task,
+        origin="assistant",
+    )
+    await post_turn(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=child.id,
+        author_user_id=author_user_id,
+        request=action.task,
+        base_revision_id=project.head_revision_id,
+        focus_node=None,
+        idempotency_key=key,
+        actor=actor,
+        available=settings.narrative_assistant_provider not in (None, "disabled"),
+        max_active_turns=settings.narrative_assistant_max_active_turns_per_workspace,
+        provider=settings.narrative_assistant_provider,
+        auto_generate=bool(asking and asking.auto_generate),
+    )
+    return child
+
+
 async def _action_row(
     session: AsyncSession,
     *,
@@ -684,10 +762,14 @@ async def start_action(
         settings=settings,
         store=store,
     )
-    kind = "voice" if isinstance(job, NarrativeVoiceJob) else "image"
-    if isinstance(job, NarrativeVoiceJob):
+    if isinstance(job, NarrativeAssistantThread):
+        kind, count = "child", 1
+        row.child_thread_id = job.id
+    elif isinstance(job, NarrativeVoiceJob):
+        kind, count = "voice", job.count
         row.voice_job_id = job.id
     else:
+        kind, count = "image", job.count
         row.image_job_id = job.id
     row.status, row.error_code, row.detail = STARTED, None, None
     await session.flush()
@@ -704,7 +786,7 @@ async def start_action(
             "label": action_label(action),
             "job_kind": kind,
             "job_id": str(job.id),
-            "count": job.count,
+            "count": count,
         },
     )
 
@@ -909,4 +991,38 @@ async def reconcile_actions(factory: async_sessionmaker[AsyncSession], limit: in
             )
             await session.commit()
             recorded += 1
+    return recorded + await _reconcile_children(factory, limit)
+
+
+async def _reconcile_children(factory: async_sessionmaker[AsyncSession], limit: int) -> int:
+    """A child session's action is done once its first reply ended; it reported that itself."""
+    async with factory() as session:
+        finished = list(
+            await session.scalars(
+                select(NarrativeAssistantAction.id)
+                .join(
+                    NarrativeAssistantTurn,
+                    NarrativeAssistantTurn.thread_id == NarrativeAssistantAction.child_thread_id,
+                )
+                .where(
+                    NarrativeAssistantAction.status == STARTED,
+                    NarrativeAssistantTurn.sequence == 1,
+                    NarrativeAssistantTurn.status.in_(_FINISHED_JOB),
+                )
+                .limit(limit)
+            )
+        )
+    recorded = 0
+    for action_id in finished:
+        async with factory() as session:
+            row = await session.scalar(
+                select(NarrativeAssistantAction)
+                .where(NarrativeAssistantAction.id == action_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if row is not None and row.status == STARTED:
+                row.status = FINISHED
+                await session.commit()
+                recorded += 1
     return recorded
