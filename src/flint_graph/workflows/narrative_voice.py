@@ -20,8 +20,8 @@ from flint_graph.application.narrative_image_workflow import (
     voice_job_workflow_id,
 )
 
-# A not-yet-committed run registration retries; the activity itself fails the job
-# on its final attempt with a safe code.
+# A busy GPU and a not-yet-committed run registration retry; the activity itself
+# fails the job on its final attempt with a safe code.
 _RUN_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=10), backoff_coefficient=2.0, maximum_attempts=3
 )

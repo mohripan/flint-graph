@@ -119,6 +119,14 @@ export function missingClips(story: StoryDraft, ids: string[]): Record<string, C
   return grouped;
 }
 
+/** The line's latest voice job when it failed, unless the clip in use was made after it. */
+export function failedLineJob<T extends { status: string; created_at: string }>(jobs: T[], clipMadeAt?: string): T | undefined {
+  const latest = jobs.reduce<T | undefined>((newest, job) =>
+    !newest || Date.parse(job.created_at) > Date.parse(newest.created_at) ? job : newest, undefined);
+  if (latest?.status !== "failed") return undefined;
+  return clipMadeAt && Date.parse(clipMadeAt) > Date.parse(latest.created_at) ? undefined : latest;
+}
+
 /** A generated clip whose words no longer match the line (uploads are never stale). */
 export function clipIsStale(story: StoryDraft, id: string, clip: { provenance: Record<string, unknown> }): boolean {
   const made = clip.provenance;

@@ -11,7 +11,8 @@ import { CharacterProfilesContext } from "./characterImages";
 import { libraryAsset, refreshLibrary, useApprovedAssets } from "./libraryAssets";
 import type { StoryDraft } from "./types";
 import {
-  VOCALIZATION_EXAMPLES, VOCALIZATION_LIMIT, clipIsStale, missingClips, setLineClip, setLineVoice, spokenText, voiceChoice,
+  VOCALIZATION_EXAMPLES, VOCALIZATION_LIMIT, clipIsStale, failedLineJob, missingClips, setLineClip, setLineVoice, spokenText,
+  voiceChoice,
 } from "./voiceModel";
 import type { VoiceChoice } from "./voiceModel";
 import { StudioDialog } from "./StudioDialog";
@@ -26,7 +27,8 @@ const message = (error: unknown, fallback: string) => error instanceof Error && 
 const active = (job: VoiceJob) => job.status === "queued" || job.status === "running";
 const ERRORS: Record<string, string> = {
   empty_speech: "The model could not say this. Try other words or a different sound.",
-  gpu_busy: "The GPU is busy with other work. Try again when image generation finishes.",
+  gpu_busy: "The GPU has too little free memory for this voice model right now (image generation or the assistant "
+    + "may be using it). Try again in a few minutes.",
   reference_deleted: "The voice reference was deleted. Choose another one in Characters.",
   reference_invalid: "The model could not use this voice reference. Try another recording.",
   reference_unavailable: "The voice reference could not be read. Try again.",
@@ -207,7 +209,9 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
   const running = lineJobs.find(active);
   const candidates = lineJobs.flatMap(job => job.assets).filter(asset => asset.status === "candidate"
     && asset.provenance.node_id === id && asset.provenance.mode === voice.mode && asset.provenance.text === text);
-  const failed = !running && !candidates.length && lineJobs[0]?.status === "failed" ? lineJobs[0] : undefined;
+  const failed = running ? undefined : failedLineJob(lineJobs, bound?.created_at);
+  const failure = failed && <span className="studio-voice-note" role="alert">
+    {ERRORS[failed.error_code ?? ""] ?? "Voice generation failed."}</span>;
   const voiceId = hasVoice(context?.profiles[speaker]);
   const model = speakerModel(jobs?.catalog ?? null, context?.profiles[speaker]);
   const chosen = lineDelivery(jobs?.deliveries[id], node.expression);
@@ -261,6 +265,7 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
         {voiceId && !running && model && <CreditCost item={voiceItem(model.id)} />}
         <button type="button" className="studio-link studio-danger" onClick={() => run(() => onChange(setLineClip(story, id, null), `${id}:voice-clip`))}>Remove clip</button>
       </>}
+      {failure}
       {candidates.filter(asset => asset.id !== bound.id).slice(0, 2).map(asset => <span key={asset.id} className="studio-voice-clip candidate">
         <span className="studio-voice-note">New take</span>
         <ClipPlayButton assetId={asset.id} label="Listen" />
@@ -290,7 +295,7 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
         if (picked) use(picked);
       }}><option value="">Choose a clip…</option>
         {choices.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select>}
-      {failed && <span className="studio-voice-note">{ERRORS[failed.error_code ?? ""] ?? "Voice generation failed."}</span>}
+      {failure}
     </span>}
   </div>;
 }

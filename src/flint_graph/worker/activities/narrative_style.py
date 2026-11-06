@@ -1,6 +1,7 @@
 """Fenced private training. Temporal receives IDs and terminal status only."""
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -54,6 +55,21 @@ class StyleTrainer(Protocol):
 
 class Superseded(Exception):
     pass
+
+
+async def finish_then_cancel[T](step: Callable[[], Awaitable[T]]) -> T:
+    """Run one database step to its end even if this task is cancelled meanwhile.
+
+    A cancel landing mid-query can drop the connection with a half-read statement, and
+    SQLite keeps that statement's lock: the job's final status write then times out.
+    """
+    inner = asyncio.ensure_future(step())
+    try:
+        return await asyncio.shield(inner)
+    except asyncio.CancelledError:
+        with suppress(Exception, asyncio.CancelledError):
+            await inner
+        raise
 
 
 def outcome(row: NarrativeStyleJob) -> ImageJobOutcome:
@@ -130,6 +146,9 @@ class NarrativeStyleActivities:
                 raise ValueError("anatomy_review_failed") from None
 
         async def progress(step: int) -> None:
+            await finish_then_cancel(lambda: record_progress(step))
+
+        async def record_progress(step: int) -> None:
             async with self.factory() as session:
                 current = await session.get(NarrativeStyleJob, job_id, with_for_update=True)
                 if (
@@ -156,6 +175,21 @@ class NarrativeStyleActivities:
                 REFERENCE_RECIPE_SHA,
             }:
                 raise ValueError("model_pin_mismatch")
+            images, reference_index = await finish_then_cancel(load_inputs)
+            return await self.trainer.train(
+                StyleTrainingRequest(
+                    tuple(images),
+                    row.dataset_sha256,
+                    row.recipe_sha256,
+                    row.trigger,
+                    row.steps,
+                    row.seed,
+                    reference_index=reference_index,
+                ),
+                on_progress=progress,
+            )
+
+        async def load_inputs() -> tuple[list[tuple[bytes, str]], int | None]:
             images = []
             reference_index = None
             async with self.factory() as session:
@@ -198,18 +232,7 @@ class NarrativeStyleActivities:
                         max_bytes=8 * 1024**2,
                     )
                     images.append((image, item["caption"]))
-            return await self.trainer.train(
-                StyleTrainingRequest(
-                    tuple(images),
-                    row.dataset_sha256,
-                    row.recipe_sha256,
-                    row.trigger,
-                    row.steps,
-                    row.seed,
-                    reference_index=reference_index,
-                ),
-                on_progress=progress,
-            )
+            return images, reference_index
 
         work, monitor = asyncio.create_task(train()), asyncio.create_task(watch())
         result = None

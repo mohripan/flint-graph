@@ -43,6 +43,7 @@ also upload their own WAV clips with a rights declaration.
 | `FLINT_GRAPH_NARRATIVE_VOICE_CUDA_CACHE_DIR` | Where compiled CUDA kernels are kept between jobs (default: a folder in the system temp). |
 | `FLINT_GRAPH_NARRATIVE_VOICE_MAX_ACTIVE_JOBS_PER_WORKSPACE` | Queued plus running jobs per workspace (default 4). |
 | `FLINT_GRAPH_NARRATIVE_VOICE_JOB_DEADLINE_SECONDS` | Watchdog for one child run (default 600). |
+| `FLINT_GRAPH_NARRATIVE_VOICE_RELEASE_OLLAMA_MODEL` | Optional: Ollama model to unload when the GPU is too full for a GPU-only model, before one immediate retry. |
 
 The one-command Studio launcher (`uv run python tools/narrative/studio.py`) runs the
 worker as the `voice` service; add the settings above to `studio.local.env` (see
@@ -197,11 +198,19 @@ otherwise Chatterbox and Qwen3 speak on the CPU and IndexTTS-2.5 refuses with
 `gpu_busy`. Measured beside a background-image job (8.5 GB), a Turbo job still ran on
 the GPU (card peak 11.4 of 11.9 GB) and took 64.6 s instead of 58.4 s.
 
+A busy GPU is retried: a run gets three attempts (about 10 s and 20 s apart) before the
+job fails with `gpu_busy`. The assistant's Ollama model stays loaded for several minutes
+after each turn (7.6 GB for a 12B model on a 12 GB card), which leaves too little for
+IndexTTS-2.5. With `FLINT_GRAPH_NARRATIVE_VOICE_RELEASE_OLLAMA_MODEL` set to that model,
+the worker asks Ollama to unload it and tries again at once, as the image worker does;
+Ollama loads it again on the next assistant turn. The Studio shows the failure under the
+line even when an older clip is still in use.
+
 ### More failure codes
 
 | Code | Meaning |
 | --- | --- |
-| `gpu_busy` | The GPU had too little free memory for a GPU-only model. Retry later. |
+| `gpu_busy` | The GPU had too little free memory for a GPU-only model on every attempt. Retry later, or set `FLINT_GRAPH_NARRATIVE_VOICE_RELEASE_OLLAMA_MODEL`. |
 | `reference_deleted` | The voice reference was deleted before the job spoke. |
 | `reference_invalid` | The model could not use the reference audio. |
 | `reference_unavailable` | The reference audio could not be read from storage. |

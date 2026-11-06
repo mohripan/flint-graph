@@ -80,3 +80,16 @@ test("missing clips are grouped by speaker for one job each and stale clips are 
   assert.equal(voice.clipIsStale(story, "hello", made), true);
   assert.equal(voice.clipIsStale(story, "hello", { provenance: { source: "upload" } }), false);
 });
+
+test("a line shows its latest voice job's failure unless a newer clip is in use", () => {
+  const job = (status, created_at) => ({ status, created_at });
+  const failed = job("failed", "2026-11-01T02:31:00+07:00");
+  const older = job("completed", "2026-10-31T19:00:00+00:00");
+  assert.equal(voice.failedLineJob([older, failed]), failed);
+  assert.equal(voice.failedLineJob([failed, job("completed", "2026-10-31T19:32:00Z")]), undefined);
+  assert.equal(voice.failedLineJob([failed, job("running", "2026-10-31T19:40:00Z")]), undefined);
+  assert.equal(voice.failedLineJob([]), undefined);
+  // A clip in use that was made after the failure hides it; one made before does not.
+  assert.equal(voice.failedLineJob([failed], "2026-10-31T19:35:00Z"), undefined);
+  assert.equal(voice.failedLineJob([failed], "2026-10-31T15:51:40Z"), failed);
+});

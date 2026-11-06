@@ -367,6 +367,12 @@ class Settings(BaseSettings):
     narrative_voice_max_active_jobs_per_workspace: int = Field(default=4, ge=1, le=20)
     narrative_voice_job_deadline_seconds: int = Field(default=600, ge=60, le=3600)
     narrative_voice_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+    # Shared single GPU: let the voice worker ask Ollama to unload this model before
+    # retrying a job that found the GPU busy (a GPU-only model such as IndexTTS-2.5).
+    # Off unless an operator sets it.
+    narrative_voice_release_ollama_model: str | None = Field(
+        default=None, min_length=1, max_length=200
+    )
     # Catalog models installed beside Kokoro (ADR 0045), as JSON keyed by model ID, e.g.
     # {"chatterbox": {"model_dir": ..., "manifest_sha256": ..., "runtime_dir": ...}}.
     # Only these are offered to creators; licenses and capabilities come from code.
