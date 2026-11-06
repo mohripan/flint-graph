@@ -134,21 +134,10 @@ export function WorkspaceGate() {
 }
 
 export function Logo({ className = "h-10 w-10" }: { className?: string }) {
+  // The FlintGraph mascot on a white tile, so it reads on light and dark headers alike.
   return (
-    <div
-      className={`flex items-center justify-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-xs ${className}`}
-    >
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
-        <circle cx="12" cy="5" r="2.2" fill="currentColor" />
-        <circle cx="5" cy="17" r="2.2" fill="currentColor" />
-        <circle cx="19" cy="17" r="2.2" fill="currentColor" />
-        <path
-          d="M12 7v3m0 0l-5.5 5m5.5-5l5.5 5"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
+    <span className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-0.5 shadow-xs ring-1 ring-slate-200 ${className}`}>
+      <img src="/brand/logo-128.png" alt="" className="h-full w-full object-contain" width={128} height={128} />
+    </span>
   );
 }
