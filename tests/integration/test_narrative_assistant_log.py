@@ -263,7 +263,7 @@ async def test_migration_backfills_existing_conversations_faithfully(
             config.attributes["configure_logger"] = False
             config.attributes["version_table_schema"] = schema
             command.downgrade(config, "0044_access_credits")
-            command.upgrade(config, "0045_assistant_thread_log")
+            command.upgrade(config, "head")
 
         await connection.run_sync(rebuild)
 

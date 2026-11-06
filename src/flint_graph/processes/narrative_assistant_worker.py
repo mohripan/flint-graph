@@ -12,14 +12,22 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from flint_graph.application.services.narrative_assistant_actions import (
+    AssetBytes,
+    dispatch_actions,
+    generation_capabilities,
+    reconcile_actions,
+)
 from flint_graph.application.services.narrative_assistant_relay import (
     AssistantDispatcher,
     recover_stale_turns,
     relay_assistant_batch,
 )
 from flint_graph.config import Settings, get_settings
+from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_assistant import build_narrative_assistant
 from flint_graph.infrastructure.narrative_assistant_temporal import TemporalAssistantDispatcher
+from flint_graph.infrastructure.object_store import create_s3_client
 from flint_graph.prompts.runtime import run_prompt_process
 from flint_graph.worker.activities.narrative_assistant import NarrativeAssistantActivities
 from flint_graph.workflows.narrative_assistant import NarrativeAssistantTurnWorkflow
@@ -33,6 +41,8 @@ async def maintain(
     *,
     dispatcher: AssistantDispatcher,
     poll_interval_seconds: float,
+    settings: Settings,
+    store: AssetBytes,
 ) -> None:
     loop = asyncio.get_running_loop()
     next_recovery = loop.time()
@@ -48,6 +58,14 @@ async def maintain(
                     logger.warning("assistant turns recovered: %d", recovered)
         except Exception:
             logger.warning("assistant dispatch unavailable")
+        # Generation actions (ADR 0061) go on even when Temporal is briefly away.
+        try:
+            started = await dispatch_actions(factory, settings=settings, store=store)
+            recorded = await reconcile_actions(factory)
+            if started or recorded:
+                logger.info("assistant actions started: %d, recorded: %d", started, recorded)
+        except Exception:
+            logger.warning("assistant actions unavailable")
         await asyncio.sleep(poll_interval_seconds)
 
 
@@ -67,7 +85,13 @@ async def run_worker(settings: Settings | None = None) -> None:
     engine = create_async_engine(configured.database_url, hide_parameters=True, pool_pre_ping=True)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     activities = NarrativeAssistantActivities(
-        factory=factory, model=model, context_chars=configured.narrative_assistant_context_chars
+        factory=factory,
+        model=model,
+        context_chars=configured.narrative_assistant_context_chars,
+        capabilities=generation_capabilities(configured),
+    )
+    store = S3NarrativeArtifactStore(
+        create_s3_client(configured, max_attempts=3), bucket=configured.object_store_bucket
     )
     try:
         async with Worker(
@@ -83,6 +107,8 @@ async def run_worker(settings: Settings | None = None) -> None:
                 factory,
                 dispatcher=dispatcher,
                 poll_interval_seconds=configured.narrative_assistant_poll_interval_seconds,
+                settings=configured,
+                store=store,
             )
     finally:
         await engine.dispose()

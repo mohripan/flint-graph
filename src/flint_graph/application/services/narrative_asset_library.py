@@ -17,6 +17,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.services.narrative_assistant_action_state import (
+    note_asset_approved,
+)
 from flint_graph.application.services.narrative_characters import get_asset
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.domain.errors import ConflictError, DomainError, NotFoundError
@@ -266,5 +269,6 @@ async def approve_asset(
         asset.approved_by_user_id = author_user_id
         asset.approved_at = datetime.now(UTC)
         await session.flush()
+        await note_asset_approved(session, asset, author_user_id)
         await session.refresh(asset)
     return asset

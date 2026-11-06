@@ -83,7 +83,7 @@ const PAID = [
   /\/look-scene-art-jobs$/,
   /\/style-jobs$/,
   /\/assistant\/threads\/[^/]+\/turns$/,
-  /\/assistant\/proposals\/[^/]+\/image-actions\/\d+$/,
+  /\/assistant\/proposals\/[^/]+\/actions\/\d+$/,
   /\/narrative\/projects\/[^/]+\/releases$/,
 ];
 

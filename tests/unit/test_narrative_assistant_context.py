@@ -96,7 +96,7 @@ def test_prompt_identity_covers_template_schema_and_version_and_is_pinned():
     assert prompt_sha256() == expected
     # Changing the prompt or schema needs a new version and a deliberate new pin.
     assert PINNED_PROMPTS[PROMPT_VERSION] == expected
-    assert PROMPT_VERSION == "narrative-assistant/v3"
+    assert PROMPT_VERSION == "narrative-assistant/v4"
     assert (
         PINNED_PROMPTS["narrative-assistant/v2"]
         == "99d7090be56e40f350e2e681c7fb59c47a49ce956ef2bfcd29d6be82d814ee8f"
@@ -107,8 +107,23 @@ def test_response_schema_requires_reply_and_nullable_proposal():
     assert RESPONSE_SCHEMA["required"] == ["reply", "proposal"]
     proposal = RESPONSE_SCHEMA["properties"]["proposal"]
     assert {"type": "null"} in proposal["anyOf"]
-    operation = proposal["anyOf"][0]["properties"]["operations"]["items"]
-    assert operation["properties"]["op"]["enum"] == [
+    json.dumps(RESPONSE_SCHEMA)
+
+
+def _operation_shapes():
+    proposal = RESPONSE_SCHEMA["properties"]["proposal"]["anyOf"][0]
+    return proposal["properties"]["operations"]["items"]["anyOf"]
+
+
+def test_each_operation_has_its_own_exact_shape_so_a_model_cannot_mix_their_fields():
+    """A flat schema let the live model write {"voice": "girl"} for a character type."""
+    named = {}
+    for shape in _operation_shapes():
+        assert shape["additionalProperties"] is False
+        op = shape["properties"]["op"]
+        for name in op.get("enum", [op.get("const")]):
+            named[name] = shape
+    assert set(named) == {
         "upsert_node",
         "delete_node",
         "upsert_character",
@@ -120,8 +135,38 @@ def test_response_schema_requires_reply_and_nullable_proposal():
         "set_theme",
         "generate_character_images",
         "generate_backgrounds",
-    ]
-    json.dumps(RESPONSE_SCHEMA)
+        "generate_expressions",
+        "generate_cg",
+        "generate_voice",
+    }
+    images = named["generate_character_images"]
+    assert set(images["required"]) == {
+        "op",
+        "character",
+        "appearance",
+        "character_type",
+        "framing",
+        "transparent",
+    }
+    assert "voice" not in images["properties"]
+    assert set(named["generate_backgrounds"]["properties"]) == {"op", "description"}
+
+
+def test_the_schema_is_written_in_the_order_a_model_should_write():
+    """Sorted keys forced operations to start with their alphabetically first field, which
+    funnelled the live model into set_title whatever it meant to do."""
+    assert next(iter(RESPONSE_SCHEMA["properties"])) == "reply"
+    for shape in _operation_shapes():
+        assert next(iter(shape["properties"])) == "op"
+    proposal = RESPONSE_SCHEMA["properties"]["proposal"]["anyOf"][0]
+    assert list(proposal["properties"]) == ["summary", "operations"]
+    node = _operation_shapes()[0]["properties"]["node"]["anyOf"]
+    assert all(next(iter(shape["properties"])) == "type" for shape in node)
+
+
+def test_writing_order_is_not_part_of_the_prompts_identity():
+    assert list(json.loads(canonical_json(RESPONSE_SCHEMA))["properties"]) == ["proposal", "reply"]
+    assert prompt_sha256() == PINNED_PROMPTS["narrative-assistant/v4"]
 
 
 def test_messages_are_system_history_then_request_with_story_as_delimited_data():

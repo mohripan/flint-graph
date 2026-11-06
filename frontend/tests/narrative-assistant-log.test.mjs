@@ -61,3 +61,22 @@ test("a long text is shortened, and an event from a newer server still shows", (
   assert.ok(long.detail.length <= 240 && long.detail.endsWith("…"));
   assert.deepEqual([future.label, future.detail, future.tone], ["something new", undefined, "neutral"]);
 });
+
+test("generation reads as one plain line per step", () => {
+  const lines = log.logLines([
+    event(1, "action.started", { label: "backgrounds of a rainy street" }),
+    event(2, "action.blocked", { label: "x", detail: "Approve a picture of Mira first." }),
+    event(3, "job.finished", { status: "completed", candidates: 4 }),
+    event(4, "job.finished", { status: "failed", error_code: "gpu_busy" }),
+    event(5, "job.finished", { status: "cancelled" }),
+    event(6, "asset.approved", { name: "Rainy street 2" }),
+  ]);
+  assert.deepEqual(lines.map(line => [line.label, line.detail, line.tone]), [
+    ["Generating", "backgrounds of a rainy street", "neutral"],
+    ["Couldn't start", "Approve a picture of Mira first.", "bad"],
+    ["Generation finished", "4 to review", "good"],
+    ["Generation failed", "gpu busy", "bad"],
+    ["Generation stopped", undefined, "muted"],
+    ["Approved", "Rainy street 2", "good"],
+  ]);
+});

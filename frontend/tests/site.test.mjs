@@ -134,7 +134,7 @@ test("paid requests and usage errors reload the balance", () => {
   for (const path of [`${project}/assets/background-jobs`, `${project}/characters/mira/portrait-jobs`,
     `${project}/characters/mira/looks/pose-jobs`, `${project}/characters/mira/looks/pose-repairs`,
     `${project}/look-scene-art-jobs`, `${project}/characters/mira/voice-jobs`, `${project}/style-jobs`,
-    `${project}/assistant/threads/t1/turns`, `${project}/releases`, `${project}/assistant/proposals/x/image-actions/2`])
+    `${project}/assistant/threads/t1/turns`, `${project}/releases`, `${project}/assistant/proposals/x/actions/2`])
     assert.equal(credits.paidRequest("POST", path), true, path);
   assert.equal(credits.paidRequest("GET", `${project}/style-jobs`), false);
   assert.equal(credits.paidRequest("POST", `${project}/style-jobs/j1/cancel`), false);

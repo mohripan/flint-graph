@@ -115,7 +115,7 @@ export interface AssistantProposalSummary {
 }
 export interface AssistantTurn {
   id: string; thread_id: string; sequence: number; request: string; base_revision_id: string;
-  focus_node: string | null; status: TurnStatus; cancel_requested: boolean; reply: string | null;
+  focus_node: string | null; auto_generate?: boolean; status: TurnStatus; cancel_requested: boolean; reply: string | null;
   error_code: string | null; model: string | null; attempts: number | null;
   created_at: string; updated_at: string; finished_at: string | null; proposal: AssistantProposalSummary | null;
 }
@@ -127,16 +127,23 @@ export type StoryOperation =
   | { op: "upsert_variable"; id: string; declaration: VariableDeclaration }
   | { op: "set_title"; title: string }
   | { op: "set_theme"; theme: StoryTheme | null }
-  | { op: "add_asset"; id: string; asset: { kind: "image" | "font"; path: string; sha256: string } }
+  | { op: "add_asset"; id: string; asset: { kind: "image" | "font" | "audio"; path: string; sha256: string } }
   | AssistantAction;
-// Suggested image jobs (story format 2): never applied with the proposal, started by the creator.
+// Generation (story format 2): never applied with the proposal; each becomes a job (ADR 0061).
 export type AssistantAction =
   | { op: "generate_character_images"; character: string; appearance: string;
       character_type: "girl" | "boy" | "woman" | "man" | "other"; framing: "portrait" | "full_body"; transparent: boolean; hires?: boolean }
-  | { op: "generate_backgrounds"; description: string };
+  | { op: "generate_backgrounds"; description: string }
+  | { op: "generate_expressions"; character: string; expressions: string[] }
+  | { op: "generate_cg"; characters: string[]; description: string }
+  | { op: "generate_voice"; character: string; lines: string[]; voice?: string | null };
 export interface AssistantProposal extends AssistantProposalSummary {
   turn_id: string; thread_id: string; base_revision_id: string; operations: StoryOperation[];
   diagnostics: Array<{ code: string; location: string }>; warnings: Array<{ code: string; location: string }>;
   decided_at: string | null; created_at: string;
 }
-export interface TurnWrite { request: string; base_revision_id: string; focus_node: string | null; idempotency_key: string }
+export interface TurnWrite {
+  request: string; base_revision_id: string; focus_node: string | null; idempotency_key: string;
+  /** Let this turn's generation actions start by themselves (ADR 0061). */
+  auto_generate?: boolean;
+}

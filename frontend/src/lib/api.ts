@@ -2,6 +2,7 @@ import type {repairBody} from "../narrative/poseRepairModel";
 import type { LedgerEntry, Prices } from "../site/creditsModel";
 import type {StyleHistory,StyleJob,styleBody} from "../narrative/styleModel";
 import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
+import type { ActionStatus } from "../narrative/assistantActions";
 import type { ThreadEvent } from "../narrative/assistantLog";
 import type {
   NarrativeProject,
@@ -102,7 +103,6 @@ export interface ImageJob {
   // High resolution: width × height is the base render, upscaled to the output size.
   hires: { scale: number; strength: number } | null; output_width: number; output_height: number;
 }
-export interface AssistantImageActionStatus { index: number; job: ImageJob | null }
 import type {
   AnswerProvenance,
   Conversation,
@@ -927,16 +927,16 @@ export const api = {
     });
   },
 
-  listAssistantImageActions(tenantId: string, projectId: string, proposalId: string,
-    signal?: AbortSignal): Promise<AssistantImageActionStatus[]> {
-    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/image-actions`, {
+  listAssistantActions(tenantId: string, projectId: string, proposalId: string,
+    signal?: AbortSignal): Promise<ActionStatus[]> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/actions`, {
       headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
   },
 
-  startAssistantImageAction(tenantId: string, projectId: string, proposalId: string, index: number,
-    signal?: AbortSignal): Promise<ImageJob> {
-    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/image-actions/${index}`, {
+  startAssistantAction(tenantId: string, projectId: string, proposalId: string, index: number,
+    signal?: AbortSignal): Promise<ActionStatus> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/actions/${index}`, {
       method: "POST", headers: tenantHeaders(tenantId), signal,
     });
   },

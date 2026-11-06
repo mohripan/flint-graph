@@ -238,6 +238,16 @@ turn rows stay the operational ledger for fencing, and a test asserts the fold a
 them. The database refuses `UPDATE`/`DELETE` on the log. Read
 `docs/reports/2026-11-06-assistant-thread-log.md`.
 
+[ADR 0061](docs/adr/0061-assistant-runs-generation.md) (migration 0046, prompt v4) makes the
+assistant really generate: sprites, backgrounds, expressions, CGs and voices, with results and
+Approve/Use in the chat. `narrative_assistant_actions` is the ledger; `dispatch_actions` and
+`reconcile_actions` run in the assistant worker, so nothing needs an open page, and the
+worker therefore needs the API's image, voice and object-store settings. The output schema has
+one exact shape per operation, and `response_schema()` orders it (`reply`, `op`, `type` first):
+Ollama's grammar writes fields in schema order, and the lock's sorted keys funnelled the model
+into `set_title`. New story fields the model may write must be added to that schema too. Read
+`docs/reports/2026-11-06-assistant-generation.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

@@ -3,10 +3,10 @@ import type { AssistantAction, AssistantTurn, ProposalStatus, StoryDraft, StoryO
 export interface TurnIntent extends TurnWrite {}
 // A lost acknowledgement resends the same key; any change to the message is a new turn.
 export function prepareTurn(previous: TurnIntent | null, request: string, baseRevisionId: string,
-  focus: string | null, key = () => crypto.randomUUID()): TurnIntent {
+  focus: string | null, key = () => crypto.randomUUID(), autoGenerate = false): TurnIntent {
   return previous && previous.request === request && previous.base_revision_id === baseRevisionId
-    && previous.focus_node === focus ? previous
-    : { request, base_revision_id: baseRevisionId, focus_node: focus, idempotency_key: key() };
+    && previous.focus_node === focus && Boolean(previous.auto_generate) === autoGenerate ? previous
+    : { request, base_revision_id: baseRevisionId, focus_node: focus, idempotency_key: key(), auto_generate: autoGenerate };
 }
 export function sendBlocker(state: { canWrite: boolean; dirty: boolean; saving: boolean; sending: boolean;
   active: boolean; text: string }): string | null {
@@ -41,27 +41,49 @@ export interface ProposalChange {
 function text(value: unknown): string | undefined {
   return value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : undefined;
 }
+const ACTION_OPS = new Set(["generate_character_images", "generate_backgrounds", "generate_expressions", "generate_cg", "generate_voice"]);
 export function isAction(operation: StoryOperation): operation is AssistantAction {
-  return operation.op === "generate_character_images" || operation.op === "generate_backgrounds";
+  return ACTION_OPS.has(operation.op);
 }
-/** One line per suggested image job, and whether it can start against the saved story. */
+/** A proposal with only generation has nothing to accept: its actions are all there is. */
+export function hasStoryChanges(operations: StoryOperation[]): boolean {
+  return operations.some(operation => !isAction(operation));
+}
 /** Plain notes for a proposal's warnings: a dropped picture suggestion, then map problems. */
 export function proposalNotes(warnings: Array<{ code: string; location: string }>): string[] {
   const notes: string[] = [];
   if (warnings.some(item => item.code === "image_action_dropped"))
-    notes.push("A picture suggestion was left out because the assistant didn't finish it. Accept the story changes, then generate the picture from Characters.");
+    notes.push("Something it meant to generate was left out because it wasn't usable. Ask again, or generate it from Characters.");
   if (warnings.some(item => item.code !== "image_action_dropped"))
     notes.push("Some scenes would be unreachable or loop; review the map after accepting.");
   return notes;
 }
 
-export function proposalActions(story: Pick<StoryDraft, "characters"> | null, operations: StoryOperation[]):
-  Array<{ index: number; action: AssistantAction; label: string; ready: boolean }> {
-  return operations.flatMap((action, index) => !isAction(action) ? [] : [action.op === "generate_backgrounds"
-    ? { index, action, label: `Generate backgrounds: ${action.description}`, ready: true }
-    : { index, action, ready: Boolean(story?.characters[action.character]),
-        label: `Generate ${action.transparent ? "transparent sprites" : action.framing === "full_body" ? "full-body portraits" : "portraits"}`
-          + ` for ${story?.characters[action.character]?.name ?? action.character}: ${action.appearance}` }]);
+/** One line per generation action, and whether it can start against the saved story. */
+export interface ProposalActionRow { index: number; action: AssistantAction; label: string; ready: boolean }
+export function proposalActions(story: Pick<StoryDraft, "characters"> | null, operations: StoryOperation[]): ProposalActionRow[] {
+  const named = (id: string) => story?.characters[id]?.name ?? id;
+  const known = (id: string) => Boolean(story?.characters[id]);
+  return operations.flatMap((action, index): ProposalActionRow[] => {
+    if (!isAction(action)) return [];
+    switch (action.op) {
+      case "generate_backgrounds":
+        return [{ index, action, label: `Generate backgrounds: ${action.description}`, ready: true }];
+      case "generate_expressions":
+        return [{ index, action, ready: known(action.character),
+          label: `Generate expressions for ${named(action.character)}: ${action.expressions.join(", ")}` }];
+      case "generate_cg":
+        return [{ index, action, ready: action.characters.every(known),
+          label: `Generate CGs of ${action.characters.map(named).join(" and ")}: ${action.description}` }];
+      case "generate_voice":
+        return [{ index, action, ready: known(action.character),
+          label: `Generate voice for ${action.lines.length} ${action.lines.length === 1 ? "line" : "lines"} of ${named(action.character)}` }];
+      default:
+        return [{ index, action, ready: known(action.character),
+          label: `Generate ${action.transparent ? "transparent sprites" : action.framing === "full_body" ? "full-body portraits" : "portraits"}`
+            + ` for ${named(action.character)}: ${action.appearance}` }];
+    }
+  });
 }
 export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" | "variables"> | null,
   operations: StoryOperation[]): ProposalChange[] {
@@ -94,7 +116,7 @@ export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" |
       case "set_theme":
         return { kind: operation.theme ? "changed" : "removed", target: "theme", label: "Look (theme)" };
       case "add_asset":
-        return { kind: "added", target: `assets.${operation.id}`, label: `${operation.asset.kind === "font" ? "Font" : "Image"} ${operation.id} from the library` };
+        return { kind: "added", target: `assets.${operation.id}`, label: `${{ font: "Font", audio: "Voice clip", image: "Image" }[operation.asset.kind]} ${operation.id} from the library` };
       default: {
         // A newer server may send an operation this Studio doesn't know yet.
         const op = (operation as { op: string }).op;

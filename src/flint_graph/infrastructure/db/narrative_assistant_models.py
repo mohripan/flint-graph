@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     event,
+    false,
     func,
     text,
 )
@@ -124,6 +125,8 @@ class NarrativeAssistantTurn(PromptBundleReference, UUIDPrimaryKeyMixin, Timesta
     focus_node: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[UUID]
     request_hash: Mapped[str] = mapped_column(String(64))
+    # The creator let this turn's generation actions start by themselves (ADR 0061).
+    auto_generate: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     status: Mapped[str] = mapped_column(String(16), default="queued")
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     execution_token: Mapped[UUID | None]
@@ -204,6 +207,77 @@ class NarrativeAssistantProposal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="RESTRICT")
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The operational state of one generation action of a proposal (ADR 0061).
+
+    Like turn rows, this is a ledger to lock and poll. What happened is in the thread log.
+    """
+
+    __tablename__ = "narrative_assistant_actions"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "op_index", name="uq_narrative_assistant_action_op"),
+        ForeignKeyConstraint(
+            ["proposal_id"],
+            ["narrative_assistant_proposals.id"],
+            name="fk_narrative_assistant_action_proposal",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["thread_id", "project_id", "tenant_id"],
+            [
+                "narrative_assistant_threads.id",
+                "narrative_assistant_threads.project_id",
+                "narrative_assistant_threads.tenant_id",
+            ],
+            name="fk_narrative_assistant_action_thread",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('offered','waiting','pending','started','blocked','finished','skipped')",
+            name="ck_narrative_assistant_action_status",
+        ),
+        CheckConstraint(
+            "image_job_id IS NULL OR voice_job_id IS NULL",
+            name="ck_narrative_assistant_action_one_job",
+        ),
+        Index(
+            "ix_narrative_assistant_action_open",
+            "status",
+            "created_at",
+            postgresql_where=text("status IN ('pending','started')"),
+            sqlite_where=text("status IN ('pending','started')"),
+        ),
+        Index(
+            "ix_narrative_assistant_action_image_job",
+            "image_job_id",
+            postgresql_where=text("image_job_id IS NOT NULL"),
+            sqlite_where=text("image_job_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_narrative_assistant_action_voice_job",
+            "voice_job_id",
+            postgresql_where=text("voice_job_id IS NOT NULL"),
+            sqlite_where=text("voice_job_id IS NOT NULL"),
+        ),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    thread_id: Mapped[UUID]
+    proposal_id: Mapped[UUID]
+    op_index: Mapped[int] = mapped_column(Integer)
+    op: Mapped[str] = mapped_column(String(40))
+    author_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(String(16))
+    image_job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("narrative_image_jobs.id", ondelete="RESTRICT")
+    )
+    voice_job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("narrative_voice_jobs.id", ondelete="RESTRICT")
+    )
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    detail: Mapped[str | None] = mapped_column(String(300))
 
 
 class NarrativeAssistantTurnEvent(UUIDPrimaryKeyMixin, Base):

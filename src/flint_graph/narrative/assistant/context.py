@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from flint_graph.narrative.assistant.assets import LibraryEntry
 from flint_graph.narrative.assistant.prompts import system_prompt
+from flint_graph.narrative.voices import VOICES
 from flint_graph.prompts.source import render
 
 HISTORY_TURNS = 8
@@ -61,12 +62,16 @@ def build_turn_messages(
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
     earlier: Sequence[str] = (),
+    voices: Mapping[str, str] | None = None,
+    capabilities: Sequence[str] = (),
 ) -> tuple[list[dict[str, str]], ContextStats]:
     messages = [{"role": "system", "content": system_prompt()}]
     recent = list(history)[-HISTORY_TURNS:]
     for turn in recent:
         messages.append({"role": turn.role, "content": turn.content[:HISTORY_CHARS]})
-    context, outlined, shown = _render(story, focus, budget, library, profiles or {}, earlier)
+    context, outlined, shown = _render(
+        story, focus, budget, library, profiles or {}, earlier, voices or {}, capabilities
+    )
     messages.append(
         {
             "role": "user",
@@ -158,7 +163,15 @@ def render_story(story: dict[str, Any], focus: str | None, budget: int) -> str:
     return _render(story, focus, budget)[0]
 
 
-def _character(key: str, item: dict[str, Any], looks: str | None) -> str:
+def _stock_voices() -> str:
+    by_gender = {
+        gender: " ".join(voice.id for voice in VOICES if voice.gender == gender)
+        for gender in ("female", "male")
+    }
+    return f"stock voices: female {by_gender['female']}; male {by_gender['male']}"
+
+
+def _character(key: str, item: dict[str, Any], looks: str | None, voice: str | None) -> str:
     details = []
     if item.get("sprites"):
         details.append(
@@ -171,6 +184,8 @@ def _character(key: str, item: dict[str, Any], looks: str | None) -> str:
         details.append("framing " + json.dumps(item["stage"], separators=(",", ":")))
     if looks:
         details.append("looks: " + _quote(looks[:200]))
+    if voice:
+        details.append(f"voice {voice}")
     return f"  {key}: {_quote(item.get('name'))}" + (f" ({'; '.join(details)})" if details else "")
 
 
@@ -181,11 +196,14 @@ def _render(
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
     earlier: Sequence[str] = (),
+    voices: Mapping[str, str] | None = None,
+    capabilities: Sequence[str] = (),
 ) -> tuple[str, int, str | None]:
     """Return the context text, the number of outlined scenes and the shown focus scene."""
     nodes: dict[str, Any] = story["nodes"]
     staged = story.get("schema_version") == "2"
     looks = profiles or {}
+    spoken = voices or {}
     header = [
         f"title: {_quote(story['title'])}",
         f"language: {story['language']}",
@@ -193,7 +211,10 @@ def _render(
         + (" (stage, expressions, sprites and theme)" if staged else " (text only)"),
         f"entry: {story['entry']}",
         "characters:",
-        *(_character(key, item, looks.get(key)) for key, item in story["characters"].items()),
+        *(
+            _character(key, item, looks.get(key), spoken.get(key))
+            for key, item in story["characters"].items()
+        ),
         "variables:",
     ]
     for key, declaration in story["variables"].items():
@@ -207,12 +228,17 @@ def _render(
             header.append("library (approved files; use an ID and it is added to the story):")
             header += [
                 f"  {entry.key}: {entry.library_kind} {_quote(entry.name[:40])}"
+                + (f" of {entry.character_id}" if entry.character_id else "")
                 for entry in library
             ]
         if story.get("theme"):
             header.append(
                 "theme: " + json.dumps(story["theme"], ensure_ascii=False, separators=(",", ":"))
             )
+    if capabilities:
+        header.append("generation available: " + ", ".join(capabilities))
+        if "voices" in capabilities:
+            header.append(_stock_voices())
     if earlier:
         # Older turns of this thread, folded from its log; escaped like any other data.
         header += ["earlier in this conversation (oldest first):", *earlier]

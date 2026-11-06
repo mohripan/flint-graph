@@ -16,7 +16,14 @@ from flint_graph.infrastructure import anthropic, ollama
 from flint_graph.narrative.assistant.context import build_messages
 from flint_graph.narrative.assistant.prompts import prompt_sha256
 from flint_graph.prompts.catalog import PromptEntry
-from flint_graph.prompts.source import PromptBundle, current_snapshot, use_snapshot
+from flint_graph.prompts.source import (
+    LockedPromptSource,
+    PromptBundle,
+    current_snapshot,
+    use_snapshot,
+)
+
+ASSISTANT_V3_BUNDLE = "5a46a5fb57616bcec4c7f955d7beb3fb10077db7b43738a64dba43f9123760b9"
 
 GOLDEN = json.loads(
     (Path(__file__).parents[1] / "fixtures/prompts/legacy_renderings.json").read_text(
@@ -35,6 +42,11 @@ def test_migrated_builders_preserve_recorded_prompt_bytes_and_legacy_identity():
     answer = AnswerGenerationRequest.model_validate(GOLDEN["answer_request"])
     support = SupportCheckRequest.model_validate(GOLDEN["support_request"])
     expected = GOLDEN["expected"]
+    # These bytes were recorded against the bundle before assistant prompt v4; it stays in
+    # the lock, and replaying it must still give exactly what it gave then.
+    with use_snapshot(LockedPromptSource.load().get(ASSISTANT_V3_BUNDLE)):
+        assistant_messages = build_messages(GOLDEN["story"], GOLDEN["request"])
+        assistant_hash = prompt_sha256()
     actual = {
         "answer_anthropic_system": anthropic._answer_system_prompt(),
         "answer_anthropic_user": anthropic._answer_user_prompt(answer),
@@ -49,8 +61,8 @@ def test_migrated_builders_preserve_recorded_prompt_bytes_and_legacy_identity():
             )
         ),
         "extraction_schema": ollama._proposal_extraction_schema(),
-        "assistant_messages": build_messages(GOLDEN["story"], GOLDEN["request"]),
-        "assistant_hash": prompt_sha256(),
+        "assistant_messages": assistant_messages,
+        "assistant_hash": assistant_hash,
         "assistant_repair": _repair_request([Diagnostic("unknown_asset", "operations.0")]),
         "portrait": asdict(
             imagegen.portrait_request("white hair, blue coat", "boy", "full_body", transparent=True)

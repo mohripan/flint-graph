@@ -58,9 +58,11 @@ class NarrativeAssistantActivities:
         model: AssistantModel | None,
         context_chars: int,
         max_attempts: int = 3,
+        capabilities: tuple[str, ...] = (),
     ) -> None:
         self.factory, self.model = factory, model
         self.context_chars, self.max_attempts = context_chars, max_attempts
+        self.capabilities = capabilities
 
     @staticmethod
     def _context(payload: object, *, finalizer: bool = False) -> tuple[TurnPayload, UUID, int]:
@@ -125,6 +127,8 @@ class NarrativeAssistantActivities:
                     observer=events,
                     library=work.library,
                     profiles=work.profiles,
+                    voices=work.voices,
+                    capabilities=self.capabilities,
                 )
             await events.flush()
         except AssistantModelError as error:

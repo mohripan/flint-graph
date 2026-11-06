@@ -73,11 +73,11 @@ async def test_distinct_suggestions_keep_distinct_jobs_even_with_identical_descr
         json={"idempotency_key": str(uuid4())},
     )
     assert accepted.status_code == 201, accepted.text
-    url = f"{path}/assistant/proposals/{proposal}/image-actions"
+    url = f"{path}/assistant/proposals/{proposal}/actions"
     first = await client.post(f"{url}/0", headers=headers)
     second = await client.post(f"{url}/1", headers=headers)
     assert first.status_code == second.status_code == 202
-    assert first.json()["id"] != second.json()["id"]
+    assert first.json()["image_job"]["id"] != second.json()["image_job"]["id"]
     assert (
         len((await client.get(f"{path}/assets/background-jobs", headers=headers)).json()["jobs"])
         == 2
@@ -106,10 +106,10 @@ async def test_postgres_concurrent_clicks_resolve_to_one_job(narrative_env, assi
         headers=headers,
         json={"idempotency_key": str(uuid4())},
     )
-    url = f"{path}/assistant/proposals/{proposal}/image-actions/0"
+    url = f"{path}/assistant/proposals/{proposal}/actions/0"
     responses = await asyncio.gather(*(client.post(url, headers=headers) for _ in range(3)))
     assert all(response.status_code == 202 for response in responses)
-    assert len({response.json()["id"] for response in responses}) == 1
+    assert len({response.json()["image_job"]["id"] for response in responses}) == 1
     assert (
         len((await client.get(f"{path}/assets/background-jobs", headers=headers)).json()["jobs"])
         == 1
@@ -133,9 +133,15 @@ async def test_background_action_survives_navigation_and_replays_without_another
         project,
         [{"op": "generate_backgrounds", "description": "school courtyard at night"}],
     )
-    actions = f"{path}/assistant/proposals/{proposal}/image-actions"
-    assert (await client.get(actions, headers=headers)).json() == [{"index": 0, "job": None}]
-    assert (await client.post(f"{actions}/0", headers=headers)).status_code == 409
+    actions = f"{path}/assistant/proposals/{proposal}/actions"
+    [offered] = (await client.get(actions, headers=headers)).json()
+    assert (offered["index"], offered["status"], offered["image_job"]) == (0, "offered", None)
+    # A background needs nothing the proposal adds, so it can start before acceptance.
+    first = await client.post(f"{actions}/0", headers=headers)
+    assert first.status_code == 202, first.text
+    job_id = first.json()["image_job"]["id"]
+    second = await client.post(f"{actions}/0", headers=headers)
+    assert second.status_code == 202 and second.json()["image_job"]["id"] == job_id
     assert (
         await client.post(
             f"{path}/assistant/proposals/{proposal}/accept",
@@ -143,18 +149,14 @@ async def test_background_action_survives_navigation_and_replays_without_another
             json={"idempotency_key": str(uuid4())},
         )
     ).status_code == 201
-    first = await client.post(f"{actions}/0", headers=headers)
-    assert first.status_code == 202, first.text
-    second = await client.post(f"{actions}/0", headers=headers)
-    assert second.status_code == 202 and second.json()["id"] == first.json()["id"]
     restored = (await client.get(actions, headers=headers)).json()
-    assert restored[0]["job"]["id"] == first.json()["id"]
-    assert restored[0]["job"]["status"] == "queued"
+    assert restored[0]["image_job"]["id"] == job_id
+    assert restored[0]["image_job"]["status"] == "queued"
     listed = (await client.get(f"{path}/assets/background-jobs", headers=headers)).json()["jobs"]
-    assert [job["id"] for job in listed] == [first.json()["id"]]
+    assert [job["id"] for job in listed] == [job_id]
     _, _, other = await new_story(client, name="Other story")
     assert (
-        await client.get(f"{other}/assistant/proposals/{proposal}/image-actions", headers=headers)
+        await client.get(f"{other}/assistant/proposals/{proposal}/actions", headers=headers)
     ).status_code == 404
     assert (await client.post(f"{actions}/9", headers=headers)).status_code == 404
 
@@ -194,13 +196,13 @@ async def test_character_action_defaults_transparent_sprites_to_hires_but_keeps_
             json={"idempotency_key": str(uuid4())},
         )
     ).status_code == 201
-    url = f"{path}/assistant/proposals/{proposal}/image-actions/1"
+    url = f"{path}/assistant/proposals/{proposal}/actions/1"
     started = await client.post(url, headers=headers)
     assert started.status_code == 202, started.text
-    data = started.json()
+    data = started.json()["image_job"]
     assert data["transparent"] is True
     assert (data["hires"] is not None) is (hires is None)
-    assert (await client.post(url, headers=headers)).json()["id"] == data["id"]
+    assert (await client.post(url, headers=headers)).json()["image_job"]["id"] == data["id"]
 
 
 @pytest.mark.anyio
@@ -252,9 +254,11 @@ async def test_pre_fix_matching_background_jobs_are_recovered_without_mutating_o
             job = await session.get(NarrativeImageJob, UUID(job_id))
             job.created_at = record.decided_at + timedelta(seconds=index + 1)
         await session.commit()
-    actions = f"{path}/assistant/proposals/{proposal}/image-actions"
-    assert (await client.get(actions, headers=headers)).json()[0]["job"]["id"] == created[-1]
-    assert (await client.post(f"{actions}/0", headers=headers)).json()["id"] == created[-1]
+    actions = f"{path}/assistant/proposals/{proposal}/actions"
+    assert (await client.get(actions, headers=headers)).json()[0]["image_job"]["id"] == created[-1]
+    assert (await client.post(f"{actions}/0", headers=headers)).json()["image_job"]["id"] == (
+        created[-1]
+    )
     assert (
         len((await client.get(f"{path}/assets/background-jobs", headers=headers)).json()["jobs"])
         == 2

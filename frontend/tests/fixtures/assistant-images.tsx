@@ -20,15 +20,17 @@ const proposal = { id: "fixture-proposal", status: "accepted", operations: [{ op
 const read = () => JSON.parse(localStorage.getItem("assistant-image-fixture") ?? "null");
 let job = read();
 let starts = Number(localStorage.getItem("assistant-image-fixture-starts") ?? 0);
-api.listAssistantImageActions = async () => [{ index: 0, job }];
-api.startAssistantImageAction = async () => {
+const status = () => ({ index: 0, op: "generate_backgrounds", label: "backgrounds", status: job ? "started" : "offered",
+  needs_accept: false, error_code: null, detail: null, image_job: job, voice_job: null });
+api.listAssistantActions = async () => [status()];
+api.startAssistantAction = async () => {
   if (!job) {
     starts += 1; localStorage.setItem("assistant-image-fixture-starts", String(starts));
     job = { id: "fixture-job", purpose: "background", status: "running", progress: 1, count: 4, cancel_requested: false, created_at: "2026-10-31T00:00:00Z", assets: [] };
     localStorage.setItem("assistant-image-fixture", JSON.stringify(job));
   }
   await new Promise(resolve => setTimeout(resolve, 500));
-  return job;
+  return status();
 };
 api.listBackgroundJobs = async () => ({ jobs: job ? [job] : [] });
 api.listNarrativeAssets = async (_tenant, _project, query) => ({ assets: query?.status === "approved" ? [asset]
@@ -43,7 +45,7 @@ function Fixture() {
     <nav>{["Assistant", "Assets", "Stage"].map(name => <button key={name} onClick={() => setView(name)}>{name}</button>)}</nav>
     <button onClick={() => { job = { ...job, status: "completed", progress: 4, assets: generated }; localStorage.setItem("assistant-image-fixture", JSON.stringify(job)); }}>Complete fixture job</button>
     <CharacterProfilesContext.Provider value={{ tenantId: "fixture", projectId: "fixture", profiles: {}, put: () => {}, reload: async () => {} }}>
-      {view === "Assistant" && <ProposalActions proposal={proposal} story={story} tenantId="fixture" projectId="fixture" canWrite />}
+      {view === "Assistant" && <ProposalActions dirty={false} onApply={async () => {}} proposal={proposal} story={story} tenantId="fixture" projectId="fixture" canWrite />}
       {view === "Assets" && <AssetLibrary tenantId="fixture" projectId="fixture" canWrite />}
       {view === "Stage" && <SceneStage story={story} head="ending" inherited={{ background: "courtyard", cg: null, characters: {} }} readOnly={false}
         onChange={() => { throw new Error("Reading inherited state must not edit the story"); }} onError={error => { throw new Error(error); }} />}

@@ -17,14 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from flint_graph.api.dependencies import (
     AuditActorDep,
     CurrentUserDep,
+    NarrativeArtifactStoreDep,
     SessionDep,
     SettingsDep,
     TenantIdDep,
     TenantMemberDep,
 )
 from flint_graph.api.narrative_assistant_schemas import (
+    AssistantActionResponse,
     AssistantDecision,
-    AssistantImageActionResponse,
     AssistantProposalResponse,
     AssistantProposalSummary,
     AssistantThreadCreate,
@@ -34,10 +35,10 @@ from flint_graph.api.narrative_assistant_schemas import (
     AssistantTurnEventResponse,
     AssistantTurnResponse,
 )
-from flint_graph.api.narrative_character_schemas import ImageJobResponse
 from flint_graph.api.narrative_schemas import NarrativeRevisionResponse
 from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
+from flint_graph.api.routes.narrative_voices import voice_job_response
 from flint_graph.application.services.narrative_assistant import (
     accept_proposal,
     cancel_turn,
@@ -51,10 +52,17 @@ from flint_graph.application.services.narrative_assistant import (
     reject_proposal,
     turn_status,
 )
+from flint_graph.application.services.narrative_assistant_actions import (
+    ActionView,
+    list_actions,
+    queue_action,
+    start_action,
+)
 from flint_graph.application.services.narrative_assistant_events import events_after
-from flint_graph.application.services.narrative_assistant_images import action_jobs, start_action
 from flint_graph.application.services.narrative_assistant_log import list_thread_events
 from flint_graph.application.services.narrative_images import get_image_job
+from flint_graph.application.services.narrative_voices import get_voice_job
+from flint_graph.domain.errors import NotFoundError, TooManyRequestsError
 from flint_graph.infrastructure.db.models import NarrativeAssistantProposal, NarrativeAssistantTurn
 from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
 
@@ -66,35 +74,55 @@ STREAM_KEEPALIVE_SECONDS = 10.0
 STREAM_MAX_SECONDS = 300.0
 
 
-@router.get(
-    "/proposals/{proposal_id}/image-actions", response_model=list[AssistantImageActionResponse]
-)
-async def image_actions_endpoint(
+async def _action_response(
+    session: AsyncSession, *, tenant_id: UUID, project_id: UUID, view: ActionView
+) -> AssistantActionResponse:
+    image_job = voice_job = None
+    if view.image_job is not None:
+        job, assets = await get_image_job(
+            session, tenant_id=tenant_id, project_id=project_id, job_id=view.image_job.id
+        )
+        image_job = job_response(job, assets)
+    elif view.voice_job is not None:
+        spoken, clips = await get_voice_job(
+            session, tenant_id=tenant_id, project_id=project_id, job_id=view.voice_job.id
+        )
+        voice_job = voice_job_response(spoken, clips)
+    return AssistantActionResponse(
+        index=view.index,
+        op=view.op,
+        label=view.label,
+        status=view.status,
+        needs_accept=view.needs_accept,
+        error_code=view.error_code,
+        detail=view.detail,
+        image_job=image_job,
+        voice_job=voice_job,
+    )
+
+
+@router.get("/proposals/{proposal_id}/actions", response_model=list[AssistantActionResponse])
+async def list_actions_endpoint(
     project_id: UUID,
     proposal_id: UUID,
     tenant_id: TenantIdDep,
     session: SessionDep,
-) -> list[AssistantImageActionResponse]:
-    result = []
-    for index, job in await action_jobs(
+) -> list[AssistantActionResponse]:
+    views = await list_actions(
         session, tenant_id=tenant_id, project_id=project_id, proposal_id=proposal_id
-    ):
-        if job is not None:
-            job, assets = await get_image_job(
-                session, tenant_id=tenant_id, project_id=project_id, job_id=job.id
-            )
-            result.append(AssistantImageActionResponse(index=index, job=job_response(job, assets)))
-        else:
-            result.append(AssistantImageActionResponse(index=index, job=None))
-    return result
+    )
+    return [
+        await _action_response(session, tenant_id=tenant_id, project_id=project_id, view=view)
+        for view in views
+    ]
 
 
 @router.post(
-    "/proposals/{proposal_id}/image-actions/{index}",
-    response_model=ImageJobResponse,
+    "/proposals/{proposal_id}/actions/{index}",
+    response_model=AssistantActionResponse,
     status_code=202,
 )
-async def start_image_action_endpoint(
+async def start_action_endpoint(
     project_id: UUID,
     proposal_id: UUID,
     index: int,
@@ -103,24 +131,43 @@ async def start_image_action_endpoint(
     session: SessionDep,
     actor: AuditActorDep,
     settings: SettingsDep,
-) -> ImageJobResponse:
-    job = await _persist(
-        session,
-        start_action(
+    store: NarrativeArtifactStoreDep,
+) -> AssistantActionResponse:
+    """Start an action or retry a blocked one; a full queue hands it to the dispatcher."""
+    try:
+        await _persist(
             session,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            proposal_id=proposal_id,
-            index=index,
-            author_user_id=current_user.user.id,
-            actor=actor,
-            settings=settings,
-        ),
+            start_action(
+                session,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                proposal_id=proposal_id,
+                index=index,
+                author_user_id=current_user.user.id,
+                actor=actor,
+                settings=settings,
+                store=store,
+            ),
+        )
+    except TooManyRequestsError:
+        await session.rollback()
+        await _persist(
+            session,
+            queue_action(
+                session,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                proposal_id=proposal_id,
+                index=index,
+            ),
+        )
+    views = await list_actions(
+        session, tenant_id=tenant_id, project_id=project_id, proposal_id=proposal_id
     )
-    job, assets = await get_image_job(
-        session, tenant_id=tenant_id, project_id=project_id, job_id=job.id
-    )
-    return job_response(job, assets)
+    view = next((item for item in views if item.index == index), None)
+    if view is None:
+        raise NotFoundError("This action was not found.")
+    return await _action_response(session, tenant_id=tenant_id, project_id=project_id, view=view)
 
 
 def turn_response(
@@ -133,6 +180,7 @@ def turn_response(
         request=turn.request,
         base_revision_id=turn.base_revision_id,
         focus_node=turn.focus_node,
+        auto_generate=turn.auto_generate,
         status=turn.status,
         cancel_requested=turn.cancel_requested,
         reply=turn.reply,
@@ -259,6 +307,7 @@ async def post_turn_endpoint(
             available=settings.narrative_assistant_provider not in (None, "disabled"),
             max_active_turns=settings.narrative_assistant_max_active_turns_per_workspace,
             provider=settings.narrative_assistant_provider,
+            auto_generate=payload.auto_generate,
         ),
     )
     return turn_response(turn, None)

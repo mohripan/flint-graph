@@ -5,11 +5,21 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from flint_graph.api.narrative_character_schemas import ImageJobResponse
+from flint_graph.api.routes.narrative_voices import VoiceJobResponse
 
 
-class AssistantImageActionResponse(BaseModel):
+class AssistantActionResponse(BaseModel):
+    """One generation action of a proposal and the job it became, if any (ADR 0061)."""
+
     index: int
-    job: ImageJobResponse | None
+    op: str
+    label: str
+    status: str
+    needs_accept: bool
+    error_code: str | None
+    detail: str | None
+    image_job: ImageJobResponse | None
+    voice_job: VoiceJobResponse | None
 
 
 class AssistantThreadCreate(BaseModel):
@@ -24,6 +34,7 @@ class AssistantTurnCreate(BaseModel):
     base_revision_id: UUID
     focus_node: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     idempotency_key: UUID
+    auto_generate: bool = False
 
 
 class AssistantDecision(BaseModel):
@@ -74,6 +85,7 @@ class AssistantTurnResponse(BaseModel):
     request: str
     base_revision_id: UUID
     focus_node: str | None
+    auto_generate: bool
     status: str
     cancel_requested: bool
     reply: str | None

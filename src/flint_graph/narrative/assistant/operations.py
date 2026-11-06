@@ -136,7 +136,47 @@ class GenerateBackgrounds(_Operation):
         return _renamed(data, "appearance", "description")
 
 
-ACTIONS = (GenerateCharacterImages, GenerateBackgrounds)
+_Expression = Annotated[str, Field(min_length=1, max_length=40)]
+
+
+class GenerateExpressions(_Operation):
+    """An action: repaint only the face of the character's approved picture (ADR 0041)."""
+
+    op: Literal["generate_expressions"]
+    character: _Key
+    expressions: Annotated[list[_Expression], Field(min_length=1, max_length=4)]
+
+
+class GenerateCg(_Operation):
+    """An action: draw an event illustration from each character's approved picture."""
+
+    op: Literal["generate_cg"]
+    characters: Annotated[list[_Key], Field(min_length=1, max_length=2)]
+    description: _Appearance
+
+    @model_validator(mode="before")
+    @classmethod
+    def _scene_is_a_description(cls, data: Any) -> Any:
+        return _renamed(data, "scene", "description")
+
+
+class GenerateVoice(_Operation):
+    """An action: speak saved lines of one character, one job and one clip per line."""
+
+    op: Literal["generate_voice"]
+    character: _Key
+    lines: Annotated[list[_Key], Field(min_length=1, max_length=24)]
+    # A stock voice for a character who has none yet; a chosen voice is never replaced.
+    voice: str | None = None
+
+
+ACTIONS = (
+    GenerateCharacterImages,
+    GenerateBackgrounds,
+    GenerateExpressions,
+    GenerateCg,
+    GenerateVoice,
+)
 
 Operation = Annotated[
     UpsertNode
@@ -150,9 +190,47 @@ Operation = Annotated[
     | SetTheme
     | AddAsset
     | GenerateCharacterImages
-    | GenerateBackgrounds,
+    | GenerateBackgrounds
+    | GenerateExpressions
+    | GenerateCg
+    | GenerateVoice,
     Field(discriminator="op"),
 ]
+
+
+def action_label(action: Any) -> str:
+    """A short, plain description of an action for the thread log and the model."""
+    if isinstance(action, GenerateBackgrounds):
+        return f"backgrounds of {action.description[:80]}"
+    if isinstance(action, GenerateExpressions):
+        return f"{', '.join(action.expressions)} expressions of {action.character}"
+    if isinstance(action, GenerateCg):
+        return f"CGs of {' and '.join(action.characters)}: {action.description[:80]}"
+    if isinstance(action, GenerateVoice):
+        lines = len(action.lines)
+        return f"voice for {lines} line{'' if lines == 1 else 's'} of {action.character}"
+    if isinstance(action, GenerateCharacterImages):
+        kind = "sprites" if action.transparent else "portraits"
+        return f"{kind} of {action.character}"
+    return "generation"
+
+
+def action_needs_accept(story: dict[str, Any], operations: Sequence[Any], action: Any) -> bool:
+    """Whether an action depends on what its own proposal adds to ``story``.
+
+    Generating before acceptance is safe: results are only candidates. Generating for a
+    character or line the story does not have yet is not possible, and a line the proposal
+    rewrites must be spoken with its new words.
+    """
+    characters = story.get("characters") or {}
+    if isinstance(action, GenerateCg):
+        return any(character not in characters for character in action.characters)
+    if isinstance(action, GenerateCharacterImages | GenerateExpressions):
+        return action.character not in characters
+    if isinstance(action, GenerateVoice):
+        rewritten = {item.id for item in operations if isinstance(item, UpsertNode)}
+        return action.character not in characters or bool(rewritten.intersection(action.lines))
+    return False
 
 
 def field_choices(op: str, field: str) -> tuple[str, ...]:
@@ -200,6 +278,12 @@ def _target(operation: Operation, index: int) -> str:
         return f"actions.images.{operation.character}.{index}"
     if isinstance(operation, GenerateBackgrounds):
         return f"actions.backgrounds.{index}"
+    if isinstance(operation, GenerateExpressions):
+        return f"actions.expressions.{operation.character}.{index}"
+    if isinstance(operation, GenerateCg):
+        return f"actions.cg.{index}"
+    if isinstance(operation, GenerateVoice):
+        return f"actions.voice.{operation.character}.{index}"
     if isinstance(operation, SetTheme):
         return "theme"
     return "entry" if isinstance(operation, SetEntry) else "title"
@@ -273,9 +357,34 @@ def check_proposal(
     diagnostics, warnings = collect_story_diagnostics(edit.story, limit=limit)
     if not diagnostics and len(canonical_json(edit.story)) > STORY_LIMIT:
         diagnostics = (Diagnostic("size_limit", "story.json"),)
+    diagnostics = (*diagnostics, *_action_problems(edit.story, operations))
     if diagnostics:
         return ProposalCheck(None, diagnostics, (), edit.touched)
     return ProposalCheck(edit.story, (), warnings, edit.touched)
+
+
+def _action_problems(story: dict[str, Any], operations: Sequence[Operation]) -> list[Diagnostic]:
+    """Actions must name what the edited story has, so the model can fix them now."""
+    problems: list[Diagnostic] = []
+    characters, nodes = story["characters"], story["nodes"]
+    for index, operation in enumerate(operations):
+        location = f"operations.{index}"
+        if isinstance(operation, GenerateCharacterImages | GenerateExpressions | GenerateVoice):
+            if operation.character not in characters:
+                problems.append(Diagnostic("unknown_reference", f"{location}.character"))
+                continue
+        if isinstance(operation, GenerateCg) and any(
+            character not in characters for character in operation.characters
+        ):
+            problems.append(Diagnostic("unknown_reference", f"{location}.characters"))
+        if isinstance(operation, GenerateVoice) and any(
+            type(nodes.get(line)) is not dict
+            or nodes[line].get("type") != "line"
+            or nodes[line].get("speaker") != operation.character
+            for line in operation.lines
+        ):
+            problems.append(Diagnostic("invalid_voice_line", f"{location}.lines"))
+    return problems
 
 
 def _keep_voice(node: Any, previous: Any) -> None:

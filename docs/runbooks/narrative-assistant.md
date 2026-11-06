@@ -83,7 +83,7 @@ thinking and the reply text as they are produced. Finished replies collapse to
 
 ## Behavior and limits
 
-Prompt `narrative-assistant/v3` asks focused follow-up questions when a new
+Prompt `narrative-assistant/v4` asks focused follow-up questions when a new
 character's name, clothes or intended image are missing. It returns a reply with
 no proposal while clarifying. Established thread/profile details are reused;
 explicitly delegating a choice lets the model make it. Transparent stage sprites
@@ -92,27 +92,43 @@ is explained rather than asked as another required question. Sufficiently specif
 background requests proceed directly to a proposal. This is model instruction,
 qualified on the local model in the linked report; creators still review proposals.
 
-Image suggestions start only after acceptance and a creator clicks **Generate**.
-`GET .../assistant/proposals/{id}/image-actions` reads their jobs without starting
-anything. `POST .../image-actions/{index}` starts/replays one job, with the original
-operation index, scoped project and tenant, and a server-derived UUID5 idempotency
-key. The browser sends no image parameters or random retry key. Concurrent clicks,
-navigation and reloads retain the same job, including its terminal status. A new
-proposal/action represents a new generation request. Failed/cancelled suggestions
-remain visible; request another suggestion or use the editor for a fresh job.
+## Generation
 
-Older v1/v2 prompt suggestions did not store a job link. A compatibility read
-finds the newest matching legacy UUID4 request by the accepting creator after
-acceptance, checking purpose, parameters and count. These old links are inferred
-and can be ambiguous for identical historical requests. No old job, proposal,
-profile or key is rewritten. New suggestions always use the exact UUID5 link.
+The assistant generates pictures and voices itself
+([ADR 0061](../adr/0061-assistant-runs-generation.md)): character sprites and portraits,
+backgrounds, expressions that repaint an approved picture's face, event CGs, and voices for
+lines. Results appear in the chat with **Approve** and **Use**. They stay candidates until
+the creator approves them, and story edits still need **Accept**.
 
-Assets polls for background jobs even when it did not start them, and keeps
-progress visible across filters, including **CGs**. Completed jobs refresh the
-review candidates. Assistant restores progress before offering a Generate button.
-API and assistant-worker code must both be refreshed by their owner to activate
-the endpoints and prompt. There is no database migration or Godot rebuild.
-See [qualification](../reports/2026-10-31-assistant-image-actions.md).
+**Generate automatically** in the composer is on by default and is remembered per browser.
+When it is on, the worker starts each action with no page open. When it is off, each action
+waits for a click. It applies per message and is stored on the turn.
+
+| State | Meaning |
+| --- | --- |
+| `offered` | Waits for a click (automatic generation was off) |
+| `waiting` | Needs something the proposal adds; starts when it is accepted |
+| `pending` | The worker starts it when the queue has room; a full queue waits, not fails |
+| `started` | Has a job |
+| `blocked` | Could not start, with the reason shown; **Try again** retries it |
+| `finished` | Its job ended, and the Activity log says how |
+| `skipped` | The proposal was rejected first |
+
+The API and the assistant worker both admit jobs, so the worker needs the same image, voice
+and object-store settings as the API. Each start is an ordinary job: the same content policy,
+credits, audit and outbox as Characters and Assets, and one job per action however many
+times it is started. `GET .../assistant/proposals/{id}/actions` reads the state, and
+`POST .../actions/{index}` starts or retries one.
+
+Expressions and CGs use the character's stage sprite, else their portrait, else their newest
+approved picture. With none, the action blocks and says to approve one. A voice action gives
+a character with no voice the stock voice it names, or a default for their type. A voice the
+creator chose is never replaced. A model with an unaccepted license blocks and says so.
+Poses are not available to the assistant yet, and music does not exist in the product.
+
+The schema constrains the model (per-operation shapes, `reply` and `op` first; see the
+ADR), so wrong fields cannot be produced by Ollama. A character with a missing detail still
+gets a question first (prompt v3's clarification rules are kept in v4).
 
 - One reply at a time per workspace by default; a second send returns 429.
 - Unusable model output is sent back with diagnostics for at most two repairs.
@@ -120,16 +136,15 @@ See [qualification](../reports/2026-10-31-assistant-image-actions.md).
     its allowed values when they are fixed), or not allowed there.
   - A proposal that is still invalid is shown as "Can't be used" and cannot be
     accepted.
-- Local models sometimes mislabel picture suggestions, so three corrections are made
-  without asking the model again:
+- Some model slips have one obvious meaning, so they are corrected without another call:
   - **Swapped field names:** a character suggestion's look written as `description`
     (or a background's place as `appearance`) is accepted under the right name.
   - **Sprites for pictures not made yet:** links to pictures that don't exist yet are
-    dropped when the same proposal suggests generating that character's pictures;
-    approving the generated pictures binds the sprites.
-  - **Unfinished suggestions:** a picture suggestion still invalid after the repairs
-    (for example without `character_type`) is left out, when the story changes
-    themselves are valid. The proposal says so: generate that picture from Characters.
+    dropped when the same proposal generates that character's pictures.
+  - **Narration:** `speaker: narrator` (with no such character) becomes narration, a
+    voice on a line with no speaker is dropped, and a full voice loses any stray `text`.
+  - **Unusable actions:** an action still invalid after the repairs is left out when the
+    story changes themselves are valid. The proposal says so.
   A typo in an existing sprite or any other broken story change still makes the
   proposal unusable.
 - Accepting a proposal whose base is no longer current rebases it when none of the
@@ -151,14 +166,6 @@ See [qualification](../reports/2026-10-31-assistant-image-actions.md).
   ID. The server adds each library file it uses to the story's assets and pins it by
   SHA-256. The model sees up to 120 approved library files and each character's
   saved appearance.
-- Image generation is suggested, never run by the assistant. A proposal can carry
-  "Suggested pictures" (character portraits, full-body or transparent sprites, or
-  backgrounds). Accepting applies only the story changes. Each suggestion then has
-  its own **Generate** button that starts a normal image job with the creator's
-  access, and the results wait for approval in Characters or Assets. A suggestion
-  for a character the proposal adds stays disabled until the proposal is accepted.
-  A transparent sprite is always full-body. The assistant cannot change the
-  expression of an existing picture yet: it suggests one sprite job per expression.
 
 ## Conversation history
 

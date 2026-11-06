@@ -21,6 +21,11 @@ from flint_graph.application.credit_prices import assistant_item
 from flint_graph.application.narrative_assistant_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
 from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
+from flint_graph.application.services.narrative_assistant_action_state import (
+    create_actions,
+    release_waiting_actions,
+    skip_open_actions,
+)
 from flint_graph.application.services.narrative_assistant_events import (
     add_status_event,
     add_turn_event,
@@ -109,6 +114,7 @@ class TurnWork:
     # character's described looks (editor metadata the model may reuse).
     library: tuple[LibraryEntry, ...] = ()
     profiles: dict[str, str] = field(default_factory=dict)
+    voices: dict[str, str] = field(default_factory=dict)
     prompt_bundle: PromptBundle | None = None
 
 
@@ -248,6 +254,7 @@ async def post_turn(
     available: bool,
     max_active_turns: int,
     provider: str | None = None,
+    auto_generate: bool = False,
 ) -> NarrativeAssistantTurn:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -266,9 +273,14 @@ async def post_turn(
         include_archived=True,
         for_update=True,
     )
-    request_hash = _fingerprint(
-        {"request": request, "base_revision_id": str(base_revision_id), "focus_node": focus_node}
-    )
+    identity: dict[str, Any] = {
+        "request": request,
+        "base_revision_id": str(base_revision_id),
+        "focus_node": focus_node,
+    }
+    if auto_generate:  # Only when set, so earlier messages keep their hashes.
+        identity["auto_generate"] = True
+    request_hash = _fingerprint(identity)
     existing = await session.scalar(
         select(NarrativeAssistantTurn).where(
             NarrativeAssistantTurn.thread_id == thread.id,
@@ -315,6 +327,7 @@ async def post_turn(
         focus_node=focus_node,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
+        auto_generate=auto_generate,
         status="queued",
         cancel_requested=False,
     )
@@ -637,6 +650,8 @@ async def accept_proposal(
         },
         actor_user_id=author_user_id,
     )
+    if not revision.conflicted:
+        await release_waiting_actions(session, proposal.id)
     await record_audit_event(
         session,
         tenant_id=tenant_id,
@@ -688,6 +703,7 @@ async def reject_proposal(
         payload={"proposal_id": str(proposal.id), "summary": proposal.summary},
         actor_user_id=author_user_id,
     )
+    await skip_open_actions(session, proposal.id)
     await record_audit_event(
         session,
         tenant_id=tenant_id,
@@ -807,15 +823,25 @@ async def claim_turn(
         )
         library = library_entries(
             story,
-            (LibraryRow(row.name, row.kind, row.media_type, row.sha256) for row in rows),
+            (
+                LibraryRow(row.name, row.kind, row.media_type, row.sha256, row.character_id)
+                for row in rows
+            ),
         )
-    looks = await session.scalars(
-        select(NarrativeCharacterProfile).where(
-            NarrativeCharacterProfile.tenant_id == turn.tenant_id,
-            NarrativeCharacterProfile.project_id == turn.project_id,
+    looks = list(
+        await session.scalars(
+            select(NarrativeCharacterProfile).where(
+                NarrativeCharacterProfile.tenant_id == turn.tenant_id,
+                NarrativeCharacterProfile.project_id == turn.project_id,
+            )
         )
     )
     profiles = {row.character_id: row.appearance for row in looks if row.appearance}
+    voices = {
+        row.character_id: row.voice or "a cloned voice"
+        for row in looks
+        if row.voice or row.voice_reference_id
+    }
     await session.flush()
     return TurnWork(
         tenant_id=turn.tenant_id,
@@ -828,6 +854,7 @@ async def claim_turn(
         earlier=conversation.earlier,
         library=library,
         profiles=profiles,
+        voices=voices,
         prompt_bundle=await execution_bundle(session, turn),
     )
 
@@ -925,6 +952,22 @@ async def complete_turn(
                 "operations": len(proposal.operations),
             },
         )
+        if proposal.status == "ready" and result.proposal is not None:
+            base = await session.scalar(
+                select(NarrativeRevision).where(
+                    NarrativeRevision.id == turn.base_revision_id,
+                    NarrativeRevision.project_id == turn.project_id,
+                    NarrativeRevision.tenant_id == turn.tenant_id,
+                )
+            )
+            if base is not None:
+                await create_actions(
+                    session,
+                    turn=turn,
+                    proposal=proposal,
+                    story=json.loads(base.story_json),
+                    operations=result.proposal.operations,
+                )
     await session.flush()
     return turn
 

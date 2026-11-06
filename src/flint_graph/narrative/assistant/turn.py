@@ -21,16 +21,19 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from flint_graph.narrative.assistant.assets import LibraryEntry, add_library_assets
 from flint_graph.narrative.assistant.context import HistoryTurn, build_turn_messages
 from flint_graph.narrative.assistant.operations import (
+    ACTIONS,
     AddAsset,
     GenerateCharacterImages,
     Proposal,
     UpsertCharacter,
+    UpsertNode,
+    apply_operations,
     check_proposal,
     field_choices,
 )
 from flint_graph.narrative.assistant.prompts import prompt_sha256, response_schema
 from flint_graph.narrative.assistant.stream import ReplyScanner
-from flint_graph.narrative.values import Diagnostic
+from flint_graph.narrative.values import Diagnostic, PackageError
 from flint_graph.prompts.source import render, snapshot_async
 
 RESPONSE_CHARS = 256 * 1024
@@ -169,7 +172,37 @@ def _without_pending_sprites(
     return proposal.model_copy(update={"operations": operations})
 
 
+_NARRATION_SPEAKERS = {"narrator", "narration", "none", "system"}
+
+
+def _tidied_line(node: dict[str, Any], known: set[str]) -> dict[str, Any]:
+    """Correct the line mistakes local models keep making, whose meaning is unambiguous."""
+    speaker = node.get("speaker")
+    if isinstance(speaker, str) and speaker.lower() in _NARRATION_SPEAKERS and speaker not in known:
+        node = {k: v for k, v in node.items() if k not in ("speaker", "expression")}
+    voice = node.get("voice")
+    if "voice" in node and "speaker" not in node:
+        node = {k: v for k, v in node.items() if k != "voice"}  # Narration is silent.
+    elif isinstance(voice, dict) and voice.get("mode") == "full" and "text" in voice:
+        node = {**node, "voice": {k: v for k, v in voice.items() if k != "text"}}
+    return node
+
+
+def _with_tidied_lines(story: dict[str, Any], proposal: Proposal) -> Proposal:
+    """Each round trip to correct these costs about a minute, so correct them here."""
+    known = set(story.get("characters") or {}) | {
+        item.id for item in proposal.operations if isinstance(item, UpsertCharacter)
+    }
+    operations = []
+    for item in proposal.operations:
+        if isinstance(item, UpsertNode) and item.node.get("type") == "line":
+            item = item.model_copy(update={"node": _tidied_line(item.node, known)})
+        operations.append(item)
+    return proposal.model_copy(update={"operations": operations})
+
+
 _ACTION_PROBLEM = re.compile(r"proposal\.operations\.(\d+)\.generate_[a-z_]+(\.|$)")
+_ACTION_CHECK = re.compile(r"operations\.(\d+)\.(character|characters|lines)$")
 
 
 def _without_broken_actions(
@@ -207,6 +240,68 @@ def _without_broken_actions(
         and isinstance(operations[index].get("character"), str)
     )
     return proposal, notes, characters
+
+
+def _without_unusable_actions(
+    story: dict[str, Any], proposal: Proposal, diagnostics: Sequence[Diagnostic]
+) -> tuple[Proposal, tuple[Diagnostic, ...]] | None:
+    """Drop actions the story cannot satisfy, once repairs are spent, if only they are wrong."""
+    broken: set[int] = set()
+    for item in diagnostics:
+        match = _ACTION_CHECK.match(item.location)
+        if match is None or not isinstance(proposal.operations[int(match.group(1))], ACTIONS):
+            return None
+        broken.add(int(match.group(1)))
+    kept = [item for index, item in enumerate(proposal.operations) if index not in broken]
+    if not broken or not kept:
+        return None
+    notes = tuple(
+        Diagnostic("image_action_dropped", f"proposal.operations.{index}")
+        for index in sorted(broken)
+    )
+    return proposal.model_copy(update={"operations": kept}), notes
+
+
+def _listed(values: Sequence[str]) -> str:
+    shown = ", ".join(list(values)[:30])
+    if not shown:
+        return "none"
+    return shown + (f" and {len(values) - 30} more" if len(values) > 30 else "")
+
+
+def _problem_reasons(
+    story: dict[str, Any], proposal: Proposal, diagnostics: Sequence[Diagnostic]
+) -> dict[str, str]:
+    """Say what exists, so a repair can fix a bad reference on its first try."""
+    try:
+        edited = apply_operations(story, proposal.operations).story
+    except PackageError:
+        edited = story
+    characters, nodes = list(edited["characters"]), list(edited["nodes"])
+    assets = list(edited.get("assets") or {})
+    reasons: dict[str, str] = {}
+    for item in diagnostics:
+        field = item.location.rsplit(".", 1)[-1]
+        if field in ("speaker", "character", "characters", "show", "hide"):
+            reasons[item.location] = (
+                f"no character has this id. Characters: {_listed(characters)}. "
+                "Leave out speaker for narration."
+            )
+        elif field in ("next", "target", "if_true", "if_false", "entry"):
+            reasons[item.location] = f"no scene has this id. Scenes: {_listed(nodes)}"
+        elif field in ("background", "cg", "audio", "asset") or item.code == "invalid_asset_kind":
+            reasons[item.location] = f"no asset of that kind has this id. Assets: {_listed(assets)}"
+        elif field in ("expression", "sprite"):
+            reasons[item.location] = "this character has no such sprite; use one it lists"
+        elif item.code == "invalid_voice":
+            reasons[item.location] = (
+                "a voice needs a speaker on this line, and only a vocalization has its own text"
+            )
+        elif item.code == "invalid_voice_line":
+            reasons[item.location] = (
+                "each line must be a line node spoken by this character, saved or added here"
+            )
+    return reasons
 
 
 def _repair_request(
@@ -281,6 +376,8 @@ async def run_turn(
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
     earlier: Sequence[str] = (),
+    voices: Mapping[str, str] | None = None,
+    capabilities: Sequence[str] = (),
 ) -> TurnResult:
     watch = observer or _Silent()
     messages, stats = build_turn_messages(
@@ -292,6 +389,8 @@ async def run_turn(
         library=library,
         profiles=profiles,
         earlier=earlier,
+        voices=voices,
+        capabilities=capabilities,
     )
     await watch.step(
         "context",
@@ -339,9 +438,17 @@ async def run_turn(
             parsed = _without_pending_sprites(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
-            proposal = parsed
+            parsed = _with_tidied_lines(story, parsed)
             check = check_proposal(story, parsed.operations)
+            if check.diagnostics and attempt == calls:
+                # Repairs are spent: keep the story edits if only actions are unusable.
+                trimmed = _without_unusable_actions(story, parsed, check.diagnostics)
+                if trimmed is not None:
+                    parsed, dropped = trimmed[0], (*dropped, *trimmed[1])
+                    check = check_proposal(story, parsed.operations)
+            proposal = parsed
             diagnostics = check.diagnostics
+            reasons = {**reasons, **_problem_reasons(story, parsed, diagnostics)}
         if parsed is not None or diagnostics:
             await watch.step(
                 "validating",

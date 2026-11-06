@@ -19,6 +19,10 @@ TURN_CANCELLED = "turn.cancelled"
 PROPOSAL_CREATED = "proposal.created"
 PROPOSAL_ACCEPTED = "proposal.accepted"
 PROPOSAL_REJECTED = "proposal.rejected"
+ACTION_STARTED = "action.started"
+ACTION_BLOCKED = "action.blocked"
+JOB_FINISHED = "job.finished"
+ASSET_APPROVED = "asset.approved"
 
 ALL_KINDS = frozenset(
     {
@@ -30,6 +34,10 @@ ALL_KINDS = frozenset(
         PROPOSAL_CREATED,
         PROPOSAL_ACCEPTED,
         PROPOSAL_REJECTED,
+        ACTION_STARTED,
+        ACTION_BLOCKED,
+        JOB_FINISHED,
+        ASSET_APPROVED,
     }
 )
 
@@ -50,12 +58,25 @@ class RecordedEvent:
 
 
 @dataclass(frozen=True)
+class ActionRecord:
+    """A generation action as far as the conversation knows."""
+
+    index: int
+    label: str
+    status: str  # started, blocked, completed, failed or cancelled
+    detail: str | None = None
+    candidates: int = 0
+    approved: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProposalRecord:
     proposal_id: str
     summary: str
     status: str
     revision_id: str | None = None
     conflicted: bool = False
+    actions: tuple[ActionRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -97,6 +118,17 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
         turn = turns.get(turn_id) if turn_id is not None else None
         if turn is not None and turn.proposal is not None:
             turns[turn.turn_id] = replace(turn, proposal=replace(turn.proposal, **changes))
+
+    def update_action(data: Mapping[str, Any], **changes: Any) -> None:
+        proposal_id, index = str(data.get("proposal_id")), data.get("index")
+        turn = turns.get(proposals.get(proposal_id, ""))
+        if turn is None or turn.proposal is None or not isinstance(index, int):
+            return
+        known = {item.index: item for item in turn.proposal.actions}
+        current = known.get(index) or ActionRecord(index, str(data.get("label", "")), "")
+        known[index] = replace(current, **changes)
+        ordered = tuple(known[key] for key in sorted(known))
+        update_proposal(proposal_id, actions=ordered)
 
     for event in events:
         if event.sequence <= cursor:
@@ -140,6 +172,35 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
             )
         elif event.kind == PROPOSAL_REJECTED:
             update_proposal(str(data["proposal_id"]), status="rejected")
+        elif event.kind == ACTION_STARTED:
+            update_action(data, status="started", label=str(data.get("label", "")))
+        elif event.kind == ACTION_BLOCKED:
+            update_action(
+                data,
+                status="blocked",
+                label=str(data.get("label", "")),
+                detail=str(data.get("detail", "")),
+            )
+        elif event.kind == JOB_FINISHED:
+            code = data.get("error_code")
+            update_action(
+                data,
+                status=str(data.get("status")),
+                candidates=int(data.get("candidates") or 0),
+                detail=None if code is None else str(code),
+            )
+        elif event.kind == ASSET_APPROVED:
+            turn = turns.get(proposals.get(str(data.get("proposal_id")), ""))
+            action = next(
+                (
+                    item
+                    for item in (turn.proposal.actions if turn and turn.proposal else ())
+                    if item.index == data.get("index")
+                ),
+                None,
+            )
+            if action is not None:
+                update_action(data, approved=(*action.approved, str(data.get("name", ""))))
     ordered = tuple(sorted(turns.values(), key=lambda item: item.turn_sequence))
     return ThreadState(title=title, cursor=cursor, turns=ordered)
 
@@ -160,6 +221,23 @@ def _proposal_outcome(proposal: ProposalRecord) -> str:
     return f"The creator has not decided on {quoted} yet; it is not in the story."
 
 
+def _action_outcome(action: ActionRecord) -> str:
+    if action.status == "started":
+        return f"{action.label}: generating now"
+    if action.status == "blocked":
+        return f"{action.label}: could not start ({action.detail})"
+    if action.status == "completed":
+        chosen = (
+            f"approved in the library: {', '.join(action.approved)}"
+            if action.approved
+            else "none approved yet"
+        )
+        return f"{action.label}: {action.candidates} candidates ready, {chosen}"
+    if action.status == "cancelled":
+        return f"{action.label}: stopped"
+    return f"{action.label}: failed ({action.detail or 'unknown error'})"
+
+
 def _assistant_text(turn: TurnRecord) -> str:
     """The assistant's side of a turn, plus what happened next."""
     if turn.status == "failed":
@@ -169,7 +247,12 @@ def _assistant_text(turn: TurnRecord) -> str:
         return "[The creator stopped this reply; nothing changed.]"
     if turn.proposal is None:
         return turn.reply or ""
-    return f"{turn.reply or ''}\n[{_proposal_outcome(turn.proposal)}]".strip()
+    notes = [_proposal_outcome(turn.proposal)]
+    if turn.proposal.actions:
+        notes.append(
+            "Generation: " + "; ".join(_action_outcome(item) for item in turn.proposal.actions)
+        )
+    return f"{turn.reply or ''}\n[{' '.join(notes)}]".strip()
 
 
 def _one_line(text: str, limit: int) -> str:

@@ -24,7 +24,8 @@ _RESERVED = {
     *(f"com{i}" for i in range(1, 10)),
     *(f"lpt{i}" for i in range(1, 10)),
 }
-_EXTENSIONS = {"image/png": "png", "font/ttf": "ttf", "font/otf": "otf"}
+_EXTENSIONS = {"image/png": "png", "font/ttf": "ttf", "font/otf": "otf", "audio/wav": "wav"}
+_STORY_KINDS = {"png": "image", "ttf": "font", "otf": "font", "wav": "audio"}
 LIBRARY_LIMIT = 120
 
 
@@ -33,19 +34,21 @@ class LibraryRow:
     """An approved library asset as the database lists it."""
 
     name: str
-    kind: str  # background, sprite, image, character_portrait or font
+    kind: str  # background, sprite, image, character_portrait, font or voice
     media_type: str
     sha256: str
+    character_id: str | None = None
 
 
 @dataclass(frozen=True)
 class LibraryEntry:
     key: str
-    kind: str  # story asset kind: image or font
+    kind: str  # story asset kind: image, font or audio
     library_kind: str
     name: str
     path: str
     sha256: str
+    character_id: str | None = None
 
 
 def slug(name: str) -> str:
@@ -63,11 +66,12 @@ def library_entries(story: dict[str, Any], rows: Iterable[LibraryRow]) -> tuple[
     known = {item.get("sha256") for item in story["assets"].values() if type(item) is dict}
     used = set(story["assets"])
     entries: list[LibraryEntry] = []
-    for row in rows:
+    # Pictures first: a project with many voice clips must not crowd out its art.
+    for row in sorted(rows, key=lambda item: item.media_type == "audio/wav"):
         extension = _EXTENSIONS.get(row.media_type)
         if extension is None or row.sha256 in known:
             continue
-        base = slug(row.name) or ("font" if extension != "png" else "image")
+        base = slug(row.name) or _STORY_KINDS[extension]
         key, number = base, 2
         while key in used:
             key, number = f"{base}_{number}", number + 1
@@ -76,11 +80,12 @@ def library_entries(story: dict[str, Any], rows: Iterable[LibraryRow]) -> tuple[
         entries.append(
             LibraryEntry(
                 key,
-                "image" if extension == "png" else "font",
+                _STORY_KINDS[extension],
                 row.kind,
                 row.name,
                 f"assets/{key}.{extension}",
                 row.sha256,
+                row.character_id,
             )
         )
         if len(entries) >= LIBRARY_LIMIT:
@@ -91,12 +96,15 @@ def library_entries(story: dict[str, Any], rows: Iterable[LibraryRow]) -> tuple[
 def _referenced(story: dict[str, Any]) -> set[str]:
     keys: set[str] = set()
     for node in story["nodes"].values():
-        if (
-            type(node) is dict
-            and node.get("type") == "stage"
-            and type(node.get("background")) is str
-        ):
-            keys.add(node["background"])
+        if type(node) is not dict:
+            continue
+        if node.get("type") == "stage":
+            keys.update(
+                node[field] for field in ("background", "cg") if type(node.get(field)) is str
+            )
+        voice = node.get("voice") if node.get("type") == "line" else None
+        if type(voice) is dict and type(voice.get("audio")) is str:
+            keys.add(voice["audio"])
     for character in story["characters"].values():
         sprites = character.get("sprites") if type(character) is dict else None
         if type(sprites) is dict:

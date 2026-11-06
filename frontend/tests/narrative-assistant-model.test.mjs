@@ -112,7 +112,7 @@ test("proposal notes explain a dropped picture suggestion apart from map warning
   assert.deepEqual(model.proposalNotes([]), []);
   const dropped = model.proposalNotes([{ code: "image_action_dropped", location: "proposal.operations.1" }]);
   assert.equal(dropped.length, 1);
-  assert.match(dropped[0], /picture suggestion was left out/);
+  assert.match(dropped[0], /meant to generate was left out/);
   const both = model.proposalNotes([{ code: "unreachable_node", location: "nodes.x" },
     { code: "image_action_dropped", location: "proposal.operations.2" }]);
   assert.equal(both.length, 2);

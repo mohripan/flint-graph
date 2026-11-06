@@ -272,7 +272,7 @@ export function StudioPage({ onDirtyChange }: {
     } catch (error) { failure(error, generation); return null; }
     finally { controllers.current.delete(request); if (epoch.current === generation) saving.current = false; }
   }
-  function acceptedRevision(revision: NarrativeRevision) {
+  function acceptedRevision(revision: NarrativeRevision, note?: string) {
     const current = stateRef.current;
     if (!current.project || revision.project_id !== current.project.id || dirtyRef.current) return;
     const generation = epoch.current;
@@ -281,7 +281,8 @@ export function StudioPage({ onDirtyChange }: {
     setProjects(rows => rows.map(row => row.id === current.project!.id ? { ...row, head_revision_id: revision.id } : row));
     const accepted = parsedStory(revision.story_json);
     if (accepted && !Object.prototype.hasOwnProperty.call(accepted.nodes, sceneId)) setSceneId(accepted.entry);
-    setNotice(`Accepted the assistant's proposal as revision ${revision.revision_number}.`);
+    setNotice(note ? `${note} Saved revision ${revision.revision_number}.`
+      : `Accepted the assistant's proposal as revision ${revision.revision_number}.`);
     void refreshHistory(current.project.id, generation);
   }
   async function upgradeStory() {

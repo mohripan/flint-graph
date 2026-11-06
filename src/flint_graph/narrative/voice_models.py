@@ -17,7 +17,7 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 from importlib import resources
-from typing import Literal
+from typing import Any, Literal
 
 Obligations = Literal["none", "attribution", "player_terms"]
 Support = Literal["full", "approximate"]
@@ -364,6 +364,45 @@ class Delivery:
 
     def as_dict(self) -> dict[str, object]:
         return {"emotion": self.emotion, "intensity": self.intensity, "tag": self.tag}
+
+
+# Expression presets that say how a line is meant; mirrors frontend voiceDelivery.ts.
+_FROM_EXPRESSION = {
+    "happy": ("happy", 0.5),
+    "laughing": ("happy", 0.9),
+    "smug": ("happy", 0.3),
+    "sad": ("sad", 0.5),
+    "crying": ("sad", 0.9),
+    "worried": ("afraid", 0.4),
+    "scared": ("afraid", 0.7),
+    "angry": ("angry", 0.6),
+    "furious": ("angry", 0.9),
+    "surprised": ("surprised", 0.6),
+    "determined": ("dramatic", 0.4),
+    "embarrassed": ("tender", 0.4),
+    "shy": ("tender", 0.4),
+    "sleepy": ("whisper", 0.3),
+    "whispering": ("whisper", 0.5),
+    "shouting": ("shout", 0.7),
+}
+
+
+def line_delivery(
+    saved: dict[str, Any] | None, expression: object, spec: VoiceModelSpec
+) -> dict[str, object]:
+    """The delivery a line is spoken with: the creator's, else its expression's.
+
+    Falls back to what this model can do instead of refusing the line, as the Studio does.
+    """
+    found = _FROM_EXPRESSION.get(str(expression).strip().lower()) if expression else None
+    wanted = saved or ({"emotion": found[0], "intensity": found[1], "tag": None} if found else {})
+    emotion = wanted.get("emotion", "neutral")
+    tag = wanted.get("tag")
+    return Delivery(
+        emotion if emotion in spec.deliveries else "neutral",
+        wanted.get("intensity", 0.5),
+        tag if tag in spec.tags else None,
+    ).as_dict()
 
 
 def clean_delivery(value: object, spec: VoiceModelSpec) -> Delivery:

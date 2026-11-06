@@ -4,7 +4,7 @@ import { ApiError, api } from "../lib/api";
 import { CreditCost } from "../components/CreditCost";
 import { useAccess } from "../site/accessContext";
 import {
-  activeTurn, activitySteps, assistantError, emptyActivity, foldEvents, mergeTurns, prepareThread, prepareTurn, proposalChanges, proposalNotes,
+  activeTurn, activitySteps, assistantError, emptyActivity, foldEvents, hasStoryChanges, mergeTurns, prepareThread, prepareTurn, proposalChanges, proposalNotes,
   proposalStatus, sendBlocker, streamedReply, threadTitle, turnStatus, workedFor,
 } from "./assistantModel";
 import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnIntent } from "./assistantModel";
@@ -19,6 +19,7 @@ const terminal = new Set(["completed", "failed", "cancelled"]);
 const suggestions = [
   "Add a scene after the opening where a stranger asks for help.",
   "Give the player a choice that leads to two different endings.",
+  "Generate a background of a rainy street at night.",
   "Which scenes can the player never reach?",
 ];
 
@@ -35,6 +36,11 @@ function readSelection(key: string): string | null {
 }
 function writeSelection(key: string, id: string | null): void {
   try { if (id) localStorage.setItem(key, id); else localStorage.removeItem(key); } catch { /* Optional convenience. */ }
+}
+const AUTO_KEY = "flintgraph.assistant.autoGenerate";
+// On unless the creator turned it off: asking for a picture should get a picture.
+function readAuto(): boolean {
+  return readSelection(AUTO_KEY) !== "off";
 }
 // The open conversation is part of the link, so it can be shared or reported by ID.
 export function linkedThread(): string | null {
@@ -75,7 +81,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   onSave, onAccepted, onConflict, onInspect, onOpenEditor, onAccessLost }: {
   tenantId: string; projectId: string; revision: NarrativeRevision; focus: string | null; canWrite: boolean;
   dirty: boolean; saving: boolean; scopeRef: MutableRefObject<(() => void) | null>;
-  onSave: () => Promise<NarrativeRevision | null>; onAccepted: (revision: NarrativeRevision) => void;
+  onSave: () => Promise<NarrativeRevision | null>; onAccepted: (revision: NarrativeRevision, notice?: string) => void;
   onConflict: (conflictRevisionId: string) => void; onInspect: (revisionId: string) => void;
   onOpenEditor: () => void; onAccessLost: () => void;
 }) {
@@ -102,6 +108,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const [visible, setVisible] = useState(() => document.visibilityState !== "hidden");
   const [drawer, setDrawer] = useState(false), [withFocus, setWithFocus] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [autoGenerate, setAutoGenerate] = useState(readAuto);
   const [now, setNow] = useState(() => Date.now());
   const intent = useRef<TurnIntent | null>(null), threadIntent = useRef<ThreadIntent | null>(null);
   const decisionKeys = useRef(new Map<string, string>()), composer = useRef<HTMLTextAreaElement>(null);
@@ -231,7 +238,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
     event?.preventDefault();
     if (blocker) return;
     setSending(true); setError(null); stick.current = true;
-    const message = text.trim(), next = prepareTurn(intent.current, message, revision.id, target);
+    const message = text.trim(), next = prepareTurn(intent.current, message, revision.id, target, undefined, autoGenerate);
     intent.current = next;
     void run("send", async signal => {
       let id = threadRef.current;
@@ -277,6 +284,22 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
         if (threadRef.current) loadTurns(threadRef.current);
       } else setError(releaseErrorMessage(failure));
     }, () => setDeciding(null));
+  }
+  // "Use" on a generated file: a normal saved revision, built with the editor's own rules.
+  async function applyToStory(change: (story: StoryDraft) => StoryDraft, notice: string) {
+    if (!canWrite || dirty) throw new Error("Save or undo your edits first.");
+    if (!story) throw new Error("The saved story couldn't be read.");
+    try {
+      onAccepted(await api.saveNarrativeRevision(tenantId, projectId, {
+        base_revision_id: revision.id, idempotency_key: crypto.randomUUID(),
+        story_json: JSON.stringify(change(story), null, 2), notices: revision.notices,
+      }), notice);
+    } catch (failure) {
+      const kept = conflictId(failure);
+      if (!kept) throw failure;
+      setConflict(kept); onConflict(kept);
+      throw new Error("The story changed, so this was kept as a conflict copy.");
+    }
   }
   function reject(proposal: AssistantProposal) {
     if (!canWrite || deciding) return;
@@ -346,8 +369,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             <button type="button" className="studio-secondary" onClick={() => onInspect(conflict)}>View conflict copy</button></div>}
           {!turns.length && <div className="assistant-welcome">
             <h3>What should we write next?</h3>
-            <p>Describe a scene, a choice or a twist, or ask about your story. The assistant proposes changes;
-              nothing changes until you accept.</p>
+            <p>Describe a scene, a choice or a twist, ask for pictures and voices, or ask about your story.
+              The assistant proposes changes, and nothing in your story changes until you accept.</p>
             {canWrite && <div className="assistant-suggestions">{suggestions.map(item =>
               <button type="button" key={item} onClick={() => compose(item)}>{item}</button>)}</div>}
           </div>}
@@ -382,8 +405,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                   && <button type="button" className="studio-secondary assistant-stop" onClick={() => stop(turn)}>Stop</button>}
                 {turn.proposal && <section className="studio-proposal" aria-label="Proposed changes">
                   <div className="studio-section-heading"><strong>{turn.proposal.summary}</strong>
-                    <span className={`studio-release-status is-${{ ready: "active", invalid: "failed", accepted: "ready",
-                      rejected: "muted" }[detail?.status ?? turn.proposal.status]}`}>{proposalStatus(detail?.status ?? turn.proposal.status)}</span></div>
+                    {(!detail || hasStoryChanges(detail.operations) || detail.status === "invalid") && <span className={`studio-release-status is-${{ ready: "active", invalid: "failed", accepted: "ready",
+                      rejected: "muted" }[detail?.status ?? turn.proposal.status]}`}>{proposalStatus(detail?.status ?? turn.proposal.status)}</span>}</div>
                   {detail ? <>
                     <ul className="studio-proposal-changes">{proposalChanges(story, detail.operations).map((change, index) =>
                       <li key={`${change.target}:${index}`}><span className={`studio-change is-${change.kind}`}>{change.kind}</span>
@@ -391,13 +414,14 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                         {change.after && <q>{change.after.slice(0, 240)}</q>}
                         {!change.after && change.before && <q className="studio-change-before">{change.before.slice(0, 240)}</q>}
                       </li>)}</ul>
-                    <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite} />
+                    <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite}
+                      dirty={dirty} onApply={applyToStory} />
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules
                       ({detail.diagnostics.slice(0, 3).map(item => `${item.code.replaceAll("_", " ")} at ${item.location}`).join("; ")}).
                       Ask again or rephrase.</p>}
                     {proposalNotes(detail.warnings).map(note => <p key={note} className="studio-hint">{note}</p>)}
                     <div className="studio-actions">
-                      {canWrite && detail.status === "ready" && <>
+                      {canWrite && detail.status === "ready" && hasStoryChanges(detail.operations) && <>
                         <button type="button" className="studio-primary" aria-disabled={dirty || deciding !== null}
                           onClick={() => accept(detail)}>{deciding === detail.id ? "Accepting…" : "Accept"}</button>
                         <button type="button" className="studio-secondary" aria-disabled={deciding !== null}
@@ -407,7 +431,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                         <button type="button" className="studio-link" onClick={onOpenEditor}>Open in the editor</button>
                         <button type="button" className="studio-link" onClick={() => onInspect(detail.accepted_revision_id!)}>View accepted revision</button></>}
                     </div>
-                    {canWrite && detail.status === "ready" && dirty
+                    {canWrite && detail.status === "ready" && dirty && hasStoryChanges(detail.operations)
                       && <p className="studio-hint">Save or undo your unsaved edits before accepting.</p>}
                   </> : <p className="studio-hint">Loading the proposed changes…</p>}
                 </section>}
@@ -434,6 +458,10 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
           {target ? <span className="assistant-focus">Focused on scene <code>{target}</code>
             <button type="button" className="studio-link" onClick={() => setWithFocus(false)}>Clear</button></span>
             : focus && <button type="button" className="studio-link" onClick={() => setWithFocus(true)}>Focus on scene {focus}</button>}
+          <label className="assistant-auto" title="Pictures and voices start as soon as the assistant proposes them, and use your credits. Turn off to start each one yourself.">
+            <input type="checkbox" checked={autoGenerate} onChange={event => {
+              setAutoGenerate(event.target.checked); writeSelection(AUTO_KEY, event.target.checked ? null : "off");
+            }} /> Generate automatically</label>
           <small>{blocker && !dirty && text.trim() ? blocker : "Enter sends · Shift + Enter adds a line"}</small>
           {access?.assistant_item && <CreditCost item={access.assistant_item} />}
         </div>

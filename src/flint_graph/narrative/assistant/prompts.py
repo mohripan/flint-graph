@@ -11,8 +11,32 @@ def system_prompt() -> str:
     return render_chat("narrative.assistant.system")[0]["content"]
 
 
+# A grammar-constrained model must write fields in the schema's order, and the lock stores
+# keys sorted. Left sorted, an operation has to start with whatever field sorts first, so a
+# model that means to write {"op": "generate_backgrounds"} gets funnelled into the few
+# operations that may start with "op", and writes set_title instead. These go first; the
+# reply first of all, so the creator sees it streaming before the proposal.
+_WRITTEN_FIRST = ("reply", "op", "type", "summary", "id", "character", "characters")
+
+
+def _written_order(schema: Any) -> Any:
+    if isinstance(schema, list):
+        return [_written_order(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    result = {key: _written_order(value) for key, value in schema.items()}
+    properties = result.get("properties")
+    if isinstance(properties, dict):
+        rank = {name: position for position, name in enumerate(_WRITTEN_FIRST)}
+        result["properties"] = {
+            name: properties[name]
+            for name in sorted(properties, key=lambda item: (rank.get(item, len(rank)), item))
+        }
+    return result
+
+
 def response_schema() -> dict[str, Any]:
-    schema: dict[str, Any] = (
+    schema: dict[str, Any] = _written_order(
         current_snapshot().entry("narrative.assistant.system").data["output_schema"]
     )
     return schema
@@ -40,4 +64,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v2": "99d7090be56e40f350e2e681c7fb59c47a49ce956ef2bfcd29d6be82d814ee8f",
     # Clarify character intent and expose the transparent-sprite high-resolution default.
     "narrative-assistant/v3": "5caef1eeab73bcb1531fbbda1a267e52ef750d8cab9129d0db720da0636551b5",
+    # Actions run for real: expressions, CGs and voices; stage CGs and line voices (ADR 0061).
+    "narrative-assistant/v4": "eba010f6361e42dc3e107faa9236c74398cb4c4936246d4e52ca74e83b63de5f",
 }

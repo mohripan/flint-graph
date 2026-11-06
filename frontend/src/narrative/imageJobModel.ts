@@ -1,14 +1,6 @@
-import type { AssistantImageActionStatus, ImageJob } from "../lib/api";
+import type { ImageJob } from "../lib/api";
 
 const terminal = new Set(["completed", "failed", "cancelled"]);
-export function mergeActionJobs(current: Record<number, ImageJob | null>, incoming: AssistantImageActionStatus[]): Record<number, ImageJob | null> {
-  const merged = { ...current };
-  for (const { index, job } of incoming) {
-    if (job) merged[index] = mergeImageJobs(current[index] ? [current[index]!] : [], [job]).find(item => item.id === job.id)!;
-    else if (!current[index]) merged[index] = null;
-  }
-  return merged;
-}
 /** A slow list response must not undo a start event, progress or a terminal result. */
 export function mergeImageJobs(current: ImageJob[], incoming: ImageJob[]): ImageJob[] {
   const merged = new Map(current.map(job => [job.id, job]));
