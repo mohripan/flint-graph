@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
+    DDL,
     JSON,
     Boolean,
     CheckConstraint,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     func,
     text,
 )
@@ -48,6 +50,9 @@ class NarrativeAssistantThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     creation_key: Mapped[UUID]
     request_hash: Mapped[str] = mapped_column(String(64))
     next_sequence: Mapped[int] = mapped_column(Integer, default=1)
+    # The position the next log event takes (ADR 0060), held here so an append takes it
+    # under this row's lock: two writers can never write the same position.
+    next_event_sequence: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -235,4 +240,54 @@ class NarrativeAssistantTurnEvent(UUIDPrimaryKeyMixin, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class NarrativeAssistantThreadEvent(UUIDPrimaryKeyMixin, Base):
+    """One thing that happened in a conversation; append-only (ADR 0060).
+
+    The database refuses UPDATE and DELETE. Turn events above are the bounded live
+    trace of one reply; these are the durable record of the whole thread.
+    """
+
+    __tablename__ = "narrative_assistant_thread_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "thread_id", "sequence", name="uq_narrative_assistant_thread_event_sequence"
+        ),
+        ForeignKeyConstraint(
+            ["thread_id", "project_id", "tenant_id"],
+            [
+                "narrative_assistant_threads.id",
+                "narrative_assistant_threads.project_id",
+                "narrative_assistant_threads.tenant_id",
+            ],
+            name="fk_narrative_assistant_thread_event_thread",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("sequence > 0", name="ck_narrative_assistant_thread_event_sequence"),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    thread_id: Mapped[UUID]
+    sequence: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    actor_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+# Migrations add the PostgreSQL equivalent; SQLite test databases get theirs here, so
+# the refusal is exercised by the ordinary test run too.
+for _operation in ("UPDATE", "DELETE"):
+    event.listen(
+        NarrativeAssistantThreadEvent.__table__,
+        "after_create",
+        DDL(  # type: ignore[no-untyped-call]
+            f"CREATE TRIGGER narrative_thread_events_no_{_operation.lower()} "
+            f"BEFORE {_operation} ON narrative_assistant_thread_events "
+            "BEGIN SELECT RAISE(ABORT, 'the thread log is append-only'); END"
+        ).execute_if(dialect="sqlite"),
     )

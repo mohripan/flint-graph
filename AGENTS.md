@@ -229,6 +229,15 @@ mirrored rule in `frontend/src/site/creditsModel.ts`. Invitations and grants can
 operators adjust balances with an audited note. Read
 `docs/reports/2026-11-06-credits-and-unlimited-access.md`.
 
+[ADR 0060](docs/adr/0060-assistant-thread-event-log.md) (migration 0045) makes an assistant
+conversation a fold over the append-only `narrative_assistant_thread_events`, modelled on
+Capsulet's durable runtime. Write lifecycle changes with `append_thread_event` in the same
+transaction, and declare new kinds in `narrative/assistant/log.py`. The fold
+(`fold_thread`) is the only source of model history and of the Studio's **Activity log**;
+turn rows stay the operational ledger for fencing, and a test asserts the fold agrees with
+them. The database refuses `UPDATE`/`DELETE` on the log. Read
+`docs/reports/2026-11-06-assistant-thread-log.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

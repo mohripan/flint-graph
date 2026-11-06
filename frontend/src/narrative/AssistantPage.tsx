@@ -11,6 +11,7 @@ import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnInte
 import { followTurnEvents, listTurnEvents, streamTurnEvents } from "./assistantStream";
 import { ProposalActions } from "./ProposalActions";
 import { releaseErrorMessage, useReleaseRequests } from "./releaseRequests";
+import { ThreadHistory } from "./ThreadHistory";
 import type { AssistantProposal, AssistantThread, AssistantTurn, NarrativeRevision, StoryDraft } from "./types";
 import "./assistant.css";
 
@@ -100,6 +101,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const [conflict, setConflict] = useState<string | null>(null);
   const [visible, setVisible] = useState(() => document.visibilityState !== "hidden");
   const [drawer, setDrawer] = useState(false), [withFocus, setWithFocus] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const intent = useRef<TurnIntent | null>(null), threadIntent = useRef<ThreadIntent | null>(null);
   const decisionKeys = useRef(new Map<string, string>()), composer = useRef<HTMLTextAreaElement>(null);
@@ -328,8 +330,11 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             }, () => undefined);
           }}><code>{copied ? "Copied" : threadId.slice(0, 8)}</code></button>}
         <span className="studio-hint">Revision {revision.revision_number}{dirty ? " · unsaved edits" : ""}</span>
+        {threadId && <button type="button" className="studio-link" aria-expanded={historyOpen}
+          onClick={() => setHistoryOpen(open => !open)}>Activity log</button>}
       </header>
       <div className="studio-visually-hidden" role="status">{announced ?? ""}</div>
+      <div className="assistant-body"><div className="assistant-chat">
       <div ref={scroller} className="assistant-scroll" onScroll={event => {
         const element = event.currentTarget;
         stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
@@ -433,6 +438,10 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
           {access?.assistant_item && <CreditCost item={access.assistant_item} />}
         </div>
       </form> : <p className="studio-notice assistant-readonly">Read-only access. You can read conversations but not ask for changes.</p>}
+      </div>
+      {historyOpen && threadId && <ThreadHistory key={threadId} tenantId={tenantId} projectId={projectId} threadId={threadId}
+        version={turns.map(turn => `${turn.status}:${turn.proposal?.status ?? ""}`).join(",")} onClose={() => setHistoryOpen(false)} />}
+      </div>
     </div>
   </section>;
 }

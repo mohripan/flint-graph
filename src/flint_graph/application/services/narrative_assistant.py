@@ -26,6 +26,10 @@ from flint_graph.application.services.narrative_assistant_events import (
     add_turn_event,
     events_after,
 )
+from flint_graph.application.services.narrative_assistant_log import (
+    append_thread_event,
+    read_thread_log,
+)
 from flint_graph.application.services.narrative_projects import (
     create_revision,
     get_project,
@@ -59,13 +63,25 @@ from flint_graph.narrative.assistant.assets import (
     library_entries,
 )
 from flint_graph.narrative.assistant.context import HistoryTurn
+from flint_graph.narrative.assistant.log import (
+    PROPOSAL_ACCEPTED,
+    PROPOSAL_CREATED,
+    PROPOSAL_REJECTED,
+    THREAD_CREATED,
+    TURN_CANCELLED,
+    TURN_COMPLETED,
+    TURN_FAILED,
+    TURN_REQUESTED,
+    conversation_from_log,
+    fold_thread,
+)
 from flint_graph.narrative.assistant.operations import Proposal, check_proposal
 from flint_graph.narrative.assistant.turn import TurnResult
 from flint_graph.narrative.values import canonical_json
 from flint_graph.prompts.source import PromptBundle
 
-HISTORY_TURNS = 4
 _ACTIVE = ("queued", "running")
+_TURN_ENDED = {"completed": TURN_COMPLETED, "failed": TURN_FAILED, "cancelled": TURN_CANCELLED}
 
 
 def _fingerprint(value: dict[str, Any]) -> str:
@@ -86,7 +102,9 @@ class TurnWork:
     story: dict[str, Any]
     request: str
     focus: str | None
+    # Folded from the thread log (ADR 0060): recent turns verbatim, older ones as one line.
     history: tuple[HistoryTurn, ...]
+    earlier: tuple[str, ...] = ()
     # Story format 2: approved library files under story-ready IDs, and each
     # character's described looks (editor metadata the model may reuse).
     library: tuple[LibraryEntry, ...] = ()
@@ -132,6 +150,15 @@ async def create_thread(
     )
     session.add(thread)
     await session.flush()
+    await append_thread_event(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread.id,
+        kind=THREAD_CREATED,
+        payload={"title": title},
+        actor_user_id=author_user_id,
+    )
     await session.refresh(thread)
     await record_audit_event(
         session,
@@ -303,6 +330,21 @@ async def post_turn(
         units=1,
         subject=f"assistant_turn:{turn.id}",
     )
+    await append_thread_event(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread.id,
+        kind=TURN_REQUESTED,
+        payload={
+            "turn_id": str(turn.id),
+            "turn_sequence": turn.sequence,
+            "request": request,
+            "base_revision_id": str(base_revision_id),
+            "focus_node": focus_node,
+        },
+        actor_user_id=author_user_id,
+    )
     await append_outbox_message(
         session,
         tenant_id=tenant_id,
@@ -455,8 +497,7 @@ async def cancel_turn(
     if turn.status not in _ACTIVE or turn.cancel_requested:
         return turn
     if turn.status == "queued":
-        turn.status, turn.finished_at = "cancelled", _now()
-        await add_status_event(session, turn)
+        await _finish(session, turn, "cancelled")
     else:
         turn.cancel_requested = True
         await append_outbox_message(
@@ -582,6 +623,20 @@ async def accept_proposal(
     proposal.decided_by_user_id = author_user_id
     proposal.decided_at = _now()
     await session.flush()
+    await append_thread_event(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=proposal.thread_id,
+        kind=PROPOSAL_ACCEPTED,
+        payload={
+            "proposal_id": str(proposal.id),
+            "revision_id": str(revision.id),
+            "summary": proposal.summary,
+            "conflicted": revision.conflicted,
+        },
+        actor_user_id=author_user_id,
+    )
     await record_audit_event(
         session,
         tenant_id=tenant_id,
@@ -624,6 +679,15 @@ async def reject_proposal(
     proposal.decided_by_user_id = author_user_id
     proposal.decided_at = _now()
     await session.flush()
+    await append_thread_event(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=proposal.thread_id,
+        kind=PROPOSAL_REJECTED,
+        payload={"proposal_id": str(proposal.id), "summary": proposal.summary},
+        actor_user_id=author_user_id,
+    )
     await record_audit_event(
         session,
         tenant_id=tenant_id,
@@ -723,21 +787,10 @@ async def claim_turn(
     )
     if base is None:
         raise DomainError(503, "Service unavailable", "Turn state is unavailable.", "turn-state")
-    earlier = await session.scalars(
-        select(NarrativeAssistantTurn)
-        .where(
-            NarrativeAssistantTurn.thread_id == turn.thread_id,
-            NarrativeAssistantTurn.sequence < turn.sequence,
-            NarrativeAssistantTurn.status == "completed",
-        )
-        .order_by(NarrativeAssistantTurn.sequence.desc())
-        .limit(HISTORY_TURNS)
+    conversation = conversation_from_log(
+        fold_thread(await read_thread_log(session, thread_id=turn.thread_id)),
+        before_turn=turn.sequence,
     )
-    history: list[HistoryTurn] = []
-    for previous in reversed(list(earlier)):
-        history.append(HistoryTurn("user", previous.request))
-        if previous.reply:
-            history.append(HistoryTurn("assistant", previous.reply))
     story = json.loads(base.story_json)
     library: tuple[LibraryEntry, ...] = ()
     profiles: dict[str, str] = {}
@@ -771,7 +824,8 @@ async def claim_turn(
         story=story,
         request=turn.request,
         focus=turn.focus_node,
-        history=tuple(history),
+        history=conversation.recent,
+        earlier=conversation.earlier,
         library=library,
         profiles=profiles,
         prompt_bundle=await execution_bundle(session, turn),
@@ -785,6 +839,25 @@ def _owned(turn: NarrativeAssistantTurn | None, token: UUID) -> bool:
 async def _finish(session: AsyncSession, turn: NarrativeAssistantTurn, status: str) -> None:
     turn.status, turn.execution_token, turn.finished_at = status, None, _now()
     await add_status_event(session, turn)
+    payload: dict[str, Any] = {"turn_id": str(turn.id), "turn_sequence": turn.sequence}
+    if status == "completed":
+        payload |= {
+            "reply": turn.reply,
+            "model": turn.model,
+            "attempts": turn.attempts,
+            "input_tokens": turn.input_tokens,
+            "output_tokens": turn.output_tokens,
+        }
+    else:
+        payload["error_code"] = turn.error_code
+    await append_thread_event(
+        session,
+        tenant_id=turn.tenant_id,
+        project_id=turn.project_id,
+        thread_id=turn.thread_id,
+        kind=_TURN_ENDED[status],
+        payload=payload,
+    )
 
 
 async def complete_turn(
@@ -813,32 +886,44 @@ async def complete_turn(
     turn.output_tokens = result.output_tokens
     await _finish(session, turn, "completed")
     if result.proposal is not None or result.diagnostics:
-        session.add(
-            NarrativeAssistantProposal(
-                tenant_id=turn.tenant_id,
-                project_id=turn.project_id,
-                thread_id=turn.thread_id,
-                turn_id=turn.id,
-                base_revision_id=turn.base_revision_id,
-                status="invalid" if result.diagnostics else "ready",
-                summary=(
-                    result.proposal.summary
-                    if result.proposal is not None
-                    else "The assistant's answer could not be used."
-                ),
-                operations=(
-                    [item.model_dump() for item in result.proposal.operations]
-                    if result.proposal is not None
-                    else []
-                ),
-                diagnostics=[
-                    {"code": item.code, "location": item.location} for item in result.diagnostics
-                ],
-                warnings=[
-                    {"code": item.code, "location": item.location} for item in result.warnings
-                ],
-                touched=list(result.touched),
-            )
+        proposal = NarrativeAssistantProposal(
+            tenant_id=turn.tenant_id,
+            project_id=turn.project_id,
+            thread_id=turn.thread_id,
+            turn_id=turn.id,
+            base_revision_id=turn.base_revision_id,
+            status="invalid" if result.diagnostics else "ready",
+            summary=(
+                result.proposal.summary
+                if result.proposal is not None
+                else "The assistant's answer could not be used."
+            ),
+            operations=(
+                [item.model_dump() for item in result.proposal.operations]
+                if result.proposal is not None
+                else []
+            ),
+            diagnostics=[
+                {"code": item.code, "location": item.location} for item in result.diagnostics
+            ],
+            warnings=[{"code": item.code, "location": item.location} for item in result.warnings],
+            touched=list(result.touched),
+        )
+        session.add(proposal)
+        await session.flush()
+        await append_thread_event(
+            session,
+            tenant_id=turn.tenant_id,
+            project_id=turn.project_id,
+            thread_id=turn.thread_id,
+            kind=PROPOSAL_CREATED,
+            payload={
+                "proposal_id": str(proposal.id),
+                "turn_id": str(turn.id),
+                "summary": proposal.summary,
+                "status": proposal.status,
+                "operations": len(proposal.operations),
+            },
         )
     await session.flush()
     return turn

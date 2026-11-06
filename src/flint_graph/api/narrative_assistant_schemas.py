@@ -94,3 +94,15 @@ class AssistantTurnEventResponse(BaseModel):
     kind: str
     payload: dict[str, Any]
     created_at: datetime
+
+
+class AssistantThreadEventResponse(BaseModel):
+    """One entry of a thread's append-only log (ADR 0060)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    thread_id: UUID
+    sequence: int
+    kind: str
+    payload: dict[str, Any]
+    actor_user_id: UUID | None
+    created_at: datetime

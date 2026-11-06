@@ -2,6 +2,7 @@ import type {repairBody} from "../narrative/poseRepairModel";
 import type { LedgerEntry, Prices } from "../site/creditsModel";
 import type {StyleHistory,StyleJob,styleBody} from "../narrative/styleModel";
 import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
+import type { ThreadEvent } from "../narrative/assistantLog";
 import type {
   NarrativeProject,
   NarrativeRevision,
@@ -958,6 +959,13 @@ export const api = {
   } = {}): Promise<AssistantTurn[]> {
     return jsonRequest(`${assistantPath(projectId)}/threads/${encodeURIComponent(threadId)}/turns?limit=100`, {
       headers: tenantHeaders(tenantId), signal: options.signal, cache: "no-store",
+    });
+  },
+
+  listAssistantThreadEvents(tenantId: string, projectId: string, threadId: string, afterSequence: number,
+    signal?: AbortSignal): Promise<ThreadEvent[]> {
+    return jsonRequest(`${assistantPath(projectId)}/threads/${encodeURIComponent(threadId)}/events?after_sequence=${afterSequence}`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
   },
 

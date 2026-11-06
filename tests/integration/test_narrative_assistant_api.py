@@ -244,10 +244,11 @@ async def test_completed_turn_shows_reply_and_reviewable_proposal_with_history(
     claimed = await work(
         factory, second["id"], json.dumps({"reply": "Nothing to add.", "proposal": None})
     )
-    assert [(item.role, item.content) for item in claimed.history] == [
-        ("user", "Add a storm."),
-        ("assistant", "Here is a storm before the ending."),
-    ]
+    # The model also hears what became of the proposal (ADR 0060).
+    assert [item.role for item in claimed.history] == ["user", "assistant"]
+    assert claimed.history[0].content == "Add a storm."
+    assert claimed.history[1].content.startswith("Here is a storm before the ending.")
+    assert "not decided" in claimed.history[1].content
     later = await turns(client, headers, path, thread)
     assert later[1]["proposal"] is None and later[1]["reply"] == "Nothing to add."
 

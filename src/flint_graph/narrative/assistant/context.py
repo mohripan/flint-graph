@@ -60,12 +60,13 @@ def build_turn_messages(
     budget: int = 32000,
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
+    earlier: Sequence[str] = (),
 ) -> tuple[list[dict[str, str]], ContextStats]:
     messages = [{"role": "system", "content": system_prompt()}]
     recent = list(history)[-HISTORY_TURNS:]
     for turn in recent:
         messages.append({"role": turn.role, "content": turn.content[:HISTORY_CHARS]})
-    context, outlined, shown = _render(story, focus, budget, library, profiles or {})
+    context, outlined, shown = _render(story, focus, budget, library, profiles or {}, earlier)
     messages.append(
         {
             "role": "user",
@@ -179,6 +180,7 @@ def _render(
     budget: int,
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
+    earlier: Sequence[str] = (),
 ) -> tuple[str, int, str | None]:
     """Return the context text, the number of outlined scenes and the shown focus scene."""
     nodes: dict[str, Any] = story["nodes"]
@@ -211,6 +213,9 @@ def _render(
             header.append(
                 "theme: " + json.dumps(story["theme"], ensure_ascii=False, separators=(",", ":"))
             )
+    if earlier:
+        # Older turns of this thread, folded from its log; escaped like any other data.
+        header += ["earlier in this conversation (oldest first):", *earlier]
     head = _safe("\n".join(header)) + "\nscenes (id | type | text -> next):"
 
     adjacent: dict[str, set[str]] = {key: set() for key in nodes}

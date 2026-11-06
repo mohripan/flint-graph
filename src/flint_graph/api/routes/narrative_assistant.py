@@ -28,6 +28,7 @@ from flint_graph.api.narrative_assistant_schemas import (
     AssistantProposalResponse,
     AssistantProposalSummary,
     AssistantThreadCreate,
+    AssistantThreadEventResponse,
     AssistantThreadResponse,
     AssistantTurnCreate,
     AssistantTurnEventResponse,
@@ -52,6 +53,7 @@ from flint_graph.application.services.narrative_assistant import (
 )
 from flint_graph.application.services.narrative_assistant_events import events_after
 from flint_graph.application.services.narrative_assistant_images import action_jobs, start_action
+from flint_graph.application.services.narrative_assistant_log import list_thread_events
 from flint_graph.application.services.narrative_images import get_image_job
 from flint_graph.infrastructure.db.models import NarrativeAssistantProposal, NarrativeAssistantTurn
 from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
@@ -204,6 +206,30 @@ async def get_thread_endpoint(
         include_archived=include_archived,
     )
     return AssistantThreadResponse.model_validate(thread)
+
+
+@router.get("/threads/{thread_id}/events", response_model=list[AssistantThreadEventResponse])
+async def list_thread_events_endpoint(
+    project_id: UUID,
+    thread_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    after_sequence: int = Query(default=0, ge=0, le=2**31 - 1),
+    limit: int = Query(default=200, ge=1, le=500),
+    include_archived: bool = False,
+) -> list[AssistantThreadEventResponse]:
+    """The thread's append-only log, oldest first, resumable from a sequence (ADR 0060)."""
+    thread = await get_thread(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=thread_id,
+        include_archived=include_archived,
+    )
+    rows = await list_thread_events(
+        session, thread_id=thread.id, after_sequence=after_sequence, limit=limit
+    )
+    return [AssistantThreadEventResponse.model_validate(row) for row in rows]
 
 
 @router.post("/threads/{thread_id}/turns", response_model=AssistantTurnResponse, status_code=202)

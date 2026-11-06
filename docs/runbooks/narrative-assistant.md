@@ -160,6 +160,16 @@ See [qualification](../reports/2026-10-31-assistant-image-actions.md).
   A transparent sprite is always full-body. The assistant cannot change the
   expression of an existing picture yet: it suggests one sprite job per expression.
 
+## Conversation history
+
+A conversation is a fold over its append-only log, `narrative_assistant_thread_events`
+([ADR 0060](../adr/0060-assistant-thread-event-log.md)). The model is told the last four
+finished turns verbatim, with what became of each proposal, and older turns as one line
+each. **Activity log** in the chat header shows the same events, and
+`GET .../assistant/threads/{id}/events?after_sequence=` returns them. The database refuses
+updates and deletes on this table; never work around that to fix data. Migration
+`0045_assistant_thread_log` backfills existing threads.
+
 ## Troubleshooting
 
 | Message | Check |

@@ -120,6 +120,7 @@ class NarrativeAssistantActivities:
                     work.request,
                     focus=work.focus,
                     history=work.history,
+                    earlier=work.earlier,
                     budget=self.context_chars,
                     observer=events,
                     library=work.library,

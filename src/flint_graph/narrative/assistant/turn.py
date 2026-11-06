@@ -280,6 +280,7 @@ async def run_turn(
     observer: TurnObserver | None = None,
     library: Sequence[LibraryEntry] = (),
     profiles: Mapping[str, str] | None = None,
+    earlier: Sequence[str] = (),
 ) -> TurnResult:
     watch = observer or _Silent()
     messages, stats = build_turn_messages(
@@ -290,6 +291,7 @@ async def run_turn(
         budget=budget,
         library=library,
         profiles=profiles,
+        earlier=earlier,
     )
     await watch.step(
         "context",

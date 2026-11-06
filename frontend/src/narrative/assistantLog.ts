@@ -1,0 +1,46 @@
+// A conversation's append-only log (ADR 0060), read as a timeline. The server is the
+// source of truth; polling only ever adds events, so repeating a request is harmless.
+export interface ThreadEvent {
+  thread_id: string; sequence: number; kind: string; payload: Record<string, unknown>;
+  actor_user_id: string | null; created_at: string;
+}
+export type LogTone = "neutral" | "good" | "bad" | "muted";
+export interface LogLine { sequence: number; at: string; label: string; detail?: string; tone: LogTone }
+
+const DETAIL_CHARS = 240;
+function short(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const line = value.replace(/\s+/g, " ").trim();
+  return line.length <= DETAIL_CHARS ? line : `${line.slice(0, DETAIL_CHARS - 1).trimEnd()}…`;
+}
+const words = (value: unknown) => typeof value === "string" ? value.replaceAll("_", " ") : undefined;
+
+export function mergeLog(current: ThreadEvent[], incoming: ThreadEvent[]): ThreadEvent[] {
+  const known = new Set(current.map(event => event.sequence));
+  const fresh = incoming.filter(event => !known.has(event.sequence));
+  return fresh.length ? [...current, ...fresh].sort((a, b) => a.sequence - b.sequence) : current;
+}
+
+function describe(kind: string, data: Record<string, unknown>): Pick<LogLine, "label" | "detail" | "tone"> {
+  switch (kind) {
+    case "thread.created": return { label: "Conversation started", detail: short(data.title), tone: "neutral" };
+    case "turn.requested": return { label: "Request", detail: short(data.request), tone: "neutral" };
+    case "turn.completed": return { label: "Reply", detail: short(data.reply), tone: "neutral" };
+    case "turn.failed": return { label: "Reply failed", detail: words(data.error_code), tone: "bad" };
+    case "turn.cancelled": return { label: "Reply stopped", tone: "muted" };
+    case "proposal.created": return data.status === "invalid"
+      ? { label: "Proposal couldn't be used", detail: short(data.summary), tone: "bad" }
+      : { label: "Changes proposed", detail: short(data.summary), tone: "neutral" };
+    case "proposal.accepted": return data.conflicted === true
+      ? { label: "Accepted as a conflict copy", detail: short(data.summary), tone: "bad" }
+      : { label: "Proposal accepted", detail: short(data.summary), tone: "good" };
+    case "proposal.rejected": return { label: "Proposal rejected", detail: short(data.summary), tone: "muted" };
+    default: return { label: kind.replaceAll(/[._]/g, " "), tone: "neutral" };
+  }
+}
+
+export function logLines(events: ThreadEvent[]): LogLine[] {
+  return events.map(event => ({
+    sequence: event.sequence, at: event.created_at, ...describe(event.kind, event.payload ?? {}),
+  }));
+}
