@@ -10,6 +10,20 @@ async function load(path) {
 }
 const routes = await load("../src/site/siteRoutes.ts");
 const usage = await load("../src/site/usageModel.ts");
+const howItWorks = await load("../src/site/howItWorksContent.ts");
+
+test("How it works steps are complete and their screenshots exist", async () => {
+  const titles = howItWorks.STEPS.map(step => step.title);
+  assert.equal(new Set(titles).size, titles.length);
+  for (const step of howItWorks.STEPS) {
+    assert.ok(step.title.trim() && step.body.length > 0 && step.body.every(text => text.trim()), step.title);
+    if (!step.image) continue;
+    assert.ok(step.image.alt.trim(), `${step.title} needs alt text`);
+    assert.match(step.image.src, /^\/site\/[\w-]+\.webp$/);
+    await readFile(new URL(`../public${step.image.src}`, import.meta.url));
+  }
+  assert.ok(howItWorks.FAQ.every(([question, answer]) => question.trim() && answer.trim()));
+});
 
 test("public pages, the Studio and old Studio links each get their route", () => {
   assert.equal(routes.routeFor("/", ""), "home");
