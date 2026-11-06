@@ -330,3 +330,161 @@ def test_rewording_a_voiced_line_keeps_its_voice_for_the_same_speaker():
         ).operations,
     )
     assert "voice" not in other.story["nodes"]["hello"]
+
+
+def test_image_actions_accept_the_other_actions_field_name():
+    # Local models sometimes write a character's look under the background field's name.
+    action = {
+        "op": "generate_character_images",
+        "character": "anna",
+        "description": "long black hair, red eyes, elegant silk dress",
+        "character_type": "woman",
+        "transparent": True,
+    }
+    images = GenerateCharacterImages.model_validate(action)
+    assert images.appearance == "long black hair, red eyes, elegant silk dress"
+    background = proposal({"op": "generate_backgrounds", "appearance": "harbor at night"})
+    assert background.operations[0].description == "harbor at night"
+    # Both names at once is ambiguous and stays invalid.
+    with pytest.raises(ValidationError):
+        GenerateCharacterImages.model_validate({**action, "appearance": "short hair"})
+
+
+class Recording:
+    provider = "scripted"
+
+    def __init__(self, *contents: str) -> None:
+        self.contents, self.messages = list(contents), []
+
+    async def respond(self, messages, schema, on_delta=None):
+        self.messages.append(list(messages))
+        return ModelReply(self.contents.pop(0), "scripted", 1, 1)
+
+
+@pytest.mark.anyio
+async def test_a_repair_says_what_is_wrong_not_only_where():
+    def answer(character: dict) -> str:
+        return json.dumps(
+            {
+                "reply": "Anna is ready.",
+                "proposal": {
+                    "summary": "Add Anna",
+                    "operations": [{"op": "upsert_character", "id": "anna", **character}],
+                },
+            }
+        )
+
+    model = Recording(answer({"name": "Anna", "title": "Onee-san"}), answer({"name": "Anna"}))
+    result = await run_turn(model, story(), "Add Anna")
+    assert result.diagnostics == () and len(model.messages) == 2
+    repair = model.messages[1][-1]["content"]
+    assert "proposal.operations.0.upsert_character.title" in repair
+    assert "not allowed here" in repair
+
+
+@pytest.mark.anyio
+async def test_a_repair_lists_the_allowed_values_of_a_missing_choice():
+    def answer(action: dict) -> str:
+        return json.dumps(
+            {
+                "reply": "Generate Mira when you like.",
+                "proposal": {
+                    "summary": "Mira sprite",
+                    "operations": [
+                        {"op": "generate_character_images", "character": "mira", **action}
+                    ],
+                },
+            }
+        )
+
+    look = {"appearance": "long black hair, red eyes"}
+    model = Recording(answer(look), answer({**look, "character_type": "woman"}))
+    result = await run_turn(model, story(), "Draw Mira")
+    assert result.diagnostics == ()
+    repair = model.messages[1][-1]["content"]
+    assert (
+        "character_type: required, but missing; use one of: girl, boy, woman, man, other" in repair
+    )
+
+
+def _anna(action: dict, character: dict | None = None) -> str:
+    return json.dumps(
+        {
+            "reply": "Anna is ready; generate her sprite when you like.",
+            "proposal": {
+                "summary": "Add Anna",
+                "operations": [
+                    {"op": "upsert_character", "id": "anna", "name": "Anna", **(character or {})},
+                    {"op": "generate_character_images", "character": "anna", **action},
+                ],
+            },
+        }
+    )
+
+
+@pytest.mark.anyio
+async def test_a_picture_suggestion_still_broken_after_repairs_is_dropped_not_the_proposal():
+    broken = _anna({"appearance": "long black hair, red eyes"})  # no character_type
+    model = Recording(broken, broken, broken)
+    result = await run_turn(model, story(), "Add Anna")
+    assert len(model.messages) == 3, "the repairs are tried first"
+    assert result.diagnostics == ()
+    assert [item.op for item in result.proposal.operations] == ["upsert_character"]
+    assert result.story["characters"]["anna"]["name"] == "Anna"
+    assert ("image_action_dropped", "proposal.operations.1") in [
+        (item.code, item.location) for item in result.warnings
+    ]
+
+
+@pytest.mark.anyio
+async def test_a_broken_story_edit_still_makes_the_proposal_unusable():
+    broken = _anna({"appearance": "x"}, character={"title": "Onee-san"})
+    result = await run_turn(Recording(broken, broken, broken), story(), "Add Anna")
+    assert result.story is None and result.diagnostics
+
+
+@pytest.mark.anyio
+async def test_sprites_of_pictures_still_to_generate_are_left_for_approval():
+    # The model cannot know the asset id of a picture it only suggests generating.
+    pending = _anna(
+        {"appearance": "long black hair, red eyes", "character_type": "woman", "transparent": True},
+        character={"sprites": {"neutral": "anna_neutral"}},
+    )
+    result = await run_turn(Recording(pending), story(), "Add Anna")
+    assert result.diagnostics == ()
+    assert "sprites" not in result.story["characters"]["anna"]
+    assert [item.op for item in result.proposal.operations] == [
+        "upsert_character",
+        "generate_character_images",
+    ]
+    # Without a picture suggestion for her, an unknown sprite is still a mistake.
+    typo = json.dumps(
+        {
+            "reply": "Done.",
+            "proposal": {
+                "summary": "Mira sprite",
+                "operations": [
+                    {
+                        "op": "upsert_character",
+                        "id": "mira",
+                        "name": "Mira",
+                        "sprites": {"neutral": "mira_neutrl"},
+                    }
+                ],
+            },
+        }
+    )
+    failed = await run_turn(Recording(typo, typo, typo), story(), "Fix Mira")
+    assert failed.diagnostics and failed.story is None
+
+
+@pytest.mark.anyio
+async def test_a_dropped_suggestion_still_leaves_its_pending_sprites_for_approval():
+    broken = _anna(
+        {"appearance": "long black hair, red eyes", "transparent": True},  # no character_type
+        character={"sprites": {"neutral": "anna_neutral"}},
+    )
+    result = await run_turn(Recording(broken, broken, broken), story(), "Add Anna")
+    assert result.diagnostics == ()
+    assert [item.op for item in result.proposal.operations] == ["upsert_character"]
+    assert "sprites" not in result.story["characters"]["anna"]

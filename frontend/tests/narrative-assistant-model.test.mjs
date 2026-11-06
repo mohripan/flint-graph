@@ -107,3 +107,14 @@ test("turn and failure copy is human and never shows raw codes", () => {
   assert.equal(model.proposalStatus("invalid"), "Can't be used");
   assert.equal(model.proposalStatus("ready"), "Ready to review");
 });
+
+test("proposal notes explain a dropped picture suggestion apart from map warnings", () => {
+  assert.deepEqual(model.proposalNotes([]), []);
+  const dropped = model.proposalNotes([{ code: "image_action_dropped", location: "proposal.operations.1" }]);
+  assert.equal(dropped.length, 1);
+  assert.match(dropped[0], /picture suggestion was left out/);
+  const both = model.proposalNotes([{ code: "unreachable_node", location: "nodes.x" },
+    { code: "image_action_dropped", location: "proposal.operations.2" }]);
+  assert.equal(both.length, 2);
+  assert.match(both.join(" "), /unreachable or loop/);
+});

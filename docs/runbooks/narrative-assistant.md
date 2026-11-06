@@ -115,8 +115,23 @@ the endpoints and prompt. There is no database migration or Godot rebuild.
 See [qualification](../reports/2026-10-31-assistant-image-actions.md).
 
 - One reply at a time per workspace by default; a second send returns 429.
-- Unusable model output is sent back with diagnostics for at most two repairs. A
-  proposal that is still invalid is shown as "Can't be used" and cannot be accepted.
+- Unusable model output is sent back with diagnostics for at most two repairs.
+  - Each problem says what is wrong as well as where: a field that is missing (with
+    its allowed values when they are fixed), or not allowed there.
+  - A proposal that is still invalid is shown as "Can't be used" and cannot be
+    accepted.
+- Local models sometimes mislabel picture suggestions, so three corrections are made
+  without asking the model again:
+  - **Swapped field names:** a character suggestion's look written as `description`
+    (or a background's place as `appearance`) is accepted under the right name.
+  - **Sprites for pictures not made yet:** links to pictures that don't exist yet are
+    dropped when the same proposal suggests generating that character's pictures;
+    approving the generated pictures binds the sprites.
+  - **Unfinished suggestions:** a picture suggestion still invalid after the repairs
+    (for example without `character_type`) is left out, when the story changes
+    themselves are valid. The proposal says so: generate that picture from Characters.
+  A typo in an existing sprite or any other broken story change still makes the
+  proposal unusable.
 - Accepting a proposal whose base is no longer current rebases it when none of the
   touched records changed; otherwise it is saved as a conflict revision and the
   current story is unchanged.

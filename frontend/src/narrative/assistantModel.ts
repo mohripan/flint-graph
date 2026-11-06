@@ -45,6 +45,16 @@ export function isAction(operation: StoryOperation): operation is AssistantActio
   return operation.op === "generate_character_images" || operation.op === "generate_backgrounds";
 }
 /** One line per suggested image job, and whether it can start against the saved story. */
+/** Plain notes for a proposal's warnings: a dropped picture suggestion, then map problems. */
+export function proposalNotes(warnings: Array<{ code: string; location: string }>): string[] {
+  const notes: string[] = [];
+  if (warnings.some(item => item.code === "image_action_dropped"))
+    notes.push("A picture suggestion was left out because the assistant didn't finish it. Accept the story changes, then generate the picture from Characters.");
+  if (warnings.some(item => item.code !== "image_action_dropped"))
+    notes.push("Some scenes would be unreachable or loop; review the map after accepting.");
+  return notes;
+}
+
 export function proposalActions(story: Pick<StoryDraft, "characters"> | null, operations: StoryOperation[]):
   Array<{ index: number; action: AssistantAction; label: string; ready: boolean }> {
   return operations.flatMap((action, index) => !isAction(action) ? [] : [action.op === "generate_backgrounds"

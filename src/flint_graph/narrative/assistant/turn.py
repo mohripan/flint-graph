@@ -11,6 +11,7 @@ JSON and may stop the turn by raising ``AssistantModelError``.
 """
 
 import json
+import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -19,7 +20,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from flint_graph.narrative.assistant.assets import LibraryEntry, add_library_assets
 from flint_graph.narrative.assistant.context import HistoryTurn, build_turn_messages
-from flint_graph.narrative.assistant.operations import Proposal, check_proposal
+from flint_graph.narrative.assistant.operations import (
+    AddAsset,
+    GenerateCharacterImages,
+    Proposal,
+    UpsertCharacter,
+    check_proposal,
+    field_choices,
+)
 from flint_graph.narrative.assistant.prompts import prompt_sha256, response_schema
 from flint_graph.narrative.assistant.stream import ReplyScanner
 from flint_graph.narrative.values import Diagnostic
@@ -93,7 +101,24 @@ class _Envelope(BaseModel):
     proposal: dict[str, Any] | None = Field(default=None)
 
 
-def _parse(content: str) -> tuple[_Envelope | None, Proposal | None, tuple[Diagnostic, ...]]:
+def _reason(error: Any) -> str:
+    """A short, plain explanation of one validation error for the repair request."""
+    kind, loc = error.get("type"), error.get("loc", ())
+    if kind == "missing":
+        choices = (
+            field_choices(str(loc[2]), str(loc[3]))
+            if len(loc) == 4 and loc[0] == "operations"
+            else ()
+        )
+        return "required, but missing" + (f"; use one of: {', '.join(choices)}" if choices else "")
+    if kind == "extra_forbidden":
+        return "not allowed here; remove it or use the field this operation defines"
+    return str(error.get("msg", "invalid")).lower()[:120]
+
+
+def _parse(
+    content: str,
+) -> tuple[_Envelope | None, Proposal | None, tuple[Diagnostic, ...], dict[str, str]]:
     text = content.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
@@ -103,24 +128,97 @@ def _parse(content: str) -> tuple[_Envelope | None, Proposal | None, tuple[Diagn
             raise ValueError("oversized")
         envelope = _Envelope.model_validate(json.loads(text))
     except (ValueError, ValidationError):
-        return None, None, (Diagnostic("invalid_response", "response"),)
+        return None, None, (Diagnostic("invalid_response", "response"),), {}
     if envelope.proposal is None:
-        return envelope, None, ()
+        return envelope, None, (), {}
     try:
-        return envelope, Proposal.model_validate(envelope.proposal), ()
+        return envelope, Proposal.model_validate(envelope.proposal), (), {}
     except ValidationError as error:
+        errors = error.errors()[:_PARSE_DIAGNOSTICS]
         diagnostics = tuple(
             Diagnostic("invalid_proposal", ".".join(["proposal", *map(str, item["loc"])]))
-            for item in error.errors()[:_PARSE_DIAGNOSTICS]
+            for item in errors
         )
-        return envelope, None, diagnostics
+        reasons = {
+            item.location: _reason(raw) for item, raw in zip(diagnostics, errors, strict=True)
+        }
+        return envelope, None, diagnostics, reasons
 
 
-def _repair_request(diagnostics: Sequence[Diagnostic]) -> str:
-    return render(
-        "narrative.assistant.repair",
-        diagnostics="\n".join(f"- {item.code} at {item.location}" for item in diagnostics),
+def _without_pending_sprites(
+    story: dict[str, Any], proposal: Proposal, dropped_for: frozenset[str] = frozenset()
+) -> Proposal:
+    """Drop sprite links to pictures the same proposal only suggests generating.
+
+    The model cannot know a future picture's asset id; approving the generated
+    pictures in Characters binds the sprites. Other unknown links stay errors.
+    ``dropped_for`` names characters whose broken suggestions were left out.
+    """
+    known = set(story.get("assets") or {})
+    known |= {item.id for item in proposal.operations if isinstance(item, AddAsset)}
+    generating = set(dropped_for) | {
+        item.character for item in proposal.operations if isinstance(item, GenerateCharacterImages)
+    }
+    operations = []
+    for item in proposal.operations:
+        if isinstance(item, UpsertCharacter) and item.id in generating and item.sprites:
+            sprites = {name: asset for name, asset in item.sprites.items() if asset in known}
+            if sprites != item.sprites:
+                item = item.model_copy(update={"sprites": sprites or None})
+        operations.append(item)
+    return proposal.model_copy(update={"operations": operations})
+
+
+_ACTION_PROBLEM = re.compile(r"proposal\.operations\.(\d+)\.generate_[a-z_]+(\.|$)")
+
+
+def _without_broken_actions(
+    raw: dict[str, Any] | None, diagnostics: Sequence[Diagnostic]
+) -> tuple[Proposal, tuple[Diagnostic, ...], frozenset[str]] | None:
+    """Drop picture suggestions that are still invalid, if nothing else is wrong.
+
+    Suggestions are never applied with a proposal; the creator starts them separately.
+    """
+    broken: set[int] = set()
+    for item in diagnostics:
+        match = _ACTION_PROBLEM.match(item.location)
+        if item.code != "invalid_proposal" or match is None:
+            return None
+        broken.add(int(match.group(1)))
+    operations = raw.get("operations") if raw is not None else None
+    if not broken or not isinstance(operations, list):
+        return None
+    kept = [operation for index, operation in enumerate(operations) if index not in broken]
+    if not kept:
+        return None
+    try:
+        proposal = Proposal.model_validate({**raw, "operations": kept})  # type: ignore[dict-item]
+    except ValidationError:
+        return None
+    notes = tuple(
+        Diagnostic("image_action_dropped", f"proposal.operations.{index}")
+        for index in sorted(broken)
     )
+    characters = frozenset(
+        str(operations[index]["character"])
+        for index in broken
+        if index < len(operations)
+        and isinstance(operations[index], dict)
+        and isinstance(operations[index].get("character"), str)
+    )
+    return proposal, notes, characters
+
+
+def _repair_request(
+    diagnostics: Sequence[Diagnostic], reasons: Mapping[str, str] | None = None
+) -> str:
+    # Saying what is wrong, not only where, lets a local model fix a misnamed field.
+    lines = (
+        f"- {item.code} at {item.location}"
+        + (f": {reasons[item.location]}" if reasons and item.location in reasons else "")
+        for item in diagnostics
+    )
+    return render("narrative.assistant.repair", diagnostics="\n".join(lines))
 
 
 class _Silent:
@@ -221,15 +319,24 @@ async def run_turn(
         model_name = answer.model
         input_tokens += answer.input_tokens or 0
         output_tokens += answer.output_tokens or 0
-        envelope, parsed, diagnostics = _parse(answer.content)
+        envelope, parsed, diagnostics, reasons = _parse(answer.content)
         if envelope is not None:
             reply = envelope.reply[:REPLY_CHARS]
             # Providers without deltas (or a reply the scanner missed) still show it.
             if reply.startswith(stream.reply):
                 await stream.publish(reply[len(stream.reply) :])
+        dropped: tuple[Diagnostic, ...] = ()
+        dropped_for: frozenset[str] = frozenset()
+        if parsed is None and attempt == calls and envelope is not None:
+            # Repairs are spent: keep the story edits if only picture suggestions are broken.
+            kept = _without_broken_actions(envelope.proposal, diagnostics)
+            if kept is not None:
+                parsed, dropped, dropped_for = kept
         if parsed is not None:
             # Library IDs the model used become explicit, stored asset additions.
-            parsed = add_library_assets(story, parsed, library)
+            parsed = _without_pending_sprites(
+                story, add_library_assets(story, parsed, library), dropped_for
+            )
             proposal = parsed
             check = check_proposal(story, parsed.operations)
             diagnostics = check.diagnostics
@@ -250,7 +357,7 @@ async def run_turn(
                 parsed,
                 check.story,
                 (),
-                check.warnings,
+                check.warnings + dropped,
                 check.touched,
                 attempt,
                 model_name,
@@ -281,7 +388,7 @@ async def run_turn(
         messages = [
             *messages,
             {"role": "assistant", "content": answer.content[:RESPONSE_CHARS]},
-            {"role": "user", "content": _repair_request(diagnostics)},
+            {"role": "user", "content": _repair_request(diagnostics, reasons)},
         ]
     return TurnResult(
         reply,
