@@ -210,6 +210,17 @@ Deploy API/pose worker together with `NARRATIVE_POSE_MAX_REFERENCES=2` before en
 `NARRATIVE_POSE_REPAIRS_ENABLED` (default off). Approval/anatomy review stay manual.
 Read `docs/reports/2026-11-02-pose-region-repairs.md` and the image-generation runbook.
 
+Public pages and invite-only access ([ADR 0058](docs/adr/0058-invite-only-access-and-usage-limits.md),
+migration 0043): `/` main page, `/how-it-works`, `/join`, and the Studio at `/studio`
+(old `/?project=` links still work). `FLINT_GRAPH_ACCESS_MODE=invite` gates every
+current-user API on an access grant redeemed from a hashed invitation key or an email
+invitation (verified address); operators come from `FLINT_GRAPH_ACCESS_ADMIN_EMAILS` or the
+OIDC admin group. Per-user image/voice/assistant/release/training limits are charged by
+`charge_usage` in each job's admission transaction after its idempotency check; add it to any
+new paid job path. Default `open` mode is unchanged. Read
+`docs/runbooks/invite-only-access.md` and
+`docs/reports/2026-11-06-main-page-and-invite-only-access.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

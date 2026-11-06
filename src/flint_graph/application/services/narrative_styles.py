@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.narrative_image_workflow import ImageJobPayload
+from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.narrative_anatomy_reviews import ensure_training_anatomy
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.outbox import append_outbox_message
@@ -308,6 +309,9 @@ async def queue_style(
         seed=seed,
     )
     session.add(row)
+    await charge_usage(
+        session, user_id=author_user_id, kind="training", units=1, subject=f"style_job:{job_id}"
+    )
     await session.flush()
     if look:
         session.add(

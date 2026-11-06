@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { UserManager, type User } from "oidc-client-ts";
+import { navigate } from "../site/router";
+import { safeReturn } from "../site/siteRoutes";
 
 type AuthMode = "dev" | "oidc";
 
@@ -16,7 +18,8 @@ interface AuthContextValue {
   loading: boolean;
   authenticated: boolean;
   userName: string | null;
-  signIn: () => Promise<void>;
+  /** Signs in, then returns to `returnTo` (default: the current page). */
+  signIn: (returnTo?: string) => Promise<void>;
   signOut: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
 }
@@ -55,7 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           window.location.search.includes("state=");
         if (isCallback) {
           const callbackUser = await userManager!.signinRedirectCallback();
-          window.history.replaceState({}, document.title, window.location.pathname);
+          const state = callbackUser.state as { returnTo?: unknown } | undefined;
+          navigate(safeReturn(state?.returnTo), { replace: true });
           if (alive) setUser(callbackUser);
           return;
         }
@@ -71,10 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async () => {
+  const signIn = useCallback(async (returnTo?: string) => {
     if (authMode === "dev") return;
     if (!userManager) throw new Error("OIDC is not configured.");
-    await userManager.signinRedirect();
+    const here = window.location.pathname + window.location.search;
+    await userManager.signinRedirect({ state: { returnTo: returnTo ?? here } });
   }, []);
 
   const signOut = useCallback(async () => {

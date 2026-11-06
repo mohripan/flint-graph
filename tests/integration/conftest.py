@@ -70,7 +70,7 @@ def keypair() -> tuple[object, dict[str, object]]:
     return private_key, public_jwk
 
 
-def sign_token(private_key: object, *, subject: str = "user-123") -> str:
+def sign_token(private_key: object, *, subject: str = "user-123", **claims: object) -> str:
     now = datetime.now(UTC)
     return jwt.encode(
         {
@@ -82,6 +82,7 @@ def sign_token(private_key: object, *, subject: str = "user-123") -> str:
             "iat": now,
             "nbf": now,
             "exp": now + timedelta(minutes=5),
+            **claims,
         },
         private_key,
         algorithm="RS256",
@@ -130,7 +131,10 @@ def oidc_auth(client, oidc_settings_override):
 
     app.dependency_overrides[get_oidc_token_verifier] = override_verifier
     try:
-        yield lambda subject="user-123": sign_token(private_key, subject=subject)
+        def token(subject: str = "user-123", **claims: object) -> str:
+            return sign_token(private_key, subject=subject, **claims)
+
+        yield token
     finally:
         app.dependency_overrides.pop(get_oidc_token_verifier, None)
 

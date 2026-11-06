@@ -29,6 +29,7 @@ from flint_graph.application.narrative_image_workflow import (
     VOICE_CANCELLED_TOPIC,
     VOICE_QUEUED_TOPIC,
 )
+from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_characters import Profile, _editable
 from flint_graph.application.services.narrative_package_v2 import bind_story_assets
@@ -434,6 +435,13 @@ async def create_voice_job(
     )
     session.add(job)
     await session.flush()
+    await charge_usage(
+        session,
+        user_id=author_user_id,
+        kind="voice",
+        units=job.count,
+        subject=f"voice_job:{job.id}",
+    )
     payload = {"schema_version": "1", "tenant_id": str(tenant_id), "job_id": str(job.id)}
     await append_outbox_message(
         session,

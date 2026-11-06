@@ -1,16 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
 import { AuthProvider } from "./lib/auth";
-import { WorkspaceProvider } from "./lib/workspace";
+import { SiteRoot } from "./site/SiteRoot";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <AuthProvider>
-      <WorkspaceProvider>
-        <App />
-      </WorkspaceProvider>
+      <SiteRoot />
     </AuthProvider>
   </React.StrictMode>,
 );

@@ -120,10 +120,39 @@ import type {
   Workspace,
 } from "./types";
 
+// Invite-only access (ADR 0058).
+export type UsageKind = "image" | "voice" | "assistant" | "release" | "training";
+export type UsageLimits = Partial<Record<UsageKind, { daily?: number; total?: number }>>;
+export interface AccessStatus {
+  mode: "open" | "invite"; has_access: boolean; is_admin: boolean; status: "none" | "active" | "suspended";
+  email: string | null; display_name: string | null; limits: UsageLimits | null;
+  usage: Record<UsageKind, { day: number; total: number }>; email_invitation: boolean;
+}
+export interface Invitation {
+  id: string; kind: "key" | "email"; label: string; key_hint: string | null; email: string | null;
+  max_redemptions: number; redemption_count: number; limits: UsageLimits;
+  expires_at: string | null; revoked_at: string | null; created_at: string;
+}
+export interface InvitationDraft {
+  kind: "key" | "email"; label: string; email?: string; max_redemptions?: number;
+  limits?: UsageLimits; expires_at?: string | null;
+}
+export interface AccessGrant {
+  id: string; user_id: string; email: string | null; display_name: string | null;
+  status: "active" | "suspended"; invitation_label: string | null; limits: UsageLimits;
+  usage: Record<UsageKind, { day: number; total: number }>; created_at: string;
+}
+
 // All requests are same-origin; the Vite dev server proxies /v1 and /health to
 // the API. In a production build these paths are served behind the same origin.
 const BASE = "";
 let accessTokenProvider: (() => Promise<string | null>) | null = null;
+
+let onAccessRequired: (() => void) | null = null;
+
+export function setAccessRequiredHandler(handler: (() => void) | null) {
+  onAccessRequired = handler;
+}
 
 export function setAccessTokenProvider(provider: (() => Promise<string | null>) | null) {
   accessTokenProvider = provider;
@@ -177,7 +206,12 @@ async function jsonRequest<T>(
     },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
-  if (!res.ok) throw await parseError(res);
+  if (!res.ok) {
+    const error = await parseError(res);
+    // Invite-only Studio (ADR 0058): someone without access, or suspended, goes to Join.
+    if (res.status === 403 && error.problem?.type?.endsWith(":access-required")) onAccessRequired?.();
+    throw error;
+  }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
@@ -266,6 +300,34 @@ export const api = {
       method: "POST",
       json: { name },
     });
+  },
+
+  accessMe(): Promise<AccessStatus> {
+    return jsonRequest<AccessStatus>("/v1/access/me");
+  },
+
+  joinStudio(key: string | null): Promise<AccessStatus> {
+    return jsonRequest<AccessStatus>("/v1/access/join", { method: "POST", json: { key } });
+  },
+
+  listInvitations(): Promise<{ invitations: Invitation[]; default_limits: UsageLimits }> {
+    return jsonRequest("/v1/admin/access/invitations");
+  },
+
+  createInvitation(draft: InvitationDraft): Promise<{ invitation: Invitation; key: string | null; link: string }> {
+    return jsonRequest("/v1/admin/access/invitations", { method: "POST", json: draft });
+  },
+
+  revokeInvitation(id: string): Promise<Invitation> {
+    return jsonRequest<Invitation>(`/v1/admin/access/invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+  },
+
+  listAccessGrants(): Promise<{ grants: AccessGrant[] }> {
+    return jsonRequest("/v1/admin/access/grants");
+  },
+
+  setAccessGrant(id: string, action: "suspend" | "resume"): Promise<AccessGrant> {
+    return jsonRequest<AccessGrant>(`/v1/admin/access/grants/${encodeURIComponent(id)}/${action}`, { method: "POST" });
   },
 
   listWorkspaces(): Promise<Workspace[]> {

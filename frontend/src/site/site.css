@@ -1,0 +1,10 @@
+@font-face { font-family: SiteLora; src: url('../narrative/Lora.ttf') format('truetype'); font-weight: 400 700; font-display: swap; }
+.site-serif { font-family: SiteLora, Georgia, serif; }
+.site-hero {
+  background:
+    radial-gradient(1100px 520px at 85% -10%, rgb(157 115 48 / 0.35), transparent 60%),
+    radial-gradient(900px 600px at 0% 110%, rgb(79 70 229 / 0.35), transparent 60%),
+    #0d1624;
+}
+.site-frame { box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.08); }
+.site-shot { box-shadow: 0 18px 50px -18px rgb(15 23 42 / 0.45), 0 0 0 1px rgb(15 23 42 / 0.08); }

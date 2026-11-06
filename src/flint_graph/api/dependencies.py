@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.embeddings import EmbeddingModel
 from flint_graph.application.query_orchestration import AnswerGenerator, SupportChecker
+from flint_graph.application.services.access import is_operator, require_access
 from flint_graph.application.services.audit import AuditActor
 from flint_graph.application.services.authz import (
     AuthenticatedPrincipal,
@@ -23,7 +24,7 @@ from flint_graph.application.services.authz import (
 from flint_graph.application.services.health_probes import ReadinessChecker
 from flint_graph.config import Settings, get_settings
 from flint_graph.domain.enums import WorkspaceRole
-from flint_graph.domain.errors import NotFoundError, UnauthorizedError
+from flint_graph.domain.errors import ForbiddenError, NotFoundError, UnauthorizedError
 from flint_graph.infrastructure.answer_generator_factory import (
     answer_generator_base_url,
     create_answer_generator,
@@ -92,12 +93,13 @@ def get_oidc_token_verifier(settings: SettingsDep) -> OIDCTokenVerifier:
 OIDCTokenVerifierDep = Annotated[OIDCTokenVerifier, Depends(get_oidc_token_verifier)]
 
 
-async def get_current_user(
+async def get_signed_in_user(
     request: Request,
     session: SessionDep,
     settings: SettingsDep,
     oidc_verifier: OIDCTokenVerifierDep,
 ) -> CurrentUser:
+    """Who is signed in, before any invite-only check (ADR 0058)."""
     if settings.auth_mode == "dev":
         principal = AuthenticatedPrincipal(
             issuer="dev",
@@ -117,7 +119,27 @@ async def get_current_user(
     return CurrentUser(user=user, principal=principal)
 
 
+SignedInUserDep = Annotated[CurrentUser, Depends(get_signed_in_user)]
+
+
+async def get_current_user(
+    current: SignedInUserDep, session: SessionDep, settings: SettingsDep
+) -> CurrentUser:
+    """The signed-in user, who in invite mode must also have joined (ADR 0058)."""
+    await require_access(session, current.user, current.principal, settings)
+    return current
+
+
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+def get_access_operator(current: SignedInUserDep, settings: SettingsDep) -> CurrentUser:
+    if not is_operator(current.principal, settings):
+        raise ForbiddenError("Only Studio operators can manage invitations.")
+    return current
+
+
+AccessOperatorDep = Annotated[CurrentUser, Depends(get_access_operator)]
 
 
 def get_audit_actor(request: Request, current_user: CurrentUserDep) -> AuditActor:

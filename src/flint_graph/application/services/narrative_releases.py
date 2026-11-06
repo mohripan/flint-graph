@@ -13,6 +13,7 @@ from flint_graph.application.narrative_release_state import (
     ReleaseJobStatus,
     request_cancellation,
 )
+from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_projects import get_project, get_revision
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
@@ -148,6 +149,9 @@ async def create_release(
     )
     session.add(job)
     await session.flush()
+    await charge_usage(
+        session, user_id=author_user_id, kind="release", units=1, subject=f"release:{release.id}"
+    )
     session.add(
         NarrativeReleaseEvent(
             tenant_id=tenant_id,

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from flint_graph.api.routes import (
+    access,
     conversations,
     documents,
     graph,
@@ -27,6 +28,8 @@ from flint_graph.api.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(observability.router)
+api_router.include_router(access.router)
+api_router.include_router(access.admin_router)
 api_router.include_router(workspaces.router)
 api_router.include_router(tenants.router)
 api_router.include_router(documents.router)

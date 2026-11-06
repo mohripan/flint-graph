@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.narrative_image_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
+from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_projects import get_project
 from flint_graph.application.services.outbox import append_outbox_message, capture_trace_context
@@ -521,6 +522,9 @@ async def _queue_job(
     )
     session.add(job)
     await session.flush()
+    await charge_usage(
+        session, user_id=author_user_id, kind="image", units=count, subject=f"image_job:{job.id}"
+    )
     await append_outbox_message(
         session,
         tenant_id=tenant_id,

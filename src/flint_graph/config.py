@@ -1,14 +1,23 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _DETERMINISTIC_EMBEDDING_MODEL = "deterministic-test"
 _DETERMINISTIC_EMBEDDING_DIMENSIONS = 384
+# Per-user generation limits a new invitation grants unless the operator sets others
+# (ADR 0058): units in the last 24 hours and in total, per kind.
+DEFAULT_ACCESS_LIMITS: dict[str, dict[str, int]] = {
+    "image": {"daily": 40, "total": 300},
+    "voice": {"daily": 150, "total": 1000},
+    "assistant": {"daily": 40, "total": 300},
+    "release": {"daily": 5, "total": 30},
+    "training": {"daily": 1, "total": 4},
+}
 # Default real embedding model + dimensions per provider. Dimensions are intrinsic to the
 # model, so switching providers/models requires a new retrieval index version + backfill.
 _REAL_EMBEDDING_MODELS: dict[str, str] = {
@@ -77,6 +86,14 @@ class Settings(BaseSettings):
     dev_auth_subject: str = "dev-user"
     dev_auth_email: str = "dev@example.local"
     dev_auth_name: str = "Local Developer"
+    # Invite-only access (ADR 0058): "open" admits every signed-in user; "invite" needs
+    # a redeemed key or email invitation and charges generation to per-user limits.
+    access_mode: Literal["open", "invite"] = "open"
+    # Comma-separated in the environment, as an operator would write it.
+    access_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    access_default_limits: dict[str, dict[str, int]] = Field(
+        default_factory=lambda: {kind: dict(limit) for kind, limit in DEFAULT_ACCESS_LIMITS.items()}
+    )
     service_name: str = "flint-graph-api"
     service_version: str = "0.1.0"
     prompt_source: Literal["locked", "langfuse"] = "locked"
@@ -556,6 +573,7 @@ class Settings(BaseSettings):
     @field_validator(
         "allowed_origins",
         "trusted_hosts",
+        "access_admin_emails",
         "readiness_required_dependencies",
         "readiness_optional_dependencies",
         mode="before",

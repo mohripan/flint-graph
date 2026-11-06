@@ -6,14 +6,19 @@ import { AuthGate, WorkspaceGate, Logo } from "./components/WorkspaceGate";
 import { SetupPage } from "./pages/SetupPage";
 import { StudioPage } from "./narrative/StudioPage";
 import { StudioNavSlot } from "./narrative/StudioNav";
+import { AccessAdminPage } from "./pages/AccessAdminPage";
+import { UsagePage } from "./pages/UsagePage";
+import { useAccess } from "./site/accessContext";
+import { linkProps } from "./site/router";
 
 // The GraphRAG Ask and Documents pages are hidden from the studio shell (#169); their
 // code and API remain for project lore sources and story questions later (#125, #171).
-type Tab = "studio" | "setup";
+type Tab = "studio" | "setup" | "invitations" | "usage";
 
 export default function App() {
   const auth = useAuth();
   const { workspace, workspaces, loading, reset, select } = useWorkspace();
+  const access = useAccess();
   const [tab, setTab] = useState<Tab>("studio");
   const [studioDirty, setStudioDirty] = useState(false);
   const [healthy, setHealthy] = useState<boolean | null>(null);
@@ -50,13 +55,14 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3">
+        <a {...linkProps("/")} onClickCapture={(event) => { if (!mayLeave()) { event.preventDefault(); event.stopPropagation(); } }}
+          className="flex min-w-0 items-center gap-3" title="FlintGraph home">
           <Logo className="h-9 w-9" />
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight text-slate-900">FlintGraph</p>
             <p className="max-w-64 truncate text-xs leading-tight text-slate-500">{workspace.name}</p>
           </div>
-        </div>
+        </a>
 
         <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto sm:gap-4">
           <HealthDot healthy={healthy} />
@@ -94,12 +100,15 @@ export default function App() {
           <NavItem active={tab === "studio"} onClick={() => navigate("studio")} label="Studio" icon={<DocIcon />} />
           {tab === "studio" && <div ref={setStudioNav} className="hidden md:block" />}
           <NavItem active={tab === "setup"} onClick={() => navigate("setup")} label="Setup" icon={<SetupIcon />} />
+          {access?.is_admin && <NavItem active={tab === "invitations"} onClick={() => navigate("invitations")} label="Invitations" icon={<KeyIcon />} />}
+          {access?.mode === "invite" && !access.is_admin && <NavItem active={tab === "usage"} onClick={() => navigate("usage")} label="Usage" icon={<GaugeIcon />} />}
         </nav>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
           {tab === "studio" ? <StudioNavSlot.Provider value={studioNav}>
             <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} />
-          </StudioNavSlot.Provider> : <SetupPage key={workspace.id} />}
+          </StudioNavSlot.Provider> : tab === "invitations" ? <AccessAdminPage />
+            : tab === "usage" ? <UsagePage /> : <SetupPage key={workspace.id} />}
         </main>
       </div>
     </div>
@@ -171,6 +180,24 @@ function SetupIcon() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function KeyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <circle cx="8" cy="15" r="4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M11 12l8-8m-3 3l2 2m-4 0l2 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GaugeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <path d="M4 17a8 8 0 1116 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 17l4-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from flint_graph.application.narrative_assistant_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
+from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_assistant_events import (
     add_status_event,
@@ -292,6 +293,13 @@ async def post_turn(
     thread.updated_at = _now()
     session.add(turn)
     await session.flush()
+    await charge_usage(
+        session,
+        user_id=author_user_id,
+        kind="assistant",
+        units=1,
+        subject=f"assistant_turn:{turn.id}",
+    )
     await append_outbox_message(
         session,
         tenant_id=tenant_id,
