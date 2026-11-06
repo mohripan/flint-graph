@@ -25,6 +25,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.credit_prices import voice_item
 from flint_graph.application.narrative_image_workflow import (
     VOICE_CANCELLED_TOPIC,
     VOICE_QUEUED_TOPIC,
@@ -438,7 +439,7 @@ async def create_voice_job(
     await charge_usage(
         session,
         user_id=author_user_id,
-        kind="voice",
+        item=voice_item(model_id),
         units=job.count,
         subject=f"voice_job:{job.id}",
     )

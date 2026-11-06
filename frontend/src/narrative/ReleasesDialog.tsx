@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { api } from "../lib/api";
+import { CreditCost } from "../components/CreditCost";
 import type { CarriedVoiceLicenses } from "../lib/api";
 import { ReleaseHistory } from "./ReleaseHistory";
 import {
@@ -230,7 +231,8 @@ export function ReleasesDialog({ tenantId, projectId, headId, revision, history,
           <button type="button" className="studio-secondary" aria-disabled={saving} onClick={() => void saveDraft()}>{saving ? "Saving…" : "Save revision"}</button></div>}
         <div className="studio-actions"><button type="button" className="studio-primary" aria-disabled={Boolean(blocker)}
           aria-describedby={describedBy} onClick={build}>{building ? "Requesting build…" : "Build release"}</button>
-          {blocker && !dirty && !building && <span className="studio-hint" id={`${ids}-blocker`}>{blocker}</span>}</div>
+          {!building && <CreditCost item="release.build" />}
+          {blocker &&!dirty && !building && <span className="studio-hint" id={`${ids}-blocker`}>{blocker}</span>}</div>
       </section> : <p className="studio-notice">Read-only access. You can follow builds and download ready releases.</p>}
       <div role="status">{notice && <p className="studio-notice">{notice}</p>}</div>
       {actionError && <p className="studio-error" role="alert">{actionError}</p>}

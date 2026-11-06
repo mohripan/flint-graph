@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
+import { CreditCost } from "../components/CreditCost";
+import { imageItem } from "../site/creditsModel";
 import { api } from "../lib/api";
 import type { ImageJob, NarrativeImage } from "../lib/api";
 import { useNarrativeImage } from "./characterImages";
@@ -132,6 +134,7 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
           <button type="button" className="studio-primary" disabled={readOnly || busy || Boolean(active) || !looks.ready || !chosen.length || !box}
             onClick={() => void generate()}>{active ? "Generating…" : chosen.length
               ? `Generate ${chosen.length} expression${chosen.length === 1 ? "" : "s"}` : "Generate expressions"}</button>
+          {!active && <CreditCost item={imageItem({ purpose: "character_expression" })} quantity={chosen.length} />}
           <span className="studio-hint">Up to {MAX_EXPRESSIONS} at a time · about 10 seconds each on this computer's GPU.</span>
         </div>
       </div>}

@@ -18,6 +18,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.credit_prices import image_item
 from flint_graph.application.narrative_image_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
 from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
@@ -392,6 +393,7 @@ async def _queue_job(
     base: tuple[NarrativeAsset, tuple[int, int, int, int]] | None = None,
     expressions: list[str] | None = None,
     references: list[tuple[str, NarrativeAsset]] | None = None,
+    price_item: str | None = None,
 ) -> NarrativeImageJob:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -523,7 +525,11 @@ async def _queue_job(
     session.add(job)
     await session.flush()
     await charge_usage(
-        session, user_id=author_user_id, kind="image", units=count, subject=f"image_job:{job.id}"
+        session,
+        user_id=author_user_id,
+        item=price_item or image_item(purpose, transparent=transparent, hires=hires),
+        units=count,
+        subject=f"image_job:{job.id}",
     )
     await append_outbox_message(
         session,

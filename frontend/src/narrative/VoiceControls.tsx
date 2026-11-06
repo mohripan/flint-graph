@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../lib/api";
+import { CreditCost } from "../components/CreditCost";
+import { useAccess } from "../site/accessContext";
+import { unitPrice, voiceItem } from "../site/creditsModel";
 import type {
   CharacterProfile, NarrativeImage, VoiceCatalog, VoiceJob, VoiceJobItem, VoiceLicenseText, VoiceModelOption,
 } from "../lib/api";
@@ -164,7 +167,11 @@ export function SceneVoices({ story, ids, readOnly, onError }: {
         }
       } catch (error) { onError(message(error, "Could not start generating voices.")); }
     })()}>Generate {count} missing {count === 1 ? "voice" : "voices"}</button>
-    {silent.length > 0 && <span className="studio-hint">Choose a voice for {silent.join(", ")} in Characters.</span>}
+    <CreditCost parts={missing.flatMap(([speaker, items]) => {
+      const model = hasVoice(profiles[speaker]) ? speakerModel(jobs.catalog, profiles[speaker]) : undefined;
+      return model ? [[voiceItem(model.id), items.length] as [string, number]] : [];
+    })} />
+    {silent.length > 0 &&<span className="studio-hint">Choose a voice for {silent.join(", ")} in Characters.</span>}
   </div>;
 }
 
@@ -251,6 +258,7 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
       {!readOnly && <>
         {voiceId && <button type="button" className="studio-link" disabled={Boolean(running)} onClick={generate}>
           {running ? "Generating…" : "Regenerate"}</button>}
+        {voiceId && !running && model && <CreditCost item={voiceItem(model.id)} />}
         <button type="button" className="studio-link studio-danger" onClick={() => run(() => onChange(setLineClip(story, id, null), `${id}:voice-clip`))}>Remove clip</button>
       </>}
       {candidates.filter(asset => asset.id !== bound.id).slice(0, 2).map(asset => <span key={asset.id} className="studio-voice-clip candidate">
@@ -274,7 +282,8 @@ export function LineVoiceControls({ story, id, readOnly, onChange, onError }: {
     </span>)
     : running ? <span className="studio-voice-note" role="status">Generating voice… {running.progress}/{running.count}</span>
     : !readOnly && <span className="studio-voice-clip">
-      {voiceId ? <button type="button" className="studio-link" onClick={generate}>Generate voice</button>
+      {voiceId ? <><button type="button" className="studio-link" onClick={generate}>Generate voice</button>
+        {model && <CreditCost item={voiceItem(model.id)} />}</>
         : <span className="studio-voice-note">Choose a voice for {story.characters[speaker]?.name ?? speaker} in Characters to generate clips.</span>}
       {choices.length > 0 && <select aria-label="Use a voice clip" value="" onChange={event => {
         const picked = choices.find(asset => asset.id === event.target.value);
@@ -354,6 +363,7 @@ export function CharacterVoice({ id, name, readOnly, onError }: {
   id: string; name: string; readOnly: boolean; onError: (message: string) => void;
 }) {
   const context = useContext(CharacterProfilesContext);
+  const access = useAccess();
   const tenantId = context?.tenantId ?? "", projectId = context?.projectId ?? "";
   const profile = context?.profiles[id];
   const { catalog, reload } = useVoiceCatalog(tenantId, projectId);
@@ -396,7 +406,8 @@ export function CharacterVoice({ id, name, readOnly, onError }: {
       <select value={modelId} disabled={readOnly} onChange={event => pickModel(event.target.value)}>
         <option value="">No voice (lines stay silent)</option>
         {catalog.models.map(item => <option key={item.id} value={item.id}>
-          {item.name}{item.cloning ? " · clones a voice" : ""}{item.license.obligations !== "none" ? " · license duties" : ""}</option>)}
+          {item.name}{item.cloning ? " · clones a voice" : ""}{item.license.obligations !== "none" ? " · license duties" : ""}
+          {unitPrice(access, voiceItem(item.id)) ? ` · ${unitPrice(access, voiceItem(item.id))}` : ""}</option>)}
       </select></label>
     {model && <p className="studio-hint">{model.description} License: {model.license.name}.
       {model.watermark === "perth" ? " Clips carry an inaudible watermark." : ""}</p>}
@@ -419,6 +430,7 @@ export function CharacterVoice({ id, name, readOnly, onError }: {
         tenantId, projectId, id, [{ mode: "full", text: `Hello. I'm ${name.trim() || "here"}. Shall we begin?` }],
       ).then(setSample, error => onError(message(error, "Could not try the voice.")))}>
         {sampleId ? "Speaking…" : "Try this voice"}</button>
+      {!sampleId && saved && <CreditCost item={voiceItem(saved)} />}
       {sample?.error_code && <span className="studio-voice-note">{ERRORS[sample.error_code] ?? "Voice generation failed."}</span>}
       {clip && sample?.voice_model === saved && <ClipPlayButton assetId={clip.id} label="Play sample" />}
     </span>}

@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.credit_prices import training_blocks, training_item
 from flint_graph.application.narrative_image_workflow import ImageJobPayload
 from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.narrative_anatomy_reviews import ensure_training_anatomy
@@ -310,7 +311,12 @@ async def queue_style(
     )
     session.add(row)
     await charge_usage(
-        session, user_id=author_user_id, kind="training", units=1, subject=f"style_job:{job_id}"
+        session,
+        user_id=author_user_id,
+        item=training_item(character=look is not None, reference=conditioning == "reference"),
+        units=1,
+        quantity=training_blocks(steps),
+        subject=f"style_job:{job_id}",
     )
     await session.flush()
     if look:

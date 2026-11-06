@@ -220,6 +220,14 @@ OIDC admin group. Per-user image/voice/assistant/release/training limits are cha
 new paid job path. Default `open` mode is unchanged. Read
 `docs/runbooks/invite-only-access.md` and
 `docs/reports/2026-11-06-main-page-and-invite-only-access.md`.
+[ADR 0059](docs/adr/0059-credits-and-unlimited-access.md) (migration 0044) adds credits:
+`charge_usage(item=…, units=…, quantity=…)` checks the per-kind caps, then spends
+`price × quantity` from the grant's balance (402 `out-of-credits`) and writes `credit_ledger`.
+Prices are the code table `application/credit_prices.py` (override with
+`FLINT_GRAPH_ACCESS_CREDIT_PRICES`); a new paid path needs a price item there and the
+mirrored rule in `frontend/src/site/creditsModel.ts`. Invitations and grants can be unlimited;
+operators adjust balances with an audited note. Read
+`docs/reports/2026-11-06-credits-and-unlimited-access.md`.
 
 ## Project Snapshot
 

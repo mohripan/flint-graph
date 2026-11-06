@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.credit_prices import image_item
 from flint_graph.application.services.audit import AuditActor
 from flint_graph.application.services.narrative_images import _queue_job
 from flint_graph.application.services.narrative_look_images import caption, source_size
@@ -241,6 +242,13 @@ async def queue_pose_job(
         available=available,
         max_active_jobs=max_active_jobs,
         policy=policy,
+        price_item=image_item(
+            "character_portrait",
+            transparent=transparent,
+            hires=False,
+            pose=True,
+            repair=bool(repair),
+        ),
     )
     await bind_job(session, job, [look], request_hash)
     session.add(

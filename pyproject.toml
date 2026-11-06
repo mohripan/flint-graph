@@ -99,6 +99,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+# User-facing prices read "4 × Pose" (ADR 0059).
+allowed-confusables = ["×"]
 
 [tool.mypy]
 python_version = "3.12"

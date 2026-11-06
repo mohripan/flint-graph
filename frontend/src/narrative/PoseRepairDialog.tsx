@@ -1,6 +1,8 @@
 import {useRef,useState} from 'react';
 import type {KeyboardEvent,PointerEvent} from 'react';
 import {api} from '../lib/api';
+import {CreditCost} from '../components/CreditCost';
+import {imageItem} from '../site/creditsModel';
 import type {NarrativeImage} from '../lib/api';
 import {useNarrativeImage} from './characterImages';
 import {Field} from './FormFields';
@@ -77,6 +79,7 @@ export function PoseRepairDialog({tenantId,projectId,characterId,asset,disabled,
         <Field label="Repair candidates"><select value={count} onChange={event=>setCount(Number(event.target.value))}><option value={1}>1</option><option value={2}>2</option></select></Field>
         <p className="studio-hint">Uses this pose’s reviewed look and trained versions. Compare the repaired detail and edges before approving.</p>
         <button type="button" className="studio-primary" disabled={!url||!instruction.trim()||!validRegion(box,width,height)} onClick={()=>void generate()}>{busy?'Starting repair…':'Generate repair'}</button>
+        <CreditCost item={imageItem({purpose:'character_portrait',pose:true,repair:true})} quantity={count} />
       </fieldset>
     </div>
     {error&&<p role="alert">{error}</p>}

@@ -1,5 +1,7 @@
 import { portraitJobs } from "./poseModel";
 import { PoseStudio } from "./PoseStudio";
+import { CreditCost } from "../components/CreditCost";
+import { imageItem } from "../site/creditsModel";
 import { useContext, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import type { CharacterFraming, CharacterProfile, CharacterType, ImageJob, NarrativeImage } from "../lib/api";
@@ -223,7 +225,8 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
         {!readOnly && <div className="studio-actions">
           <button type="button" className="studio-primary" disabled={busy || Boolean(active) || !looks.ready || (looks.look ? looks.look.asset.status !== "approved" : !cleanAppearance(appearance))}
             onClick={() => void generate()}>{active ? "Generating…" : generateLabel(sprite)}</button>
-          {profile.portrait && <button type="button" className="studio-link" onClick={() => void choose(null)}>Remove portrait</button>}
+          {!active && <CreditCost item={imageItem({ purpose: "character_portrait", transparent: sprite, hires })} quantity={PORTRAITS_PER_JOB} />}
+          {profile.portrait &&<button type="button" className="studio-link" onClick={() => void choose(null)}>Remove portrait</button>}
           <button type="button" className="studio-link studio-danger" onClick={() => {
             try { onChange(deleteCharacter(story, id)); }
             catch (error) { onError(message(error, "Could not remove a character.")); }

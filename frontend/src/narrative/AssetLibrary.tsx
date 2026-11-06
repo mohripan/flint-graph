@@ -20,6 +20,8 @@ import { Field } from "./FormFields";
 import { StudioDialog } from "./StudioDialog";
 import { ClipPlayButton } from "./VoiceControls";
 import { VoiceReferences, useVoiceReferences } from "./VoiceReferences";
+import { CreditCost } from "../components/CreditCost";
+import { imageItem } from "../site/creditsModel";
 
 const PAGE = 48;
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
@@ -211,6 +213,7 @@ function BackgroundGenerator({ tenantId, projectId, active, onStarted, onCancel 
     <div className="studio-actions">
       <button type="submit" className="studio-secondary" disabled={busy || Boolean(active) || !description.trim()}>
         {active ? "Generating…" : "Generate 4 backgrounds"}</button>
+      {!active && <CreditCost item={imageItem({ purpose: "background" })} quantity={4} />}
       {active && <><span role="status" className="studio-hint">{jobStatus(active).replace("portrait", "background")}</span>
         {!active.cancel_requested && <button type="button" className="studio-link" onClick={() => onCancel(active)}>Cancel</button>}</>}
     </div>

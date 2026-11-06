@@ -11,6 +11,8 @@ import { useNarrativeImage } from "./characterImages";
 import { useCharacterLooks } from "./CharacterLooks";
 import { jobStatus } from "./characterModel";
 import { Field } from "./FormFields";
+import { CreditCost } from "../components/CreditCost";
+import { imageItem } from "../site/creditsModel";
 
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
 const REFERENCES_SHOWN = 12;
@@ -85,6 +87,7 @@ export function CgGenerator({ tenantId, projectId, characterNames, active, lates
     <div className="studio-actions">
       <button type="submit" className="studio-primary" disabled={busy || Boolean(active) || Boolean(problem) || picks.some(pick => pick.look === undefined)}>
         {active ? "Generating…" : `Generate ${cgCandidates(picks)} CGs`}</button>
+      {!active && <CreditCost item={imageItem({ purpose: "scene_art" })} quantity={cgCandidates(picks)} />}
       {active && <><span role="status" className="studio-hint">{jobStatus(active)}</span>
         {!active.cancel_requested && <button type="button" className="studio-link" onClick={() => onCancel(active)}>Cancel</button>}</>}
     </div>

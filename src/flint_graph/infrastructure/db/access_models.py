@@ -1,4 +1,4 @@
-"""Invite-only access: invitations, grants and usage charges (ADR 0058)."""
+"""Invite-only access: invitations, grants, usage charges and credits (ADR 0058, 0059)."""
 
 from datetime import datetime
 from typing import Any
@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -37,6 +38,7 @@ class AccessInvitation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         UniqueConstraint("key_sha256", name="uq_access_invitations_key"),
         Index("ix_access_invitations_email", "email"),
+        CheckConstraint("credits IS NULL OR credits >= 0", name="ck_access_invitations_credits"),
     )
 
     kind: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -48,6 +50,9 @@ class AccessInvitation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     max_redemptions: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     redemption_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     limits: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # Credits the grant starts with (ADR 0059); NULL only on invitations made before it.
+    credits: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[UUID] = mapped_column(
@@ -62,6 +67,7 @@ class AccessGrant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("status IN ('active', 'suspended')", name="ck_access_grants_status"),
         UniqueConstraint("user_id", name="uq_access_grants_user"),
+        CheckConstraint("credits IS NULL OR credits >= 0", name="ck_access_grants_credits"),
     )
 
     user_id: Mapped[UUID] = mapped_column(
@@ -71,6 +77,10 @@ class AccessGrant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("access_invitations.id", ondelete="SET NULL"), nullable=True
     )
     limits: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # The balance (ADR 0059). NULL on grants made before credits: caps only.
+    credits: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Spends no credits and ignores the caps, like an operator.
+    unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="active")
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -93,5 +103,40 @@ class UsageCharge(UUIDPrimaryKeyMixin, Base):
     )
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     units: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The price item (ADR 0059); NULL on charges made before credits.
+    item: Mapped[str | None] = mapped_column(String(40), nullable=True)
     subject: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+CREDIT_CHANGES = ("join", "charge", "add", "remove", "set", "unlimited", "limited")
+
+
+class CreditLedgerEntry(UUIDPrimaryKeyMixin, Base):
+    """One change to a person's credits: joining, a charge, or an operator's adjustment."""
+
+    __tablename__ = "credit_ledger"
+    __table_args__ = (
+        CheckConstraint(
+            "change IN (" + ", ".join(f"'{change}'" for change in CREDIT_CHANGES) + ")",
+            name="ck_credit_ledger_change",
+        ),
+        CheckConstraint("balance IS NULL OR balance >= 0", name="ck_credit_ledger_balance"),
+        Index("ix_credit_ledger_user_time", "user_id", "created_at"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    change: Mapped[str] = mapped_column(String(12), nullable=False)
+    # Signed: what the change added to (or took from) the balance.
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    balance: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    item: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subject: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

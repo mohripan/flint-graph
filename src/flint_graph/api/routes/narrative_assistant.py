@@ -232,6 +232,7 @@ async def post_turn_endpoint(
             actor=actor,
             available=settings.narrative_assistant_provider not in (None, "disabled"),
             max_active_turns=settings.narrative_assistant_max_active_turns_per_workspace,
+            provider=settings.narrative_assistant_provider,
         ),
     )
     return turn_response(turn, None)

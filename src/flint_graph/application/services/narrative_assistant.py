@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.credit_prices import assistant_item
 from flint_graph.application.narrative_assistant_workflow import CANCELLED_TOPIC, QUEUED_TOPIC
 from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
@@ -219,6 +220,7 @@ async def post_turn(
     actor: AuditActor,
     available: bool,
     max_active_turns: int,
+    provider: str | None = None,
 ) -> NarrativeAssistantTurn:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
     tenant = await session.scalar(
@@ -293,10 +295,11 @@ async def post_turn(
     thread.updated_at = _now()
     session.add(turn)
     await session.flush()
+    # Priced by the server's provider: each runs one configured model (ADR 0059).
     await charge_usage(
         session,
         user_id=author_user_id,
-        kind="assistant",
+        item=assistant_item(provider or "ollama"),
         units=1,
         subject=f"assistant_turn:{turn.id}",
     )

@@ -150,7 +150,11 @@ async def create_release(
     session.add(job)
     await session.flush()
     await charge_usage(
-        session, user_id=author_user_id, kind="release", units=1, subject=f"release:{release.id}"
+        session,
+        user_id=author_user_id,
+        item="release.build",
+        units=1,
+        subject=f"release:{release.id}",
     )
     session.add(
         NarrativeReleaseEvent(

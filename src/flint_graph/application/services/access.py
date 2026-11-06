@@ -1,9 +1,10 @@
-"""Invite-only access: who may use the Studio, and how much they may generate (ADR 0058).
+"""Invite-only access: who may use the Studio, and how much they may generate.
 
 In ``invite`` mode a signed-in person needs an active grant, made by redeeming an
-invitation key or an email invitation, unless they are a configured operator. Each
-admitted generation charges units against the grant's limits in the same transaction
-as the job, after the job's own idempotency check.
+invitation key or an email invitation, unless they are a configured operator (ADR 0058).
+Each admitted generation counts units against the grant's caps and spends credits from
+its balance at the item's price (ADR 0059), in the same transaction as the job, after
+the job's own idempotency check. Every balance change is written to the credit ledger.
 """
 
 from __future__ import annotations
@@ -19,12 +20,14 @@ from uuid import UUID
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from flint_graph.application.credit_prices import PriceItem, resolve_prices
 from flint_graph.application.services.authz import AuthenticatedPrincipal
 from flint_graph.config import DEFAULT_ACCESS_LIMITS, Settings
 from flint_graph.domain.errors import DomainError, NotFoundError
 from flint_graph.infrastructure.db.models import (
     AccessGrant,
     AccessInvitation,
+    CreditLedgerEntry,
     UsageCharge,
     User,
 )
@@ -42,6 +45,9 @@ _NOUNS = {
 _ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 _WINDOW = timedelta(hours=24)
 _MAX_UNITS = 10_000_000
+MAX_CREDITS = 10_000_000
+# Where a request's access dependency leaves what charges need (see require_access).
+_REQUEST_ACCESS = "flint_graph.access"
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
 
 
@@ -102,6 +108,23 @@ def limit_problem(
     return None
 
 
+def _credits(amount: int) -> str:
+    return "1 credit" if amount == 1 else f"{amount} credits"
+
+
+def credit_problem(price: PriceItem, *, quantity: int, balance: int) -> str:
+    """Why a charge of ``quantity`` x ``price`` does not fit ``balance``, naming all three."""
+    total = price.credits * quantity
+    if quantity == 1:
+        head = f"{price.label} costs {_credits(total)}"
+    elif price.per == 1:
+        head = f"{quantity} × {price.label} costs {_credits(total)} ({price.credits} each)"
+    else:
+        head = f"{price.label} costs {_credits(total)} ({price.credits} per {price.unit})"
+    left = f"you have {balance} left" if balance else "you have none left"
+    return f"{head}, but {left}. Ask the person who invited you for more credits."
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -151,10 +174,25 @@ def _invalid_invitation() -> DomainError:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class RequestAccess:
+    """What charges in this request need: who is exempt, and this deployment's prices."""
+
+    user_id: UUID
+    exempt: bool
+    prices: dict[str, int]
+
+
 async def require_access(
     session: AsyncSession, user: User, principal: AuthenticatedPrincipal, settings: Settings
 ) -> None:
-    if settings.access_mode == "open" or is_operator(principal, settings):
+    exempt = settings.access_mode == "open" or is_operator(principal, settings)
+    # Charges run deep inside job services; the request's session carries the prices
+    # there, so no service needs the settings.
+    session.info[_REQUEST_ACCESS] = RequestAccess(
+        user.id, exempt, dict(settings.access_credit_prices)
+    )
+    if exempt:
         return
     status = await session.scalar(select(AccessGrant.status).where(AccessGrant.user_id == user.id))
     if status != "active":
@@ -170,6 +208,10 @@ class AccessState:
     limits: dict[str, Any] | None
     usage: dict[str, dict[str, int]]
     email_invitation: bool
+    credits: int | None
+    # No credits are spent: open mode, an operator, or an unlimited grant.
+    unlimited: bool
+    prices: dict[str, PriceItem]
 
 
 async def usage_summary(session: AsyncSession, user_id: UUID) -> dict[str, dict[str, int]]:
@@ -236,6 +278,11 @@ async def access_state(
         limits=dict(grant.limits) if grant is not None else None,
         usage=await usage_summary(session, user.id),
         email_invitation=invited,
+        credits=grant.credits if grant is not None else None,
+        unlimited=settings.access_mode == "open"
+        or admin
+        or (grant is not None and grant.unlimited),
+        prices=resolve_prices(settings.access_credit_prices),
     )
 
 
@@ -282,43 +329,110 @@ async def join(
             user_id=user.id,
             invitation_id=invitation.id,
             limits=dict(invitation.limits),
+            credits=invitation.credits,
+            unlimited=invitation.unlimited,
             status="active",
         )
     )
+    if invitation.credits is not None:
+        session.add(
+            CreditLedgerEntry(
+                user_id=user.id,
+                change="join",
+                amount=invitation.credits,
+                balance=invitation.credits,
+                subject=f"invitation:{invitation.id}",
+                created_at=_now(),
+            )
+        )
     await session.flush()
 
 
 async def charge_usage(
-    session: AsyncSession, *, user_id: UUID, kind: str, units: int, subject: str | None = None
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    item: str,
+    units: int,
+    quantity: int | None = None,
+    subject: str | None = None,
 ) -> None:
-    """Count admitted units against the user's grant; users without one are not limited."""
+    """Admit ``units`` of ``item`` for the user: check the caps, then spend the credits.
+
+    ``units`` count against the kind's caps (images, lines, turns, builds, trainings);
+    ``quantity`` (default ``units``) multiplies the price, e.g. 100-step training blocks.
+    People without a grant, operators and open mode are not charged.
+    """
+    request = session.info.get(_REQUEST_ACCESS)
+    if not isinstance(request, RequestAccess) or request.user_id != user_id:
+        request = None
+    if request is not None and request.exempt:
+        return
+    price = resolve_prices(request.prices if request else None)[item]
+    if units <= 0:
+        return
     grant = await session.scalar(
         select(AccessGrant).where(AccessGrant.user_id == user_id).with_for_update()
     )
-    if grant is None or units <= 0:
+    if grant is None:
         return
     if grant.status != "active":
         raise access_required()
     now = _now()
-    used_day, used_total = (
-        await session.execute(
-            select(
-                func.coalesce(
-                    func.sum(
-                        case((UsageCharge.created_at >= now - _WINDOW, UsageCharge.units), else_=0)
+    quantity = units if quantity is None else quantity
+    needed = price.credits * quantity
+    if not grant.unlimited:
+        used_day, used_total = (
+            await session.execute(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (UsageCharge.created_at >= now - _WINDOW, UsageCharge.units),
+                                else_=0,
+                            )
+                        ),
+                        0,
                     ),
-                    0,
-                ),
-                func.coalesce(func.sum(UsageCharge.units), 0),
-            ).where(UsageCharge.user_id == user_id, UsageCharge.kind == kind)
-        )
-    ).one()
-    problem = limit_problem(grant.limits, kind, units, int(used_day), int(used_total))
-    if problem is not None:
-        raise DomainError(429, "Usage limit reached", problem, "usage-limit")
+                    func.coalesce(func.sum(UsageCharge.units), 0),
+                ).where(UsageCharge.user_id == user_id, UsageCharge.kind == price.kind)
+            )
+        ).one()
+        problem = limit_problem(grant.limits, price.kind, units, int(used_day), int(used_total))
+        if problem is not None:
+            raise DomainError(429, "Usage limit reached", problem, "usage-limit")
+        if grant.credits is not None and needed > grant.credits:
+            raise DomainError(
+                402,
+                "Out of credits",
+                credit_problem(price, quantity=quantity, balance=grant.credits),
+                "out-of-credits",
+                [{"credits_needed": needed, "credits_left": grant.credits}],
+            )
     session.add(
-        UsageCharge(user_id=user_id, kind=kind, units=units, subject=subject, created_at=now)
+        UsageCharge(
+            user_id=user_id,
+            kind=price.kind,
+            units=units,
+            item=item,
+            subject=subject,
+            created_at=now,
+        )
     )
+    if not grant.unlimited and grant.credits is not None and needed > 0:
+        grant.credits -= needed
+        session.add(
+            CreditLedgerEntry(
+                user_id=user_id,
+                change="charge",
+                amount=-needed,
+                balance=grant.credits,
+                item=item,
+                quantity=quantity,
+                subject=subject,
+                created_at=now,
+            )
+        )
     await session.flush()
 
 
@@ -333,8 +447,14 @@ async def create_invitation(
     expires_at: datetime | None,
     created_by: UUID,
     settings: Settings,
+    credits: int | None = None,
+    unlimited: bool = False,
 ) -> tuple[AccessInvitation, str | None]:
-    """Create an invitation; a key invitation's key is returned once and never stored."""
+    """Create an invitation; a key invitation's key is returned once and never stored.
+
+    An unlimited invitation carries no credits and no caps, so a grant made from it
+    fails closed if an operator later turns unlimited off.
+    """
     label = label.strip()
     if not label or len(label) > 120:
         raise _invalid("Give the invitation a label of up to 120 characters.")
@@ -342,6 +462,11 @@ async def create_invitation(
         granted = clean_limits(settings.access_default_limits if limits is None else limits)
     except ValueError as error:
         raise _invalid(str(error)) from None
+    credits = settings.access_default_credits if credits is None else credits
+    if not 0 <= credits <= MAX_CREDITS:
+        raise _invalid(f"Credits must be between 0 and {MAX_CREDITS}.")
+    if unlimited:
+        granted, credits = {}, 0
     expires_at = _aware(expires_at)
     if expires_at is not None and expires_at <= _now():
         raise _invalid("Choose an expiry in the future.")
@@ -357,6 +482,8 @@ async def create_invitation(
             key_hint=key[-4:],
             max_redemptions=max_redemptions,
             limits=granted,
+            credits=credits,
+            unlimited=unlimited,
             expires_at=expires_at,
             created_by_user_id=created_by,
         )
@@ -370,6 +497,8 @@ async def create_invitation(
             email=address,
             max_redemptions=1,
             limits=granted,
+            credits=credits,
+            unlimited=unlimited,
             expires_at=expires_at,
             created_by_user_id=created_by,
         )
@@ -436,3 +565,120 @@ async def set_grant_status(session: AsyncSession, grant_id: UUID, status: str) -
     grant.suspended_at = _now() if status == "suspended" else None
     await session.flush()
     return grant
+
+
+async def _locked_grant(session: AsyncSession, grant_id: UUID) -> AccessGrant:
+    grant = await session.scalar(
+        select(AccessGrant).where(AccessGrant.id == grant_id).with_for_update()
+    )
+    if grant is None:
+        raise NotFoundError("Access grant was not found.")
+    return grant
+
+
+def _credit_error(detail: str) -> DomainError:
+    return DomainError(422, "Invalid credit change", detail, "invalid-credit-change")
+
+
+async def adjust_credits(
+    session: AsyncSession,
+    grant_id: UUID,
+    *,
+    change: str,
+    amount: int,
+    note: str | None,
+    actor_id: UUID,
+) -> AccessGrant:
+    """An operator adds, removes or sets a person's credits, recorded in the ledger."""
+    grant = await _locked_grant(session, grant_id)
+    note = (note or "").strip()[:300] or None
+    if change not in ("add", "remove", "set"):
+        raise _credit_error("Choose add, remove or set.")
+    if not 0 <= amount <= MAX_CREDITS:
+        raise _credit_error(f"Enter between 0 and {MAX_CREDITS} credits.")
+    if change != "set" and amount < 1:
+        raise _credit_error("Enter at least 1 credit.")
+    if grant.credits is None and change != "set":
+        raise DomainError(
+            409,
+            "No credit balance",
+            "This person joined before credits. Set a balance first.",
+            "credits-not-set",
+        )
+    before = grant.credits or 0
+    if change == "add":
+        after = before + amount
+        if after > MAX_CREDITS:
+            raise _credit_error(f"A balance can be at most {MAX_CREDITS} credits.")
+    elif change == "remove":
+        if amount > before:
+            raise _credit_error(
+                f"They have {before} credits. Set the balance to 0 to remove them all."
+            )
+        after = before - amount
+    else:
+        after = amount
+    grant.credits = after
+    session.add(
+        CreditLedgerEntry(
+            user_id=grant.user_id,
+            change=change,
+            amount=after - before,
+            balance=after,
+            actor_user_id=actor_id,
+            note=note,
+            created_at=_now(),
+        )
+    )
+    await session.flush()
+    return grant
+
+
+async def set_unlimited(
+    session: AsyncSession, grant_id: UUID, *, unlimited: bool, note: str | None, actor_id: UUID
+) -> AccessGrant:
+    """Turn unlimited on or off; the balance is kept for when it is off."""
+    grant = await _locked_grant(session, grant_id)
+    if grant.unlimited == unlimited:
+        return grant
+    grant.unlimited = unlimited
+    session.add(
+        CreditLedgerEntry(
+            user_id=grant.user_id,
+            change="unlimited" if unlimited else "limited",
+            amount=0,
+            balance=grant.credits,
+            actor_user_id=actor_id,
+            note=(note or "").strip()[:300] or None,
+            created_at=_now(),
+        )
+    )
+    await session.flush()
+    return grant
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerRow:
+    entry: CreditLedgerEntry
+    actor_email: str | None
+
+
+async def credit_history(session: AsyncSession, user_id: UUID, limit: int = 200) -> list[LedgerRow]:
+    """A person's credit changes, newest first."""
+    rows = (
+        await session.execute(
+            select(CreditLedgerEntry, User.email)
+            .outerjoin(User, User.id == CreditLedgerEntry.actor_user_id)
+            .where(CreditLedgerEntry.user_id == user_id)
+            .order_by(CreditLedgerEntry.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    return [LedgerRow(entry, email) for entry, email in rows]
+
+
+async def grant_owner(session: AsyncSession, grant_id: UUID) -> UUID:
+    user_id = await session.scalar(select(AccessGrant.user_id).where(AccessGrant.id == grant_id))
+    if user_id is None:
+        raise NotFoundError("Access grant was not found.")
+    return user_id

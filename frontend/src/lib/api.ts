@@ -1,4 +1,5 @@
 import type {repairBody} from "../narrative/poseRepairModel";
+import type { LedgerEntry, Prices } from "../site/creditsModel";
 import type {StyleHistory,StyleJob,styleBody} from "../narrative/styleModel";
 import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
 import type {
@@ -120,27 +121,34 @@ import type {
   Workspace,
 } from "./types";
 
-// Invite-only access (ADR 0058).
+// Invite-only access (ADR 0058) and credits (ADR 0059).
 export type UsageKind = "image" | "voice" | "assistant" | "release" | "training";
 export type UsageLimits = Partial<Record<UsageKind, { daily?: number; total?: number }>>;
 export interface AccessStatus {
   mode: "open" | "invite"; has_access: boolean; is_admin: boolean; status: "none" | "active" | "suspended";
   email: string | null; display_name: string | null; limits: UsageLimits | null;
   usage: Record<UsageKind, { day: number; total: number }>; email_invitation: boolean;
+  // Missing on an API from before ADR 0059.
+  credits: number | null; unlimited: boolean; prices?: Prices; assistant_item?: string | null;
 }
 export interface Invitation {
   id: string; kind: "key" | "email"; label: string; key_hint: string | null; email: string | null;
   max_redemptions: number; redemption_count: number; limits: UsageLimits;
+  credits: number | null; unlimited: boolean;
   expires_at: string | null; revoked_at: string | null; created_at: string;
 }
 export interface InvitationDraft {
   kind: "key" | "email"; label: string; email?: string; max_redemptions?: number;
-  limits?: UsageLimits; expires_at?: string | null;
+  limits?: UsageLimits; credits?: number; unlimited?: boolean; expires_at?: string | null;
 }
 export interface AccessGrant {
   id: string; user_id: string; email: string | null; display_name: string | null;
   status: "active" | "suspended"; invitation_label: string | null; limits: UsageLimits;
-  usage: Record<UsageKind, { day: number; total: number }>; created_at: string;
+  usage: Record<UsageKind, { day: number; total: number }>; credits: number | null; unlimited: boolean;
+  created_at: string;
+}
+export interface CreditEntry extends LedgerEntry {
+  id: string; balance: number | null; subject: string | null; created_at: string;
 }
 
 // All requests are same-origin; the Vite dev server proxies /v1 and /health to
@@ -149,9 +157,16 @@ const BASE = "";
 let accessTokenProvider: (() => Promise<string | null>) | null = null;
 
 let onAccessRequired: (() => void) | null = null;
+export interface ResponseSeen { method: string; path: string; status: number; problemType?: string }
+let onResponse: ((response: ResponseSeen) => void) | null = null;
 
 export function setAccessRequiredHandler(handler: (() => void) | null) {
   onAccessRequired = handler;
+}
+
+/** Sees every API response, e.g. to reload the credit balance after paid work (ADR 0059). */
+export function setResponseObserver(observer: ((response: ResponseSeen) => void) | null) {
+  onResponse = observer;
 }
 
 export function setAccessTokenProvider(provider: (() => Promise<string | null>) | null) {
@@ -210,8 +225,10 @@ async function jsonRequest<T>(
     const error = await parseError(res);
     // Invite-only Studio (ADR 0058): someone without access, or suspended, goes to Join.
     if (res.status === 403 && error.problem?.type?.endsWith(":access-required")) onAccessRequired?.();
+    onResponse?.({ method: rest.method ?? "GET", path, status: res.status, problemType: error.problem?.type });
     throw error;
   }
+  onResponse?.({ method: rest.method ?? "GET", path, status: res.status });
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
@@ -310,7 +327,11 @@ export const api = {
     return jsonRequest<AccessStatus>("/v1/access/join", { method: "POST", json: { key } });
   },
 
-  listInvitations(): Promise<{ invitations: Invitation[]; default_limits: UsageLimits }> {
+  myCredits(): Promise<{ entries: CreditEntry[] }> {
+    return jsonRequest("/v1/access/credits", { cache: "no-store" });
+  },
+
+  listInvitations(): Promise<{ invitations: Invitation[]; default_limits: UsageLimits; default_credits?: number }> {
     return jsonRequest("/v1/admin/access/invitations");
   },
 
@@ -328,6 +349,20 @@ export const api = {
 
   setAccessGrant(id: string, action: "suspend" | "resume"): Promise<AccessGrant> {
     return jsonRequest<AccessGrant>(`/v1/admin/access/grants/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+  },
+
+  changeGrantCredits(id: string, change: { change: "add" | "remove" | "set"; amount: number; note?: string }): Promise<AccessGrant> {
+    return jsonRequest<AccessGrant>(`/v1/admin/access/grants/${encodeURIComponent(id)}/credits`, { method: "POST", json: change });
+  },
+
+  setGrantUnlimited(id: string, unlimited: boolean, note?: string): Promise<AccessGrant> {
+    return jsonRequest<AccessGrant>(`/v1/admin/access/grants/${encodeURIComponent(id)}/unlimited`, {
+      method: "POST", json: { unlimited, ...(note ? { note } : {}) },
+    });
+  },
+
+  grantCredits(id: string): Promise<{ entries: CreditEntry[] }> {
+    return jsonRequest(`/v1/admin/access/grants/${encodeURIComponent(id)}/credits`, { cache: "no-store" });
   },
 
   listWorkspaces(): Promise<Workspace[]> {

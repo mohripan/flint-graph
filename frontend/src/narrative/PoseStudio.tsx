@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { CreditCost } from "../components/CreditCost";
+import { imageItem } from "../site/creditsModel";
 import type { NarrativeImage } from "../lib/api";
 import { LookImage, useCharacterLooks } from "./CharacterLooks";
 import { CandidateLookReview, useLookReviewFlags } from "./CandidateLookReview";
@@ -173,6 +175,7 @@ export function PoseStudio({ id, story, tenantId, projectId, readOnly, onChange,
         <Field label="Candidates"><select value={count} onChange={event=>setCount(Number(event.target.value))}>{[1,2,3,4].map(n=><option key={n}>{n}</option>)}</select></Field>
         <label className="pose-transparent"><input type="checkbox" checked={transparent&&!!history?.capabilities.transparent} disabled={!history?.capabilities.transparent} onChange={event=>setTransparent(event.target.checked)} />Transparent stage sprite</label>
         <button type="button" className="studio-primary" disabled={!pose.trim()||(!!extra&&!confirmed)||strengthConflict} onClick={()=>void generate()}>{active?"Generating…":`Generate ${count===1?"pose":`${count} poses`}`}</button>
+        {!active&&<CreditCost item={imageItem({purpose:"character_portrait",pose:true})} quantity={count} />}
       </fieldset>
     </div>
     {active&&<div className="studio-job" role="status"><progress max={active.job.count} value={active.job.progress} aria-label="Pose generation progress" /><span>{poseStatus(active.job)}</span>

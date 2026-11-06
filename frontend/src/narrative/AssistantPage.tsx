@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, MutableRefObject } from "react";
 import { ApiError, api } from "../lib/api";
+import { CreditCost } from "../components/CreditCost";
+import { useAccess } from "../site/accessContext";
 import {
   activeTurn, activitySteps, assistantError, emptyActivity, foldEvents, mergeTurns, prepareThread, prepareTurn, proposalChanges,
   proposalStatus, sendBlocker, streamedReply, threadTitle, turnStatus, workedFor,
@@ -77,6 +79,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   onOpenEditor: () => void; onAccessLost: () => void;
 }) {
   const { run, cancel, invalidate } = useReleaseRequests(onAccessLost);
+  const access = useAccess();
   useLayoutEffect(() => {
     scopeRef.current = invalidate;
     return () => { if (scopeRef.current === invalidate) scopeRef.current = null; };
@@ -427,6 +430,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             <button type="button" className="studio-link" onClick={() => setWithFocus(false)}>Clear</button></span>
             : focus && <button type="button" className="studio-link" onClick={() => setWithFocus(true)}>Focus on scene {focus}</button>}
           <small>{blocker && !dirty && text.trim() ? blocker : "Enter sends · Shift + Enter adds a line"}</small>
+          {access?.assistant_item && <CreditCost item={access.assistant_item} />}
         </div>
       </form> : <p className="studio-notice assistant-readonly">Read-only access. You can read conversations but not ask for changes.</p>}
     </div>

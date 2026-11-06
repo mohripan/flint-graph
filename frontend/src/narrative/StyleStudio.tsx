@@ -1,5 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {api} from '../lib/api';
+import {CreditCost} from '../components/CreditCost';
+import {trainingBlocks,trainingItem} from '../site/creditsModel';
 import {Field} from './FormFields';
 import {LookImage} from './CharacterLooks';
 import {useLookReviewFlags} from './CandidateLookReview';
@@ -128,6 +130,7 @@ export function StyleStudio({tenantId,projectId,readOnly,characterLook,character
     <label className="studio-check"><input type="checkbox" checked={rights} onChange={e=>setRights(e.target.checked)} /><span>I reviewed these images and captions and have rights to train on them.</span></label>
     <p className="studio-hint">Weights stay private in the Studio and are never included in exported games.</p>
     <button type="button" className="studio-primary" disabled={selected.length<4||!rights||!name.trim()||selected.some(i=>!i.caption.trim()||blocked.has(i.asset.id))||(!!characterLook&&(!sameLook||!anatomy||!selected.some(i=>i.asset.sha256===characterLook.source_sha256)))} onClick={()=>void train()}>{characterLook?"Train character version":"Train style version"}</button>
+    <CreditCost item={trainingItem({character:!!characterLook,reference:!!characterLook&&referenceConditioned})} quantity={trainingBlocks(steps||20)} />
    </fieldset>
   </details>}
   {notice&&<p role="status">{notice}</p>}

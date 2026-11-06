@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { Spinner } from "../components/ui";
-import { api, type AccessStatus } from "../lib/api";
+import { ApiError, api, type AccessStatus } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { linkProps, navigate } from "./router";
 import { SiteLayout } from "./SiteLayout";
 
+// A proxy's "502 Bad Gateway" or a failed fetch means the server is down, not the key.
 const message = (error: unknown) =>
-  error instanceof Error && error.message ? error.message : "Something went wrong. Try again in a moment.";
+  (error instanceof ApiError && error.status >= 500 && !error.problem) || error instanceof TypeError
+    ? "FlintGraph's server can't be reached right now. Try again in a moment."
+    : error instanceof Error && error.message ? error.message : "Something went wrong. Try again in a moment.";
 
 // Joining an invite-only Studio (ADR 0058): sign in with any account, then redeem a key,
 // or accept the email invitation that matches the verified address.

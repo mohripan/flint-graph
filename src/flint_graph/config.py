@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     access_default_limits: dict[str, dict[str, int]] = Field(
         default_factory=lambda: {kind: dict(limit) for kind, limit in DEFAULT_ACCESS_LIMITS.items()}
     )
+    # Credits (ADR 0059): what a new invitation grants when the operator gives none,
+    # and per-item overrides of the code price table, e.g. {"image.pose": 10}.
+    access_default_credits: int = Field(default=500, ge=0, le=10_000_000)
+    access_credit_prices: dict[str, int] = Field(default_factory=dict)
     service_name: str = "flint-graph-api"
     service_version: str = "0.1.0"
     prompt_source: Literal["locked", "langfuse"] = "locked"
@@ -569,6 +573,14 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
+
+    @field_validator("access_credit_prices", mode="after")
+    @classmethod
+    def _known_credit_prices(cls, value: dict[str, int]) -> dict[str, int]:
+        # Imported here: the price table imports the voice catalog, not these settings.
+        from flint_graph.application.credit_prices import clean_price_overrides
+
+        return clean_price_overrides(value)
 
     @field_validator(
         "allowed_origins",

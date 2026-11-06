@@ -1,6 +1,8 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { ImageJob } from "../lib/api";
+import { CreditCost } from "../components/CreditCost";
+import { imageItem } from "../site/creditsModel";
 import { proposalActions } from "./assistantModel";
 import { CharacterProfilesContext } from "./characterImages";
 import { isActive, jobStatus } from "./characterModel";
@@ -10,6 +12,8 @@ import { refreshLibrary } from "./libraryAssets";
 import type { AssistantProposal, StoryDraft } from "./types";
 
 const message = (error: unknown) => error instanceof Error && error.message ? error.message : "Could not start generating.";
+// Each suggestion starts one job of four candidates on the server.
+const ACTION_IMAGES = 4;
 
 // A suggestion has a stable server identity: remounting only reads its existing job.
 export function ProposalActions({ proposal, story, tenantId, projectId, canWrite }: {
@@ -86,6 +90,9 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
         </small> : canWrite && <button type="button" className="studio-secondary"
           disabled={!ready || proposal.status !== "accepted" || !loaded || busy[index]}
           onClick={() => void start(index)}>{busy[index] ? "Starting…" : !loaded ? "Checking…" : "Generate"}</button>}
+        {!job && canWrite && <CreditCost quantity={ACTION_IMAGES} item={action.op === "generate_character_images"
+          ? imageItem({ purpose: "character_portrait", transparent: action.transparent, hires: action.hires ?? action.transparent })
+          : imageItem({ purpose: "background" })} />}
         {proposal.status !== "accepted" && <small className="studio-hint">Accept the proposal before generating its images.</small>}
         {errors[index] && <small className="studio-error" role="alert">{errors[index]}</small>}
       </li>;

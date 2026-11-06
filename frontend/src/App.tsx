@@ -9,6 +9,7 @@ import { StudioNavSlot } from "./narrative/StudioNav";
 import { AccessAdminPage } from "./pages/AccessAdminPage";
 import { UsagePage } from "./pages/UsagePage";
 import { useAccess } from "./site/accessContext";
+import { balanceLabel, metered } from "./site/creditsModel";
 import { linkProps } from "./site/router";
 
 // The GraphRAG Ask and Documents pages are hidden from the studio shell (#169); their
@@ -25,6 +26,7 @@ export default function App() {
   const [studioNav, setStudioNav] = useState<HTMLElement | null>(null);
   const mayLeave = () => !studioDirty || window.confirm("Leave this draft without saving? Your last saved revision will remain available.");
   const navigate = (next: Tab) => { if (next !== tab && mayLeave()) setTab(next); };
+  const balance = balanceLabel(access);
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +68,12 @@ export default function App() {
 
         <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto sm:gap-4">
           <HealthDot healthy={healthy} />
+          {balance && <button type="button" onClick={() => navigate(access?.is_admin ? "invitations" : "usage")}
+            title={access?.is_admin || access?.unlimited ? "Generation spends no credits" : "Your credit balance"}
+            aria-label={`Credits: ${balance}`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${metered(access) && access.credits < 10 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+            {balance === "Unlimited" ? "Unlimited credits" : balance}
+          </button>}
           <select
             value={workspace.id}
             onChange={(event) => {
