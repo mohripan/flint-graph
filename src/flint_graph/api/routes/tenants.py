@@ -4,6 +4,7 @@ from flint_graph.api.dependencies import CurrentUserDep, SessionDep
 from flint_graph.api.schemas import TenantCreate, TenantResponse
 from flint_graph.application.services.authz import add_workspace_member
 from flint_graph.application.services.tenants import create_tenant
+from flint_graph.application.services.workspaces import require_workspace_name_free
 from flint_graph.domain.enums import WorkspaceRole
 
 router = APIRouter(prefix="/v1/tenants", tags=["tenants"])
@@ -15,6 +16,7 @@ async def create_tenant_endpoint(
     session: SessionDep,
     current_user: CurrentUserDep,
 ) -> TenantResponse:
+    await require_workspace_name_free(session, name=payload.name, user_id=current_user.user.id)
     tenant = await create_tenant(session, name=payload.name)
     await add_workspace_member(
         session,

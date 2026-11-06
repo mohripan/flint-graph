@@ -60,8 +60,9 @@ Keys do not provide this separation; sign-in does. Under `FLINT_GRAPH_AUTH_MODE=
 user, who becomes an owner of any workspace they name. Staging and production refuse dev auth
 unless `allow_unsafe_dev_auth` is set.
 
-Workspace names are unique across the server, so a second person cannot use a name someone else
-already has. It reveals only the name. This is unchanged and worth revisiting before wider use.
+When this was delivered, workspace names were unique across the server, so a second person could
+not use a name someone else already had, and the refusal revealed that name. Migration 0049 has
+since made names unique per person, so a refusal only ever concerns your own workspaces.
 
 ## Verification
 

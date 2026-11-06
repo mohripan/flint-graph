@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from flint_graph.domain.enums import (
     AliasSource,
@@ -26,9 +26,13 @@ from flint_graph.domain.enums import (
     WorkspaceRole,
 )
 
+WorkspaceName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=2, max_length=200)
+]
+
 
 class TenantCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=200)
+    name: WorkspaceName
 
 
 class TenantResponse(BaseModel):
@@ -103,7 +107,7 @@ class DocumentIntakeResponse(BaseModel):
 
 
 class WorkspaceCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=200)
+    name: WorkspaceName
 
 
 class WorkspaceResponse(BaseModel):

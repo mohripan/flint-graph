@@ -530,6 +530,7 @@ Milestone 12 MVP bootstrap and access boundary:
   limiting.
 - Tenant-scoped dependencies authorize `X-Tenant-ID` against active workspace membership.
 - Workspace roles are ordered as viewer, member, admin, owner.
+- Workspace names are unique per person, ignoring case, among the workspaces they actively belong to; they are not unique across the server (migration 0049).
 - Graph review/merge mutations, document deletion/cleanup retry, and retrieval setup/backfill require admin or owner.
 - Document creation/upload/intake requires member, admin, or owner.
 - Server-backed workspace, document list, setup readiness, backfill list, and query history are available to the frontend.

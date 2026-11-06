@@ -148,7 +148,8 @@ def enum_column(enum_type: type[PyEnum], length: int) -> SAEnum:
 class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tenants"
 
-    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    # Unique per person, not across the server: see require_workspace_name_free.
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
