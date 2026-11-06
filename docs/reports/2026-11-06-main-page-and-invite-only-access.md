@@ -62,6 +62,31 @@ each person's generation is limited because GPU time costs money.
     invitation list and people's usage were shown.
 - **Gates:** see the commit message for the exact commands and results.
 
+## Update: renamed character and a longer How it works
+
+- **Name.** The user asked for the character in the page screenshots to have another
+  name. In the four WebPs "Quen Aldwinia" is now "Oliver Hale", and the CG labels
+  read `oliver CG 1–4` and `oliver_cg_4`. The pictures are unchanged.
+  - The edits start from the original full-resolution QA captures in ignored
+    `notes/scene-art-qualification/ui/`. The published files are their exact Lanczos
+    downscales, saved as WebP at quality 82, method 6.
+  - Studio text was redrawn by headless Edge in Segoe UI with fitted size, colour and
+    position. Redrawing the old text this way matched the originals to within 15
+    levels at 9 pixels.
+  - In the playtests, the box behind the speaker's name was rebuilt from the original
+    CG: 0.44 mean residual against the real box. Lora 22 was drawn over it. The dimmed
+    editor below the first playtest got the same change, dimmed.
+  - The evidence of the scene-art report is unchanged. The scripts are in ignored
+    `notes/site-screenshot-rename/`.
+- **How it works** now has nine steps. New steps cover the assistant (live work,
+  proposals, follow-up questions, suggested pictures), portraits and high-resolution
+  sprites, expressions and poses from an approved look, private style or look
+  training, backgrounds and one- or two-character CGs with the gallery, the stage and
+  Look tab, and voices (stock or consented cloned voices, WAV uploads, deliveries,
+  license terms).
+  - The copy lives in `frontend/src/site/howItWorksContent.ts`. A test checks every
+    step and that each screenshot it uses exists.
+
 ## Limits and follow-ups
 
 - The server sends no email yet: operators copy a ready message. Amazon SES would be
