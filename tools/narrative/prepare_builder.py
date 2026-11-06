@@ -25,8 +25,24 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def prepare(engine, templates, output):
+def expected_identity():
+    """What a builder for this checkout contains, and the hash the application pins."""
     pin = json.loads((ROOT / "ops/narrative/toolchain-linux.json").read_bytes())
+    runtime = ROOT / "runtimes/godot"
+    identity = {
+        "schema_version": "1",
+        "pin": pin,
+        "runtime_files": {name: digest(runtime / name) for name in TEMPLATE_FILES},
+        "child_sha256": digest(ROOT / "src/flint_graph/narrative/build_child.py"),
+        "recipe_sha256": digest(ROOT / "ops/narrative/Dockerfile"),
+    }
+    return identity, hashlib.sha256(canonical_json(identity)).hexdigest()
+
+
+def prepare(engine, templates, output):
+    identity, toolchain_hash = expected_identity()
+    pin = identity["pin"]
+    runtime_hashes = identity["runtime_files"]
     if digest(engine) != pin["engine_sha256"]:
         raise ValueError("unqualified_engine")
     for name, expected in pin["templates"].items():
@@ -39,18 +55,8 @@ def prepare(engine, templates, output):
         or absolute.parent.resolve(strict=True) != absolute.parent
     ):
         raise ValueError("unsafe_output")
-    runtime = ROOT / "runtimes/godot"
-    runtime_hashes = {name: digest(runtime / name) for name in TEMPLATE_FILES}
     child = ROOT / "src/flint_graph/narrative/build_child.py"
     recipe = ROOT / "ops/narrative/Dockerfile"
-    identity = {
-        "schema_version": "1",
-        "pin": pin,
-        "runtime_files": runtime_hashes,
-        "child_sha256": digest(child),
-        "recipe_sha256": digest(recipe),
-    }
-    toolchain_hash = hashlib.sha256(canonical_json(identity)).hexdigest()
     absolute.mkdir()
     shutil.copyfile(engine, absolute / "godot")
     for name in pin["templates"]:
@@ -74,11 +80,21 @@ def prepare(engine, templates, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine", type=Path, required=True)
-    parser.add_argument("--templates", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--engine", type=Path)
+    parser.add_argument("--templates", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--build", action="store_true")
+    parser.add_argument(
+        "--expected-toolchain",
+        action="store_true",
+        help="print the toolchain hash a builder for this checkout has, and stop",
+    )
     args = parser.parse_args()
+    if args.expected_toolchain:
+        print(expected_identity()[1])
+        return
+    if not (args.engine and args.templates and args.output):
+        parser.error("--engine, --templates and --output are required")
     try:
         receipt = prepare(args.engine, args.templates, args.output)
     except (ValueError, OSError) as exc:

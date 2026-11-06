@@ -8,9 +8,10 @@ Configuration is a git-ignored ``studio.local.env`` at the repository root (copy
 settings and go to the API and workers; ``STUDIO_*`` lines configure this launcher.
 
 Before starting anything it starts the listed Docker containers, waits for
-PostgreSQL, the object store, Temporal and Ollama, checks that the ports are free and
-that the playtest build matches the frontend and the Godot runtime, and applies the
-database migrations. It then runs the API, the build, relay, assistant, image and
+PostgreSQL, the object store, Temporal and Ollama, and checks that the ports are free.
+If the game player changed, it rebuilds the playtest and the release builder from the
+verified Godot toolchain under ``notes/`` and uses them for this run. It applies the
+database migrations, then runs the API, the build, relay, assistant, image and
 voice workers (plus an explicitly selected pose worker), the playtest server and
 the frontend, prefixes their output, and stops all
 of them on Ctrl+C or when one fails to start. Settings values are never printed.
@@ -30,8 +31,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -55,7 +56,13 @@ LAUNCHER_KEYS = {
     "STUDIO_PREVIEW_BUILD",
     "STUDIO_CONTAINERS",
     "STUDIO_SERVICES",
+    "STUDIO_GODOT_DIR",
 }
+# Verified downloads (docs/runbooks/narrative-web-play.md) and what is built from them.
+# Both are git-ignored; nothing here is ever downloaded automatically.
+GODOT_DIR = "notes/toolchains/godot-4.7.2"
+BUILDS_DIR = "notes/studio-builds"
+BUILD_SECONDS = 900
 _KEY = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 READY_SECONDS = 90
 WORKER_GRACE_SECONDS = 4
@@ -104,6 +111,7 @@ class StudioConfig:
     preview_port: int
     frontend_port: int
     preview_build: Path | None
+    godot_dir: Path = ROOT / GODOT_DIR
 
     @classmethod
     def from_values(cls, values: dict[str, str], root: Path = ROOT) -> StudioConfig:
@@ -146,6 +154,7 @@ class StudioConfig:
             preview_port=ports[1],
             frontend_port=ports[2],
             preview_build=(root / build).resolve() if build else None,
+            godot_dir=(root / values.get("STUDIO_GODOT_DIR", GODOT_DIR)).resolve(),
         )
 
 
@@ -245,6 +254,142 @@ def preview_problem(build: Path, frontend_port: int, runtime: str) -> str | None
             f"is now {runtime}; {rebuild}"
         )
     return None
+
+
+Runner = Callable[..., "subprocess.CompletedProcess[str]"]
+
+
+def _last_line(result: subprocess.CompletedProcess[str]) -> str:
+    lines = ((result.stderr or "") + (result.stdout or "")).strip().splitlines()
+    return lines[-1] if lines else "no output"
+
+
+def refreshed_preview(
+    config: StudioConfig, root: Path = ROOT, runner: Runner = subprocess.run
+) -> StudioConfig:
+    """The config with a playtest build that fits this checkout, building one if needed."""
+    if "preview" not in config.services:
+        return config
+    assert config.preview_build is not None
+    port = config.frontend_port
+    toolchain = json.loads((root / "runtimes/godot/toolchain.json").read_text("utf-8"))
+    runtime = toolchain["runtime_version"]
+    problem = preview_problem(config.preview_build, port, runtime)
+    if problem is None:
+        return config
+    builds = root / BUILDS_DIR
+    stem = f"preview-{runtime}-{port}"
+    for existing in sorted(builds.glob(stem + "-*")):
+        if preview_problem(existing, port, runtime) is None:
+            return replace(config, preview_build=existing)
+    engine = config.godot_dir / "engine/Godot_v4.7.2-stable_win64.exe"
+    templates = config.godot_dir / "templates"
+    if not engine.is_file() or not templates.is_dir():
+        raise StudioError(problem)
+    print("[studio] the game player changed; rebuilding the playtest", flush=True)
+    builds.mkdir(parents=True, exist_ok=True)
+    output = builds / f"{stem}-{int(time.time())}"
+    result = runner(
+        [
+            sys.executable,
+            str(root / "tools/narrative/build_preview.py"),
+            "--engine",
+            str(engine),
+            "--templates",
+            str(templates),
+            "--parent-origin",
+            f"http://localhost:{port}",
+            "--output",
+            str(output),
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=BUILD_SECONDS,
+    )
+    built = result.returncode == 0 and preview_problem(output, port, runtime) is None
+    if not built:
+        raise StudioError(f"{problem}. Rebuilding it failed: {_last_line(result)}")
+    return replace(config, preview_build=output)
+
+
+def refreshed_builder(
+    config: StudioConfig, root: Path = ROOT, runner: Runner = subprocess.run
+) -> StudioConfig:
+    """The config pinned to a release builder for this checkout, building one if needed.
+
+    A failure here never stops the Studio: writing, generating and playtesting do not need
+    the builder, so only releases are affected.
+    """
+    key = "FLINT_GRAPH_NARRATIVE_RELEASE_TOOLCHAIN_SHA256"
+    pinned = config.settings.get(key)
+    if "worker" not in config.services or not pinned:
+        return config
+    tool = str(root / "tools/narrative/prepare_builder.py")
+    common = {"cwd": root, "capture_output": True, "text": True}
+
+    def warn(reason: str) -> StudioConfig:
+        print(f"[studio] releases will fail until the builder is rebuilt: {reason}", flush=True)
+        return config
+
+    asked = runner([sys.executable, tool, "--expected-toolchain"], timeout=120, **common)
+    expected = asked.stdout.strip() if asked.returncode == 0 else ""
+    if len(expected) != 64:
+        return warn("its expected version is unknown")
+    if expected == pinned:
+        return config
+
+    def use(receipt: dict[str, str]) -> StudioConfig:
+        settings = {
+            **config.settings,
+            key: receipt["toolchain_sha256"],
+            "FLINT_GRAPH_NARRATIVE_RELEASE_BUILDER_IMAGE_DIGEST": receipt["image"],
+        }
+        return replace(config, settings=settings)
+
+    builds = root / BUILDS_DIR
+    stem = f"builder-{expected[:16]}"
+    for existing in sorted(builds.glob(stem + "-*")):
+        try:
+            receipt = json.loads((existing / "toolchain.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        if receipt.get("toolchain_sha256") == expected and receipt.get("image"):
+            inspected = runner(
+                ["docker", "image", "inspect", receipt["image"]], timeout=60, **common
+            )
+            if inspected.returncode == 0:
+                return use(receipt)
+    engine = config.godot_dir / "linux/Godot_v4.7.2-stable_linux.x86_64"
+    if not engine.is_file() or not (config.godot_dir / "templates").is_dir():
+        return warn(f"no Godot toolchain at {config.godot_dir}")
+    print("[studio] the game player changed; rebuilding the release builder", flush=True)
+    builds.mkdir(parents=True, exist_ok=True)
+    output = builds / f"{stem}-{int(time.time())}"
+    result = runner(
+        [
+            sys.executable,
+            tool,
+            "--engine",
+            str(engine),
+            "--templates",
+            str(config.godot_dir / "templates"),
+            "--output",
+            str(output),
+            "--build",
+        ],
+        timeout=BUILD_SECONDS,
+        **common,
+    )
+    if result.returncode != 0:
+        return warn(_last_line(result))
+    try:
+        receipt = json.loads((output / "toolchain.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return warn("the build left no receipt")
+    if receipt.get("toolchain_sha256") != expected or not receipt.get("image"):
+        return warn("the build's receipt does not match this checkout")
+    return use(receipt)
 
 
 def _reachable(host: str, port: int, seconds: float) -> bool:
@@ -459,6 +604,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{args.config} and fill it in"
             )
         config = StudioConfig.from_values(parse_env(args.config))
+        if args.command == "up":
+            config = refreshed_builder(refreshed_preview(config))
         preflight(config)
         if args.command == "check":
             print("[studio] everything is ready to start", flush=True)

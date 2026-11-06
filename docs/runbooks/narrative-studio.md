@@ -57,16 +57,20 @@ containers and playtest build. In order, it:
 1. starts the listed Docker containers that are stopped (PostgreSQL, MinIO,
    Temporal), then waits for them and, when the assistant or image worker runs, for
    Ollama;
-2. refuses to start when a port is taken, `frontend/node_modules` is missing, or the
-   playtest build was made for another frontend origin or Godot runtime version
-   (rebuild it as below);
-3. applies `alembic upgrade head` (`--no-migrate` skips it);
-4. runs the API, the release worker and relay, the assistant, image and voice
+2. rebuilds the playtest and the release builder when the game player changed (ADR 0064), from
+   the verified toolchain in `notes/toolchains/godot-4.7.2` (or `STUDIO_GODOT_DIR`), into
+   `notes/studio-builds`. It uses them for that run without editing `studio.local.env`, and later
+   starts reuse them. This can take a few minutes once. Without the toolchain, a stale playtest
+   stops the start and says how to rebuild it as below, and a stale builder only warns that
+   releases will fail. `check` reports problems and builds nothing;
+3. refuses to start when a port is taken or `frontend/node_modules` is missing;
+4. applies `alembic upgrade head` (`--no-migrate` skips it);
+5. runs the API, the release worker and relay, the assistant, image and voice
    workers, the playtest server and the frontend, prefixing each line of output with its name,
    and prints `ready` once the API, playtest and frontend answer.
 
 Ctrl+C stops every process it started. Closing the window or killing the launcher
-ends them too. `check` runs steps 1 and 2 only. `STUDIO_SERVICES` runs a subset,
+ends them too. `check` runs the container, dependency and port checks only. `STUDIO_SERVICES` runs a subset,
 for example `api,preview,frontend` without the GPU and model workers. After editing
 the image content policy or settings, restart the launcher.
 

@@ -58,9 +58,11 @@ func _initialize() -> void:
 		root.add_child(stage)
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		stage._set_text_speed("instant")
 		await process_frame
 		await process_frame
 		if config["case"] == "cg_keyboard_gallery":
+			stage._toolbar("Menu")
 			_find(stage, "Gallery").grab_focus()
 		var down := InputEventKey.new()
 		down.keycode = KEY_ENTER
@@ -96,6 +98,7 @@ func _initialize() -> void:
 			root.add_child(stage)
 			stage.size = Vector2(1280, 720)
 			stage.configure(checked["story"], checked["package_hash"], checked["assets"], text)
+			stage._set_text_speed("instant")
 			await process_frame
 			await process_frame
 			var first: String = stage._player.state["node_id"]
@@ -145,6 +148,7 @@ func _initialize() -> void:
 		root.add_child(stage)
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		stage._set_text_speed("instant")
 		await process_frame
 		await process_frame
 		var clips: Array = [stage.current_voice()]
@@ -186,6 +190,7 @@ func _initialize() -> void:
 			root.add_child(stage)
 			stage.size = Vector2(1280, 720)
 			stage.configure(story, checked["package_hash"], checked["assets"])
+			stage._set_text_speed("instant")
 			await process_frame
 			await process_frame
 			var first: String = stage._player.state["node_id"]
@@ -229,6 +234,7 @@ func _initialize() -> void:
 		root.add_child(stage)
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		stage._set_text_speed("instant")
 		stage._toolbar("Save")  # Save before seeing a CG.
 		_find(stage, "Continue").pressed.emit()
 		await process_frame
@@ -272,6 +278,7 @@ func _initialize() -> void:
 		root.add_child(stage)
 		stage.size = Vector2(1280, 720)
 		stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+		stage._set_text_speed("instant")
 		var screens: Array = []
 		for step: String in ["", "Continue", "Go", "Continue"]:
 			if step != "":
@@ -293,6 +300,18 @@ func _initialize() -> void:
 				"name": stage._name.text if stage._name_box.visible else null,
 				"box": {"left": box.position.x, "right": box.end.x, "bottom": box.end.y, "top": box.position.y}})
 		print("UI_RESULT:" + JSON.stringify({"screens": screens}))
+		quit(0)
+		return
+	if config["case"] == "controls":
+		await _probe_controls(checked)
+		quit(0)
+		return
+	if config["case"] == "controls_settings":
+		_probe_settings()
+		quit(0)
+		return
+	if config["case"] == "controls_preview":
+		await _probe_controls_preview(checked)
 		quit(0)
 		return
 	if config["case"] == "stale_restart":
@@ -329,3 +348,237 @@ func _initialize() -> void:
 	print("UI_RESULT:" + JSON.stringify({"first": first, "failures": results,
 		"second": second, "updated": final.get("data") == updated}))
 	quit(0)
+
+
+func _controls_stage(base: String, checked: Dictionary) -> Control:
+	var stage: Control = load(base).new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	return stage
+
+
+func _node_of(stage: Control) -> String:
+	return stage._player.state["node_id"]
+
+
+func _dimmed(stage: Control) -> Dictionary:
+	return {"mira": stage._sprites["mira"].modulate != Color.WHITE,
+		"oren": stage._sprites["oren"].modulate != Color.WHITE}
+
+
+func _mouse(button: int) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = button
+	event.pressed = true
+	return event
+
+
+func _probe_controls(checked: Dictionary) -> void:
+	var out := {}
+	var store: GDScript = load("res://runtime/save_store.gd")
+	var stage: Control = await _controls_stage("res://runtime/vn_view.gd", checked)
+	var next := _find(stage, "Continue")
+	out["default_speed"] = stage._settings["text_speed"]
+	out["revealing_at_start"] = stage._revealing()
+	next.pressed.emit()
+	out["first_press"] = {"node": _node_of(stage), "revealing": stage._revealing()}
+	next.pressed.emit()
+	out["second_press"] = {"node": _node_of(stage), "revealing": stage._revealing()}
+	stage._set_text_speed("instant")
+	out["instant_stops_the_reveal"] = not stage._revealing()
+	# Speaker focus: Oren speaks on l2, Mira on l1, nobody on l3.
+	var focus := {"oren_speaks": _dimmed(stage)}
+	stage._toolbar("Restart")
+	focus["mira_speaks"] = _dimmed(stage)
+	stage._request_advance()
+	stage._request_advance()
+	focus["narration"] = _dimmed(stage)
+	stage._toolbar("Restart")
+	stage._set_speaker_focus(false)
+	focus["turned_off"] = _dimmed(stage)
+	stage._set_speaker_focus(true)
+	out["focus"] = focus
+	# Read to the last line, then open the backlog.
+	stage._request_advance()
+	stage._request_advance()
+	stage._request_advance()
+	_find(stage, "Stay").pressed.emit()
+	var log := {}
+	stage._toolbar("Log")
+	await process_frame
+	await process_frame
+	log["entries"] = stage.backlog_rows()
+	var before := _node_of(stage)
+	stage._request_advance()
+	log["pauses"] = {"advanced": _node_of(stage) != before,
+		"continue_disabled": _find(stage, "Continue").disabled}
+	stage._unhandled_key_input(_key(KEY_ESCAPE))
+	log["escape_closes"] = not stage._log_panel.visible
+	for index in range(400):
+		stage._note_backlog(null, str(index))
+	log["limit"] = stage._backlog.size()
+	out["log"] = log
+	# Auto, from the start of the story.
+	stage._toolbar("Restart")
+	var auto := {}
+	stage._toolbar("Auto")
+	stage._process(0.5)
+	auto["before_delay"] = _node_of(stage)
+	stage._process(60.0)
+	auto["after_delay"] = _node_of(stage)
+	stage._toolbar("Log")
+	stage._process(60.0)
+	auto["paused_by_log"] = _node_of(stage)
+	stage._close_log()
+	stage._process(60.0)
+	stage._process(60.0)
+	stage._process(60.0)
+	stage._process(60.0)
+	auto["stops_at_choice"] = _node_of(stage)
+	auto["still_on"] = stage._auto
+	stage._toolbar("Auto")
+	out["auto"] = auto
+	# Skip: l1 to l3 were read above; the line after the choice is made unread again.
+	stage._read.erase(load("res://runtime/reading.gd").read_mark("l4", "A line [b]nobody[/b] has read."))
+	stage._toolbar("Restart")
+	var skip := {}
+	stage._toolbar("Skip")
+	for tick in range(8):
+		stage._process(1.0)
+	skip["stops_at"] = _node_of(stage)
+	skip["turned_off_at_choice"] = not stage._skip
+	_find(stage, "Stay").pressed.emit()
+	stage._toolbar("Skip")
+	stage._process(1.0)
+	skip["unread"] = {"node": _node_of(stage), "skip": stage._skip}
+	var reading: GDScript = load("res://runtime/reading.gd")
+	skip["changed_text_is_unread"] = reading.read_mark("l1", "One") != reading.read_mark("l1", "Two")
+	out["skip"] = skip
+	# Hide: back at the first line.
+	stage._toolbar("Restart")
+	var hide := {}
+	stage._toolbar("Hide")
+	hide["hidden"] = {"box": stage._box.visible, "toolbar": stage._menu.visible}
+	stage._input(_mouse(MOUSE_BUTTON_LEFT))
+	hide["after_click"] = {"box": stage._box.visible, "toolbar": stage._menu.visible, "node": _node_of(stage)}
+	stage._toolbar("Hide")
+	stage._input(_key(KEY_ENTER))
+	var release := _key(KEY_ENTER)
+	release.pressed = false
+	stage._input(release)
+	hide["after_enter"] = {"box": stage._box.visible, "toolbar": stage._menu.visible, "node": _node_of(stage)}
+	stage._gui_input(_mouse(MOUSE_BUTTON_RIGHT))
+	hide["after_right_click"] = {"box": stage._box.visible}
+	stage._set_ui_hidden(false)
+	out["hide"] = hide
+	# Quick save has its own slot.
+	var quick := {}
+	stage._toolbar("Save")
+	var regular: Dictionary = store.read_save(checked["package_hash"])
+	stage._request_advance()
+	stage._toolbar("Quick save")
+	quick["slot_written"] = store.read_quick_save(checked["package_hash"]).get("error") == ""
+	quick["regular_untouched"] = store.read_save(checked["package_hash"]).get("data") == regular.get("data")
+	stage._request_advance()
+	stage._request_advance()
+	stage._toolbar("Quick load")
+	quick["loaded_node"] = _node_of(stage)
+	quick["notice"] = stage._notice.text
+	quick["log_marks_the_load"] = stage.backlog_rows()[-2] == [null, "— Quick save loaded —"]
+	out["quick"] = quick
+	# The menu pauses the story and holds the rest of the actions.
+	var menu := {}
+	stage._toolbar("Menu")
+	menu["open"] = stage._menu_panel.visible
+	menu["continue_disabled"] = _find(stage, "Continue").disabled
+	var bar: Array = []
+	for button: Node in stage._menu.get_children():
+		bar.append(button.text)
+	menu["toolbar_buttons"] = bar
+	stage._unhandled_key_input(_key(KEY_ESCAPE))
+	menu["escape_closes"] = not stage._menu_panel.visible
+	out["menu"] = menu
+	# Settings persist on this device.
+	stage._set_text_speed("slow")
+	stage._set_auto_speed("fast")
+	stage._set_speaker_focus(false)
+	stage._volume_slider.value = 40
+	await process_frame
+	out["stored"] = store.read_settings()
+	stage._flush_read_marks(100.0)
+	out["read_marks_kept"] = store.read_marks(checked["story"]["id"]).size() > 0
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _probe_settings() -> void:
+	var store: GDScript = load("res://runtime/save_store.gd")
+	var out := {}
+	DirAccess.make_dir_recursive_absolute("user://flint_graph")
+	var old := FileAccess.open("user://flint_graph/settings.json", FileAccess.WRITE)
+	old.store_string("{\"schema_version\":\"1\",\"voice_volume\":35}")
+	old.close()
+	out["old_file"] = store.read_settings()
+	var bad := FileAccess.open("user://flint_graph/settings.json", FileAccess.WRITE)
+	bad.store_string("{\"schema_version\":\"2\",\"voice_volume\":900,\"text_speed\":\"warp\"}")
+	bad.close()
+	out["bad_file"] = store.read_settings()
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _list_user_files() -> Array:
+	var found: Array = []
+	var pending: Array = ["user://flint_graph"]
+	while not pending.is_empty():
+		var folder: String = pending.pop_back()
+		var access := DirAccess.open(folder)
+		if access == null:
+			continue
+		for name in access.get_files():
+			found.append(folder.path_join(name))
+		for name in access.get_directories():
+			pending.append(folder.path_join(name))
+	return found
+
+
+func _probe_controls_preview(checked: Dictionary) -> void:
+	var out := {}
+	var before := _list_user_files()
+	var spy := GDScript.new()
+	spy.source_code = "extends \"res://preview/vn_view.gd\"\nvar calls: Array = []\nfunc _overlay_bridge(open: bool) -> void:\n\tcalls.append(open)\n"
+	spy.reload()
+	var stage: Control = spy.new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	var disabled := {}
+	for label: String in ["Save", "Load", "Quick save", "Quick load", "Restart", "Gallery"]:
+		disabled[label] = _find(stage, label).disabled
+	out["disabled"] = disabled
+	stage._set_text_speed("instant")
+	out["speed_changes"] = stage._settings["text_speed"]
+	stage._toolbar("Log")
+	await process_frame
+	out["log_works"] = stage._log_panel.visible
+	stage._close_log()
+	stage._toolbar("Menu")
+	await process_frame
+	stage._close_menu()
+	stage._request_advance()
+	stage._request_advance()
+	stage._request_advance()
+	stage._toolbar("Restart")
+	stage._toolbar("Skip")
+	for tick in range(8):
+		stage._process(1.0)
+	out["skip_works_in_memory"] = _node_of(stage)
+	stage._flush_read_marks(100.0)
+	var written: Array = []
+	for path: String in _list_user_files():
+		if not path in before:
+			written.append(path)
+	out["files_written"] = written
+	out["overlay_calls"] = stage.calls
+	print("UI_RESULT:" + JSON.stringify(out))

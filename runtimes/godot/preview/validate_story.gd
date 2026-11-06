@@ -244,7 +244,8 @@ static func _story(story: Variant) -> bool:
 static func _digest(bytes: PackedByteArray) -> String:
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
-	context.update(bytes)
+	if not bytes.is_empty():  # The engine logs an error for an empty update.
+		context.update(bytes)
 	return context.finish().hex_encode()
 
 static func validate(source: PackedByteArray, notices: PackedByteArray, package_hash: String, assets: Dictionary = {}) -> Dictionary:

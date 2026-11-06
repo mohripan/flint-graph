@@ -76,6 +76,7 @@ def main() -> None:
         "runtime/vn_view.gd",
         "runtime/save_store.gd",
         "runtime/player_terms.gd",
+        "runtime/reading.gd",
         "runtime/strict_json.gd",
         "fonts/Lora.ttf",
         "fonts/LICENSE-Lora.txt",

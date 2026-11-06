@@ -7,11 +7,15 @@ extends Control
 const PlayerScript = preload("res://runtime/player.gd")
 const SaveStore = preload("res://runtime/save_store.gd")
 const PlayerTerms = preload("res://runtime/player_terms.gd")
+const Reading = preload("res://runtime/reading.gd")
 const DisplayFont = preload("res://fonts/Lora.ttf")
 const INK := Color("182635")
 const PAPER := Color("f0f4f6")
 const LAMP := Color("d5ae68")
 const SLOTS := {"left": 0.2, "center": 0.5, "right": 0.8}
+const DIMMED := Color(0.56, 0.56, 0.62)
+const TOOLTIPS := {"Log": "Read earlier lines (L)", "Auto": "Advance by itself (A)",
+	"Skip": "Skip lines you have read (S)", "Hide": "Hide the interface (H)", "Menu": "Saves and settings (Esc)"}
 # Theme defaults from the design review; every theme field is optional.
 const DEFAULTS := {
 	"textbox": {"position": "bottom", "width": 92, "background": "#182635e6",
@@ -64,6 +68,34 @@ var _terms_panel: PanelContainer
 var _terms_button: Button
 var _terms_required := false
 var _terms_disabled: Dictionary = {}
+# Player controls (ADR 0064). None of them changes story state.
+var _settings: Dictionary
+var _screen_generation := -1
+var _screen_session: RefCounted
+var _reveal_total := 0.0
+var _reveal_elapsed := 0.0
+var _auto := false
+var _skip := false
+var _wait := 0.0
+var _ui_hidden := false
+var _backlog: Array = []
+var _read: Dictionary = {}
+var _read_dirty := false
+var _read_flush := 0.0
+var _auto_button: Button
+var _skip_button: Button
+var _log_panel: PanelContainer
+var _log_scroll: ScrollContainer
+var _log_entries: VBoxContainer
+var _log_close: Button
+var _log_disabled: Dictionary = {}
+var _menu_panel: PanelContainer
+var _menu_close: Button
+var _menu_buttons: Array[Button] = []
+var _menu_disabled: Dictionary = {}
+var _speed_buttons: Dictionary = {}
+var _auto_speed_buttons: Dictionary = {}
+var _focus_toggle: CheckButton
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary, notices: String = "") -> void:
@@ -74,7 +106,9 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary, not
 	_theme = _merged(source.get("theme", {}))
 	_font = _story_font()
 	_gallery_saved = _read_gallery()
-	_voice_volume = _read_volume()
+	_settings = _read_settings()
+	_voice_volume = _settings["voice_volume"]
+	_read = _read_marks()
 	_player = PlayerScript.new(source, package_hash, _gallery_saved)
 	_build()
 	if _terms != null:
@@ -157,6 +191,19 @@ func _small_button(label: String) -> Button:
 	return button
 
 
+func _small_toggle(label: String) -> Button:
+	# Lit while on, so a mode that is running shows at a glance.
+	var button := _small_button(label)
+	button.toggle_mode = true
+	var lit: StyleBoxFlat = button.get_theme_stylebox("normal").duplicate()
+	lit.bg_color = LAMP
+	lit.border_color = LAMP
+	button.add_theme_stylebox_override("pressed", lit)
+	for role: String in ["font_pressed_color", "font_hover_pressed_color"]:
+		button.add_theme_color_override(role, INK)
+	return button
+
+
 func _build() -> void:
 	var ground := ColorRect.new()
 	ground.color = INK
@@ -202,11 +249,12 @@ func _build() -> void:
 	_text.scroll_active = false
 	_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_text.add_theme_font_override("normal_font", _font)
+	_text.visible_characters_behavior = TextServer.VC_CHARS_AFTER_SHAPING  # Words never jump lines.
 	_text.add_theme_color_override("default_color", _color(box["text"]))
 	column.add_child(_text)
 	_continue = _small_button("Continue")
 	_continue.size_flags_horizontal = Control.SIZE_SHRINK_END
-	_continue.pressed.connect(func() -> void: _action("advance", _player.generation, _player))
+	_continue.pressed.connect(_request_advance)
 	column.add_child(_continue)
 	_choices = VBoxContainer.new()
 	_choices.add_theme_constant_override("separation", 12)
@@ -218,28 +266,15 @@ func _build() -> void:
 	_menu.offset_right = -12
 	_menu.offset_top = 12
 	add_child(_menu)
-	for item: String in ["Save", "Load", "Restart", "Gallery"] + (["License"] if _terms != null else []):
-		var button := _small_button(item)
+	for item: String in ["Log", "Auto", "Skip", "Hide", "Menu"]:
+		var button := _small_toggle(item) if item in ["Auto", "Skip"] else _small_button(item)
+		button.tooltip_text = TOOLTIPS[item]
 		button.pressed.connect(_toolbar.bind(item))
 		_menu.add_child(button)
-	var voice_label := Label.new()
-	voice_label.text = "Voice"
-	voice_label.add_theme_color_override("font_color", PAPER)
-	voice_label.add_theme_color_override("font_outline_color", INK)
-	voice_label.add_theme_constant_override("outline_size", 4)
-	voice_label.add_theme_font_size_override("font_size", 14)
-	_menu.add_child(voice_label)
-	_volume_slider = HSlider.new()
-	_volume_slider.min_value = 0
-	_volume_slider.max_value = 100
-	_volume_slider.step = 10
-	_volume_slider.value = _voice_volume
-	_volume_slider.custom_minimum_size = Vector2(96, 0)
-	_volume_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_volume_slider.focus_mode = Control.FOCUS_ALL
-	_volume_slider.tooltip_text = "Voice volume"
-	_volume_slider.value_changed.connect(_set_volume)
-	_menu.add_child(_volume_slider)
+		if item == "Auto":
+			_auto_button = button
+		elif item == "Skip":
+			_skip_button = button
 	_voice_player = AudioStreamPlayer.new()
 	add_child(_voice_player)
 	_notice = Label.new()
@@ -253,7 +288,396 @@ func _build() -> void:
 	_notice.add_theme_constant_override("outline_size", 4)
 	_notice.add_theme_font_size_override("font_size", 14)
 	add_child(_notice)
+	_build_log()
+	_build_menu_panel()
 	_build_gallery()
+
+
+func _panel_label(text: String, size_px: int = 14) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override("font_color", PAPER)
+	label.add_theme_font_size_override("font_size", size_px)
+	return label
+
+
+func _build_log() -> void:
+	_log_panel = PanelContainer.new()
+	_log_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_log_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_log_panel.add_theme_stylebox_override("panel", _style(Color(INK, 0.96), LAMP, 0))
+	_log_panel.hide()
+	add_child(_log_panel)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	_log_panel.add_child(column)
+	_log_close = _small_button("Close log")
+	_log_close.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_log_close.pressed.connect(_close_log)
+	column.add_child(_log_close)
+	_log_scroll = ScrollContainer.new()
+	_log_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(_log_scroll)
+	_log_entries = VBoxContainer.new()
+	_log_entries.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log_entries.add_theme_constant_override("separation", 10)
+	_log_scroll.add_child(_log_entries)
+
+
+func _note_backlog(speaker: Variant, text: String, color: Variant = null) -> void:
+	_backlog.append({"speaker": speaker, "text": text, "color": color})
+	while _backlog.size() > Reading.BACKLOG_LIMIT:
+		_backlog.pop_front()
+
+
+func backlog_rows() -> Array:
+	var rows: Array = []
+	for entry: Dictionary in _backlog:
+		rows.append([entry["speaker"], entry["text"]])
+	return rows
+
+
+func _open_log() -> void:
+	if _overlay_open():
+		return
+	for child in _log_entries.get_children():
+		_log_entries.remove_child(child)
+		child.queue_free()
+	if _backlog.is_empty():
+		_log_entries.add_child(_panel_label("Nothing here yet.", 18))
+	for entry: Dictionary in _backlog:
+		# Labels draw plain text, so story markup can never become formatting here.
+		var row := VBoxContainer.new()
+		row.add_theme_constant_override("separation", 2)
+		if entry["speaker"] != null:
+			var speaker := _panel_label(entry["speaker"])
+			speaker.add_theme_color_override("font_color", _color(entry["color"]) if entry["color"] != null else LAMP)
+			row.add_child(speaker)
+		var body := _panel_label(entry["text"], 18)
+		body.add_theme_font_override("font", _font)
+		row.add_child(body)
+		_log_entries.add_child(row)
+	_pause_controls(_log_disabled)
+	_log_panel.show()
+	_log_close.grab_focus()
+	_overlay_changed()
+	_scroll_log_to_end.call_deferred()
+	_publish_qa.call_deferred()
+
+
+func _scroll_log_to_end() -> void:
+	if is_inside_tree():
+		await get_tree().process_frame
+		_log_scroll.scroll_vertical = int(_log_scroll.get_v_scroll_bar().max_value)
+
+
+func _close_log() -> void:
+	if not _log_panel.visible:
+		return
+	_log_panel.hide()
+	_resume_controls(_log_disabled)
+	_refocus()
+	_overlay_changed()
+	_publish_qa.call_deferred()
+
+
+func _build_menu_panel() -> void:
+	_menu_panel = PanelContainer.new()
+	_menu_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_menu_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_menu_panel.add_theme_stylebox_override("panel", _style(Color(INK, 0.96), LAMP, 0))
+	_menu_panel.hide()
+	add_child(_menu_panel)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_menu_panel.add_child(scroll)
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 10)
+	scroll.add_child(column)
+	_menu_close = _small_button("Close menu")
+	_menu_close.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_menu_close.pressed.connect(_close_menu)
+	column.add_child(_menu_close)
+	column.add_child(_panel_label("Game"))
+	var actions := HFlowContainer.new()
+	actions.add_theme_constant_override("h_separation", 6)
+	actions.add_theme_constant_override("v_separation", 6)
+	column.add_child(actions)
+	for item: String in ["Save", "Load", "Quick save", "Quick load", "Restart", "Gallery"] + (["License"] if _terms != null else []):
+		var button := _small_button(item)
+		button.pressed.connect(_toolbar.bind(item))
+		actions.add_child(button)
+		_menu_buttons.append(button)
+	_speed_buttons = _setting_row(column, "Text speed", Reading.TEXT_SPEEDS.keys(), _settings["text_speed"], _set_text_speed)
+	_auto_speed_buttons = _setting_row(column, "Auto speed", Reading.AUTO_SPEEDS.keys(), _settings["auto_speed"], _set_auto_speed)
+	column.add_child(_panel_label("Voice volume"))
+	_volume_slider = HSlider.new()
+	_volume_slider.min_value = 0
+	_volume_slider.max_value = 100
+	_volume_slider.step = 10
+	_volume_slider.value = _voice_volume
+	_volume_slider.custom_minimum_size = Vector2(200, 24)
+	_volume_slider.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_volume_slider.focus_mode = Control.FOCUS_ALL
+	_volume_slider.tooltip_text = "Voice volume"
+	_volume_slider.value_changed.connect(_set_volume)
+	column.add_child(_volume_slider)
+	_focus_toggle = CheckButton.new()
+	_focus_toggle.text = "Dim characters who are not speaking"
+	_focus_toggle.focus_mode = Control.FOCUS_ALL
+	_focus_toggle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_focus_toggle.add_theme_color_override("font_color", PAPER)
+	_focus_toggle.add_theme_color_override("font_pressed_color", PAPER)
+	_focus_toggle.add_theme_color_override("font_hover_color", PAPER)
+	_focus_toggle.add_theme_color_override("font_hover_pressed_color", PAPER)
+	_focus_toggle.add_theme_color_override("font_focus_color", PAPER)
+	_focus_toggle.add_theme_font_size_override("font_size", 14)
+	_focus_toggle.set_pressed_no_signal(_settings["speaker_focus"])
+	_focus_toggle.toggled.connect(_set_speaker_focus)
+	column.add_child(_focus_toggle)
+
+
+func _setting_row(parent: Container, title: String, values: Array, current: String, apply: Callable) -> Dictionary:
+	parent.add_child(_panel_label(title))
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 6)
+	row.add_theme_constant_override("v_separation", 6)
+	parent.add_child(row)
+	var group := ButtonGroup.new()
+	var buttons := {}
+	for value: String in values:
+		var button := _small_toggle(value.capitalize())
+		button.button_group = group
+		button.set_pressed_no_signal(value == current)
+		button.pressed.connect(apply.bind(value))
+		row.add_child(button)
+		_menu_buttons.append(button)
+		buttons[value] = button
+	return buttons
+
+
+func _open_menu() -> void:
+	if _overlay_open():
+		return
+	_pause_controls(_menu_disabled)
+	# The menu's own controls stay usable while it is open.
+	for button: Button in _menu_buttons:
+		button.disabled = _menu_disabled.get(button, false)
+		_menu_disabled.erase(button)
+	_menu_panel.show()
+	_menu_close.grab_focus()
+	_overlay_changed()
+	_publish_qa.call_deferred()
+
+
+func _close_menu() -> void:
+	if not _menu_panel.visible:
+		return
+	_menu_panel.hide()
+	_resume_controls(_menu_disabled)
+	_refocus()
+	_overlay_changed()
+	_publish_qa.call_deferred()
+
+
+func _overlay_open() -> bool:
+	return _gallery_panel.visible or _terms_open() or _log_panel.visible or _menu_panel.visible \
+		or (_sound_gate != null and _sound_gate.visible)
+
+
+func _overlay_changed() -> void:
+	pass  # Playtests tell their page, so Escape closes the overlay before the playtest.
+
+
+func _pause_controls(store: Dictionary) -> void:
+	# Disable underlying focus targets as well as guarding queued action signals.
+	for control: Node in _menu.get_children() + _menu_buttons + _buttons:
+		if control is Button:
+			store[control] = control.disabled
+			control.disabled = true
+
+
+func _resume_controls(store: Dictionary) -> void:
+	for control: Button in store:
+		if is_instance_valid(control):
+			control.disabled = store[control]
+	store.clear()
+
+
+func _refocus() -> void:
+	if not _buttons.is_empty():
+		_buttons[0].grab_focus()
+
+
+func _revealing() -> bool:
+	return _reveal_elapsed < _reveal_total
+
+
+func _finish_reveal() -> void:
+	_reveal_total = 0.0
+	_reveal_elapsed = 0.0
+	_text.visible_ratio = 1.0
+
+
+func _request_advance() -> void:
+	# The first press finishes a line that is still appearing; the next one moves on.
+	if _revealing():
+		_finish_reveal()
+		_publish_qa.call_deferred()
+		return
+	_action("advance", _player.generation, _player)
+
+
+func _set_auto(on: bool) -> void:
+	_auto = on
+	_auto_button.set_pressed_no_signal(on)
+	if on:
+		_set_skip(false)
+		_wait = Reading.auto_seconds(_player.view["text"], _settings["auto_speed"])
+	_publish_qa.call_deferred()
+
+
+func _set_skip(on: bool) -> void:
+	_skip = on
+	_skip_button.set_pressed_no_signal(on)
+	if on:
+		_set_auto(false)
+		_wait = 0.0
+	_publish_qa.call_deferred()
+
+
+func _set_ui_hidden(hidden: bool) -> void:
+	_ui_hidden = hidden
+	for control: Control in [_box, _choices, _menu, _notice]:
+		control.visible = not hidden
+	if not hidden:
+		_refocus()
+	_publish_qa.call_deferred()
+
+
+func _set_text_speed(value: String) -> void:
+	if not value in Reading.TEXT_SPEEDS:
+		return
+	_settings["text_speed"] = value
+	_speed_buttons[value].set_pressed_no_signal(true)
+	if value == "instant":
+		_finish_reveal()
+	_persist_settings()
+	_publish_qa.call_deferred()
+
+
+func _set_auto_speed(value: String) -> void:
+	if not value in Reading.AUTO_SPEEDS:
+		return
+	_settings["auto_speed"] = value
+	_auto_speed_buttons[value].set_pressed_no_signal(true)
+	_persist_settings()
+	_publish_qa.call_deferred()
+
+
+func _set_speaker_focus(on: bool) -> void:
+	_settings["speaker_focus"] = on
+	_focus_toggle.set_pressed_no_signal(on)
+	_apply_speaker_focus()
+	_persist_settings()
+	_publish_qa.call_deferred()
+
+
+func _apply_speaker_focus() -> void:
+	var speaker: Variant = _player.view["speaker"]
+	var dim: bool = _settings["speaker_focus"] and speaker != null and _sprites.has(speaker) and _sprites.size() > 1
+	for id: String in _sprites:
+		_sprites[id].modulate = DIMMED if dim and id != speaker else Color.WHITE
+
+
+func _read_settings() -> Dictionary:
+	return SaveStore.read_settings()
+
+
+func _persist_settings() -> void:
+	if SaveStore.write_settings(_settings) != "":
+		_notice.text = "Settings kept for this session. This device could not store them."
+
+
+func _read_marks() -> Dictionary:
+	return SaveStore.read_marks(_source["id"])
+
+
+func _persist_marks() -> void:
+	SaveStore.write_read_marks(_source["id"], _read.keys())
+
+
+func _flush_read_marks(delta: float) -> void:
+	_read_flush += delta
+	if _read_dirty and _read_flush >= Reading.FLUSH_SECONDS:
+		_read_dirty = false
+		_read_flush = 0.0
+		_persist_marks()
+
+
+func _exit_tree() -> void:
+	if _read_dirty:
+		_read_dirty = false
+		_persist_marks()
+
+
+func _process(delta: float) -> void:
+	if _player == null:
+		return
+	_flush_read_marks(delta)
+	if _overlay_open() or _ui_hidden:
+		return
+	if _revealing():
+		if _skip:
+			_finish_reveal()
+		else:
+			_reveal_elapsed += delta
+			if _revealing():
+				_text.visible_ratio = _reveal_elapsed / _reveal_total
+			else:
+				_finish_reveal()
+		return
+	if _skip:
+		_tick_skip(delta)
+	elif _auto:
+		_tick_auto(delta)
+
+
+func _tick_skip(delta: float) -> void:
+	var current: Dictionary = _player.view
+	var read: bool = current["type"] == "line" and _read.has(Reading.read_mark(_player.state["node_id"], current["text"]))
+	if not read:
+		_set_skip(false)
+		_notice.text = "Skip stopped: this line is new." if current["type"] == "line" else "Skip stopped."
+		_start_voice.call_deferred(_voice_generation, _voice_session)
+		return
+	_wait -= delta
+	if _wait <= 0.0:
+		_wait = Reading.SKIP_SECONDS
+		_action("advance", _player.generation, _player)
+
+
+func _tick_auto(delta: float) -> void:
+	if _player.view["type"] != "line":
+		return  # Choices and endings always wait for the player.
+	if _voice_player.playing:
+		_wait = Reading.AFTER_VOICE_SECONDS
+		return
+	_wait -= delta
+	if _wait <= 0.0:
+		_action("advance", _player.generation, _player)
+
+
+func _begin_screen(current: Dictionary) -> void:
+	_wait = Reading.SKIP_SECONDS if _skip else Reading.auto_seconds(current["text"], _settings["auto_speed"])
+	_reveal_elapsed = 0.0
+	_reveal_total = 0.0 if _skip else Reading.reveal_seconds(current["text"], _settings["text_speed"])
+	_text.visible_ratio = 0.0 if _reveal_total > 0.0 else 1.0
+	if current["type"] in ["line", "choice", "end"] and current["text"] != "":
+		_note_backlog(current["speaker_name"], current["text"], current["speaker_color"])
 
 
 func _build_terms() -> void:
@@ -298,10 +722,7 @@ func _open_terms(required: bool) -> void:
 		return
 	_terms_required = required
 	_terms_button.text = "I agree" if required else "Close license"
-	for button: Node in _menu.get_children() + _buttons:
-		if button is Button:
-			_terms_disabled[button] = button.disabled
-			button.disabled = true
+	_pause_controls(_terms_disabled)
 	_terms_panel.show()
 	_terms_button.grab_focus()
 	_publish_qa.call_deferred()
@@ -315,12 +736,8 @@ func _close_terms() -> void:
 		_persist_terms()
 	_terms_required = false
 	_terms_panel.hide()
-	for button: Button in _terms_disabled:
-		if is_instance_valid(button):
-			button.disabled = _terms_disabled[button]
-	_terms_disabled.clear()
-	if not _buttons.is_empty():
-		_buttons[0].grab_focus()
+	_resume_controls(_terms_disabled)
+	_refocus()
 	if accepted:
 		# The agreeing click also lets the browser play sound: start the first line's clip.
 		_start_voice.call_deferred(_voice_generation, _voice_session)
@@ -372,11 +789,7 @@ func _build_gallery() -> void:
 func _open_gallery() -> void:
 	if _gallery_panel.visible:
 		return
-	# Disable underlying focus targets as well as guarding queued action signals.
-	for button: Node in _menu.get_children() + _buttons:
-		if button is Button:
-			_gallery_disabled[button] = button.disabled
-			button.disabled = true
+	_pause_controls(_gallery_disabled)
 	for child in _gallery_entries.get_children():
 		_gallery_entries.remove_child(child)
 		child.queue_free()
@@ -393,6 +806,7 @@ func _open_gallery() -> void:
 		_gallery_entries.add_child(button)
 	_gallery_panel.show()
 	_gallery_panel.get_child(0).get_child(0).grab_focus()
+	_overlay_changed()
 	_publish_qa.call_deferred()
 
 
@@ -406,14 +820,13 @@ func _show_gallery_image(id: String) -> void:
 
 
 func _close_gallery() -> void:
+	if not _gallery_panel.visible:
+		return
 	_gallery_panel.hide()
 	_gallery_image.texture = null
-	for button: Button in _gallery_disabled:
-		if is_instance_valid(button):
-			button.disabled = _gallery_disabled[button]
-	_gallery_disabled.clear()
-	if not _buttons.is_empty():
-		_buttons[0].grab_focus()
+	_resume_controls(_gallery_disabled)
+	_refocus()
+	_overlay_changed()
 	_publish_qa.call_deferred()
 
 
@@ -434,19 +847,11 @@ func _persist_gallery() -> void:
 			_notice.text = "CGs unlocked for this session. This device could not keep the gallery."
 
 
-func _read_volume() -> int:
-	return SaveStore.read_voice_volume()
-
-
-func _persist_volume() -> void:
-	if SaveStore.write_voice_volume(_voice_volume) != "":
-		_notice.text = "Voice volume set for this session. This device could not keep it."
-
-
 func _set_volume(value: float) -> void:
 	_voice_volume = clampi(int(round(value)), 0, 100)
+	_settings["voice_volume"] = _voice_volume
 	_apply_volume()
-	_persist_volume()
+	_persist_settings()
 	_publish_qa.call_deferred()
 
 
@@ -511,6 +916,8 @@ func _start_voice(generation: int, session: RefCounted) -> void:
 		return  # Played once the start screen is opened.
 	if _terms_open() and _terms_required:
 		return  # Played once the player accepts the license terms.
+	if _skip:
+		return  # Lines flying past stay silent; the line Skip stops on plays.
 	if generation == _voice_generation and session == _voice_session and _voice_player.stream != null:
 		_voice_player.play()
 
@@ -616,6 +1023,7 @@ func _render() -> void:
 		if not shown.has(id):
 			_sprites[id].queue_free()
 			_sprites.erase(id)
+	_apply_speaker_focus()
 	for id: String in _textures.keys():
 		if not in_use.has(id):
 			_textures.erase(id)  # Only what is on screen stays decoded.
@@ -636,6 +1044,10 @@ func _render() -> void:
 	_name_box.add_theme_stylebox_override("panel", tag)
 	_name.add_theme_color_override("font_color", ink)
 	_text.text = current["text"]
+	if _player.generation != _screen_generation or _player != _screen_session:
+		_screen_generation = _player.generation
+		_screen_session = _player
+		_begin_screen(current)
 	_continue.visible = current["type"] == "line"
 	for child in _choices.get_children():
 		_choices.remove_child(child)
@@ -762,9 +1174,21 @@ func _layout() -> void:
 
 
 func _action(action: String, generation: int, session: RefCounted) -> void:
-	if not _gallery_panel.visible and not _terms_open() and session == _player and _player.act(action, generation) == "":
-		_notice.text = ""
-		_render()
+	if _overlay_open() or _ui_hidden or session != _player:
+		return
+	var left: Dictionary = _player.view
+	var node_id: String = _player.state["node_id"]
+	if _player.act(action, generation) != "":
+		return
+	if left["type"] == "line" and _read.size() < Reading.MAX_READ_MARKS:
+		_read[Reading.read_mark(node_id, left["text"])] = true
+		_read_dirty = true
+	elif left["type"] == "choice":
+		for option: Dictionary in left["options"]:
+			if action == "choose:" + option["id"]:
+				_note_backlog(null, "› " + option["text"])
+	_notice.text = ""
+	_render()
 
 
 func _save_path() -> String:
@@ -772,14 +1196,31 @@ func _save_path() -> String:
 
 
 func _toolbar(action: String) -> void:
-	if _gallery_panel.visible or _terms_open():
+	if _gallery_panel.visible or _terms_open() or _log_panel.visible:
 		return
-	if action == "License":
+	# Everything in the menu closes it first: results show on the stage behind it.
+	_close_menu()
+	if action == "Menu":
+		_open_menu()
+	elif action == "Log":
+		_open_log()
+	elif action == "Auto":
+		_set_auto(not _auto)
+		_refocus()
+	elif action == "Skip":
+		_set_skip(not _skip)
+		_refocus()
+	elif action == "Hide":
+		_set_ui_hidden(true)
+	elif action == "License":
 		_open_terms(false)
 	elif action == "Gallery":
 		_open_gallery()
 	elif action == "Restart":
 		_close_gallery()
+		_set_auto(false)
+		_set_skip(false)
+		_backlog.clear()
 		_player = PlayerScript.new(_source, _hash, _player.seen_cgs)
 		_notice.text = "Started over. Your saved game is still available."
 		_render()
@@ -789,31 +1230,53 @@ func _toolbar(action: String) -> void:
 		if error == "" and OS.has_feature("web") and not OS.is_userfs_persistent():
 			_notice.text = "Saved for this session. Browser storage is unavailable."
 		_publish_qa.call_deferred()
+	elif action == "Quick save":
+		var error: String = SaveStore.write_quick_save(_hash, _player.save())
+		_notice.text = "Quick saved." if error == "" else "This device could not save your progress. Your previous quick save is unchanged."
+		if error == "" and OS.has_feature("web") and not OS.is_userfs_persistent():
+			_notice.text = "Quick saved for this session. Browser storage is unavailable."
+		_publish_qa.call_deferred()
 	elif action == "Load":
-		var saved: Dictionary = SaveStore.read_save(_hash)
-		if saved.get("error") == "not_found":
-			_notice.text = "No saved game on this device yet."
-			_publish_qa.call_deferred()
-			return
-		if saved.get("error", "save_read_failed") != "":
-			_notice.text = "That saved game cannot be loaded. Your progress is unchanged."
-			_publish_qa.call_deferred()
-			return
-		if _player.load_save(saved["data"]) != "":
-			_notice.text = "That saved game cannot be loaded. Your progress is unchanged."
-			_publish_qa.call_deferred()
-			return
-		_notice.text = "Saved game loaded."
-		_render()
+		_load_slot(SaveStore.read_save(_hash), "No saved game on this device yet.", "Saved game loaded.")
+	elif action == "Quick load":
+		_load_slot(SaveStore.read_quick_save(_hash), "No quick save on this device yet.", "Quick save loaded.")
+
+
+func _load_slot(saved: Dictionary, missing: String, loaded: String) -> void:
+	if saved.get("error") == "not_found":
+		_notice.text = missing
+		_publish_qa.call_deferred()
+		return
+	if saved.get("error", "save_read_failed") != "":
+		_notice.text = "That saved game cannot be loaded. Your progress is unchanged."
+		_publish_qa.call_deferred()
+		return
+	if _player.load_save(saved["data"]) != "":
+		_notice.text = "That saved game cannot be loaded. Your progress is unchanged."
+		_publish_qa.call_deferred()
+		return
+	_set_auto(false)
+	_set_skip(false)
+	_note_backlog(null, "— " + loaded.trim_suffix(".") + " —")
+	_notice.text = loaded
+	_render()
 
 
 func _gui_input(event: InputEvent) -> void:
-	# Clicking or tapping the stage advances a line, as in most visual novels.
-	if _gallery_panel.visible or _terms_open():
+	# Clicking or tapping the stage advances a line, as in most visual novels. A right
+	# click hides the interface and scrolling up opens the log, as they usually do too.
+	if _overlay_open() or _ui_hidden:
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if _player.view["type"] == "line":
-			_action("advance", _player.generation, _player)
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT and _player.view["type"] == "line":
+			_set_skip(false)
+			_request_advance()
+			accept_event()
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_set_ui_hidden(true)
+			accept_event()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_open_log()
 			accept_event()
 
 
@@ -828,6 +1291,16 @@ func _input(event: InputEvent) -> void:
 		if not event is InputEventMouseMotion:
 			get_viewport().set_input_as_handled()
 		return
+	if _ui_hidden:
+		# Any press brings the interface back; it never advances the story as well.
+		var pressed_key: bool = event is InputEventKey and event.pressed and not event.echo
+		if pressed_key or ((event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed):
+			if pressed_key and event.keycode in [KEY_ENTER, KEY_SPACE]:
+				_advance_key = event.keycode
+			_set_ui_hidden(false)
+		if not event is InputEventMouseMotion:
+			get_viewport().set_input_as_handled()
+		return
 	if not event is InputEventKey or not event.keycode in [KEY_ENTER, KEY_SPACE] or _terms_open():
 		return
 	# Claim the entire keystroke before GUI dispatch: the focused Continue button
@@ -837,12 +1310,13 @@ func _input(event: InputEvent) -> void:
 			_advance_key = 0
 		get_viewport().set_input_as_handled()
 		return
-	if _player == null or _gallery_panel.visible or not event.pressed or event.echo or event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+	if _player == null or _overlay_open() or not event.pressed or event.echo or event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
 		return
 	var focused := get_viewport().gui_get_focus_owner()
 	if _player.view["type"] == "line" and (focused == null or focused == _continue):
 		_advance_key = event.keycode
-		_action("advance", _player.generation, _player)
+		_set_skip(false)
+		_request_advance()
 		get_viewport().set_input_as_handled()
 
 
@@ -859,12 +1333,35 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_close_gallery()
 		get_viewport().set_input_as_handled()
 		return
+	if _log_panel.visible:
+		if event.keycode in [KEY_ESCAPE, KEY_L]:
+			_close_log()
+		elif event.keycode in [KEY_UP, KEY_DOWN, KEY_PAGEUP, KEY_PAGEDOWN]:
+			var step: int = {KEY_UP: -40, KEY_DOWN: 40, KEY_PAGEUP: -300, KEY_PAGEDOWN: 300}[event.keycode]
+			_log_scroll.scroll_vertical += step
+		get_viewport().set_input_as_handled()
+		return
+	if _menu_panel.visible:
+		if event.keycode == KEY_ESCAPE:
+			_close_menu()
+		get_viewport().set_input_as_handled()
+		return
+	var shortcut: String = {KEY_L: "Log", KEY_A: "Auto", KEY_S: "Skip", KEY_H: "Hide", KEY_ESCAPE: "Menu"}.get(event.keycode, "")
+	if not OS.has_feature("web"):
+		# A browser takes F5 for itself, so web players use the menu.
+		shortcut = {KEY_F5: "Quick save", KEY_F9: "Quick load"}.get(event.keycode, shortcut)
+	if shortcut != "":
+		_toolbar(shortcut)
+		get_viewport().set_input_as_handled()
+		return
 	var current: Dictionary = _player.view
 	var action := ""
 	if current["type"] == "line" and event.keycode in [KEY_ENTER, KEY_SPACE]:
 		var focused := get_viewport().gui_get_focus_owner()
 		if focused == null or focused == _continue:
-			action = "advance"
+			_request_advance()
+			get_viewport().set_input_as_handled()
+			return
 	elif current["type"] == "choice" and event.keycode >= KEY_1 and event.keycode <= KEY_9:
 		var index: int = event.keycode - KEY_1
 		if index < current["options"].size():
@@ -891,8 +1388,8 @@ func _publish_qa() -> void:
 	for id: String in _sprites:
 		figures.append(_rect(_sprites[id]).merged({"id": id, "loaded": _sprites[id].texture != null}))
 	var toolbar: Array = []
-	for button: Node in _menu.get_children():
-		if button is Button:
+	for button: Node in _menu.get_children() + _menu_buttons:
+		if button is Button and button.is_visible_in_tree():
 			toolbar.append(_rect(button).merged({"label": button.text, "disabled": button.disabled}))
 	var gallery_controls: Array = []
 	if _gallery_panel.visible:
@@ -911,7 +1408,10 @@ func _publish_qa() -> void:
 		"toolbar": toolbar, "gallery_controls": gallery_controls,
 		"terms": _terms != null, "terms_open": _terms_open(), "terms_required": _terms_required, "gallery_image_loaded": _gallery_image.texture != null,
 		"voice_volume": _voice_volume, "voice_clip": current_voice(), "voice_playing": _voice_player.playing,
-		"volume_slider": _rect(_volume_slider), "sound_gate": _sound_gate != null and _sound_gate.visible}
+		"volume_slider": _rect(_volume_slider), "sound_gate": _sound_gate != null and _sound_gate.visible,
+		"text_speed": _settings["text_speed"], "auto_speed": _settings["auto_speed"], "speaker_focus": _settings["speaker_focus"],
+		"auto": _auto, "skip": _skip, "ui_hidden": _ui_hidden, "revealing": _revealing(),
+		"log_open": _log_panel.visible, "menu_open": _menu_panel.visible, "backlog": backlog_rows().size(), "read_marks": _read.size()}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")
 	if browser != null and json != null:

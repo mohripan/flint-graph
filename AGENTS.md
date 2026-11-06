@@ -264,6 +264,15 @@ from the grammar inside a child, because a prompt rule alone did not stop the mo
 instead of working. Parents and children stay connected through `child.*` log events and
 `child_context`. Read `docs/reports/2026-11-06-assistant-child-sessions.md`.
 
+[ADR 0064](docs/adr/0064-standard-player-controls.md) (runtime 0.8.0) adds backlog, auto-advance,
+skip-read, text speed, hide, quick save and speaker focus to `vn_view.gd`, with pacing in
+`runtime/reading.gd`. They never touch story state, so format, saves and the reference player are
+unchanged. Text appears over time by default, so native UI probes that press once per line call
+`_set_text_speed("instant")` first. Save, Load and the rest moved into a Menu panel. After a runtime
+change the launcher rebuilds the playtest and release builder itself, into `notes/studio-builds`.
+Adding a runtime file means updating `pyproject.toml`, `export/__init__.py`, `build_child.py` and
+`build_preview.py`. Read `docs/reports/2026-11-07-player-controls.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,
