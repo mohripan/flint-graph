@@ -4,7 +4,9 @@ Created: 2026-10-27; dependency review updated 2026-10-30. The original five
 milestones contained 21 issues. The user added #133–#167 across four further
 milestones and shared conversation work. On 2026-10-31 the user added M39
 (#173–#178) for voice references and expressive delivery, and M40 (#179–#186) for
-character consistency research. These additions are planned, not delivered.
+character consistency research. M41 (#187–#194) plans GPU coordination and a
+multi-node path; M42 (#195–#202) is the first AWS deployment with a GPU that
+sleeps when idle. These additions are planned, not delivered.
 
 The [product brief](narrative-game-studio.md) explains the direction. Review the
 [M30 written contract](../superpowers/specs/2026-10-27-portable-story-runtime-design.md)
@@ -213,6 +215,26 @@ Research inputs from the user: [deepghs/ccip](https://huggingface.co/deepghs/cci
 [deepghs/imgutils](https://github.com/deepghs/imgutils), LoRA fine-tuning and richer
 references. CCIP recognizes a character across outfits, so clothes need their own
 check. Scores advise and never approve; LoRAs and references never ship in games.
+
+## M42: AWS deployment with a GPU that sleeps when idle
+
+[Milestone](https://github.com/mohripan/flint-graph/milestone/29) ·
+[Tracking issue #195](https://github.com/mohripan/flint-graph/issues/195)
+
+| Issue | Deliverable | Dependency/order |
+| --- | --- | --- |
+| [#196](https://github.com/mohripan/flint-graph/issues/196) | Dispatch GPU jobs from the always-on tier; GPU workers only execute | First |
+| [#199](https://github.com/mohripan/flint-graph/issues/199) | GPU instance image: drivers, runtimes, verified pinned models | Parallel with #196 |
+| [#197](https://github.com/mohripan/flint-graph/issues/197) | Start the stopped GPU instance when GPU work is queued; daily GPU-hour cap | #196 |
+| [#198](https://github.com/mohripan/flint-graph/issues/198) | Idle watchdog drains and stops the instance | #196, #197, #199 |
+| [#200](https://github.com/mohripan/flint-graph/issues/200) | Always-on tier on AWS: site, API, relays, RDS, S3, Cognito, release builds | #196 |
+| [#201](https://github.com/mohripan/flint-graph/issues/201) | Studio shows "Starting the GPU…" | #197; extends #192 |
+| [#202](https://github.com/mohripan/flint-graph/issues/202) | Assistant model on the sleeping GPU or hosted | #197, #199 |
+
+Queued jobs already wait durably in Temporal, so a job asked for while the GPU sleeps
+waits for a 1–3 minute cold start. Per-user limits (ADR 0058) apply first; the daily
+GPU-hour cap is a second guard. This single-GPU stage precedes M41's multi-node
+Kubernetes path (#194). No cloud spend is authorized by planning alone.
 
 ## Current sequencing
 
