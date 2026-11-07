@@ -271,6 +271,25 @@ def test_a_fresh_download_on_any_machine_reproduces_the_pins() -> None:
         assert data == (json.dumps(json.loads(data), indent=2) + "\n").encode(), path.name
 
 
+def test_a_playtest_runs_on_its_own_address_with_nothing_to_steal() -> None:
+    workflow = (ROOT / ".github/workflows/deploy-images.yml").read_text("utf-8")
+    documents = list(yaml.safe_load_all((PRODUCTION / "ingress.yaml").read_text("utf-8")))
+    hosts = {
+        document["metadata"]["name"]: {rule["host"] for rule in document["spec"]["rules"]}
+        for document in documents
+    }
+    assert not hosts["playtest"] & hosts["studio"]
+    # Each is built knowing the other: the frontend the frame's address, the frame the one parent.
+    frame = next(iter(hosts["playtest"]))
+    assert f"default: https://{frame}" in workflow
+    assert "default: https://flintgraph.digital" in workflow
+    assert "flintgraph.digital" in hosts["studio"]
+    spec = _deployments()["playtest"]["spec"]["template"]["spec"]
+    assert spec["automountServiceAccountToken"] is False
+    assert not spec["containers"][0].get("envFrom")
+    assert not spec["containers"][0].get("env")
+
+
 def test_runpod_gets_the_same_models_and_the_same_ollama() -> None:
     fetch = (ROOT / "ops/deploy/runpod-generation.Dockerfile").read_text("utf-8")
     assert "deploy/ansible/vars/models.yml" in fetch

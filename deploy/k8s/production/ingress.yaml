@@ -59,3 +59,27 @@ spec:
                 name: frontend
                 port:
                   number: 80
+---
+# Playtests, on an address of their own so that a story cannot reach the signed-in site. The frontend
+# and the playtest image each have the other's address written into them when they are built.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: playtest
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+spec:
+  tls:
+    - hosts: [play.54-253-96-189.sslip.io]
+  rules:
+    - host: play.54-253-96-189.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: playtest
+                port:
+                  number: 80

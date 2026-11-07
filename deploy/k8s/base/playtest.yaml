@@ -1,0 +1,43 @@
+# The browser build of the game player, on its own address (ops/deploy/playtest.Dockerfile). It holds
+# no secrets and calls no API, so it gets neither the config nor the Secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playtest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: playtest
+  template:
+    metadata:
+      labels:
+        app: playtest
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: playtest
+          image: ghcr.io/mohripan/flint-graph-playtest:unset
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /index.html
+              port: 80
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: playtest
+spec:
+  selector:
+    app: playtest
+  ports:
+    - port: 80

@@ -9,6 +9,7 @@ resources:
   - minio.yaml
   - api.yaml
   - frontend.yaml
+  - playtest.yaml
   - studio-workers.yaml
 configMapGenerator:
   - name: flintgraph-config
