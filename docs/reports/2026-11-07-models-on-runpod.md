@@ -38,23 +38,34 @@ The balance ended at 73 of 100 credits. The run took 17.2 minutes.
 
 ## What it cost
 
-Runpod's billing for 2026-11-07, read at about 17:35 UTC. That day held all the setup and every test here.
+Runpod's billing for 2026-11-07, read at 20:01 UTC. That day held all the setup and every test here. No charges had arrived for
+any hour after 17:00 to 18:00, and both endpoints showed no running workers and no jobs.
 
 | Item | USD |
 | --- | ---: |
-| Serverless GPU, assistant `afs9c0epe9ynoz` | 0.3562 |
-| Serverless GPU, generation `zxfk4sx2prley7` | 0.2088 |
-| Serverless disk | 0.0030 |
+| Serverless GPU, assistant `afs9c0epe9ynoz` | 0.5728 |
+| Serverless GPU, generation `zxfk4sx2prley7` | 0.2641 |
+| Serverless disk | 0.0037 |
 | Pods that downloaded the weights, CPU | 0.1058 |
 | Those pods' disk | 0.0049 |
-| Volume | 0.0097 |
-| **Total** | **0.6884** |
+| Volume | 0.0146 |
+| **Total** | **0.9659** |
 
-The GPU figures are 36.8 and 21.6 worker minutes at $0.58 an hour. Nearly all of the pods' cost was one download pod that
+The GPU figures are 59.3 and 27.3 worker minutes at $0.58 an hour. Nearly all of the pods' cost was one download pod that
 crash-looped, which should not recur.
 
+**Billing lags.** A read at about 17:35 UTC showed a total of $0.6884, because that hour's charges had not all arrived. Read
+it again later before trusting a figure for the last hour or two.
+
 Worked from the run's log and that rate, the run above is 915 s of assistant worker and 348 s of generation worker, each
-including its idle wait, so about **$0.20**. That is a calculation for one run, since billing does not split by run.
+including its idle wait, so about **$0.20**. Billing does not split by run, but the 17:00 UTC hour held only that run and one
+short assistant turn, which makes the calculation checkable:
+
+| Worker | Calculated | Billed | Difference |
+| --- | ---: | ---: | ---: |
+| Assistant, with the extra turn | 1118 s | 1106 s | -1.1% |
+| Generation | 348 s | 343 s | -1.4% |
+
 `deploy/cost/estimate.py` prints the whole bill from it: $28.51 a month with nobody using the site, $30.55 at 10 visits, and
 $69.21 at 200.
 
