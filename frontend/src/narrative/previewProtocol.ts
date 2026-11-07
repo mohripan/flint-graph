@@ -9,6 +9,11 @@ export function previewOrigin(value: string, parent: string): string {
 }
 // The click that opened the playtest lets its frame start sound, so the first voiced line plays.
 export const PLAYTEST_FRAME_ALLOW = "autoplay; camera 'none'; microphone 'none'; geolocation 'none'";
+// A dropped download of the player never recovers by itself, and starting again usually works.
+// Only for a player that has not asked for the story yet: once sent, its bytes are gone.
+export function afterStartTimeout(attempt: number): "restart" | "fail" {
+  return attempt < 2 ? "restart" : "fail";
+}
 // Story format 2 (ADR 0040): playtests carry the revision's image and font bytes.
 export const ASSET_CAPS = { image: 10485760, font: 8388608, audio: 10485760, music: 10485760 } as const;
 export const ASSET_TOTAL = 104857600;

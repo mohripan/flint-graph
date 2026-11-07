@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { acceptPreviewMessage, checkedAssets, PLAYTEST_FRAME_ALLOW, previewOrigin, snapshotMessage, storyAssets } from "./previewProtocol";
+import { acceptPreviewMessage, afterStartTimeout, checkedAssets, PLAYTEST_FRAME_ALLOW, previewOrigin, snapshotMessage, storyAssets } from "./previewProtocol";
 import type { PreviewPhase } from "./previewProtocol";
 import { StudioDialog } from "./StudioDialog";
 import type { NarrativeRevision } from "./types";
@@ -9,6 +9,7 @@ export function PreviewDialog({ revision, onClose }: { revision: NarrativeRevisi
   const iframe = useRef<HTMLIFrameElement>(null);
   const [nonce] = useState(() => [...crypto.getRandomValues(new Uint8Array(32))].map(value => value.toString(16).padStart(2, "0")).join(""));
   const [phase, setPhase] = useState<PreviewPhase>("waiting");
+  const [attempt, setAttempt] = useState(1);
   const [error, setError] = useState<string | null>(null);
   // v2 revisions bring images and fonts: fetched and hash-checked before the player mounts.
   const [declared] = useState(() => { try { return storyAssets(revision.story_json); } catch { return null; } });
@@ -34,7 +35,11 @@ export function PreviewDialog({ revision, onClose }: { revision: NarrativeRevisi
     if (!origin || !ready) return;
     let current: PreviewPhase = "waiting";
     const fail = (text: string) => () => { current = "error"; setPhase("error"); setError(text); };
-    let timeout = window.setTimeout(fail("The story player did not start. Close playtest and retry."), 90000);
+    const notStarted = () => {
+      if (afterStartTimeout(attempt) === "restart") setAttempt(attempt + 1);
+      else fail("The story player did not start. Close playtest and retry.")();
+    };
+    let timeout = window.setTimeout(notStarted, 90000);
     const receive = (event: MessageEvent) => {
       const child = iframe.current?.contentWindow;
       if (!child) return;
@@ -54,7 +59,7 @@ export function PreviewDialog({ revision, onClose }: { revision: NarrativeRevisi
     };
     window.addEventListener("message", receive);
     return () => { window.clearTimeout(timeout); window.removeEventListener("message", receive); };
-  }, [origin, nonce, revision, onClose, ready, declared, assets]);
+  }, [origin, nonce, revision, onClose, ready, declared, assets, attempt]);
   // QA is explicitly opt-in, read-only, and uses the shared runtime's existing probe.
   const qa = new URLSearchParams(location.search).get("qa") === "1" ? "?qa=1" : "";
   return <StudioDialog label={`Playtest revision ${revision.revision_number}`} onClose={onClose}>
@@ -63,8 +68,9 @@ export function PreviewDialog({ revision, onClose }: { revision: NarrativeRevisi
       <button type="button" className="studio-secondary" onClick={onClose}>Close playtest</button></header>
       {(!origin || error) ? <p role="alert" className="studio-error">{error ?? "Configure a trusted preview on a separate host to play this revision."}</p>
         : <><p role="status" className="studio-preview-status">{phase === "loaded" ? "Playing saved revision"
-            : ready ? "Starting the story player…" : "Loading this revision's images and fonts…"}</p>
-          {ready && <iframe ref={iframe} src={`${origin}/index.html${qa}#${nonce}`} title="Saved story playtest"
+            : !ready ? "Loading this revision's images and fonts…"
+            : attempt > 1 ? "That took too long, so the story player is starting again…" : "Starting the story player…"}</p>
+          {ready && <iframe key={attempt} ref={iframe} src={`${origin}/index.html${qa}#${nonce}`} title="Saved story playtest"
             sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" allow={PLAYTEST_FRAME_ALLOW} />}</>}
     </div>
   </StudioDialog>;

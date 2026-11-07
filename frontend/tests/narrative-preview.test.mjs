@@ -31,6 +31,17 @@ test("the preview channel rejects wrong-window, wrong-origin, wrong-nonce and un
   assert.equal(protocol.acceptPreviewMessage({ ...event, data: { ...loaded, content_hash: "0".repeat(64) } }, context, "loading"), null);
   assert.equal(protocol.acceptPreviewMessage({ ...event, data: loaded }, context, "waiting"), null);
 });
+test("a player that stalls while starting gets one fresh start, then the person is told", () => {
+  // A dropped download never recovers by itself: nothing in the frame fetches it again.
+  assert.equal(protocol.afterStartTimeout(1), "restart");
+  assert.equal(protocol.afterStartTimeout(2), "fail");
+  // The restarted frame is a new window: a late message from the old one is not its answer.
+  const stalled = {}, fresh = {}, origin = "http://127.0.0.1:5192";
+  const context = { window: fresh, origin, nonce, revision, hash };
+  const data = { protocol: "flint-preview", version: 1, nonce, type: "ready" };
+  assert.equal(protocol.acceptPreviewMessage({ source: stalled, origin, data }, context, "waiting"), null);
+  assert.equal(protocol.acceptPreviewMessage({ source: fresh, origin, data }, context, "waiting"), "ready");
+});
 test("v2 playtests check every declared asset's size and hash before loading", async () => {
   const bytes = text => new TextEncoder().encode(text).buffer;
   const hex = async data => protocol.sha256Hex(data);
