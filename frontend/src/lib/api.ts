@@ -5,6 +5,7 @@ import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
 import type { ActionStatus } from "../narrative/assistantActions";
 import type { GpuStatus } from "../narrative/gpuModel";
 import type { ThreadEvent } from "../narrative/assistantLog";
+import type { ProjectContents } from "../narrative/trashModel";
 import type {
   NarrativeProject,
   NarrativeRevision,
@@ -138,7 +139,7 @@ export interface AccessStatus {
   email: string | null; display_name: string | null; limits: UsageLimits | null;
   usage: Record<UsageKind, { day: number; total: number }>; email_invitation: boolean;
   // Missing on an API from before ADR 0059.
-  credits: number | null; unlimited: boolean; prices?: Prices; assistant_item?: string | null;
+  credits: number | null; unlimited: boolean; keeps_going?: boolean; prices?: Prices; assistant_item?: string | null;
 }
 export interface Invitation {
   id: string; kind: "key" | "email"; label: string; key_hint: string | null; email: string | null;
@@ -247,10 +248,11 @@ function idempotencyKey(): string {
   return crypto.randomUUID();
 }
 
-function narrativePage(options: { limit?: number; beforeId?: string; includeArchived?: boolean }): string {
+function narrativePage(options: { limit?: number; beforeId?: string; includeArchived?: boolean; trashed?: boolean }): string {
   const query = new URLSearchParams({ limit: String(options.limit ?? 25) });
   if (options.beforeId) query.set("before_id", options.beforeId);
   if (options.includeArchived) query.set("include_archived", "true");
+  if (options.trashed) query.set("trashed", "true");
   return query.toString();
 }
 
@@ -386,7 +388,7 @@ export const api = {
   },
 
   listNarrativeProjects(tenantId: string, options: {
-    limit?: number; beforeId?: string; includeArchived?: boolean; signal?: AbortSignal;
+    limit?: number; beforeId?: string; includeArchived?: boolean; trashed?: boolean; signal?: AbortSignal;
   } = {}): Promise<NarrativeProject[]> {
     return jsonRequest(`/v1/narrative/projects?${narrativePage(options)}`, {
       headers: tenantHeaders(tenantId), signal: options.signal,
@@ -398,6 +400,36 @@ export const api = {
     return jsonRequest("/v1/narrative/projects", {
       method: "POST", headers: tenantHeaders(tenantId), signal,
       json: { name, idempotency_key: key },
+    });
+  },
+
+  renameNarrativeProject(tenantId: string, projectId: string, name: string,
+    signal?: AbortSignal): Promise<NarrativeProject> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/rename`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal, json: { name },
+    });
+  },
+
+  /** Moves a project to the trash, or back out of it. Nothing is lost either way (ADR 0073). */
+  trashNarrativeProject(tenantId: string, projectId: string, baseRevisionId: string, trashed: boolean,
+    signal?: AbortSignal): Promise<NarrativeProject> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/archive`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { base_revision_id: baseRevisionId, archived: trashed },
+    });
+  },
+
+  /** What deleting this project forever would take with it. */
+  narrativeProjectContents(tenantId: string, projectId: string, signal?: AbortSignal): Promise<ProjectContents> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}/contents`, {
+      headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  /** Permanent, and only for a project already in the trash. Safe to repeat if it fails midway. */
+  deleteNarrativeProject(tenantId: string, projectId: string, signal?: AbortSignal): Promise<void> {
+    return jsonRequest(`/v1/narrative/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE", headers: tenantHeaders(tenantId), signal,
     });
   },
 

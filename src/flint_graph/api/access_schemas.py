@@ -28,8 +28,10 @@ class AccessStatus(BaseModel):
     email_invitation: bool
     # The balance; None without a grant, or on a grant made before credits.
     credits: int | None
-    # True when nothing is charged: open mode, an operator, or an unlimited grant.
+    # True when nothing is enforced: open mode, an operator, or an unlimited grant.
     unlimited: bool
+    # On their own server: ``credits`` is a real balance that never stops them (ADR 0074).
+    keeps_going: bool = False
     prices: dict[str, PriceResponse]
     # The price item of an assistant turn on this server; None when it is off.
     assistant_item: str | None

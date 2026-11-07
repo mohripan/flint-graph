@@ -94,6 +94,15 @@ class MemoryStore:
         assert "/voice-references/" in key
         self.objects.pop(key, None)
 
+    async def delete_project_files(self, *, tenant_id, project_id, release_ids):
+        prefixes = (
+            f"tenants/{tenant_id}/narrative/projects/{project_id}/",
+            *(f"tenants/{tenant_id}/narrative/releases/{item}/" for item in release_ids),
+        )
+        self.objects = {
+            key: data for key, data in self.objects.items() if not key.startswith(prefixes)
+        }
+
     async def get_verified(self, key, *, expected_size, expected_sha256, max_bytes):
         data = self.objects.get(key)
         if data is None or hashlib.sha256(data).hexdigest() != expected_sha256:
@@ -386,9 +395,7 @@ async def test_portrait_jobs_are_built_server_side_idempotent_and_bounded(studio
 
 
 @pytest.mark.anyio
-async def test_the_content_policy_file_refuses_blocked_words_and_leads_negatives(
-    studio, tmp_path
-):
+async def test_the_content_policy_file_refuses_blocked_words_and_leads_negatives(studio, tmp_path):
     client, _, _, headers, base, *_ = studio
     jobs = f"{base}/characters/mira/portrait-jobs"
     nude = job_body(appearance="silver hair, Nude")
@@ -734,18 +741,31 @@ async def test_expression_jobs_repaint_the_face_of_a_base_sprite(studio):
     uploaded = await client.post(
         f"{base}/assets",
         headers=headers,
-        data={"kind": "sprite", "name": "Mira base", "license": "Own work", "notice": "",
-              "rights_declared": "true"},
+        data={
+            "kind": "sprite",
+            "name": "Mira base",
+            "license": "Own work",
+            "notice": "",
+            "rights_declared": "true",
+        },
         files={"file": ("mira.png", sprite, "image/png")},
     )
     assert uploaded.status_code == 201, uploaded.text
     asset = uploaded.json()
-    profile = {"base_version": 0, "appearance": "shoulder-length white hair, red eyes",
-               "character_type": "girl", "framing": "full_body"}
+    profile = {
+        "base_version": 0,
+        "appearance": "shoulder-length white hair, red eyes",
+        "character_type": "girl",
+        "framing": "full_body",
+    }
     saved = await client.put(f"{base}/characters/mira", headers=headers, json=profile)
     assert saved.status_code == 200
-    body = {"base_asset_id": asset["id"], "face_box": [100, 20, 160, 80],
-            "expressions": ["happy", "Fond of tea"], "idempotency_key": str(uuid4())}
+    body = {
+        "base_asset_id": asset["id"],
+        "face_box": [100, 20, 160, 80],
+        "expressions": ["happy", "Fond of tea"],
+        "idempotency_key": str(uuid4()),
+    }
     path = f"{base}/characters/mira/expression-jobs"
     for bad, status in (
         ({"face_box": [250, 20, 310, 80]}, 422),
@@ -799,8 +819,13 @@ async def test_expression_jobs_repaint_the_face_of_a_base_sprite(studio):
         tall = await client.post(
             f"{base}/assets",
             headers=headers,
-            data={"kind": "sprite", "name": f"Mira {height}", "license": "Own work",
-                  "notice": "", "rights_declared": "true"},
+            data={
+                "kind": "sprite",
+                "name": f"Mira {height}",
+                "license": "Own work",
+                "notice": "",
+                "rights_declared": "true",
+            },
             files={"file": ("tall.png", png(200, height, 40, height, alpha=True), "image/png")},
         )
         assert tall.status_code == 201, tall.text

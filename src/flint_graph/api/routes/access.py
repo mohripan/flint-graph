@@ -70,6 +70,7 @@ async def _status(session: AsyncSession, current: CurrentUser, settings: Setting
         email_invitation=state.email_invitation,
         credits=state.credits,
         unlimited=state.unlimited,
+        keeps_going=state.keeps_going,
         prices={
             item_id: PriceResponse(
                 credits=item.credits, kind=item.kind, label=item.label, unit=item.unit, per=item.per

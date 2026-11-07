@@ -17,8 +17,24 @@ class NarrativeProjectResponse(BaseModel):
     name: str
     head_revision_id: UUID
     archived_at: datetime | None
+    purge_started_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class NarrativeProjectRename(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=200)
+
+
+class NarrativeProjectContentsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    revisions: int
+    files: int
+    characters: int
+    conversations: int
+    releases: int
+    working: list[str]
 
 
 class NarrativeRevisionSummary(BaseModel):

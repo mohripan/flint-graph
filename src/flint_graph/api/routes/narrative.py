@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from flint_graph.api.dependencies import (
     AuditActorDep,
     CurrentUserDep,
+    NarrativeArtifactStoreDep,
     SessionDep,
     SettingsDep,
     TenantAdminDep,
@@ -17,12 +18,19 @@ from flint_graph.api.dependencies import (
 )
 from flint_graph.api.narrative_schemas import (
     NarrativeArchiveRequest,
+    NarrativeProjectContentsResponse,
     NarrativeProjectCreate,
+    NarrativeProjectRename,
     NarrativeProjectResponse,
     NarrativeRevisionCreate,
     NarrativeRevisionResponse,
     NarrativeRevisionSummary,
     NarrativeUpgradeRequest,
+)
+from flint_graph.application.services.narrative_project_purge import (
+    begin_purge,
+    finish_purge,
+    project_contents,
 )
 from flint_graph.application.services.narrative_projects import (
     archive_project,
@@ -32,9 +40,11 @@ from flint_graph.application.services.narrative_projects import (
     get_revision,
     list_projects,
     list_revisions,
+    rename_project,
     upgrade_to_v2,
 )
 from flint_graph.domain.errors import DomainError
+from flint_graph.infrastructure.narrative_artifact_store import ArtifactStoreError
 
 router = APIRouter(prefix="/v1/narrative/projects", tags=["narrative"])
 
@@ -178,6 +188,61 @@ async def archive_project_endpoint(
     return NarrativeProjectResponse.model_validate(project)
 
 
+@router.post("/{project_id}/rename", response_model=NarrativeProjectResponse)
+async def rename_project_endpoint(
+    project_id: UUID,
+    payload: NarrativeProjectRename,
+    tenant_id: TenantMemberDep,
+    session: SessionDep,
+    actor: AuditActorDep,
+) -> NarrativeProjectResponse:
+    project = await _persist(
+        session,
+        rename_project(
+            session, tenant_id=tenant_id, project_id=project_id, name=payload.name, actor=actor
+        ),
+    )
+    return NarrativeProjectResponse.model_validate(project)
+
+
+@router.get("/{project_id}/contents", response_model=NarrativeProjectContentsResponse)
+async def project_contents_endpoint(
+    project_id: UUID, tenant_id: TenantAdminDep, session: SessionDep
+) -> NarrativeProjectContentsResponse:
+    return NarrativeProjectContentsResponse.model_validate(
+        await project_contents(session, tenant_id=tenant_id, project_id=project_id)
+    )
+
+
+@router.delete("/{project_id}", status_code=204)
+async def delete_project_endpoint(
+    project_id: UUID,
+    tenant_id: TenantAdminDep,
+    session: SessionDep,
+    store: NarrativeArtifactStoreDep,
+    actor: AuditActorDep,
+) -> None:
+    """Delete a project in the trash forever. Safe to repeat if it fails partway (ADR 0073)."""
+    releases = await _persist(
+        session, begin_purge(session, tenant_id=tenant_id, project_id=project_id)
+    )
+    try:
+        await store.delete_project_files(
+            tenant_id=tenant_id, project_id=project_id, release_ids=releases
+        )
+    except ArtifactStoreError:
+        raise DomainError(
+            503,
+            "Service unavailable",
+            "Some of this project's files could not be removed yet. "
+            "It is still in the trash, so try again in a moment.",
+            "project-files-unavailable",
+        ) from None
+    await _persist(
+        session, finish_purge(session, tenant_id=tenant_id, project_id=project_id, actor=actor)
+    )
+
+
 @router.get("", response_model=list[NarrativeProjectResponse])
 async def list_projects_endpoint(
     tenant_id: TenantIdDep,
@@ -185,6 +250,7 @@ async def list_projects_endpoint(
     limit: int = Query(default=50, ge=1, le=100),
     before_id: UUID | None = None,
     include_archived: bool = False,
+    trashed: bool = False,
 ) -> list[NarrativeProjectResponse]:
     projects = await list_projects(
         session,
@@ -192,6 +258,7 @@ async def list_projects_endpoint(
         limit=limit,
         before_id=before_id,
         include_archived=include_archived,
+        trashed=trashed,
     )
     return [NarrativeProjectResponse.model_validate(project) for project in projects]
 

@@ -65,6 +65,8 @@ export interface NarrativeProject {
   name: string;
   head_revision_id: string;
   archived_at: string | null;
+  /** Delete forever has begun: only finishing it is possible now. */
+  purge_started_at?: string | null;
   created_at: string;
   updated_at: string;
 }

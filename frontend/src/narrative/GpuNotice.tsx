@@ -25,9 +25,9 @@ export function GpuStatusProvider({ children }: { children: ReactNode }) {
 }
 
 /** Tells people the GPU is not up, where they are about to wait for it. */
-export function GpuNotice({ kinds, dark = false }: { kinds: GpuKind[]; dark?: boolean }) {
+export function GpuNotice({ kinds }: { kinds: GpuKind[] }) {
   const message = gpuMessage(useContext(GpuContext), kinds);
   if (!message) return null;
-  return <p role="status" className={`studio-gpu-notice ${dark ? "is-dark" : ""} ${message.bad ? "is-bad" : ""}`}>
+  return <p role="status" className={`studio-gpu-notice ${message.bad ? "is-bad" : ""}`}>
     <strong>{message.title}</strong> {message.body}</p>;
 }

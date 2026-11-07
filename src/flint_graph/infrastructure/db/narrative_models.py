@@ -48,7 +48,10 @@ class NarrativeProject(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     creation_hash: Mapped[str] = mapped_column(String(64))
     head_revision_id: Mapped[UUID | None]
     next_revision_number: Mapped[int] = mapped_column(Integer, default=1)
+    # In the trash. Everything is kept until someone chooses to delete it forever (ADR 0073).
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Files may already be gone from here on, so the project can no longer be restored.
+    purge_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class NarrativeRevision(UUIDPrimaryKeyMixin, Base):

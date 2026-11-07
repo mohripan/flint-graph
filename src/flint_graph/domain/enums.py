@@ -209,6 +209,8 @@ class AuditAction(StrEnum):
     NARRATIVE_REVISION_CONFLICTED = "narrative.revision_conflicted"
     NARRATIVE_PROJECT_ARCHIVED = "narrative.project_archived"
     NARRATIVE_PROJECT_RESTORED = "narrative.project_restored"
+    NARRATIVE_PROJECT_RENAMED = "narrative.project_renamed"
+    NARRATIVE_PROJECT_PURGED = "narrative.project_purged"
     NARRATIVE_RELEASE_REQUESTED = "narrative.release_requested"
     NARRATIVE_RELEASE_RETRIED = "narrative.release_retried"
     NARRATIVE_RELEASE_CANCELLED = "narrative.release_cancelled"

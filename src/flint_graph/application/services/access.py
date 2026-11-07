@@ -28,6 +28,7 @@ from flint_graph.infrastructure.db.models import (
     AccessGrant,
     AccessInvitation,
     CreditLedgerEntry,
+    OwnCredits,
     UsageCharge,
     User,
 )
@@ -182,6 +183,8 @@ class RequestAccess:
     user_id: UUID
     exempt: bool
     prices: dict[str, int]
+    # What someone exempt starts with; their balance counts down from here (ADR 0074).
+    starting_credits: int = 0
 
 
 async def require_access(
@@ -191,7 +194,7 @@ async def require_access(
     # Charges run deep inside job services; the request's session carries the prices
     # there, so no service needs the settings.
     session.info[_REQUEST_ACCESS] = RequestAccess(
-        user.id, exempt, dict(settings.access_credit_prices)
+        user.id, exempt, dict(settings.access_credit_prices), settings.access_default_credits
     )
     if exempt:
         return
@@ -210,12 +213,17 @@ class AccessState:
     usage: dict[str, dict[str, int]]
     email_invitation: bool
     credits: int | None
-    # No credits are spent: open mode, an operator, or an unlimited grant.
+    # Nothing is enforced: open mode, an operator, or an unlimited grant.
     unlimited: bool
     prices: dict[str, PriceItem]
+    # On their own server: ``credits`` is a real balance that never stops them (ADR 0074).
+    keeps_going: bool = False
 
 
-async def usage_summary(session: AsyncSession, user_id: UUID) -> dict[str, dict[str, int]]:
+async def usage_summary(
+    session: AsyncSession, user_id: UUID, *, own_server: bool = False
+) -> dict[str, dict[str, int]]:
+    """What counts against an allowance, or with ``own_server`` everything the person made."""
     since = _now() - _WINDOW
     rows = await session.execute(
         select(
@@ -225,7 +233,10 @@ async def usage_summary(session: AsyncSession, user_id: UUID) -> dict[str, dict[
             ),
             func.coalesce(func.sum(UsageCharge.units), 0),
         )
-        .where(UsageCharge.user_id == user_id)
+        .where(
+            UsageCharge.user_id == user_id,
+            *(() if own_server else (UsageCharge.own_server.is_(False),)),
+        )
         .group_by(UsageCharge.kind)
     )
     summary = {kind: {"day": 0, "total": 0} for kind in KINDS}
@@ -266,6 +277,11 @@ async def access_state(
     grant = await session.scalar(select(AccessGrant).where(AccessGrant.user_id == user.id))
     status = grant.status if grant is not None else "none"
     has_access = settings.access_mode == "open" or admin or status == "active"
+    keeps_going = settings.access_mode == "open" or admin
+    balance = grant.credits if grant is not None else None
+    if keeps_going:
+        own = await session.get(OwnCredits, user.id)
+        balance = own.credits if own is not None else settings.access_default_credits
     invited = (
         not has_access
         and status == "none"
@@ -277,9 +293,10 @@ async def access_state(
         is_admin=admin,
         status=status,
         limits=dict(grant.limits) if grant is not None else None,
-        usage=await usage_summary(session, user.id),
+        usage=await usage_summary(session, user.id, own_server=keeps_going),
         email_invitation=invited,
-        credits=grant.credits if grant is not None else None,
+        credits=balance,
+        keeps_going=keeps_going,
         unlimited=settings.access_mode == "open"
         or admin
         or (grant is not None and grant.unlimited),
@@ -353,11 +370,72 @@ def act_for(session: AsyncSession, *, user_id: UUID, settings: Settings) -> None
     """Charge like the person's own request would, for work a worker starts after it ended.
 
     A press that finds the queue full is started later (ADR 0068), and must cost what its card
-    said. Operators have no grant to charge, so only open mode and the prices need carrying.
+    said. An operator has no grant, which is how their balance is found below.
     """
     session.info[_REQUEST_ACCESS] = RequestAccess(
-        user_id, settings.access_mode == "open", dict(settings.access_credit_prices)
+        user_id,
+        settings.access_mode == "open",
+        dict(settings.access_credit_prices),
+        settings.access_default_credits,
     )
+
+
+async def _spend_own_credits(
+    session: AsyncSession,
+    request: RequestAccess,
+    *,
+    item: str,
+    units: int,
+    quantity: int | None,
+    subject: str | None,
+) -> None:
+    """Count down the balance of someone on their own server. It stops at zero, and so never
+    stops them. Locking the person's row keeps two first charges from both creating it."""
+    if units <= 0:
+        return
+    price = resolve_prices(request.prices)[item]
+    await session.execute(select(User.id).where(User.id == request.user_id).with_for_update())
+    own = await session.get(OwnCredits, request.user_id, populate_existing=True)
+    if own is None:
+        own = OwnCredits(user_id=request.user_id, credits=request.starting_credits)
+        session.add(own)
+        session.add(
+            CreditLedgerEntry(
+                user_id=request.user_id,
+                change="join",
+                amount=request.starting_credits,
+                balance=request.starting_credits,
+                created_at=_now(),
+            )
+        )
+    quantity = units if quantity is None else quantity
+    needed = price.credits * quantity
+    session.add(
+        UsageCharge(
+            user_id=request.user_id,
+            kind=price.kind,
+            units=units,
+            item=item,
+            subject=subject,
+            own_server=True,
+            created_at=_now(),
+        )
+    )
+    if needed > 0:
+        own.credits = max(0, own.credits - needed)
+        session.add(
+            CreditLedgerEntry(
+                user_id=request.user_id,
+                change="charge",
+                amount=-needed,
+                balance=own.credits,
+                item=item,
+                quantity=quantity,
+                subject=subject,
+                created_at=_now(),
+            )
+        )
+    await session.flush()
 
 
 async def charge_usage(
@@ -373,12 +451,15 @@ async def charge_usage(
 
     ``units`` count against the kind's caps (images, lines, turns, builds, trainings);
     ``quantity`` (default ``units``) multiplies the price, e.g. 100-step training blocks.
-    People without a grant, operators and open mode are not charged.
+    Operators and open mode are never stopped: this counts down their own balance instead.
     """
     request = session.info.get(_REQUEST_ACCESS)
     if not isinstance(request, RequestAccess) or request.user_id != user_id:
         request = None
     if request is not None and request.exempt:
+        await _spend_own_credits(
+            session, request, item=item, units=units, quantity=quantity, subject=subject
+        )
         return
     price = resolve_prices(request.prices if request else None)[item]
     if units <= 0:
@@ -387,6 +468,11 @@ async def charge_usage(
         select(AccessGrant).where(AccessGrant.user_id == user_id).with_for_update()
     )
     if grant is None:
+        # Admission has already checked access, so this is an operator's work started by a worker.
+        if request is not None:
+            await _spend_own_credits(
+                session, request, item=item, units=units, quantity=quantity, subject=subject
+            )
         return
     if grant.status != "active":
         raise access_required()
@@ -407,7 +493,11 @@ async def charge_usage(
                         0,
                     ),
                     func.coalesce(func.sum(UsageCharge.units), 0),
-                ).where(UsageCharge.user_id == user_id, UsageCharge.kind == price.kind)
+                ).where(
+                    UsageCharge.user_id == user_id,
+                    UsageCharge.kind == price.kind,
+                    UsageCharge.own_server.is_(False),
+                )
             )
         ).one()
         problem = limit_problem(grant.limits, price.kind, units, int(used_day), int(used_total))

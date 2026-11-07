@@ -401,14 +401,22 @@ class NarrativeAssistantThreadEvent(UUIDPrimaryKeyMixin, Base):
 
 
 # Migrations add the PostgreSQL equivalent; SQLite test databases get theirs here, so
-# the refusal is exercised by the ordinary test run too.
-for _operation in ("UPDATE", "DELETE"):
+# the refusal is exercised by the ordinary test run too. Only a project being deleted forever
+# can lose its log (ADR 0073).
+for _operation, _unless in (
+    ("UPDATE", ""),
+    (
+        "DELETE",
+        "WHEN NOT EXISTS (SELECT 1 FROM narrative_projects "
+        "WHERE id = OLD.project_id AND purge_started_at IS NOT NULL) ",
+    ),
+):
     event.listen(
         NarrativeAssistantThreadEvent.__table__,
         "after_create",
         DDL(  # type: ignore[no-untyped-call]
             f"CREATE TRIGGER narrative_thread_events_no_{_operation.lower()} "
-            f"BEFORE {_operation} ON narrative_assistant_thread_events "
+            f"BEFORE {_operation} ON narrative_assistant_thread_events {_unless}"
             "BEGIN SELECT RAISE(ABORT, 'the thread log is append-only'); END"
         ).execute_if(dialect="sqlite"),
     )

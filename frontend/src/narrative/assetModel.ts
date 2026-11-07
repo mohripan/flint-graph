@@ -17,6 +17,37 @@ export const KIND_LABELS: Record<string, string> = {
 };
 const MB = 1024 * 1024;
 
+export interface AssetSet<T> { key: string; title: string | null; options: number; created_at: string | null; assets: T[] }
+
+/**
+ * The options from one Generate belong together, so they are compared as a set rather than found
+ * scattered among others with the same names. Everything else keeps its place between the sets.
+ */
+export function assetSets<T extends { id: string; kind: string; character_id: string | null; job_id: string | null; created_at: string }>(
+  assets: readonly T[], names: Record<string, string> = {},
+): AssetSet<T>[] {
+  const sizes = new Map<string, number>();
+  for (const asset of assets) if (asset.job_id) sizes.set(asset.job_id, (sizes.get(asset.job_id) ?? 0) + 1);
+  const sets: AssetSet<T>[] = [], byJob = new Map<string, AssetSet<T>>();
+  let loose: AssetSet<T> | null = null;
+  for (const asset of assets) {
+    if (asset.job_id && sizes.get(asset.job_id)! > 1) {
+      let set = byJob.get(asset.job_id);
+      if (!set) {
+        const person = asset.character_id ? names[asset.character_id] : undefined;
+        const kind = KIND_LABELS[asset.kind] ?? asset.kind;
+        set = { key: `job:${asset.job_id}`, title: person ? `${person} · ${kind}` : kind, options: sizes.get(asset.job_id)!, created_at: asset.created_at, assets: [] };
+        byJob.set(asset.job_id, set); sets.push(set); loose = null;
+      }
+      set.assets.push(asset);
+    } else {
+      if (!loose) { loose = { key: `loose:${asset.id}`, title: null, options: 0, created_at: null, assets: [] }; sets.push(loose); }
+      loose.assets.push(asset); loose.options += 1;
+    }
+  }
+  return sets;
+}
+
 export function filterQuery(filter: AssetFilter): { kind?: string; status?: string } {
   if (filter === "all") return {};
   if (filter === "candidates") return { status: "candidate" };

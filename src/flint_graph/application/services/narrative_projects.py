@@ -77,9 +77,13 @@ async def list_projects(
     limit: int,
     before_id: UUID | None,
     include_archived: bool,
+    trashed: bool = False,
 ) -> list[NarrativeProject]:
     statement = select(NarrativeProject).where(NarrativeProject.tenant_id == tenant_id)
-    if not include_archived:
+    if trashed:
+        include_archived = True
+        statement = statement.where(NarrativeProject.archived_at.is_not(None))
+    elif not include_archived:
         statement = statement.where(NarrativeProject.archived_at.is_(None))
     if before_id is not None:
         cursor = await get_project(
@@ -160,6 +164,8 @@ async def archive_project(
         raise ConflictError("Project head changed. Reload before changing archive state.")
     if (project.archived_at is not None) == archived:
         return project
+    if project.purge_started_at is not None:
+        raise ConflictError("Deleting this project has already started, so it cannot come back.")
     project.archived_at = datetime.now(UTC) if archived else None
     await session.flush()
     await session.refresh(project)
@@ -175,6 +181,32 @@ async def archive_project(
         resource_type="narrative_project",
         resource_id=project_id,
         metadata={"head_revision_id": str(project.head_revision_id)},
+    )
+    return project
+
+
+async def rename_project(
+    session: AsyncSession, *, tenant_id: UUID, project_id: UUID, name: str, actor: AuditActor
+) -> NarrativeProject:
+    """The name people see in the Studio. The story's own title, which players see, is separate."""
+    project = await get_project(
+        session, tenant_id=tenant_id, project_id=project_id, for_update=True
+    )
+    if project.archived_at is not None:
+        raise ConflictError("Restore this project from the trash before renaming it.")
+    if project.name == name:
+        return project
+    project.name = name
+    await session.flush()
+    await session.refresh(project)
+    await record_audit_event(
+        session,
+        action=AuditAction.NARRATIVE_PROJECT_RENAMED,
+        actor=actor,
+        tenant_id=tenant_id,
+        resource_type="narrative_project",
+        resource_id=project_id,
+        metadata={},
     )
     return project
 

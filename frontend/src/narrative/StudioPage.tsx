@@ -29,6 +29,8 @@ import { StudioNavSlot, StudioSideNav } from "./StudioNav";
 import { PANELS as panels, currentSection } from "./studioSections";
 import type { Panel } from "./studioSections";
 import type { NarrativeProject, NarrativeRevision, RevisionSummary, RevisionWrite, StoryDraft, StoryNode } from "./types";
+import { GettingStarted } from "./GettingStarted";
+import { ProjectCard, RenameDialog, TrashView } from "./ProjectCollection";
 import "./studio.css";
 
 function readSelection(key: string): string | null {
@@ -64,6 +66,7 @@ export function StudioPage({ onDirtyChange }: {
   if (!workspace) throw new Error("A workspace is required.");
   const tenantId = workspace.id, storageKey = `flintgraph.studio.project.${tenantId}`;
   const canWrite = workspace.role !== "viewer";
+  const canDelete = workspace.role === "owner" || workspace.role === "admin";
   const navSlot = useContext(StudioNavSlot);
   const [state, dispatch] = useReducer(draftReducer, undefined, () => initialDraftState());
   const stateRef = useRef(state); stateRef.current = state;
@@ -72,6 +75,9 @@ export function StudioPage({ onDirtyChange }: {
   const [listMore, setListMore] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashCount, setTrashCount] = useState(0);
+  const [renaming, setRenaming] = useState<NarrativeProject | null>(null);
   const [historyRows, setHistoryRows] = useState<RevisionSummary[]>([]);
   const [historyMore, setHistoryMore] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -184,9 +190,25 @@ export function StudioPage({ onDirtyChange }: {
       if (!mounted.current || version !== listEpoch.current || epoch.current !== generation) return;
       setProjects(previous => older ? [...previous, ...rows.filter(row => !previous.some(item => item.id === row.id))] : rows);
       setListMore(rows.length === 25);
+      if (canDelete) {
+        // Only a count beside the link, so a failure here is not worth a message.
+        const trashed = await api.listNarrativeProjects(tenantId, { limit: 100, trashed: true, signal: request.signal }).catch(() => null);
+        if (trashed && mounted.current && version === listEpoch.current) setTrashCount(trashed.length);
+      }
     } catch (error) { failure(error, generation); }
     finally { controllers.current.delete(request); if (mounted.current && version === listEpoch.current) setListBusy(false); }
-  }, [tenantId, projects, failure]);
+  }, [tenantId, projects, failure, canDelete]);
+
+  async function moveToTrash(project: NarrativeProject) {
+    const generation = epoch.current;
+    try {
+      await api.trashNarrativeProject(tenantId, project.id, project.head_revision_id, true);
+      if (!mounted.current || epoch.current !== generation) return;
+      setProjects(rows => rows.filter(row => row.id !== project.id));
+      setTrashCount(count => count + 1);
+      setNotice(`Moved “${project.name}” to the trash. You can restore it from there.`);
+    } catch (error) { failure(error, generation); }
+  }
 
   const refreshHistory = useCallback(async (projectId: string, generation: number, older?: string) => {
     const request = controller(), version = ++historyEpoch.current; setHistoryBusy(true);
@@ -449,17 +471,23 @@ export function StudioPage({ onDirtyChange }: {
         onClick={() => void inspectRevision(state.conflict!.revisionId)}>View saved copy</button>
         <button type="button" className="studio-secondary" onClick={() => void inspectRevision(state.conflict!.headId)}>Review other revision</button></div>
     </section>}
-    {state.loading ? <p role="status" className="studio-empty">Opening the saved story…</p> : !state.project ? <>
+    {renaming && <RenameDialog tenantId={tenantId} project={renaming} onClose={() => setRenaming(null)}
+      onDone={project => { setProjects(rows => rows.map(row => row.id === project.id ? project : row)); setRenaming(null); }} />}
+    {state.loading ? <p role="status" className="studio-empty">Opening the saved story…</p> : !state.project ? trashOpen
+      ? <TrashView tenantId={tenantId} onBack={() => setTrashOpen(false)} onChanged={() => void refreshProjects()} /> : <>
+      <GettingStarted />
       {canWrite && <form className="studio-create" onSubmit={event => void createProject(event)}>
         <Field label="New project name"><input value={createName} maxLength={200}
           onChange={event => setCreateName(event.target.value)} placeholder="A title for your next story" /></Field>
         <button type="submit" className="studio-primary" disabled={!createName.trim() || createBusy}>{createBusy ? "Creating…" : "Create story"}</button>
       </form>}
-      <div className="studio-section-heading"><h2>Projects</h2><button type="button" className="studio-link" disabled={listBusy}
-        onClick={() => void refreshProjects()}>Refresh projects</button></div>
-      <div className="studio-projects">{projects.map(project => <button type="button" className="studio-project" key={project.id}
-        disabled={createBusy} onClick={() => chooseProject(project.id)}><span>Authored story</span><h3>{project.name}</h3>
-        <p>Open the writing desk <span aria-hidden="true">↗</span></p></button>)}</div>
+      <div className="studio-section-heading"><h2>Projects</h2><div className="studio-section-links">
+        <button type="button" className="studio-link" disabled={listBusy} onClick={() => void refreshProjects()}>Refresh projects</button>
+        {canDelete && <button type="button" className="studio-link" onClick={() => setTrashOpen(true)}>Trash{trashCount ? ` (${trashCount})` : ""}</button>}
+      </div></div>
+      <div className="studio-projects">{projects.map(project => <ProjectCard key={project.id} project={project} disabled={createBusy}
+        canWrite={canWrite} canDelete={canDelete} onOpen={() => chooseProject(project.id)}
+        onRename={() => setRenaming(project)} onTrash={() => void moveToTrash(project)} />)}</div>
       {!projects.length && <p className="studio-empty">{listBusy ? "Loading projects…" : "Your first story starts here. A blank project needs no documents or AI service."}</p>}
       {listMore && <button type="button" className="studio-secondary" disabled={listBusy} onClick={() => void refreshProjects(true)}>Load older projects</button>}
     </> : assistantView && state.revision ? <AssistantPage key={`${tenantId}:${state.project.id}`}

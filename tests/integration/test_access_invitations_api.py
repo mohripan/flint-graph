@@ -190,7 +190,7 @@ async def test_generation_is_charged_against_each_users_limits(v2, oidc_auth):  
             },
         )
 
-    # Open mode charges nobody.
+    # Open mode counts against nobody's allowance (ADR 0074).
     assert (await background(guest_auth, 1)).status_code == 202
     invite_mode(narrative_image_max_active_jobs_per_workspace=10)
     admin = admin_headers(oidc_auth)
@@ -209,5 +209,7 @@ async def test_generation_is_charged_against_each_users_limits(v2, oidc_auth):  
     me = (await client.get("/v1/access/me", headers=guest_auth)).json()
     assert me["usage"]["image"] == {"day": 3, "total": 3}
     async with factory() as session:
-        rows = await session.scalar(select(func.count(UsageCharge.id)))
+        rows = await session.scalar(
+            select(func.count(UsageCharge.id)).where(UsageCharge.own_server.is_(False))
+        )
     assert rows == 2

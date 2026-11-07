@@ -185,7 +185,8 @@ async def test_an_unlimited_key_spends_nothing_until_an_operator_limits_it(v2, o
 
     # Operators are unlimited without any grant; open mode charges nobody.
     assert (await me(client, admin))["unlimited"] is True
-    assert (await me(client, admin))["credits"] is None
+    # An operator's balance is their own (ADR 0074); it is not a grant.
+    assert (await me(client, admin))["keeps_going"] is True
 
 
 async def test_defaults_overrides_older_grants_voices_and_the_assistant(v2, oidc_auth):  # noqa: F811

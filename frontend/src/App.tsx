@@ -7,14 +7,15 @@ import { SetupPage } from "./pages/SetupPage";
 import { StudioPage } from "./narrative/StudioPage";
 import { StudioNavSlot } from "./narrative/StudioNav";
 import { AccessAdminPage } from "./pages/AccessAdminPage";
+import { GuidePage } from "./pages/GuidePage";
 import { UsagePage } from "./pages/UsagePage";
 import { useAccess } from "./site/accessContext";
-import { balanceLabel, metered } from "./site/creditsModel";
+import { balanceLabel, keepsGoing, metered } from "./site/creditsModel";
 import { linkProps } from "./site/router";
 
 // The GraphRAG Ask and Documents pages are hidden from the studio shell (#169); their
 // code and API remain for project lore sources and story questions later (#125, #171).
-type Tab = "studio" | "setup" | "invitations" | "usage";
+type Tab = "studio" | "setup" | "invitations" | "usage" | "guide";
 
 export default function App() {
   const auth = useAuth();
@@ -68,8 +69,8 @@ export default function App() {
 
         <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto sm:gap-4">
           <HealthDot healthy={healthy} />
-          {balance && <button type="button" onClick={() => navigate(access?.is_admin ? "invitations" : "usage")}
-            title={access?.is_admin || access?.unlimited ? "Generation spends no credits" : "Your credit balance"}
+          {balance && <button type="button" onClick={() => navigate(access?.is_admin && !keepsGoing(access) ? "invitations" : "usage")}
+            title={keepsGoing(access) ? "Your credits. On your own server, running out won't stop you." : access?.is_admin || access?.unlimited ? "Generation spends no credits" : "Your credit balance"}
             aria-label={`Credits: ${balance}`}
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${metered(access) && access.credits < 10 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
             {balance === "Unlimited" ? "Unlimited credits" : balance}
@@ -109,14 +110,15 @@ export default function App() {
           {tab === "studio" && <div ref={setStudioNav} className="hidden md:block" />}
           <NavItem active={tab === "setup"} onClick={() => navigate("setup")} label="Setup" icon={<SetupIcon />} />
           {access?.is_admin && <NavItem active={tab === "invitations"} onClick={() => navigate("invitations")} label="Invitations" icon={<KeyIcon />} />}
-          {access?.mode === "invite" && !access.is_admin && <NavItem active={tab === "usage"} onClick={() => navigate("usage")} label="Usage" icon={<GaugeIcon />} />}
+          {(keepsGoing(access) || (access?.mode === "invite" && !access.is_admin)) && <NavItem active={tab === "usage"} onClick={() => navigate("usage")} label="Usage" icon={<GaugeIcon />} />}
+          <NavItem active={tab === "guide"} onClick={() => navigate("guide")} label="Guide" icon={<BookIcon />} />
         </nav>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50">
           {tab === "studio" ? <StudioNavSlot.Provider value={studioNav}>
             <StudioPage key={workspace.id} onDirtyChange={setStudioDirty} />
           </StudioNavSlot.Provider> : tab === "invitations" ? <AccessAdminPage />
-            : tab === "usage" ? <UsagePage /> : <SetupPage key={workspace.id} />}
+            : tab === "usage" ? <UsagePage /> : tab === "guide" ? <GuidePage /> : <SetupPage key={workspace.id} />}
         </main>
       </div>
     </div>
@@ -157,6 +159,14 @@ function HealthDot({ healthy }: { healthy: boolean | null }) {
       <span className={`h-2 w-2 rounded-full ${color}`} />
       {label}
     </span>
+  );
+}
+
+function BookIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.5C10.5 5 8 4.5 4 4.5v14c4 0 6.5.5 8 2m0-14c1.5-1.5 4-2 8-2v14c-4 0-6.5.5-8 2m0-14v14" />
+    </svg>
   );
 }
 

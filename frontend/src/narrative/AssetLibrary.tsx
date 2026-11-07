@@ -5,7 +5,7 @@ import type { ImageJob, NarrativeImage } from "../lib/api";
 import { FolderActions, LibraryRail, MoveBar } from "./LibraryRail";
 import { folderPath, folderRows, uploadKindForView, viewQuery, viewTitle } from "./assetFolders";
 import type { LibraryIndex, LibraryView } from "./assetFolders";
-import { KIND_LABELS, UPLOAD_KINDS, kindForFile, suggestName, uploadProblem } from "./assetModel";
+import { assetSets, KIND_LABELS, UPLOAD_KINDS, kindForFile, suggestName, uploadProblem } from "./assetModel";
 import { GpuNotice } from "./GpuNotice";
 import { MusicGenerator } from "./MusicGenerator";
 import type { UploadKind } from "./assetModel";
@@ -170,7 +170,10 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
         {reviews.failed && !private_ && <p role="status" className="studio-notice">Some saved look feedback could not be shown. Open Compare look to check an image.</p>}
         {private_ ? null : assets === null ? <p className="studio-hint">Loading assets…</p>
           : !assets.length ? <p className="studio-empty">{view.type === "review" ? "Nothing waiting for review." : cgs ? "No CGs here yet." : "No assets here yet."}</p>
-          : <div className="studio-asset-grid">{assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
+          : <div className="studio-asset-sets">{assetSets(assets, characterNames).map(set => <section key={set.key}
+            className={set.title ? "studio-asset-set" : "studio-asset-loose"} aria-label={set.title ?? "Other assets"}>
+            {set.title && <header><h3>{set.title}</h3><small>{set.options} options · {setDate(set.created_at)}</small></header>}
+            <div className="studio-asset-grid">{set.assets.map(asset => <AssetCard key={asset.id} tenantId={tenantId}
               projectId={projectId} asset={asset} canWrite={canWrite} onView={() => setViewing(asset)}
               flags={reviews.flags} names={characterNames}
               selected={selected.has(asset.id)} onSelect={() => toggle(asset.id)}
@@ -185,7 +188,8 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
               onDiscard={() => act(async () => {
                 await api.discardNarrativeImage(tenantId, projectId, asset.id);
                 setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
-              }, "Could not discard.")} />)}</div>}
+              }, "Could not discard.")} />)}</div>
+          </section>)}</div>}
         {!private_ && next && <button type="button" className="studio-secondary" onClick={() => void load(next)}>Show more</button>}
       </div>
     </div>
@@ -225,6 +229,8 @@ function BackgroundGenerator({ tenantId, projectId, active, onStarted, onCancel 
     {error && <p className="studio-error" role="alert">{error}</p>}
   </form>;
 }
+
+const setDate = (when: string | null) => when ? new Date(when).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
 
 function AssetCard({ tenantId, projectId, asset, canWrite, onView, onRename, onApprove, onDiscard, selected, onSelect, folder, flags, names }: {
   tenantId: string; projectId: string; asset: NarrativeImage; canWrite: boolean;

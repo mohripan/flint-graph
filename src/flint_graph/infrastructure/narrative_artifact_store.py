@@ -7,6 +7,7 @@ verification, and never return a public/presigned URL from this adapter.
 import asyncio
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
@@ -191,6 +192,38 @@ class S3NarrativeArtifactStore:
         if not _REFERENCE_KEY.fullmatch(key):
             raise ValueError("Only voice reference audio can be deleted")
         await asyncio.to_thread(self._delete, key)
+
+    def _delete_prefix(self, prefix: str) -> None:
+        """List and delete until nothing is left, so a retry simply carries on."""
+        try:
+            while True:
+                found = self.client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+                keys = [{"Key": item["Key"]} for item in found.get("Contents", [])]
+                if not keys:
+                    return
+                result = self.client.delete_objects(
+                    Bucket=self.bucket, Delete={"Objects": keys, "Quiet": True}
+                )
+                if result.get("Errors"):
+                    raise ArtifactStoreError("artifact_unavailable")
+        except ArtifactStoreError:
+            raise
+        except Exception:
+            # SDK errors may embed private keys/headers. Expose only a safe code.
+            raise ArtifactStoreError("artifact_unavailable") from None
+
+    async def delete_project_files(
+        self, *, tenant_id: UUID, project_id: UUID, release_ids: Sequence[UUID]
+    ) -> None:
+        """Remove all of a project's files and its releases' (ADR 0073). Everything else in this
+        store stays create-only. IDs are parsed first, so no other prefix can be named."""
+        tenant, project = (UUID(str(value)) for value in (tenant_id, project_id))
+        prefixes = [
+            f"tenants/{tenant}/narrative/projects/{project}/",
+            *(f"tenants/{tenant}/narrative/releases/{UUID(str(item))}/" for item in release_ids),
+        ]
+        for prefix in prefixes:
+            await asyncio.to_thread(self._delete_prefix, prefix)
 
     async def put_once(
         self,

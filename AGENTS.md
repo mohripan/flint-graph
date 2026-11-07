@@ -331,6 +331,15 @@ with no proposal is sent back; a first story replaces the blank starter (only wh
 that change nothing are dropped, so a pictures request shows only its cards. The end-to-end creator run stopped at the sprites.
 Read `docs/reports/2026-11-07-first-creator-run.md`.
 
+[ADR 0073](docs/adr/0073-project-trash-and-permanent-delete.md) (migration 0055) adds the project trash (`archived_at`), Delete forever,
+rename and a first-time guide. A purge removes files, then rows; `project_tables()` and `project_loops()` read the schema, so a new table
+holding a project's rows needs only a `project_id`. Immutable tables allow one thing: a `DELETE` of a row whose own project has
+`purge_started_at` set. A new kind of job must join `RUNNING_WORK`. Read `docs/reports/2026-11-07-project-trash-and-guide.md`.
+
+[ADR 0074](docs/adr/0074-a-balance-on-your-own-server.md) (migration 0056) gives open-mode users and operators a real balance that never stops
+them: `own_credits` (never a grant, so it gives no access), `keeps_going` in the access status, and `own_server` usage that never counts against
+an allowance. In the frontend, check `keepsGoing` beside `metered`. The Assets page groups a job's options with `assetSets`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,
