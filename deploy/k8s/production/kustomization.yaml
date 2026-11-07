@@ -14,4 +14,4 @@ images:
   - name: ghcr.io/mohripan/flint-graph-api
     newTag: 695d17f7c85afa8aa24076525cd200060ebafe47
   - name: ghcr.io/mohripan/flint-graph-frontend
-    newTag: 8fc56f0237a60a0f82b95fff538153af8eca07bd
+    newTag: e5c46123ebd3d8e3524ed88989e6ef202f5fc8d6
