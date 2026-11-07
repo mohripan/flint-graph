@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { useAccess } from "../site/accessContext";
 import { quoteView } from "../site/creditsModel";
 import { cardLabel, quoteParts } from "./assistantActions";
+import { GpuNotice } from "./GpuNotice";
+import { actionGpuKind } from "./gpuModel";
 import type { ActionStatus, ActionQuote } from "./assistantActions";
 
 const ICONS: Record<string, ReactNode> = {
@@ -33,6 +35,7 @@ export function GenerationCard({ quote, status, note, busy, error, onGenerate, o
     {price?.over && <p className="assistant-gen-note is-bad" role="status">You don&rsquo;t have enough credits for this.</p>}
     {note && <p className={`assistant-gen-note ${note.bad ? "is-bad" : ""}`} role="status">{note.text}</p>}
     {error && <p className="assistant-gen-note is-bad" role="alert">{error}</p>}
+    <GpuNotice kinds={[actionGpuKind(status.op)]} dark />
     <div className="assistant-gen-buttons">
       <button type="button" className="assistant-gen-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
       <button type="button" className="assistant-gen-go" disabled={busy || status.needs_accept || Boolean(price?.over)}

@@ -13,6 +13,7 @@ import { attachmentKind, toggleAttachment } from "./assistantLibrary";
 import { appendThreads, findThread, mergeThreads, placeThread, visibleThreads } from "./assistantThreads";
 import type { Attachment } from "./assistantLibrary";
 import { LibraryPicker } from "./LibraryPicker";
+import { GpuNotice } from "./GpuNotice";
 import { ProposalActions } from "./ProposalActions";
 import { releaseErrorMessage, useReleaseRequests } from "./releaseRequests";
 import { ThreadHistory } from "./ThreadHistory";
@@ -443,6 +444,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                 {status && !running && <p className={turn.status === "failed" ? "studio-error" : "studio-hint"}>
                   {turn.status === "failed" ? assistantError(turn.error_code) : status}</p>}
                 {running && turn.cancel_requested && <p className="studio-hint">Stopping…</p>}
+                {turn.status === "queued" && <GpuNotice kinds={["assistant"]} />}
                 {canWrite && running && !turn.cancel_requested
                   && <button type="button" className="studio-secondary assistant-stop" onClick={() => stop(turn)}>Stop</button>}
                 {turn.proposal && <section className="studio-proposal" aria-label="Proposed changes">
@@ -485,6 +487,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
         </div>
       </div>
       {canWrite ? <form className="assistant-composer" onSubmit={send}>
+        {text.trim() && !turns.some(turn => turn.status === "queued") && <GpuNotice kinds={["assistant"]} />}
         {dirty && <div className="studio-notice studio-release-dirty"><span>Save your changes so the assistant sees them.</span>
           <button type="button" className="studio-secondary" aria-disabled={saving} onClick={() => { if (!saving) void onSave(); }}>
             {saving ? "Saving…" : "Save revision"}</button></div>}

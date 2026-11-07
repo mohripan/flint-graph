@@ -17,6 +17,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from flint_graph.application.narrative_image_workflow import VOICE_WORKFLOW, voice_job_workflow_id
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat
 from flint_graph.application.services.narrative_image_relay import ImageDispatcher
 from flint_graph.application.services.narrative_voice_relay import (
     recover_stale_voice_jobs,
@@ -150,14 +151,17 @@ async def run_worker(settings: Settings | None = None) -> None:
         factory=factory, generator=generator, store=store, generators=engines, releaser=releaser
     )
     try:
-        async with Worker(
-            temporal,
-            task_queue=queue,
-            workflows=[NarrativeVoiceJobWorkflow],
-            activities=[activities.run, activities.finalize],
-            max_concurrent_activities=1,
-            max_heartbeat_throttle_interval=timedelta(seconds=5),
-            graceful_shutdown_timeout=timedelta(seconds=30),
+        async with (
+            Worker(
+                temporal,
+                task_queue=queue,
+                workflows=[NarrativeVoiceJobWorkflow],
+                activities=[activities.run, activities.finalize],
+                max_concurrent_activities=1,
+                max_heartbeat_throttle_interval=timedelta(seconds=5),
+                graceful_shutdown_timeout=timedelta(seconds=30),
+            ),
+            gpu_heartbeat(factory, "voice"),
         ):
             await maintain(
                 factory,

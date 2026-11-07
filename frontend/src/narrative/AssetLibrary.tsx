@@ -6,6 +6,7 @@ import { FolderActions, LibraryRail, MoveBar } from "./LibraryRail";
 import { folderPath, folderRows, uploadKindForView, viewQuery, viewTitle } from "./assetFolders";
 import type { LibraryIndex, LibraryView } from "./assetFolders";
 import { KIND_LABELS, UPLOAD_KINDS, kindForFile, suggestName, uploadProblem } from "./assetModel";
+import { GpuNotice } from "./GpuNotice";
 import type { UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
 import { refreshLibrary, useAssetFont } from "./libraryAssets";
@@ -108,6 +109,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
     <div className="studio-section-heading"><h2>Assets</h2>
       {canWrite && <button type="button" className="studio-primary" onClick={() => setUploading(true)}>Upload</button>}</div>
     <p className="studio-hint">Backgrounds, character sprites, CGs, fonts, voice clips, music and sound effects for this story. Uploads keep transparency; generated items wait here for your approval. Folders only organize the library: stories and games stay the same.</p>
+    {canWrite && !private_ && <GpuNotice kinds={["image"]} />}
     {canWrite && !cgs && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
       onStarted={job => { imageJobStarted(tenantId, projectId, job); setView({ type: "review" }); }}
       onCancel={job => void act(async () => {

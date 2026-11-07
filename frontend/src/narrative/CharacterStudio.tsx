@@ -1,3 +1,4 @@
+import { GpuNotice } from "./GpuNotice";
 import { portraitJobs } from "./poseModel";
 import { PoseStudio } from "./PoseStudio";
 import { CreditCost } from "../components/CreditCost";
@@ -34,7 +35,7 @@ export function CharacterStudio({ story, readOnly, onChange, onError, onUpgrade 
   const ids = Object.keys(story.characters);
   const [selected, setSelected] = useState<string | null>(ids[0] ?? null);
   const current = selected && story.characters[selected] ? selected : ids[0] ?? null;
-  return <div className="studio-characters-frame"><div className="studio-characters">
+  return <div className="studio-characters-frame">{!readOnly && <GpuNotice kinds={["image", "voice", "pose"]} />}<div className="studio-characters">
     <aside className="studio-character-list" aria-label="Characters">
       <div className="studio-section-heading"><h2>Characters</h2>
         {!readOnly && <button type="button" className="studio-secondary" onClick={() => {

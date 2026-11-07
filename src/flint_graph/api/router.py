@@ -11,6 +11,7 @@ from flint_graph.api.routes import (
     narrative_assets,
     narrative_assistant,
     narrative_characters,
+    narrative_gpu,
     narrative_layout,
     narrative_looks,
     narrative_poses,
@@ -48,6 +49,7 @@ api_router.include_router(narrative_styles.router)
 api_router.include_router(narrative_characters.router)
 api_router.include_router(narrative_assets.router)
 api_router.include_router(narrative_asset_folders.router)
+api_router.include_router(narrative_gpu.router)
 api_router.include_router(narrative_voices.router)
 api_router.include_router(narrative_voices.models_router)
 api_router.include_router(narrative_voice_references.router)

@@ -8,6 +8,8 @@ import type { Attachment } from "./assistantLibrary";
 import { proposalActions } from "./assistantModel";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { GenerationCard } from "./GenerationCard";
+import { GpuNotice } from "./GpuNotice";
+import { actionGpuKind } from "./gpuModel";
 import { refreshLibrary } from "./libraryAssets";
 import { bindAsset, expressionId, setSprite } from "./stageModel";
 import { StudioDialog } from "./StudioDialog";
@@ -201,6 +203,8 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
             onClick={() => setReopened(current => ({ ...current, [index]: true }))}>Show again</button></>}
           {active && <progress max={job.count} value={job.progress} aria-label="Progress" />}</small>}
         {errors[`start:${index}`] && <small className="studio-error" role="alert">{errors[`start:${index}`]}</small>}
+        {status && (status.status === "pending" || job?.status === "queued")
+          && <GpuNotice kinds={[actionGpuKind(status.op)]} />}
         {status?.child_thread && onOpenThread && <button type="button" className="studio-link"
           onClick={() => onOpenThread(status.child_thread!.id)}>Open this session</button>}
         {status?.image_job?.status === "completed" && pictures(status.image_job)}

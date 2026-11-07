@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat
 from flint_graph.application.services.narrative_style_relay import (
     recover_style_jobs,
     relay_style_batch,
@@ -85,14 +86,17 @@ async def run_worker() -> None:
         factory=factory, trainer=trainer, store=store, tracker=tracker
     )
     try:
-        async with Worker(
-            temporal,
-            task_queue=settings.narrative_style_task_queue,
-            workflows=[NarrativeStyleJobWorkflow],
-            activities=[activities.run, activities.finalize],
-            max_concurrent_activities=1,
-            max_heartbeat_throttle_interval=timedelta(seconds=5),
-            graceful_shutdown_timeout=timedelta(seconds=30),
+        async with (
+            Worker(
+                temporal,
+                task_queue=settings.narrative_style_task_queue,
+                workflows=[NarrativeStyleJobWorkflow],
+                activities=[activities.run, activities.finalize],
+                max_concurrent_activities=1,
+                max_heartbeat_throttle_interval=timedelta(seconds=5),
+                graceful_shutdown_timeout=timedelta(seconds=30),
+            ),
+            gpu_heartbeat(factory, "style"),
         ):
             recovery = 0.0
             while True:

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat
 from flint_graph.application.services.narrative_image_relay import (
     ImageDispatcher,
     recover_stale_image_jobs,
@@ -132,14 +133,17 @@ async def run_worker(settings: Settings | None = None) -> None:
     store = S3NarrativeArtifactStore(client, bucket=configured.object_store_bucket)
     activities = NarrativePoseActivities(factory=factory, generator=generator, store=store)
     try:
-        async with Worker(
-            temporal,
-            task_queue=queue,
-            workflows=[NarrativeImageJobWorkflow],
-            activities=[activities.run, activities.finalize],
-            max_concurrent_activities=1,
-            max_heartbeat_throttle_interval=timedelta(seconds=5),
-            graceful_shutdown_timeout=timedelta(seconds=30),
+        async with (
+            Worker(
+                temporal,
+                task_queue=queue,
+                workflows=[NarrativeImageJobWorkflow],
+                activities=[activities.run, activities.finalize],
+                max_concurrent_activities=1,
+                max_heartbeat_throttle_interval=timedelta(seconds=5),
+                graceful_shutdown_timeout=timedelta(seconds=30),
+            ),
+            gpu_heartbeat(factory, "pose"),
         ):
             await maintain(
                 factory,

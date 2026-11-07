@@ -12,6 +12,7 @@ import { PassageEditor } from "./PassageEditor";
 import { SceneHierarchy } from "./SceneHierarchy";
 import { SceneOptionsContext } from "./sceneOptions";
 import { CharacterProfilesProvider } from "./characterImages";
+import { GpuStatusProvider } from "./GpuNotice";
 import { AssetLibrary } from "./AssetLibrary";
 import { CharacterStudio } from "./CharacterStudio";
 import { LookPanel } from "./LookPanel";
@@ -403,6 +404,7 @@ export function StudioPage({ onDirtyChange }: {
   const assistantView = view === "assistant" && Boolean(state.project && state.revision);
 
   return <SceneOptionsContext.Provider value={sceneOptions}>
+  <GpuStatusProvider>
   <CharacterProfilesProvider tenantId={tenantId} projectId={state.project?.id ?? ""}>
   <div className={`narrative-studio ${assistantView ? "is-assistant" : ""} ${navSlot ? "has-side-nav" : ""}`} role="region" aria-label="Narrative studio" onBlurCapture={() => history.current.breakGroup()}>
     {releasesOpen && state.project && state.revision && <ReleasesDialog key={`${tenantId}:${state.project.id}`}
@@ -520,5 +522,6 @@ export function StudioPage({ onDirtyChange }: {
     </StudioDialog>}
   </div>
   </CharacterProfilesProvider>
+  </GpuStatusProvider>
   </SceneOptionsContext.Provider>;
 }

@@ -289,6 +289,11 @@ class Settings(BaseSettings):
     narrative_look_tagger_python: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_look_tagger_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
     narrative_style_training_enabled: bool = False
+    # This deployment's GPU sleeps and a controller wakes it (#197). Without one, leave this off:
+    # the Studio would promise a wake-up that never comes.
+    narrative_gpu_sleeps: bool = False
+    # A measured wake-up time, shown to people; unset says "a few minutes".
+    narrative_gpu_wake_seconds: int | None = Field(default=None, ge=10, le=3600)
     narrative_style_reference_training_enabled: bool = False
     narrative_style_worker_enabled: bool = False
     narrative_style_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)

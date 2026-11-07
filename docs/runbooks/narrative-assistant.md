@@ -115,6 +115,11 @@ Each action appears in the chat as a card: what it will make, the model, how man
 | `declined` | Cancelled, with nothing generated or charged; **Show again** brings the card back |
 | `skipped` | The proposal was rejected first |
 
+If the GPU is down, the card and the chat say so and why
+([ADR 0069](../adr/0069-saying-when-the-gpu-is-asleep.md)): `GET /v1/narrative/gpu` reads it.
+Set `FLINT_GRAPH_NARRATIVE_GPU_SLEEPS=true` only with a controller that really wakes the machine, and
+`FLINT_GRAPH_NARRATIVE_GPU_WAKE_SECONDS` from a measured cold start.
+
 The API and the assistant worker both admit jobs, so the worker needs the same image, voice
 and object-store settings as the API. Each start is an ordinary job: the same content policy,
 credits, audit and outbox as Characters and Assets, and one job per action however many

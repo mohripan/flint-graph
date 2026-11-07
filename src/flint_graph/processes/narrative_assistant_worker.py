@@ -23,6 +23,7 @@ from flint_graph.application.services.narrative_assistant_relay import (
     recover_stale_turns,
     relay_assistant_batch,
 )
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat
 from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_assistant import build_narrative_assistant
@@ -94,14 +95,17 @@ async def run_worker(settings: Settings | None = None) -> None:
         create_s3_client(configured, max_attempts=3), bucket=configured.object_store_bucket
     )
     try:
-        async with Worker(
-            temporal,
-            task_queue=queue,
-            workflows=[NarrativeAssistantTurnWorkflow],
-            activities=[activities.run, activities.finalize],
-            max_concurrent_activities=configured.narrative_assistant_max_active_turns_per_workspace,
-            max_heartbeat_throttle_interval=timedelta(seconds=5),
-            graceful_shutdown_timeout=timedelta(seconds=30),
+        async with (
+            Worker(
+                temporal,
+                task_queue=queue,
+                workflows=[NarrativeAssistantTurnWorkflow],
+                activities=[activities.run, activities.finalize],
+                max_concurrent_activities=configured.narrative_assistant_max_active_turns_per_workspace,
+                max_heartbeat_throttle_interval=timedelta(seconds=5),
+                graceful_shutdown_timeout=timedelta(seconds=30),
+            ),
+            gpu_heartbeat(factory, "assistant"),
         ):
             await maintain(
                 factory,

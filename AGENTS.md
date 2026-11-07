@@ -297,6 +297,12 @@ what admission charges (`test_every_card_costs_exactly_what_it_says`), so a new 
 a row in that test. `act_for` gives the worker's session the deployment's prices. Read
 `docs/reports/2026-11-07-generation-cards.md`.
 
+[ADR 0069](docs/adr/0069-saying-when-the-gpu-is-asleep.md) (migration 0052) tells people when the GPU is
+down, in chat and wherever they generate. GPU workers keep a row fresh with `gpu_heartbeat`, and `record_gpu_state`
+is what the controller (#197) will call. A new GPU worker needs the heartbeat and a line in `expected_kinds`.
+`FLINT_GRAPH_NARRATIVE_GPU_SLEEPS` is only true with a controller, or the message correctly says it won't wake.
+Read `docs/reports/2026-11-07-gpu-wake-message.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

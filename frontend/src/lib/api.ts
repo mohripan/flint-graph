@@ -3,6 +3,7 @@ import type { LedgerEntry, Prices } from "../site/creditsModel";
 import type {StyleHistory,StyleJob,styleBody} from "../narrative/styleModel";
 import type { PoseHistory, PoseJob, poseBody } from "../narrative/poseModel";
 import type { ActionStatus } from "../narrative/assistantActions";
+import type { GpuStatus } from "../narrative/gpuModel";
 import type { ThreadEvent } from "../narrative/assistantLog";
 import type {
   NarrativeProject,
@@ -932,6 +933,10 @@ export const api = {
     return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/actions`, {
       headers: tenantHeaders(tenantId), signal, cache: "no-store",
     });
+  },
+
+  gpuStatus(signal?: AbortSignal): Promise<GpuStatus> {
+    return jsonRequest("/v1/narrative/gpu", { signal, cache: "no-store" });
   },
 
   declineAssistantAction(tenantId: string, projectId: string, proposalId: string, index: number,
