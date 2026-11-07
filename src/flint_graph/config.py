@@ -294,6 +294,11 @@ class Settings(BaseSettings):
     narrative_style_training_enabled: bool = False
     # This deployment's GPU sleeps and a controller wakes it (#197). Without one, leave this off:
     # the Studio would promise a wake-up that never comes.
+    # A remote GPU (ADR 0078): these addresses run the generation children elsewhere, and the
+    # token also authorizes the assistant's model at `ollama_base_url`.
+    narrative_remote_gpu_image_url: str | None = None
+    narrative_remote_gpu_voice_url: str | None = None
+    narrative_remote_gpu_token: str | None = None
     narrative_gpu_sleeps: bool = False
     # Dispatch GPU work from the always-on tier, and let GPU workers only execute (ADR 0070).
     narrative_gpu_dispatch_enabled: bool = False
@@ -456,6 +461,14 @@ class Settings(BaseSettings):
     # rather than a fabricated one.
     usage_pricing: dict[str, dict[str, float]] = Field(default_factory=dict)
     usage_currency: str = "USD"
+
+    @model_validator(mode="after")
+    def validate_remote_gpu_settings(self) -> Self:
+        if (
+            self.narrative_remote_gpu_image_url or self.narrative_remote_gpu_voice_url
+        ) and not self.narrative_remote_gpu_token:
+            raise ValueError("A remote GPU requires narrative_remote_gpu_token")
+        return self
 
     @model_validator(mode="after")
     def validate_narrative_process_settings(self) -> Self:

@@ -18,7 +18,7 @@ import os
 import struct
 import sys
 import tempfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -196,18 +196,23 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_model(model_dir: Path, manifest_sha256: str) -> ModelIdentity:
+def verify_model(
+    model_dir: Path, manifest_sha256: str, *, weights_here: bool = True
+) -> ModelIdentity:
     """Check the model directory against its pinned download manifest.
 
     The manifest's own SHA-256 is the operator pin; every listed file must match
-    size and hash and nothing else may be present (no extra weights or code).
+    size and hash and nothing else may be present (no extra weights or code). With
+    a remote GPU the weights are not here, so only the manifest and its pin are.
     """
-    return _verify_manifest(model_dir, manifest_sha256)[0]
+    return _verify_manifest(model_dir, manifest_sha256, weights_here=weights_here)[0]
 
 
-def verify_cutout_model(model_dir: Path, manifest_sha256: str) -> CutoutModel:
+def verify_cutout_model(
+    model_dir: Path, manifest_sha256: str, *, weights_here: bool = True
+) -> CutoutModel:
     """The segmenter directory under the same pin, holding exactly one ONNX model."""
-    identity, root, files = _verify_manifest(model_dir, manifest_sha256)
+    identity, root, files = _verify_manifest(model_dir, manifest_sha256, weights_here=weights_here)
     models = [name for name in files if name.endswith(".onnx")]
     if len(models) != 1:
         raise ValueError("The cutout manifest must list exactly one ONNX model")
@@ -216,9 +221,11 @@ def verify_cutout_model(model_dir: Path, manifest_sha256: str) -> CutoutModel:
     )
 
 
-def verify_ip_adapter_model(model_dir: Path, manifest_sha256: str) -> IpAdapterModel:
+def verify_ip_adapter_model(
+    model_dir: Path, manifest_sha256: str, *, weights_here: bool = True
+) -> IpAdapterModel:
     """The IP-Adapter directory under its pin: one SDXL weight beside its image encoder."""
-    identity, root, files = _verify_manifest(model_dir, manifest_sha256)
+    identity, root, files = _verify_manifest(model_dir, manifest_sha256, weights_here=weights_here)
     weights = [
         name
         for name in files
@@ -236,7 +243,7 @@ def verify_ip_adapter_model(model_dir: Path, manifest_sha256: str) -> IpAdapterM
 
 
 def _verify_manifest(
-    model_dir: Path, manifest_sha256: str
+    model_dir: Path, manifest_sha256: str, *, weights_here: bool = True
 ) -> tuple[ModelIdentity, Path, dict[str, Any]]:
     root = model_dir.resolve(strict=True)
     manifest_path = root / MANIFEST
@@ -247,19 +254,20 @@ def _verify_manifest(
     files = manifest.get("files")
     if not isinstance(files, dict) or not files:
         raise ValueError("Model manifest lists no files")
-    present = {
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.is_file() or path.is_symlink()
-    }
-    if present != set(files) | {MANIFEST}:
-        raise ValueError("Model directory does not match its manifest")
-    for name, expected in files.items():
-        path = root / name
-        if path.is_symlink() or not path.is_file():
-            raise ValueError("Model files must be regular files")
-        if path.stat().st_size != expected["size"] or _sha256_file(path) != expected["sha256"]:
-            raise ValueError("Model file does not match its manifest")
+    if weights_here:
+        present = {
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+            if path.is_file() or path.is_symlink()
+        }
+        if present != set(files) | {MANIFEST}:
+            raise ValueError("Model directory does not match its manifest")
+        for name, expected in files.items():
+            path = root / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("Model files must be regular files")
+            if path.stat().st_size != expected["size"] or _sha256_file(path) != expected["sha256"]:
+                raise ValueError("Model file does not match its manifest")
     identity = ModelIdentity(
         repo=str(manifest["repo"]),
         revision=str(manifest["revision"]),
@@ -324,8 +332,10 @@ class LocalImageGenerator:
         deadline_seconds: int,
         cutout: CutoutModel | None = None,
         ip_adapter: IpAdapterModel | None = None,
+        child_env: Mapping[str, str] | None = None,
     ) -> None:
         self.python, self.script, self.model_dir = python, script, model_dir
+        self.child_env = child_env or {}
         self.model, self.deadline, self.cutout = model, deadline_seconds, cutout
         self.ip_adapter = ip_adapter
 
@@ -344,6 +354,7 @@ class LocalImageGenerator:
                 "TRANSFORMERS_OFFLINE": "1",
                 "HF_HUB_DISABLE_TELEMETRY": "1",
                 "PYTHONDONTWRITEBYTECODE": "1",
+                **self.child_env,
             }
         )
         return environment

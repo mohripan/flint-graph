@@ -73,4 +73,6 @@ def build_image_describer(settings: Settings) -> ImageDescriber | None:
     model = settings.narrative_assistant_vision_model
     if not model:
         return None
-    return OllamaImageDescriber(model=model, base_url=settings.ollama_base_url)
+    from flint_graph.infrastructure.narrative_assistant import ollama_client
+
+    return OllamaImageDescriber(model=model, http_client=ollama_client(settings))

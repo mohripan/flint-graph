@@ -8,6 +8,7 @@ never the spoken text.
 
 import asyncio
 import logging
+import sys
 import tempfile
 from datetime import timedelta
 from pathlib import Path
@@ -27,6 +28,7 @@ from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_image_temporal import TemporalImageDispatcher
 from flint_graph.infrastructure.narrative_imagegen import OllamaGpuReleaser
+from flint_graph.infrastructure.narrative_remote_child import child_environment, script_path
 from flint_graph.infrastructure.narrative_voicegen import (
     LocalEngineVoiceGenerator,
     LocalVoiceGenerator,
@@ -70,12 +72,24 @@ async def maintain(
 def build_generator(configured: Settings) -> LocalVoiceGenerator:
     assert configured.narrative_voice_runtime_dir and configured.narrative_voice_model_dir
     assert configured.narrative_voice_model_manifest_sha256
-    python, script = voice_runtime_paths(Path(configured.narrative_voice_runtime_dir))
-    if not python.is_file() or not script.is_file():
-        raise SystemExit("The voice runtime is not installed; run uv sync in runtimes/voicegen.")
+    remote = configured.narrative_remote_gpu_voice_url
+    child_env = None
+    if remote:
+        # The weights and the real child are on the remote machine. Their pinned manifest is here.
+        assert configured.narrative_remote_gpu_token
+        python, script = Path(sys.executable), script_path()
+        child_env = child_environment(remote, configured.narrative_remote_gpu_token)
+    else:
+        python, script = voice_runtime_paths(Path(configured.narrative_voice_runtime_dir))
+        if not python.is_file() or not script.is_file():
+            raise SystemExit(
+                "The voice runtime is not installed; run uv sync in runtimes/voicegen."
+            )
     model_dir = Path(configured.narrative_voice_model_dir)
     try:
-        model, _ = verify_voice_model(model_dir, configured.narrative_voice_model_manifest_sha256)
+        model, _ = verify_voice_model(
+            model_dir, configured.narrative_voice_model_manifest_sha256, weights_here=not remote
+        )
     except (OSError, ValueError):
         raise SystemExit("The voice model does not match its pinned manifest.") from None
     cache = Path(
@@ -91,6 +105,7 @@ def build_generator(configured: Settings) -> LocalVoiceGenerator:
         deadline_seconds=configured.narrative_voice_job_deadline_seconds,
         device=configured.narrative_voice_device,
         cuda_cache=cache.resolve(),
+        child_env=child_env,
     )
 
 

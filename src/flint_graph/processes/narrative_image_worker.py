@@ -7,6 +7,7 @@ against its pinned manifest before any job runs. Logs carry counts, never prompt
 
 import asyncio
 import logging
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from flint_graph.infrastructure.narrative_imagegen import (
     verify_ip_adapter_model,
     verify_model,
 )
+from flint_graph.infrastructure.narrative_remote_child import child_environment, script_path
 from flint_graph.infrastructure.object_store import create_s3_client
 from flint_graph.worker.activities.narrative_image import NarrativeImageActivities
 from flint_graph.workflows.narrative_image import NarrativeImageJobWorkflow
@@ -65,12 +67,25 @@ async def maintain(
 def build_generator(configured: Settings) -> LocalImageGenerator:
     assert configured.narrative_image_runtime_dir and configured.narrative_image_model_dir
     assert configured.narrative_image_model_manifest_sha256
-    python, script = runtime_paths(Path(configured.narrative_image_runtime_dir))
-    if not python.is_file() or not script.is_file():
-        raise SystemExit("The image runtime is not installed; run uv sync in runtimes/imagegen.")
+    remote = configured.narrative_remote_gpu_image_url
+    child_env = None
+    if remote:
+        # The weights and the real child are on the remote GPU. Their pinned manifests are here.
+        assert configured.narrative_remote_gpu_token
+        python, script = Path(sys.executable), script_path()
+        child_env = child_environment(remote, configured.narrative_remote_gpu_token)
+    else:
+        python, script = runtime_paths(Path(configured.narrative_image_runtime_dir))
+        if not python.is_file() or not script.is_file():
+            raise SystemExit(
+                "The image runtime is not installed; run uv sync in runtimes/imagegen."
+            )
+    weights_here = not remote
     model_dir = Path(configured.narrative_image_model_dir)
     try:
-        model = verify_model(model_dir, configured.narrative_image_model_manifest_sha256)
+        model = verify_model(
+            model_dir, configured.narrative_image_model_manifest_sha256, weights_here=weights_here
+        )
     except (OSError, ValueError):
         raise SystemExit("The image model does not match its pinned manifest.") from None
     cutout = None
@@ -80,6 +95,7 @@ def build_generator(configured: Settings) -> LocalImageGenerator:
             cutout = verify_cutout_model(
                 Path(configured.narrative_image_cutout_model_dir),
                 configured.narrative_image_cutout_manifest_sha256,
+                weights_here=weights_here,
             )
         except (OSError, ValueError):
             raise SystemExit("The cutout model does not match its pinned manifest.") from None
@@ -90,6 +106,7 @@ def build_generator(configured: Settings) -> LocalImageGenerator:
             ip_adapter = verify_ip_adapter_model(
                 Path(configured.narrative_image_ip_adapter_model_dir),
                 configured.narrative_image_ip_adapter_manifest_sha256,
+                weights_here=weights_here,
             )
         except (OSError, ValueError):
             raise SystemExit("The IP-Adapter does not match its pinned manifest.") from None
@@ -101,6 +118,7 @@ def build_generator(configured: Settings) -> LocalImageGenerator:
         deadline_seconds=configured.narrative_image_job_deadline_seconds,
         cutout=cutout,
         ip_adapter=ip_adapter,
+        child_env=child_env,
     )
 
 

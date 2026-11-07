@@ -19,7 +19,7 @@ import hashlib
 import json
 import os
 import tempfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -120,10 +120,10 @@ class VoiceGenerator(Protocol):
 
 
 def verify_voice_model(
-    model_dir: Path, manifest_sha256: str
+    model_dir: Path, manifest_sha256: str, *, weights_here: bool = True
 ) -> tuple[ModelIdentity, tuple[str, ...]]:
     """The Kokoro directory under its pinned manifest, and the voice packs it holds."""
-    identity, _, files = _verify_manifest(model_dir, manifest_sha256)
+    identity, _, files = _verify_manifest(model_dir, manifest_sha256, weights_here=weights_here)
     if "config.json" not in files or "kokoro-v1_0.pth" not in files:
         raise ValueError("The voice manifest lacks the Kokoro weights")
     voices = tuple(
@@ -171,10 +171,12 @@ class LocalVoiceGenerator:
         deadline_seconds: int,
         device: str = "auto",
         cuda_cache: Path | None = None,
+        child_env: Mapping[str, str] | None = None,
     ) -> None:
         if device not in ("auto", "cpu"):
             raise ValueError("Voice device must be auto or cpu")
         self.python, self.script, self.model_dir = python, script, model_dir
+        self.child_env = child_env or {}
         self.model, self.deadline, self.device = model, deadline_seconds, device
         self.cuda_cache = cuda_cache
 
@@ -200,6 +202,7 @@ class LocalVoiceGenerator:
             # cache every job pays that again (measured 26 s against 8.5 s per job).
             environment["CUDA_CACHE_PATH"] = str(self.cuda_cache)
             environment["CUDA_CACHE_MAXSIZE"] = str(4 * 1024**3)
+        environment.update(self.child_env)
         return environment
 
     async def generate(self, request: VoiceRequest, *, on_progress: Progress) -> VoiceResult:

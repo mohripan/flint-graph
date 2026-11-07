@@ -1,0 +1,13 @@
+*
+!runtimes/imagegen/pyproject.toml
+!runtimes/imagegen/uv.lock
+!runtimes/imagegen/generate.py
+!runtimes/voicegen/pyproject.toml
+!runtimes/voicegen/uv.lock
+!runtimes/voicegen/generate.py
+!ops/deploy/share_identical_files.py
+!deploy/runpod/relay.py
+!deploy/runpod/server.py
+!deploy/runpod/fetch_weights.py
+!tools/narrative/fetch_model.py
+!deploy/ansible/vars/models.yml

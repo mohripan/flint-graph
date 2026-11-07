@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -43,6 +44,10 @@ def _chunk(line: str) -> dict[str, Any]:
     if "error" in chunk:
         raise AssistantModelError("provider_unavailable")
     return chunk
+
+
+WORKER_START_SECONDS = 300.0
+WORKER_RETRY_SECONDS = 5.0
 
 
 class OllamaNarrativeAssistant:
@@ -286,6 +291,36 @@ class DeterministicNarrativeAssistant:
         )
 
 
+class _WaitsForAWorker(httpx.AsyncHTTPTransport):
+    """Runpod answers with an error while a worker starts from nothing, and expects a retry. The
+    worker's own replies are never errors, so any of these came from the way there (ADR 0078)."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        deadline = time.monotonic() + WORKER_START_SECONDS
+        while True:
+            response = await super().handle_async_request(request)
+            if (
+                response.status_code < 400
+                or response.status_code in (401, 403, 404)
+                or time.monotonic() >= deadline
+            ):
+                return response
+            await response.aclose()
+            await asyncio.sleep(WORKER_RETRY_SECONDS)
+
+
+def ollama_client(settings: Settings) -> httpx.AsyncClient:
+    """Ollama at the configured address, which on a remote GPU requires its token (ADR 0078)."""
+    token = settings.narrative_remote_gpu_token
+    if not token:
+        return httpx.AsyncClient(base_url=settings.ollama_base_url)
+    return httpx.AsyncClient(
+        base_url=settings.ollama_base_url,
+        headers={"Authorization": f"Bearer {token}"},
+        transport=_WaitsForAWorker(),
+    )
+
+
 def build_narrative_assistant(settings: Settings) -> AssistantModel | None:
     """Return the configured provider, or ``None`` when conversational authoring is off."""
     provider = settings.narrative_assistant_provider
@@ -299,7 +334,7 @@ def build_narrative_assistant(settings: Settings) -> AssistantModel | None:
             max_output_tokens=settings.narrative_assistant_max_output_tokens,
             temperature=settings.narrative_assistant_temperature,
             timeout_seconds=settings.narrative_assistant_turn_deadline_seconds,
-            base_url=settings.ollama_base_url,
+            http_client=ollama_client(settings),
             thinking=settings.narrative_assistant_thinking,
             thinking_tokens=settings.narrative_assistant_thinking_tokens,
         )
