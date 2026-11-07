@@ -243,10 +243,24 @@ def test_the_mounted_manifests_are_the_exact_files_their_pins_hash() -> None:
     for model in models["flintgraph_models"]:
         data = (BASE / "model-manifests" / f"{model['name']}.json").read_bytes()
         assert hashlib.sha256(data).hexdigest() == model["manifest_sha256"], model["name"]
-    volume = _deployments()["studio-workers"]["spec"]["template"]["spec"]["volumes"][0]
-    assert {item["key"] for item in volume["configMap"]["items"]} == {
-        f"{model['name']}.json" for model in models["flintgraph_models"]
+
+
+def test_a_model_has_the_same_path_here_as_on_the_gpu() -> None:
+    # A ConfigMap volume reaches its files through symlinks into a dated folder. The workers resolve
+    # paths, so they would send the GPU `/models/..2026_11_07.../name`, which exists only on this
+    # server. A subPath mount is a real file, so the path resolves to itself.
+    models = yaml.safe_load((ROOT / "deploy/ansible/vars/models.yml").read_text("utf-8"))
+    names = {model["name"] for model in models["flintgraph_models"]}
+    spec = _deployments()["studio-workers"]["spec"]["template"]["spec"]
+    assert "items" not in spec["volumes"][0]["configMap"]
+    mounts = spec["containers"][0]["volumeMounts"]
+    assert {mount["mountPath"]: mount["subPath"] for mount in mounts} == {
+        f"/models/{name}/flintgraph-download.json": f"{name}.json" for name in names
     }
+    config = _config()
+    for key, folder in config.items():
+        if key.endswith("_MODEL_DIR") and folder.startswith("/models/"):
+            assert folder.removeprefix("/models/") in names, key
 
 
 def test_a_fresh_download_on_any_machine_reproduces_the_pins() -> None:

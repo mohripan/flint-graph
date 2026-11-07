@@ -43,16 +43,14 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+          # One subPath each, because a ConfigMap volume reaches its files through symlinks into a
+          # dated folder. The workers resolve paths and send them to the GPU, which has no such folder.
           volumeMounts:
-            - name: manifests
-              mountPath: /models
-              readOnly: true
+            - {name: manifests, readOnly: true, subPath: animagine-xl-4.0.json, mountPath: /models/animagine-xl-4.0/flintgraph-download.json}
+            - {name: manifests, readOnly: true, subPath: anime-seg.json, mountPath: /models/anime-seg/flintgraph-download.json}
+            - {name: manifests, readOnly: true, subPath: ip-adapter.json, mountPath: /models/ip-adapter/flintgraph-download.json}
+            - {name: manifests, readOnly: true, subPath: kokoro-82m.json, mountPath: /models/kokoro-82m/flintgraph-download.json}
       volumes:
         - name: manifests
           configMap:
             name: model-manifests
-            items:
-              - {key: animagine-xl-4.0.json, path: animagine-xl-4.0/flintgraph-download.json}
-              - {key: anime-seg.json, path: anime-seg/flintgraph-download.json}
-              - {key: ip-adapter.json, path: ip-adapter/flintgraph-download.json}
-              - {key: kokoro-82m.json, path: kokoro-82m/flintgraph-download.json}
