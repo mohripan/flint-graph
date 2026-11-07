@@ -12,6 +12,7 @@ JSON and may stop the turn by raising ``AssistantModelError``.
 
 import json
 import re
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -518,6 +519,197 @@ def _keeps_who_is_on_stage(story: dict[str, Any], proposal: Proposal, request: s
     return proposal.model_copy(update={"operations": operations})
 
 
+def _with_library_sprites(
+    story: dict[str, Any], proposal: Proposal, library: Sequence[LibraryEntry]
+) -> Proposal:
+    """A character needs a picture attached to be shown at all, and approving one does not attach
+    it. A real thread wrote a scene for someone with four approved sprites and showed nobody."""
+    if story.get("schema_version") != "2":
+        return proposal
+    characters = story.get("characters") or {}
+    upserted = {item.id: item for item in proposal.operations if isinstance(item, UpsertCharacter)}
+    wanted: set[str] = set()
+    for item in proposal.operations:
+        if isinstance(item, UpsertNode):
+            speaker = item.node.get("speaker")
+            if isinstance(speaker, str):
+                wanted.add(speaker)
+            for entry in item.node.get("show") or []:
+                if isinstance(entry, dict) and isinstance(entry.get("character"), str):
+                    wanted.add(entry["character"])
+    operations = list(proposal.operations)
+    for character in sorted(wanted):
+        chosen = upserted.get(character)
+        saved = characters.get(character)
+        if (chosen is None and not isinstance(saved, dict)) or (chosen and chosen.sprites):
+            continue
+        if isinstance(saved, dict) and saved.get("sprites"):
+            continue
+        picture = next(
+            (
+                entry
+                for entry in library
+                if entry.character_id == character and entry.library_kind == "sprite"
+            ),
+            None,
+        )
+        if picture is None:
+            continue
+        sprites = {"neutral": picture.key}
+        if chosen is not None:
+            at = operations.index(chosen)
+            operations[at] = chosen.model_copy(update={"sprites": sprites})
+        else:
+            assert isinstance(saved, dict)
+            operations.append(
+                UpsertCharacter(
+                    op="upsert_character", id=character, name=saved["name"], sprites=sprites
+                )
+            )
+    return proposal.model_copy(update={"operations": operations})
+
+
+_POSITIONS = ("center", "left", "right")
+_STAGING_ROUNDS = 16
+
+
+def _targets(node: dict[str, Any]) -> list[str]:
+    found = [node.get(field) for field in ("next", "if_true", "if_false")]
+    found += [option.get("target") for option in node.get("options") or []]
+    return [target for target in found if isinstance(target, str)]
+
+
+def _on_arrival(nodes: Mapping[str, Any], entry: Any) -> dict[str, dict[str, str]]:
+    """Who is on stage arriving at each step, and where. Someone counts only if every route leaves
+    them there, and the answer can only shrink as routes are found, so this settles."""
+    if entry not in nodes:
+        return {}
+    reached: dict[str, dict[str, str]] = {entry: {}}
+    queue = deque([entry])
+    while queue:
+        key = queue.popleft()
+        node = nodes[key]
+        after = dict(reached[key])
+        if node.get("type") == "stage":
+            for name in node.get("hide") or []:
+                after.pop(name, None)
+            for shown in node.get("show") or []:
+                # A place holds one person, so whoever stood there has gone.
+                after = {k: v for k, v in after.items() if v != shown.get("position")}
+                after[shown.get("character")] = shown.get("position")
+        for target in _targets(node):
+            if target not in nodes:
+                continue
+            known = reached.get(target)
+            merged = after if known is None else {k: v for k, v in known.items() if k in after}
+            if known is None or merged != known:
+                reached[target] = merged
+                queue.append(target)
+    return reached
+
+
+def _with_speakers_on_stage(story: dict[str, Any], proposal: Proposal, request: str) -> Proposal:
+    """Who speaks a new line, and has a picture to show, is on stage for it. The model forgets, and
+    the game then plays their words over an empty stage. Only new lines: rewording a saved one
+    says nothing about the stage, and someone hidden or asked to be absent stays that way."""
+    if _TAKES_OFF_STAGE.search(request):
+        return proposal
+    try:
+        edited = apply_operations(story, proposal.operations).story
+    except PackageError:
+        return proposal  # The check reports the operation problem itself.
+    saved = story.get("nodes") or {}
+    written = {item.id for item in proposal.operations if isinstance(item, UpsertNode)}
+    nodes: dict[str, Any] = dict(edited["nodes"])
+    entry = edited.get("entry")
+    characters = edited.get("characters") or {}
+    hidden = {
+        name
+        for key in written
+        if nodes.get(key, {}).get("type") == "stage"
+        for name in nodes[key].get("hide") or []
+    }
+    changed: set[str] = set()
+    full: set[str] = set()
+    for _ in range(_STAGING_ROUNDS):
+        arrival = _on_arrival(nodes, entry)
+        found = None
+        for key, there in arrival.items():
+            node = nodes[key]
+            speaker = node.get("speaker") if node.get("type") == "line" else None
+            sprites = (characters.get(speaker) or {}).get("sprites") if speaker else None
+            if (
+                sprites
+                and key in written
+                and key not in saved
+                and speaker not in hidden
+                and speaker not in full
+                and speaker not in there
+            ):
+                found = key, str(speaker), sprites
+                break
+        if found is None:
+            break
+        key, speaker, sprites = found
+        into: dict[str, list[str]] = {}
+        for name, node in nodes.items():
+            for target in _targets(node):
+                into.setdefault(target, []).append(name)
+        # The step this proposal wrote for the scene, if a single path leads from it to the line.
+        step = None
+        at = key
+        for _ in range(len(nodes)):
+            before = into.get(at) or []
+            if len(before) != 1:
+                break
+            at = before[0]
+            if nodes[at].get("type") == "stage":
+                step = at if at in written else None
+                break
+        standing = arrival.get(step, {}) if step else arrival[key]
+        shown_there = nodes[step].get("show") or [] if step else []
+        taken = set(standing.values()) | {shown.get("position") for shown in shown_there}
+        place = next((slot for slot in _POSITIONS if slot not in taken), None)
+        if place is None:
+            full.add(speaker)  # Who should leave is the creator's choice.
+            continue
+        wearing = nodes[key].get("expression")
+        if wearing not in sprites:
+            wearing = "neutral" if "neutral" in sprites else next(iter(sprites))
+        arriving = {"character": speaker, "sprite": wearing, "position": place}
+        if step is not None:
+            nodes[step] = {**nodes[step], "show": [*shown_there, arriving]}
+            changed.add(step)
+            continue
+        added = f"{key}_stage"
+        number = 2
+        while added in nodes:
+            added, number = f"{key}_stage_{number}", number + 1
+        for name in into.get(key) or []:
+            nodes[name] = _repointed(nodes[name], {key: added})
+            changed.add(name)
+        nodes[added] = {"type": "stage", "show": [arriving], "next": key}
+        changed.add(added)
+        if entry == key:
+            entry = added
+    if not changed and entry == edited.get("entry"):
+        return proposal
+    operations: list[Any] = [
+        item.model_copy(update={"node": nodes[item.id]})
+        if isinstance(item, UpsertNode) and item.id in changed
+        else item
+        for item in proposal.operations
+    ]
+    operations.extend(
+        UpsertNode(op="upsert_node", id=key, node=nodes[key]) for key in sorted(changed - written)
+    )
+    if entry != edited.get("entry"):
+        # An operation names its target once, so one already moving the start is changed instead.
+        operations = [item for item in operations if not isinstance(item, SetEntry)]
+        operations.append(SetEntry(op="set_entry", id=entry))
+    return proposal.model_copy(update={"operations": operations})
+
+
 def _without_stage_copies(story: dict[str, Any], proposal: Proposal) -> Proposal:
     """A real thread rewrote a step, then added an exact copy that nothing led to. A new step that
     is merely unlinked stays, because the creator asked for it and the warning can say so."""
@@ -893,12 +1085,15 @@ async def run_turn(
         if parsed is not None:
             # Library IDs the model used become explicit, stored asset additions.
             parsed = _without_pending_sprites(
-                story, add_library_assets(story, parsed, library), dropped_for
+                story,
+                add_library_assets(story, _with_library_sprites(story, parsed, library), library),
+                dropped_for,
             )
             parsed = _keeps_who_is_on_stage(story, _without_stage_copies(story, parsed), request)
             parsed = _with_voice_actions(_with_tidied_nodes(story, parsed, library), capabilities)
             # The question goes before wherever the story begins, so find that first.
-            parsed = _with_player(story, _joined_to_the_start(story, parsed))
+            parsed = _with_speakers_on_stage(story, _joined_to_the_start(story, parsed), request)
+            parsed = _with_player(story, parsed)
             parsed = _without_no_ops(story, parsed)
             # A provider without a grammar could still write these; they can only be refused.
             refused: tuple[type, ...] = (StartChildSession,) if child_session else ()
