@@ -1,9 +1,10 @@
-"""The network, the always-on server, its data disk and the budget alarm."""
+"""The network, the always-on server, its data disk, sign-in and the budget alarm."""
 
 from typing import Any
 
 from aws_cdk import CfnOutput, RemovalPolicy, Size, Stack
 from aws_cdk import aws_budgets as budgets
+from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_ssm as ssm
@@ -133,6 +134,7 @@ class FoundationStack(Stack):
             string_value=f"https://{self.control.instance_private_ip}:6443",
         )
 
+        self._sign_in()
         self._budget()
         CfnOutput(self, "PublicIp", value=address.attr_public_ip)
         CfnOutput(self, "ControlInstanceId", value=self.control.instance_id)
@@ -161,6 +163,52 @@ class FoundationStack(Stack):
             role.add_to_policy(
                 iam.PolicyStatement(actions=["ssm:PutParameter"], resources=[arn(write)])
             )
+
+    def _sign_in(self) -> None:
+        """Who someone is. Whether they may use the Studio is the invitation check in the API, so
+        anyone may create an account here and still get nowhere without an invitation."""
+        users = cognito.UserPool(
+            self,
+            "Users",
+            self_sign_up_enabled=True,
+            sign_in_aliases=cognito.SignInAliases(email=True),
+            auto_verify=cognito.AutoVerifiedAttrs(email=True),
+            account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
+            password_policy=cognito.PasswordPolicy(min_length=12),
+            # Free for up to 10,000 people a month.
+            feature_plan=cognito.FeaturePlan.LITE,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        users.add_domain(
+            "SignInPage",
+            cognito_domain=cognito.CognitoDomainOptions(domain_prefix=self.config.sign_in_prefix),
+        )
+        studio = users.add_client(
+            "Studio",
+            # The browser cannot keep a secret. It proves itself with PKCE instead.
+            generate_secret=False,
+            prevent_user_existence_errors=True,
+            supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO],
+            o_auth=cognito.OAuthSettings(
+                flows=cognito.OAuthFlows(authorization_code_grant=True),
+                scopes=[
+                    cognito.OAuthScope.OPENID,
+                    cognito.OAuthScope.EMAIL,
+                    cognito.OAuthScope.PROFILE,
+                ],
+                callback_urls=[self.config.site_url],
+                logout_urls=[self.config.site_url],
+            ),
+        )
+        region = self.config.region
+        issuer = f"https://cognito-idp.{region}.amazonaws.com/{users.user_pool_id}"
+        CfnOutput(self, "SignInIssuer", value=issuer)
+        CfnOutput(self, "SignInClientId", value=studio.user_pool_client_id)
+        CfnOutput(
+            self,
+            "SignInLogoutUrl",
+            value=f"https://{self.config.sign_in_prefix}.auth.{region}.amazoncognito.com/logout",
+        )
 
     def _budget(self) -> None:
         email = self.config.alert_email

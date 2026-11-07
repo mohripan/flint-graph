@@ -11,6 +11,12 @@ on:
       oidc_client_id:
         description: Sign-in client ID, written into the frontend
         required: true
+      oidc_bearer:
+        description: Which token the frontend sends. Cognito needs id_token
+        default: id_token
+      oidc_logout_url:
+        description: The provider's sign-out page, if it publishes no end-session endpoint
+        required: false
 
 permissions:
   contents: read
@@ -53,3 +59,5 @@ jobs:
           build-args: |
             VITE_FLINT_GRAPH_OIDC_AUTHORITY=${{ inputs.oidc_authority }}
             VITE_FLINT_GRAPH_OIDC_CLIENT_ID=${{ inputs.oidc_client_id }}
+            VITE_FLINT_GRAPH_OIDC_BEARER=${{ inputs.oidc_bearer }}
+            VITE_FLINT_GRAPH_OIDC_LOGOUT_URL=${{ inputs.oidc_logout_url }}

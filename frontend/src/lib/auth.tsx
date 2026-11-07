@@ -10,6 +10,7 @@ import {
 import { UserManager, type User } from "oidc-client-ts";
 import { navigate } from "../site/router";
 import { safeReturn } from "../site/siteRoutes";
+import { bearerKind, bearerToken, displayName, logoutAddress } from "./oidcTokens";
 
 type AuthMode = "dev" | "oidc";
 
@@ -26,6 +27,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const authMode = (import.meta.env.VITE_FLINT_GRAPH_AUTH_MODE ?? "dev") as AuthMode;
+const bearer = bearerKind(import.meta.env.VITE_FLINT_GRAPH_OIDC_BEARER);
 
 function createUserManager(): UserManager | null {
   if (authMode !== "oidc") return null;
@@ -84,13 +86,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (authMode === "dev") return;
-    if (userManager) await userManager.signoutRedirect();
+    if (!userManager) return;
+    const leaveTo = logoutAddress(
+      import.meta.env.VITE_FLINT_GRAPH_OIDC_LOGOUT_URL,
+      import.meta.env.VITE_FLINT_GRAPH_OIDC_CLIENT_ID,
+      window.location.origin,
+    );
+    if (leaveTo) {
+      await userManager.removeUser();
+      window.location.assign(leaveTo);
+      return;
+    }
+    await userManager.signoutRedirect();
   }, []);
 
   const getAccessToken = useCallback(async () => {
     if (authMode === "dev") return null;
     const current = user ?? (userManager ? await userManager.getUser() : null);
-    return current && !current.expired ? current.access_token : null;
+    return bearerToken(current, bearer);
   }, [user]);
 
   const value = useMemo<AuthContextValue>(
@@ -98,12 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mode: authMode,
       loading,
       authenticated: authMode === "dev" || Boolean(user && !user.expired),
-      userName:
-        authMode === "dev"
-          ? "Local Developer"
-          : typeof user?.profile.name === "string"
-            ? user.profile.name
-            : null,
+      userName: authMode === "dev" ? "Local Developer" : displayName(user?.profile),
       signIn,
       signOut,
       getAccessToken,

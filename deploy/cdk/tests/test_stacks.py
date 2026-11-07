@@ -139,6 +139,27 @@ def test_a_broken_first_boot_cannot_leave_the_gpu_running_for_days(templates):
     assert "shutdown" not in json.dumps(only_instance(foundation)["UserData"])
 
 
+def test_sign_in_is_for_a_browser_and_returns_only_to_the_studio(templates):
+    foundation, _ = templates
+    client = next(iter(foundation.find_resources("AWS::Cognito::UserPoolClient").values()))
+    properties = client["Properties"]
+    assert properties["GenerateSecret"] is False
+    assert properties["AllowedOAuthFlows"] == ["code"]
+    assert sorted(properties["AllowedOAuthScopes"]) == ["email", "openid", "profile"]
+    assert properties["CallbackURLs"] == [InfraConfig().site_url]
+    assert properties["LogoutURLs"] == [InfraConfig().site_url]
+    assert properties["PreventUserExistenceErrors"] == "ENABLED"
+
+
+def test_sign_in_verifies_email_and_keeps_its_accounts(templates):
+    foundation, _ = templates
+    pool = next(iter(foundation.find_resources("AWS::Cognito::UserPool").values()))
+    assert pool["Properties"]["AutoVerifiedAttributes"] == ["email"]
+    assert pool["Properties"]["UsernameAttributes"] == ["email"]
+    assert pool["Properties"]["UserPoolTier"] == "LITE"
+    assert pool["DeletionPolicy"] == "Retain"
+
+
 def test_a_budget_alarm_exists_and_emails_when_given_an_address():
     foundation, _ = build()
     foundation.resource_count_is("AWS::Budgets::Budget", 1)

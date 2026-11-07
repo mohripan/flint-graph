@@ -7,9 +7,9 @@ metadata:
     traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
 spec:
   tls:
-    - hosts: [studio.example.com]
+    - hosts: [54-253-96-189.sslip.io]
   rules:
-    - host: studio.example.com
+    - host: 54-253-96-189.sslip.io
       http:
         paths:
           - path: /v1
