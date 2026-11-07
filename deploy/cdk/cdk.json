@@ -2,6 +2,7 @@
   "app": "uv run --frozen python app.py",
   "context": {
     "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:defaultCrossStackReferences": "strong",
     "@aws-cdk/aws-iam:minimizePolicies": true
   }
 }

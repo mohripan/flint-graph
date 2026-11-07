@@ -54,8 +54,8 @@
     "g4dn.xlarge": {
       "high": 0.3228,
       "low": 0.291,
-      "median": 0.304,
-      "samples": 62
+      "median": 0.3041,
+      "samples": 63
     },
     "g5.xlarge": {
       "high": 0.6753,

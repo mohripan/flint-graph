@@ -18,7 +18,7 @@
     - role: gpu_watchdog
       when: flintgraph_role == 'gpu'
     - role: base
-    - role: data_folders
+    - role: data_volume
       when: flintgraph_role == 'control'
     - role: k3s_server
       when: flintgraph_role == 'control'

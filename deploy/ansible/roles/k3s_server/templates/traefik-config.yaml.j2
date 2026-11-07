@@ -25,6 +25,7 @@ spec:
     certificatesResolvers:
       letsencrypt:
         acme:
+          email: "{{ acme_email.stdout | trim }}"
           storage: /data/acme.json
           httpChallenge:
             entryPoint: web

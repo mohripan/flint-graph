@@ -1,19 +1,21 @@
-"""The always-on Lightsail server, the key it uses to reach AWS, and the budget alarm."""
+"""The network, the always-on server, its data disk and the budget alarm."""
 
 from typing import Any
 
-from aws_cdk import CfnOutput, RemovalPolicy, Stack
+from aws_cdk import CfnOutput, RemovalPolicy, Size, Stack
 from aws_cdk import aws_budgets as budgets
+from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam as iam
-from aws_cdk import aws_lightsail as lightsail
 from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
-from flintgraph_infra.common import provisioning
-from flintgraph_infra.config import DEFAULT_VPC_CIDR, GPU_TAG_KEY, GPU_TAG_VALUE, InfraConfig
+from flintgraph_infra.common import provisioning, require_imdsv2
+from flintgraph_infra.config import GPU_TAG_KEY, GPU_TAG_VALUE, InfraConfig
 
-SERVER_NAME = "flintgraph-control"
-PORT = lightsail.CfnInstance.PortProperty
+# k3s control traffic and the encrypted network between the two servers.
+K3S_API = ec2.Port.tcp(6443)
+KUBELET = ec2.Port.tcp(10250)
+WIREGUARD = ec2.Port.udp(51820)
 
 
 class FoundationStack(Stack):
@@ -21,82 +23,144 @@ class FoundationStack(Stack):
         super().__init__(scope, name, **kwargs)
         self.config = config
 
-        self.control = lightsail.CfnInstance(
+        # One public subnet and no NAT gateway, which would cost more than the server does.
+        # The CIDR must stay clear of k3s's own 10.42.0.0/16 and 10.43.0.0/16.
+        self.vpc = ec2.Vpc(
             self,
-            "Control",
-            instance_name=SERVER_NAME,
-            blueprint_id=config.control_blueprint,
-            bundle_id=config.control_bundle,
-            availability_zone=config.zone,
-            user_data="\n".join(provisioning(config, "control", {})),
-            networking=lightsail.CfnInstance.NetworkingProperty(ports=self._ports()),
-        )
-        address = lightsail.CfnStaticIp(
-            self, "PublicAddress", static_ip_name=SERVER_NAME, attached_to=SERVER_NAME
-        )
-        address.add_dependency(self.control)
-        # Every project lives on this server's disk, and there are no backups, so deleting the
-        # stack must not delete the server. Removing it is a deliberate act in the console.
-        self.control.apply_removal_policy(RemovalPolicy.RETAIN)
-        address.apply_removal_policy(RemovalPolicy.RETAIN)
-
-        self._key_user()
-
-        # The GPU server reads this to find the cluster, over the private network.
-        ssm.StringParameter(
-            self,
-            "K3sUrl",
-            parameter_name="/flintgraph/k3s/url",
-            string_value=f"https://{self.control.attr_private_ip_address}:6443",
+            "Vpc",
+            ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/24"),
+            availability_zones=[config.zone],
+            nat_gateways=0,
+            restrict_default_security_group=False,
+            subnet_configuration=[
+                ec2.SubnetConfiguration(
+                    name="public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=25
+                )
+            ],
         )
 
-        self._budget()
-        CfnOutput(self, "PublicIp", value=address.attr_ip_address)
-
-    def _ports(self) -> list[PORT]:
-        public = [
-            PORT(from_port=port, to_port=port, protocol="tcp", cidrs=["0.0.0.0/0"])
-            for port in (80, 443)
-        ]
-        # Only Lightsail's own browser console can reach SSH.
-        console = PORT(
-            from_port=22, to_port=22, protocol="tcp", cidr_list_aliases=["lightsail-connect"]
+        # No port 22 anywhere: shell access is through Systems Manager Session Manager.
+        self.control_security_group = ec2.SecurityGroup(
+            self, "ControlSecurityGroup", vpc=self.vpc, description="FlintGraph always-on server"
         )
-        # k3s control traffic and the encrypted network between the two servers.
-        from_gpu = [
-            PORT(from_port=port, to_port=port, protocol=protocol, cidrs=[DEFAULT_VPC_CIDR])
-            for port, protocol in ((6443, "tcp"), (10250, "tcp"), (51820, "udp"))
-        ]
-        return [*public, console, *from_gpu]
+        self.gpu_security_group = ec2.SecurityGroup(
+            self, "GpuSecurityGroup", vpc=self.vpc, description="FlintGraph GPU server, no inbound"
+        )
+        for port in (ec2.Port.tcp(80), ec2.Port.tcp(443)):
+            self.control_security_group.add_ingress_rule(ec2.Peer.any_ipv4(), port, "Public web")
+        for port in (K3S_API, KUBELET, WIREGUARD):
+            self.control_security_group.add_ingress_rule(
+                self.gpu_security_group, port, "From the GPU server"
+            )
+        for port in (KUBELET, WIREGUARD):
+            self.gpu_security_group.add_ingress_rule(
+                self.control_security_group, port, "From the always-on server"
+            )
 
-    def _key_user(self) -> None:
-        """Lightsail has no instance role, so this server needs a key. It is created by hand and
-        never here, because CloudFormation would keep its secret in the stack."""
-        user = iam.User(self, "ControlUser", user_name=SERVER_NAME)
+        self.control_role = self._node_role("ControlRole")
+        self.gpu_role = self._node_role("GpuRole")
         # Only this server may wake the GPU, and only the tagged instance (ADR 0070).
-        user.add_to_policy(iam.PolicyStatement(actions=["ec2:DescribeInstances"], resources=["*"]))
-        user.add_to_policy(
+        self.control_role.add_to_policy(
+            iam.PolicyStatement(actions=["ec2:DescribeInstances"], resources=["*"])
+        )
+        self.control_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:StartInstances", "ec2:StopInstances"],
                 resources=[self.format_arn(service="ec2", resource="instance", resource_name="*")],
                 conditions={"StringEquals": {f"aws:ResourceTag/{GPU_TAG_KEY}": GPU_TAG_VALUE}},
             )
         )
+        self._allow_parameters(self.control_role, read="/flintgraph/*", write="/flintgraph/k3s/*")
+        self._allow_parameters(self.gpu_role, read="/flintgraph/k3s/*")
 
-        def parameters(path: str) -> str:
-            return self.format_arn(service="ssm", resource="parameter", resource_name=path)
+        # Survives the server being replaced, and even this stack being deleted.
+        self.data_volume = ec2.Volume(
+            self,
+            "DataVolume",
+            availability_zone=config.zone,
+            size=Size.gibibytes(config.data_gb),
+            volume_type=ec2.EbsDeviceVolumeType.GP3,
+            encrypted=True,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
 
-        user.add_to_policy(
+        self.control = ec2.Instance(
+            self,
+            "Control",
+            instance_type=ec2.InstanceType(config.control_instance_type),
+            machine_image=ec2.MachineImage.generic_linux({config.region: config.ami}),
+            vpc=self.vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            security_group=self.control_security_group,
+            role=self.control_role,
+            # Unlimited mode bills for sustained CPU without warning. Slower is better than that.
+            credit_specification=ec2.CpuCredits.STANDARD,
+            block_devices=[
+                ec2.BlockDevice(
+                    device_name="/dev/sda1",
+                    volume=ec2.BlockDeviceVolume.ebs(
+                        config.control_root_gb,
+                        volume_type=ec2.EbsDeviceVolumeType.GP3,
+                        encrypted=True,
+                    ),
+                )
+            ],
+            user_data=provisioning(
+                config,
+                "control",
+                {"flintgraph_data_volume": self.data_volume.volume_id},
+            ),
+            user_data_causes_replacement=False,
+        )
+        require_imdsv2(self.control)
+        self.control.instance.add_property_override("DisableApiTermination", True)
+        ec2.CfnVolumeAttachment(
+            self,
+            "DataVolumeAttachment",
+            device="/dev/sdf",
+            instance_id=self.control.instance_id,
+            volume_id=self.data_volume.volume_id,
+        )
+        address = ec2.CfnEIP(
+            self, "PublicAddress", domain="vpc", instance_id=self.control.instance_id
+        )
+
+        # The GPU server reads this to find the cluster.
+        ssm.StringParameter(
+            self,
+            "K3sUrl",
+            parameter_name="/flintgraph/k3s/url",
+            string_value=f"https://{self.control.instance_private_ip}:6443",
+        )
+
+        self._budget()
+        CfnOutput(self, "PublicIp", value=address.attr_public_ip)
+        CfnOutput(self, "ControlInstanceId", value=self.control.instance_id)
+
+    def _node_role(self, name: str) -> iam.Role:
+        return iam.Role(
+            self,
+            name,
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore")
+            ],
+        )
+
+    def _allow_parameters(self, role: iam.Role, *, read: str, write: str | None = None) -> None:
+        def arn(path: str) -> str:
+            return self.format_arn(service="ssm", resource="parameter", resource_name=path[1:])
+
+        role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"],
-                resources=[parameters("flintgraph/*"), parameters("flintgraph")],
+                resources=[arn(read), arn(read.removesuffix("/*"))],
             )
         )
-        user.add_to_policy(
-            iam.PolicyStatement(
-                actions=["ssm:PutParameter"], resources=[parameters("flintgraph/k3s/*")]
+        if write:
+            role.add_to_policy(
+                iam.PolicyStatement(actions=["ssm:PutParameter"], resources=[arn(write)])
             )
-        )
 
     def _budget(self) -> None:
         email = self.config.alert_email

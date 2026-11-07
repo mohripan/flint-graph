@@ -9,30 +9,23 @@ from typing import Any
 UBUNTU_AMI = "ami-01e91e94accc42eec"
 GPU_TAG_KEY = "flintgraph-gpu"
 GPU_TAG_VALUE = "1"
-# Lightsail's own network, which it peers with the Region's default VPC, the only one it can.
-LIGHTSAIL_CIDR = "172.26.0.0/16"
-DEFAULT_VPC_CIDR = "172.31.0.0/16"
 
 
 @dataclass(frozen=True)
 class InfraConfig:
     region: str = "ap-southeast-2"
-    # Both servers share a zone, so traffic between them stays free.
     zone: str = "ap-southeast-2a"
     ami: str = UBUNTU_AMI
     repo_url: str = "https://github.com/mohripan/flint-graph.git"
     git_ref: str = "master"
-    # 2 GB of memory, 60 GB of disk, an address and 1.5 TB of traffic, at a flat price.
-    control_bundle: str = "small_3_2"
-    control_blueprint: str = "ubuntu_24_04"
+    control_instance_type: str = "t3a.medium"
+    control_root_gb: int = 20
+    # Disks can grow but not shrink, so this starts small.
+    data_gb: int = 20
     # The cheapest GPU that runs what is deployed. Poses and training refuse it: they need native
     # bf16, which a T4 lacks, so adding them means changing this (ADR 0077).
     gpu_instance_type: str = "g4dn.xlarge"
     gpu_root_gb: int = 70
-    # The project's default VPC and its subnet in `zone`, passed with `-c` when deploying. These
-    # placeholders let `cdk synth` work without AWS, and a deployment using them simply fails.
-    default_vpc_id: str = "vpc-00000000000000000"
-    default_subnet_id: str = "subnet-00000000000000000"
     monthly_budget_usd: int = 50
     alert_email: str | None = None
 

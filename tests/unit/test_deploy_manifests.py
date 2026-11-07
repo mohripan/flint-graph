@@ -190,12 +190,13 @@ def test_no_image_can_change_unseen() -> None:
                 assert "@sha256:" in image, name
 
 
-def test_the_data_lives_under_fixed_folders_that_ansible_creates() -> None:
-    tasks = (ROOT / "deploy/ansible/roles/data_folders/tasks/main.yml").read_text("utf-8")
+def test_the_data_lives_on_the_retained_disk_under_fixed_folders() -> None:
+    tasks = (ROOT / "deploy/ansible/roles/data_volume/tasks/main.yml").read_text("utf-8")
     for name in ("postgres", "minio", "temporal"):
         spec = _deployments()[name]["spec"]["template"]["spec"]
         assert spec["volumes"][0]["hostPath"]["path"] == f"/var/lib/flintgraph/{name}"
-        # Created by Ansible, so a missing folder stops the pod instead of quietly starting empty.
+        # Created by Ansible, so a data disk that failed to mount stops the pod rather than
+        # letting it write to the root disk and lose the data at the next replacement.
         assert spec["volumes"][0]["hostPath"]["type"] == "Directory"
         assert f"{{name: {name}," in tasks
 
@@ -242,7 +243,9 @@ def test_the_daily_limit_matches_the_cost_estimate() -> None:
 @pytest.mark.parametrize(
     ("estimate_name", "field"),
     [
-        ("CONTROL", "control_bundle"),
+        ("CONTROL", "control_instance_type"),
+        ("CONTROL_ROOT_GB", "control_root_gb"),
+        ("DATA_GB", "data_gb"),
         ("GPU", "gpu_instance_type"),
         ("GPU_ROOT_GB", "gpu_root_gb"),
     ],
@@ -306,7 +309,7 @@ def test_local_virtual_environments_stay_out_of_images() -> None:
 
 
 def test_each_data_folder_belongs_to_the_user_its_image_runs_as() -> None:
-    tasks = (ROOT / "deploy/ansible/roles/data_folders/tasks/main.yml").read_text("utf-8")
+    tasks = (ROOT / "deploy/ansible/roles/data_volume/tasks/main.yml").read_text("utf-8")
     owners = dict(re.findall(r'\{name: (\w+), owner: "(\d+)"\}', tasks))
     assert owners == {"postgres": "0", "minio": "65532", "temporal": "1000"}
 
@@ -331,25 +334,12 @@ def test_traefik_is_given_settings_its_chart_actually_reads() -> None:
     assert "letsencrypt" in values["certificatesResolvers"]
 
 
-def test_no_pod_can_reach_an_instance_role() -> None:
+def test_only_the_controller_can_reach_the_instance_role() -> None:
     policy = next(item for item in _documents() if item["kind"] == "NetworkPolicy")
-    assert policy["spec"]["podSelector"] == {}
+    selector = policy["spec"]["podSelector"]["matchExpressions"][0]
+    assert selector == {"key": "app", "operator": "NotIn", "values": ["gpu-controller"]}
     block = policy["spec"]["egress"][0]["to"][0]["ipBlock"]
     assert block["except"] == ["169.254.169.254/32"]
-
-
-def test_only_the_controller_is_given_the_aws_key() -> None:
-    holders = [
-        name
-        for name, deployment in _deployments().items()
-        for container in _containers(deployment)
-        for source in container.get("envFrom", [])
-        if source.get("secretRef", {}).get("name") == "flintgraph-aws"
-    ]
-    assert holders == ["gpu-controller"]
-    # It is written by Ansible, from a file an operator places, and is never in this repository.
-    template = ROOT / "deploy/ansible/roles/app_secrets/templates/aws-key.yaml.j2"
-    assert "name: flintgraph-aws" in template.read_text("utf-8")
 
 
 def test_the_public_route_reaches_only_what_it_should() -> None:

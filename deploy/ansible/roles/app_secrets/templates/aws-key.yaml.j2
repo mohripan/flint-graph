@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: flintgraph-aws
-  namespace: flintgraph
-type: Opaque
-stringData:
-  AWS_ACCESS_KEY_ID: {{ aws_key.results[0].stdout | trim | to_json }}
-  AWS_SECRET_ACCESS_KEY: {{ aws_key.results[1].stdout | trim | to_json }}

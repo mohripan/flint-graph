@@ -27,6 +27,13 @@
   until: k3s_ready.rc == 0
   changed_when: false
 
+- name: Read the email for HTTPS certificates
+  ansible.builtin.command: >
+    /snap/bin/aws ssm get-parameter --region {{ aws_region }}
+    --name /flintgraph/config/acme-email --query Parameter.Value --output text
+  register: acme_email
+  changed_when: false
+
 - name: Have Traefik obtain HTTPS certificates
   ansible.builtin.template:
     src: traefik-config.yaml.j2

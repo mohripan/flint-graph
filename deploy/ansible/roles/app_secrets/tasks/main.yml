@@ -31,18 +31,3 @@
     stdin: "{{ lookup('ansible.builtin.template', 'secret.yaml.j2') }}"
   no_log: true
   changed_when: true
-
-- name: Read the key this server was given
-  ansible.builtin.command: "/snap/bin/aws configure get {{ item }}"
-  loop: [aws_access_key_id, aws_secret_access_key]
-  register: aws_key
-  changed_when: false
-  no_log: true
-
-# In its own Secret, so only the controller gets it.
-- name: Give that key to the GPU controller alone
-  ansible.builtin.command:
-    cmd: k3s kubectl apply -f -
-    stdin: "{{ lookup('ansible.builtin.template', 'aws-key.yaml.j2') }}"
-  no_log: true
-  changed_when: true
