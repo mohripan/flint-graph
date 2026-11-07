@@ -17,6 +17,7 @@ from pathlib import Path
 REGION = "ap-southeast-2"
 LOCATION = "Asia Pacific (Sydney)"
 INSTANCES = (
+    "t3.small",
     "t3a.small",
     "t3a.medium",
     "t3a.large",

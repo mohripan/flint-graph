@@ -31,6 +31,7 @@
     "g6.xlarge": 1.0464,
     "m7i-flex.large": 0.1197,
     "t3.medium": 0.0528,
+    "t3.small": 0.0264,
     "t3a.large": 0.095,
     "t3a.medium": 0.0475,
     "t3a.small": 0.0238,

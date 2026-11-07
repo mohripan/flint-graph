@@ -2,3 +2,4 @@ cdk.out/
 .venv/
 __pycache__/
 .pytest_cache/
+cdk.context.json

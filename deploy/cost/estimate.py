@@ -12,7 +12,7 @@ from pathlib import Path
 
 HOURS_PER_MONTH = 730
 
-CONTROL = "t3a.medium"
+CONTROL = "t3.small"
 CONTROL_ROOT_GB = 20
 DATA_GB = 20
 GPU = "g4dn.xlarge"
@@ -65,28 +65,22 @@ def main() -> None:
 
     # (the always-on server's monthly cost, whether a disk and address are extra, GPU per hour)
     paths = {
-        f"{CONTROL} on-demand, on all the time": (server, True, on_demand),
-        f"{CONTROL} on-demand, on {HOURS_ON_FOR_DEMOS} h a day": (
-            server * HOURS_ON_FOR_DEMOS / 24,
-            True,
-            on_demand,
-        ),
-        "t3a.small on-demand (2 GB), on all the time": (
+        f"{CONTROL} (2 GB), as prepared": (server, True, on_demand),
+        "t3a.small (2 GB), needs the Paid Plan": (
             hourly["t3a.small"] * HOURS_PER_MONTH,
             True,
             on_demand,
         ),
-        "Lightsail 2 GB, includes disk and address": (
+        "Lightsail 2 GB, includes disk and address; refused on this account": (
             lightsail["small_3_2"]["usd_per_month"],
             False,
             on_demand,
         ),
-        "Lightsail 4 GB, includes disk and address": (
-            lightsail["medium_3_2"]["usd_per_month"],
-            False,
-            on_demand,
+        "t3a.medium Spot and g4dn Spot, needs an irreversible unlock": (
+            spot["t3a.medium"] * HOURS_PER_MONTH,
+            True,
+            interruptible,
         ),
-        f"{CONTROL} Spot and {GPU} Spot": (spot[CONTROL] * HOURS_PER_MONTH, True, interruptible),
     }
     visit = VISIT_MINUTES / 60
     print(f"\nWhole monthly bill with {GPU}, by usage:\n")

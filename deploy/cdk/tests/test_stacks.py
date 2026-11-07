@@ -87,7 +87,7 @@ def test_the_always_on_server_cannot_run_up_a_surprise_cpu_bill(templates):
     properties = only_instance(foundation)
     assert properties["CreditSpecification"] == {"CPUCredits": "standard"}
     assert properties["DisableApiTermination"] is True
-    assert properties["InstanceType"] == "t3a.medium"
+    assert properties["InstanceType"] == "t3.small"
 
 
 def test_the_gpu_stops_rather_than_terminates_when_it_shuts_itself_down(templates):

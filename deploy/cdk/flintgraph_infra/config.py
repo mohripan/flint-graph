@@ -18,7 +18,9 @@ class InfraConfig:
     ami: str = UBUNTU_AMI
     repo_url: str = "https://github.com/mohripan/flint-graph.git"
     git_ref: str = "master"
-    control_instance_type: str = "t3a.medium"
+    # The cheapest 2 GB server the Free Plan can launch. t3a.small is $1.90 a month less but
+    # needs the Paid Plan, and Lightsail refused its 2 GB plan on this account (ADR 0077).
+    control_instance_type: str = "t3.small"
     control_root_gb: int = 20
     # Disks can grow but not shrink, so this starts small.
     data_gb: int = 20
