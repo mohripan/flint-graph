@@ -135,7 +135,7 @@ export function ExpressionStudio({ id, story, tenantId, projectId, readOnly, onC
             onClick={() => void generate()}>{active ? "Generating…" : chosen.length
               ? `Generate ${chosen.length} expression${chosen.length === 1 ? "" : "s"}` : "Generate expressions"}</button>
           {!active && <CreditCost item={imageItem({ purpose: "character_expression" })} quantity={chosen.length} />}
-          <span className="studio-hint">Up to {MAX_EXPRESSIONS} at a time · about 10 seconds each on this computer's GPU.</span>
+          <span className="studio-hint">Up to {MAX_EXPRESSIONS} at a time.</span>
         </div>
       </div>}
     {active && <div className="studio-job" role="status">

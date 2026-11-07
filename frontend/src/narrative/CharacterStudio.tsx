@@ -252,7 +252,7 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
     {latest?.truncated && <p className="studio-notice">This description is long; the model only read its first part. Shorter descriptions follow more closely.</p>}
     <h3 className="studio-candidates-title">Generated portraits</h3>
     {reviews.failed && <p role="status" className="studio-notice">Some saved look feedback could not be shown. Open Compare look to check an image.</p>}
-    {!candidates.length && !active && <p className="studio-empty">Describe this character, then generate portraits to choose from. Images are made on this computer's GPU.</p>}
+    {!candidates.length && !active && <p className="studio-empty">Describe this character, then generate portraits to choose from.</p>}
     <div className="studio-candidates">
       {candidates.map(({ asset }) => <Candidate key={asset.id} tenantId={tenantId} projectId={projectId} asset={asset}
         flags={reviews.flags}
