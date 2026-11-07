@@ -70,7 +70,7 @@ export const STEPS: Step[] = [
 ];
 
 export const FAQ: Array<[string, string]> = [
-  ["Who can join?", "Anyone with an invitation key or an email invitation. If you would like one, ask the person who told you about FlintGraph."],
+  ["Who can join?", "Anyone with an invitation key or an email invitation. If you would like one, email mohripan16@gmail.com."],
   ["Can I use my work email?", "Yes, but you don't have to. A key works with any account. An email invitation needs the exact address it was sent to, verified by your sign-in provider."],
   ["Is there a limit on generating?", "Each invitation includes credits. Generating spends them: a standard image or a simple voice line costs little, while a pose, a CG, a release build or a training run costs more, and the Studio shows the price before you start. There are also daily caps on how much you can make. If you run out of either, the Studio says which. Chatting with the assistant spends a little too, because it runs on the same GPU. Writing, editing and playtesting are free."],
   ["Who owns what I make?", "Your stories and the art and voices you approve are yours to use in your game. Exported Godot projects are ordinary source projects you can keep editing."],

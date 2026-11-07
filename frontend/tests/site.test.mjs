@@ -25,6 +25,18 @@ test("How it works steps are complete and their screenshots exist", async () => 
   assert.ok(howItWorks.FAQ.every(([question, answer]) => question.trim() && answer.trim()));
 });
 
+test("someone without an invitation is told where to ask for one", async () => {
+  const contact = await load("../src/site/contact.ts");
+  assert.ok(contact.CONTACT_HREF.startsWith(`mailto:${contact.CONTACT_EMAIL}?`));
+  const answer = howItWorks.FAQ.find(([question]) => question === "Who can join?")[1];
+  assert.ok(answer.includes(contact.CONTACT_EMAIL));
+  for (const page of ["JoinPage", "HomePage"]) {
+    const source = await readFile(new URL(`../src/site/${page}.tsx`, import.meta.url), "utf8");
+    assert.ok(source.includes("CONTACT_HREF"), page);
+    assert.ok(!source.includes("told you about"), page);
+  }
+});
+
 test("public pages, the Studio and old Studio links each get their route", () => {
   assert.equal(routes.routeFor("/", ""), "home");
   assert.equal(routes.routeFor("/how-it-works", ""), "how");

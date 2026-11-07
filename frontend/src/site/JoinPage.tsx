@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Spinner } from "../components/ui";
 import { ApiError, api, type AccessStatus } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { CONTACT_EMAIL, CONTACT_HREF } from "./contact";
 import { linkProps, navigate } from "./router";
 import { SiteLayout } from "./SiteLayout";
 
@@ -75,7 +76,7 @@ export function JoinPage() {
           className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50">
           {busy ? "Joining…" : "Join FlintGraph"}</button>
       </form>
-      <p className="mt-4 text-sm text-slate-500">No key yet? FlintGraph is invite-only for now. Ask the person who told you about it.</p>
+      <p className="mt-4 text-sm text-slate-500">No key yet? FlintGraph is invite-only for now. To ask for one, email <a href={CONTACT_HREF} className="underline">{CONTACT_EMAIL}</a>.</p>
     </>;
   }
 

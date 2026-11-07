@@ -1,3 +1,4 @@
+import { CONTACT_EMAIL, CONTACT_HREF } from "./contact";
 import { linkProps } from "./router";
 import { Screenshot, SiteLayout } from "./SiteLayout";
 
@@ -98,6 +99,10 @@ export function HomePage() {
               FlintGraph is opening to a small group first. If you received an invitation key, or an invitation
               sent to your email address, you can join now. Each invitation includes a generous daily allowance
               of images, voice lines and assistant replies.
+            </p>
+            <p className="mt-4 max-w-xl leading-relaxed text-slate-300">
+              No invitation yet? To ask for one, email{" "}
+              <a href={CONTACT_HREF} className="font-semibold text-amber-300 underline hover:text-amber-200">{CONTACT_EMAIL}</a>.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 lg:justify-end">
