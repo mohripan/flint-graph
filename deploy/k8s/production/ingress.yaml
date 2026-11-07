@@ -7,8 +7,33 @@ metadata:
     traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
 spec:
   tls:
-    - hosts: [54-253-96-189.sslip.io]
+    - hosts: [flintgraph.digital, 54-253-96-189.sslip.io]
   rules:
+    - host: flintgraph.digital
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          # The page checks this one. The rest of /health and the API's docs stay inside the cluster.
+          - path: /health/live
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
     - host: 54-253-96-189.sslip.io
       http:
         paths:

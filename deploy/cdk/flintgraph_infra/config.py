@@ -28,9 +28,10 @@ class InfraConfig:
     # bf16, which a T4 lacks, so adding them means changing this (ADR 0077).
     gpu_instance_type: str = "g4dn.xlarge"
     gpu_root_gb: int = 70
-    # Where people reach the Studio, which sign-in must return them to exactly. A free name
-    # for the public address, until a domain replaces it.
-    site_url: str = "https://54-253-96-189.sslip.io"
+    # Where people reach the Studio, which sign-in must return them to exactly.
+    site_url: str = "https://flintgraph.digital"
+    # The free name for the public address, which keeps working beside it.
+    fallback_site_url: str = "https://54-253-96-189.sslip.io"
     sign_in_prefix: str = "flintgraph-studio"
     monthly_budget_usd: int = 50
     alert_email: str | None = None

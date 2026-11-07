@@ -146,8 +146,9 @@ def test_sign_in_is_for_a_browser_and_returns_only_to_the_studio(templates):
     assert properties["GenerateSecret"] is False
     assert properties["AllowedOAuthFlows"] == ["code"]
     assert sorted(properties["AllowedOAuthScopes"]) == ["email", "openid", "profile"]
-    assert properties["CallbackURLs"] == [InfraConfig().site_url]
-    assert properties["LogoutURLs"] == [InfraConfig().site_url]
+    both = [InfraConfig().site_url, InfraConfig().fallback_site_url]
+    assert properties["CallbackURLs"] == both
+    assert properties["LogoutURLs"] == both
     assert properties["PreventUserExistenceErrors"] == "ENABLED"
 
 

@@ -196,8 +196,8 @@ class FoundationStack(Stack):
                     cognito.OAuthScope.EMAIL,
                     cognito.OAuthScope.PROFILE,
                 ],
-                callback_urls=[self.config.site_url],
-                logout_urls=[self.config.site_url],
+                callback_urls=[self.config.site_url, self.config.fallback_site_url],
+                logout_urls=[self.config.site_url, self.config.fallback_site_url],
             ),
         )
         region = self.config.region
