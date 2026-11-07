@@ -93,6 +93,75 @@ async def test_questions_get_an_answer_without_a_proposal():
     assert messages[-1]["content"].endswith("How many endings are there?")
 
 
+def spoken(reply: str) -> str:
+    return json.dumps({"reply": reply, "proposal": None})
+
+
+@pytest.mark.anyio
+async def test_a_reply_that_promises_work_and_proposes_nothing_is_sent_back():
+    model = Script(spoken("I'll create the characters first."), response())
+    result = await run_turn(model, story(), "Write the story now.")
+    assert result.attempts == 2
+    assert result.proposal is not None
+    assert result.diagnostics == ()
+    assert "says what you will do" in model.calls[1][0][-1]["content"]
+
+
+@pytest.mark.anyio
+async def test_a_promise_with_a_question_tacked_on_is_still_a_promise():
+    promise = spoken("I'll create Vera and Holt and write the scene. Sound good?")
+    result = await run_turn(Script(promise, response()), story(), "Make a mystery.")
+    assert result.attempts == 2
+    assert result.proposal is not None
+
+
+@pytest.mark.anyio
+async def test_a_promise_that_stays_empty_ends_as_a_plain_reply_not_a_failure():
+    promise = spoken("I will set this up.")
+    result = await run_turn(Script(promise, promise, promise), story(), "Write it.")
+    assert result.attempts == 3
+    assert result.proposal is None
+    assert result.diagnostics == ()
+    assert result.reply == "I will set this up."
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "The story has one ending.",
+        "I'll need a name first. What should we call her?",
+        "Here is what happens: she misses the ferry.",
+        "I will not change anything unless you ask?",
+        "Let me know what you'd like next.",
+    ],
+)
+async def test_answers_and_questions_are_not_mistaken_for_promises(reply):
+    result = await run_turn(Script(spoken(reply)), story(), "How does it go?")
+    assert result.attempts == 1
+    assert result.reply == reply
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("request_text", "sent_back"),
+    [
+        ("Write a short story about Ren and Aiko.", True),
+        ("Make a tiny mystery scene with a detective.", True),
+        ("Make a tiny mystery: Vera questions a butler named Holt about a necklace.", True),
+        ("Add a character named Ren.", False),
+        ("Create a sprite of Ren.", False),
+        ("Draw a picture of Aiko for this story.", False),
+        ("Create a girl with short green hair.", False),
+    ],
+)
+async def test_asked_for_writing_it_cannot_ask_what_people_wear(request_text, sent_back):
+    asked = spoken("What should they look like, and what do they wear?")
+    result = await run_turn(Script(asked, response()), story(), request_text)
+    assert (result.attempts == 2) is sent_back
+    assert (result.proposal is not None) is sent_back
+
+
 @pytest.mark.anyio
 async def test_valid_proposal_is_checked_against_the_base_story():
     result = await run_turn(Script(VALID), story(), "Add a storm.")

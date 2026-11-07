@@ -119,4 +119,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v11": "a875a87c83634ab6ade3a8291fde4cf8642ffcb9fd44b49248f76580520f7184",
     # Letting the player name the protagonist (ADR 0072).
     "narrative-assistant/v12": "4983aa99b91571aefc8900305a6e79a234046368c412cbd5ae8042c647d082f7",
+    # Writing is not a request for pictures, and no promises for later.
+    "narrative-assistant/v13": "ead5796d3beb8d8aef8a668258cfe1db839ab3e42de368cdbfa751ccf049aa1f",
 }

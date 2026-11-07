@@ -326,6 +326,11 @@ theme the live model invented every colour. Read `docs/reports/2026-11-07-title-
 stay identical in `values.py` and `player.gd`. Keep Python, `player.gd` and `validate_story.gd` in step. Read
 `docs/reports/2026-11-07-player-name.md`.
 
+Prompt v13 and `turn.py` make a first request usable: a request to write gets writing, not questions about clothes; a promise
+with no proposal is sent back; a first story replaces the blank starter (only while it holds the starter's exact words); edits
+that change nothing are dropped, so a pictures request shows only its cards. The end-to-end creator run stopped at the sprites.
+Read `docs/reports/2026-11-07-first-creator-run.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

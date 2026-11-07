@@ -503,8 +503,8 @@ async def test_a_stage_step_that_changes_nothing_is_left_out_without_another_cal
     )
     result = await run_turn(model, story(), "Add a step.")
     assert len(model.calls) == 1
-    assert [item.id for item in result.proposal.operations] == ["opening"]
-    assert result.proposal.operations[0].node["next"] == "ending"
+    # Without the empty step the opening is exactly as saved, so nothing is left to propose.
+    assert result.proposal is None
 
 
 @pytest.mark.anyio
@@ -523,8 +523,7 @@ async def test_when_nothing_is_left_to_propose_the_reply_stands_alone():
     [(("music",), "add a generate_music action"), ((), "upload one in Assets")],
 )
 async def test_a_repair_for_missing_music_only_offers_to_make_it_where_it_can(capabilities, advice):
-    source = story()
-    source["assets"]["dusk"] = {"kind": "image", "path": "assets/dusk.png", "sha256": sha("7")}
+    source = with_files()
     node = {"type": "stage", "background": "dusk", "music": "sad_piano", "next": "ending"}
     fixed = {"type": "stage", "background": "dusk", "next": "ending"}
     model = Scripted(
@@ -600,8 +599,9 @@ async def test_a_new_step_only_for_a_track_being_made_is_left_out_and_the_story_
     result = await run_turn(Scripted(answer(*edits)), story(), "Music.", capabilities=("music",))
     assert result.diagnostics == ()
     assert result.attempts == 1
-    assert [getattr(item, "id", "") for item in result.proposal.operations] == ["opening", ""]
-    assert result.proposal.operations[0].node["next"] == "ending"
+    # The opening went straight back to where it led, so only the track is left to make.
+    assert [item.op for item in result.proposal.operations] == ["generate_music"]
+    assert result.story["nodes"]["opening"]["next"] == "ending"
 
 
 @pytest.mark.anyio
@@ -851,6 +851,250 @@ async def test_what_leads_into_a_rewritten_scene_with_nothing_left_goes_straight
     assert result.diagnostics == ()
     assert result.story["nodes"]["lead"]["next"] == "hi"
     assert result.story["nodes"]["opening"] == story()["nodes"]["opening"]
+
+
+@pytest.mark.anyio
+async def test_a_story_with_no_files_cannot_use_made_up_ones_and_joins_up_around_them():
+    source = story()
+    source["assets"] = {}
+    for character in source["characters"].values():
+        character.pop("sprites", None)
+    first = {"type": "stage", "background": "pier_night", "ambience": "waves", "next": "second"}
+    second = {"type": "stage", "cg": "moon", "sound": "bell", "next": "hi"}
+    line = {"type": "line", "text": "Hi.", "next": "ending"}
+    made = answer(
+        {"op": "upsert_node", "id": "first", "node": first},
+        {"op": "upsert_node", "id": "second", "node": second},
+        {"op": "upsert_node", "id": "hi", "node": line},
+        {"op": "set_entry", "id": "first"},
+    )
+    result = await run_turn(Scripted(made), source, "Write it.")
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    assert result.story["entry"] == "hi"
+    assert "first" not in result.story["nodes"]
+    assert "second" not in result.story["nodes"]
+
+
+@pytest.mark.anyio
+async def test_a_made_up_file_is_sent_back_when_a_real_one_could_replace_it():
+    source = with_files()
+    node = {"type": "stage", "background": "dusk_two", "next": "ending"}
+    fixed = {"type": "stage", "background": "dusk", "next": "ending"}
+    model = Scripted(
+        answer({"op": "upsert_node", "id": "hi", "node": node}),
+        answer({"op": "upsert_node", "id": "hi", "node": fixed}),
+    )
+    result = await run_turn(model, source, "Show the dusk.")
+    assert result.attempts == 2
+    assert "dusk" in model.calls[1][-1]["content"]
+
+
+@pytest.mark.anyio
+async def test_an_enums_first_value_joins_its_list():
+    declaration = {"type": "enum", "initial": "unknown", "values": ["work", "love"]}
+    made = answer({"op": "upsert_variable", "id": "secret", "declaration": declaration})
+    result = await run_turn(Scripted(made), story(), "Track her secret.")
+    assert result.diagnostics == ()
+    assert result.story["variables"]["secret"]["values"] == ["unknown", "work", "love"]
+
+
+def blank_project():
+    return {
+        **story(),
+        "characters": {},
+        "assets": {},
+        "entry": "opening",
+        "nodes": {
+            "opening": {
+                "type": "line",
+                "text_id": "o",
+                "text": "A new story begins.",
+                "next": "ending",
+            },
+            "ending": {"type": "end", "text_id": "e", "text": "To be continued.", "ending": "done"},
+        },
+    }
+
+
+FIRST = {"type": "line", "text": "One.", "next": "second"}
+SECOND = {"type": "end", "text": "Two.", "ending": "fin"}
+
+
+@pytest.mark.anyio
+async def test_a_first_story_written_beside_the_starter_is_where_the_game_begins():
+    made = answer(
+        {"op": "upsert_node", "id": "first", "node": FIRST},
+        {"op": "upsert_node", "id": "second", "node": SECOND},
+    )
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert result.diagnostics == ()
+    assert result.story["entry"] == "first"
+    assert set(result.story["nodes"]) == {"first", "second"}, "no stray starter scenes"
+
+
+@pytest.mark.anyio
+async def test_the_starters_ending_stays_if_the_story_uses_it():
+    first = {"type": "line", "text": "One.", "next": "ending"}
+    made = answer({"op": "upsert_node", "id": "first", "node": first})
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert result.story["entry"] == "first"
+    assert set(result.story["nodes"]) == {"first", "ending"}
+
+
+@pytest.mark.anyio
+async def test_a_story_that_already_links_itself_in_is_left_alone():
+    rewritten = {"type": "line", "text": "Now.", "next": "first"}
+    made = answer(
+        {"op": "upsert_node", "id": "opening", "node": rewritten},
+        {"op": "upsert_node", "id": "first", "node": {**FIRST, "next": "ending"}},
+    )
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert result.story["entry"] == "opening"
+    assert "ending" in result.story["nodes"]
+
+
+@pytest.mark.anyio
+async def test_an_unlinked_scene_in_a_real_story_is_not_moved_to_the_start():
+    made = answer({"op": "upsert_node", "id": "aside", "node": {**FIRST, "next": "ending"}})
+    result = await run_turn(Scripted(made), story(), "Add a scene.")
+    assert result.story["entry"] == story()["entry"]
+
+
+@pytest.mark.anyio
+async def test_a_first_story_that_uses_the_name_asks_it_before_the_story_not_the_starter():
+    named = {"type": "line", "text": "Hello, {name}.", "next": "second"}
+    made = answer(
+        {"op": "upsert_node", "id": "first", "node": named},
+        {"op": "upsert_node", "id": "second", "node": SECOND},
+    )
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert result.diagnostics == ()
+    assert result.warnings == ()
+    entry = result.story["entry"]
+    assert result.story["nodes"][entry]["type"] == "name"
+    assert result.story["nodes"][entry]["next"] == "first"
+    assert set(result.story["nodes"]) == {entry, "first", "second"}
+
+
+@pytest.mark.anyio
+async def test_a_first_story_that_rewrites_the_opening_lets_go_of_the_starters_ending():
+    # The Third Ferry: every scene was reachable but the starter's unused ending stayed behind.
+    rewritten = {"type": "line", "text": "Now.", "next": "first"}
+    made = answer(
+        {"op": "upsert_node", "id": "opening", "node": rewritten},
+        {"op": "upsert_node", "id": "first", "node": FIRST},
+        {"op": "upsert_node", "id": "second", "node": SECOND},
+    )
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert result.diagnostics == ()
+    assert result.warnings == ()
+    assert result.story["entry"] == "opening"
+    assert set(result.story["nodes"]) == {"opening", "first", "second"}
+
+
+@pytest.mark.anyio
+async def test_a_first_story_starting_elsewhere_lets_go_of_a_rewritten_opening_too():
+    rewritten = {"type": "line", "text": "Now.", "next": "ending"}
+    made = answer(
+        {"op": "upsert_node", "id": "opening", "node": rewritten},
+        {"op": "upsert_node", "id": "first", "node": FIRST},
+        {"op": "upsert_node", "id": "second", "node": SECOND},
+        {"op": "set_entry", "id": "first"},
+    )
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert result.diagnostics == ()
+    assert result.warnings == ()
+    assert set(result.story["nodes"]) == {"first", "second"}
+
+
+@pytest.mark.anyio
+async def test_a_broken_first_story_reports_its_broken_link_and_nothing_invented():
+    rewritten = {"type": "line", "text": "Now.", "next": "nowhere"}
+    made = answer({"op": "upsert_node", "id": "opening", "node": rewritten})
+    model = Scripted(made, made, made)
+    result = await run_turn(model, blank_project(), "Write a story.")
+    assert result.diagnostics == (Diagnostic("unknown_reference", "nodes.opening.next"),)
+
+
+@pytest.mark.anyio
+async def test_a_first_story_with_no_ending_of_its_own_keeps_the_starters():
+    looping = {"type": "line", "text": "Now.", "next": "first"}
+    back = {"type": "line", "text": "Again.", "next": "opening"}
+    made = answer(
+        {"op": "upsert_node", "id": "opening", "node": looping},
+        {"op": "upsert_node", "id": "first", "node": back},
+    )
+    result = await run_turn(Scripted(made), blank_project(), "Write a story.")
+    assert "ending" in (result.story or {}).get("nodes", {"ending": None})
+
+
+@pytest.mark.anyio
+async def test_a_short_story_the_creator_wrote_is_not_a_blank_starter():
+    source = blank_project()
+    source["nodes"]["opening"]["text"] = "My own first line."
+    made = answer({"op": "upsert_node", "id": "aside", "node": {**FIRST, "next": "ending"}})
+    result = await run_turn(Scripted(made), source, "Add a scene.")
+    assert result.story["entry"] == "opening"
+    assert result.story["nodes"]["opening"]["text"] == "My own first line."
+
+
+SPRITES_FOR_MIRA = {
+    "op": "generate_character_images",
+    "character": "mira",
+    "appearance": "a raincoat and short grey hair",
+    "character_type": "woman",
+}
+
+
+@pytest.mark.anyio
+async def test_writing_a_character_out_unchanged_is_not_a_change():
+    source = story()
+    source["characters"]["mira"]["color"] = "#ffb6c1"
+    made = answer(
+        {"op": "upsert_character", "id": "mira", "name": "Mira", "color": "#ffb6c1"},
+        SPRITES_FOR_MIRA,
+    )
+    result = await run_turn(Scripted(made), source, "Make sprites of Mira.")
+    assert result.diagnostics == ()
+    assert [item.op for item in result.proposal.operations] == ["generate_character_images"]
+    assert result.story == source
+
+
+@pytest.mark.anyio
+async def test_a_character_who_really_changes_stays_in_the_proposal():
+    made = answer(
+        {"op": "upsert_character", "id": "mira", "name": "Mira Vale"},
+        SPRITES_FOR_MIRA,
+    )
+    result = await run_turn(Scripted(made), story(), "Rename her.")
+    assert [item.op for item in result.proposal.operations] == [
+        "upsert_character",
+        "generate_character_images",
+    ]
+
+
+@pytest.mark.anyio
+async def test_a_scene_rewritten_word_for_word_is_not_a_change():
+    source = story()
+    same = {"type": "line", "speaker": "mira", "text": "Fog again.", "next": "ending"}
+    changed = {"type": "line", "text": "The bell rang twice.", "next": "ending"}
+    made = answer(
+        {"op": "upsert_node", "id": "opening", "node": same},
+        {"op": "upsert_node", "id": "narration", "node": changed},
+    )
+    result = await run_turn(Scripted(made), source, "Change the bell line.")
+    assert [item.id for item in result.proposal.operations] == ["narration"]
+    assert result.story["nodes"]["opening"] == source["nodes"]["opening"]
+
+
+@pytest.mark.anyio
+async def test_when_nothing_really_changes_the_reply_stands_alone():
+    same = {"type": "line", "speaker": "mira", "text": "Fog again.", "next": "ending"}
+    made = answer({"op": "upsert_node", "id": "opening", "node": same}, reply="It already says so.")
+    result = await run_turn(Scripted(made), story(), "Does she mention the fog?")
+    assert result.proposal is None
+    assert result.reply == "It already says so."
 
 
 def test_the_model_sees_a_player_and_a_question_in_the_story():

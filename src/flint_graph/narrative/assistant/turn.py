@@ -23,6 +23,7 @@ from flint_graph.narrative.assistant.context import HistoryTurn, build_turn_mess
 from flint_graph.narrative.assistant.operations import (
     ACTIONS,
     AddAsset,
+    DeleteNode,
     GenerateBackgrounds,
     GenerateCg,
     GenerateCharacterImages,
@@ -33,10 +34,12 @@ from flint_graph.narrative.assistant.operations import (
     SetEntry,
     SetPlayer,
     SetTheme,
+    SetTitle,
     SetTitleScreen,
     StartChildSession,
     UpsertCharacter,
     UpsertNode,
+    UpsertVariable,
     apply_operations,
     check_proposal,
     field_choices,
@@ -216,7 +219,7 @@ def _tidied_stage(
     for field in ("show", "hide"):
         if node.get(field) == []:
             del changed[field]  # Models write an empty list to mean none, which is not allowed.
-    for field in ("background", "cg", "music", "ambience"):
+    for field in ("background", "cg", "music", "ambience", "sound"):
         if field in generating and isinstance(node.get(field), str) and node[field] not in assets:
             del changed[field]
     show = node.get("show")
@@ -282,7 +285,19 @@ def _without_blanks(theme: dict[str, Any]) -> dict[str, Any]:
     return tidied
 
 
-def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
+def _tidied_variable(item: UpsertVariable) -> UpsertVariable:
+    """An enum's first value not in its list is plainly meant to be one of them."""
+    declaration = item.declaration
+    values = declaration.get("values")
+    initial = declaration.get("initial")
+    if declaration.get("type") != "enum" or not isinstance(values, list) or initial in values:
+        return item
+    return item.model_copy(update={"declaration": {**declaration, "values": [initial, *values]}})
+
+
+def _with_tidied_nodes(
+    story: dict[str, Any], proposal: Proposal, library: Sequence[LibraryEntry] = ()
+) -> Proposal:
     """Each round trip to correct these costs seconds to minutes, so correct them here."""
     upserted = {item.id: item for item in proposal.operations if isinstance(item, UpsertCharacter)}
     characters = story.get("characters") or {}
@@ -306,6 +321,19 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
         )
         if any(isinstance(item, kind) for item in proposal.operations)
     }
+    # With no file of a kind at all, an ID for one is made up and nothing could correct it.
+    have = {
+        (asset.get("kind") if isinstance(asset, dict) else asset.kind)
+        for asset in (story.get("assets") or {}).values()
+    } | {item.asset.get("kind") for item in proposal.operations if isinstance(item, AddAsset)}
+    have |= {entry.kind for entry in library}
+    for fields, wanted in (
+        (("background", "cg"), "image"),
+        (("music", "ambience"), "music"),
+        (("sound",), "audio"),
+    ):
+        if wanted not in have:
+            generating.update(fields)
     pending: dict[str, set[str]] = {}
     for item in proposal.operations:
         if isinstance(item, GenerateExpressions):
@@ -316,6 +344,8 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
     # Steps that had nothing left to do, and where each one led.
     gone: dict[str, str] = {}
     for item in proposal.operations:
+        if isinstance(item, UpsertVariable):
+            item = _tidied_variable(item)
         if isinstance(item, UpsertNode):
             kind = item.node.get("type")
             if kind == "line":
@@ -397,6 +427,79 @@ def _with_player(story: dict[str, Any], proposal: Proposal) -> Proposal:
     return proposal.model_copy(update={"operations": operations})
 
 
+# What a new project holds before anyone has written a word (narrative_projects.py).
+_STARTER_TEXTS = {"A new story begins.", "To be continued."}
+
+
+def _joined_to_the_start(story: dict[str, Any], proposal: Proposal) -> Proposal:
+    """A first story written beside the blank starter, which still leads straight to its end:
+    the game would never reach a word of it. With one clear place to begin, begin there, and
+    let go of the starter's scenes the story does not use. A creator's own words are left alone."""
+    starter = story.get("nodes") or {}
+    if len(starter) > 2 or any(node.get("text") not in _STARTER_TEXTS for node in starter.values()):
+        return proposal
+    written = {item.id: item.node for item in proposal.operations if isinstance(item, UpsertNode)}
+    added = {key: node for key, node in written.items() if key not in starter}
+    if not added:
+        return proposal
+
+    def targets(node: dict[str, Any]) -> list[Any]:
+        return [
+            *(node.get(field) for field in ("next", "if_true", "if_false")),
+            *(option.get("target") for option in node.get("options", [])),
+        ]
+
+    operations: list[Any] = list(proposal.operations)
+    entries = [item for item in operations if isinstance(item, SetEntry)]
+    start = entries[0].id if entries else story["entry"]
+    if start not in added and len(added) == len(written):
+        led_to = {target for node in added.values() for target in targets(node)}
+        roots = [key for key in added if key not in led_to]
+        if len(roots) != 1:
+            return proposal
+        start = roots[0]
+        operations = [item for item in operations if not isinstance(item, SetEntry)]
+        operations.append(SetEntry(op="set_entry", id=start))
+    nodes = {**starter, **written}
+    if start not in nodes:
+        return proposal  # A wrong entry is for validation to report.
+    reached: set[Any] = set()
+    pending = [start]
+    while pending:
+        key = pending.pop()
+        if key in nodes and key not in reached:
+            reached.add(key)
+            pending.extend(targets(nodes[key]))
+    # Only a story that stands on its own can let go. With a broken link or no ending yet, what is
+    # wrong is for validation to say, without a missing ending we would have caused ourselves.
+    complete = any(nodes[key].get("type") == "end" for key in reached) and all(
+        target in nodes for key in reached for target in targets(nodes[key]) if target is not None
+    )
+    stray = set(starter) - reached if complete else set()
+    operations = [
+        item
+        for item in operations
+        if not (isinstance(item, UpsertNode | DeleteNode) and item.id in stray)
+    ]
+    operations.extend(DeleteNode(op="delete_node", id=key) for key in sorted(stray))
+    return proposal.model_copy(update={"operations": operations})
+
+
+def _without_no_ops(story: dict[str, Any], proposal: Proposal) -> Proposal:
+    """Writing out a character or scene unchanged is not an edit. Left in, it reads as a change,
+    asks to be accepted, and saves a revision identical to the one before."""
+    operations = []
+    for item in proposal.operations:
+        if isinstance(item, UpsertCharacter | UpsertNode | UpsertVariable | SetEntry | SetTitle):
+            try:
+                if apply_operations(story, [item]).story == story:
+                    continue
+            except PackageError:
+                pass  # For validation to report.
+        operations.append(item)
+    return proposal.model_copy(update={"operations": operations})
+
+
 def _with_voice_actions(proposal: Proposal, capabilities: Sequence[str]) -> Proposal:
     """A line marked for voice stays silent without its action, and local models often write
     only the mark. The mark comes from a request for voice, so it can stand for the action."""
@@ -425,6 +528,36 @@ def _with_voice_actions(proposal: Proposal, capabilities: Sequence[str]) -> Prop
     if not added:
         return proposal
     return proposal.model_copy(update={"operations": [*proposal.operations, *added]})
+
+
+_PROMISE = re.compile(
+    r"\b(?:i'll|i will|i'm going to|i am going to|let me)\s+(?:\w+\s+)?"
+    r"(?:create|write|add|set|make|draft|put|start|get|prepare|build)\b",
+    re.I,
+)
+
+
+def _promised_work(reply: str) -> bool:
+    """It says what it will do and proposes nothing: the creator is left waiting for work that
+    is not coming, and the message has already been paid for."""
+    return _PROMISE.search(reply) is not None
+
+
+_ASKS_LOOKS = re.compile(
+    r"\b(look like|looks like|wear|wearing|clothes|outfit|hair|sprite|portrait|visual)\b", re.I
+)
+# Asking about pictures, or designing someone, is when how they look is a fair question.
+_WANTS_LOOKS = re.compile(
+    r"\b(picture|pictures|image|images|sprite|sprites|portrait|portraits|draw|art|look|looks"
+    r"|character|characters|hair|eyes|outfit|outfits|clothes|wear|wearing)\b",
+    re.I,
+)
+
+
+def _wrongly_asks_about_looks(request: str, reply: str) -> bool:
+    """The creator asked for writing, and the model asks what people wear instead. Told not to,
+    it still does: a small model follows its examples of asking more than this exception."""
+    return _ASKS_LOOKS.search(reply) is not None and _WANTS_LOOKS.search(request) is None
 
 
 _ACTION_PROBLEM = re.compile(r"proposal\.operations\.(\d+)\.generate_[a-z_]+(\.|$)")
@@ -701,8 +834,10 @@ async def run_turn(
             parsed = _without_pending_sprites(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
-            parsed = _with_voice_actions(_with_tidied_nodes(story, parsed), capabilities)
-            parsed = _with_player(story, parsed)
+            parsed = _with_voice_actions(_with_tidied_nodes(story, parsed, library), capabilities)
+            # The question goes before wherever the story begins, so find that first.
+            parsed = _with_player(story, _joined_to_the_start(story, parsed))
+            parsed = _without_no_ops(story, parsed)
             # A provider without a grammar could still write these; they can only be refused.
             refused: tuple[type, ...] = (StartChildSession,) if child_session else ()
             if "music" not in capabilities:
@@ -756,6 +891,20 @@ async def run_turn(
                 output_tokens,
                 prompt_sha256(),
             )
+        if parsed is None and not diagnostics and attempt < calls:
+            if _wrongly_asks_about_looks(request, reply):
+                diagnostics = (Diagnostic("no_proposal", "proposal"),)
+                reasons = {
+                    "proposal": "the creator asked for writing, not pictures, so do not ask how "
+                    "anyone looks or what they wear. Add the characters by name and write the "
+                    "whole story now: every scene, choice and ending, in this proposal."
+                }
+            elif _promised_work(reply):
+                diagnostics = (Diagnostic("no_proposal", "proposal"),)
+                reasons = {
+                    "proposal": "your reply says what you will do, but the proposal is null. "
+                    "Write the whole proposal now, or ask your question if you truly cannot."
+                }
         if parsed is None and not diagnostics:
             return TurnResult(
                 reply,
