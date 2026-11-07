@@ -15,6 +15,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from flint_graph.application.services.narrative_gpu import expected_kinds
 from flint_graph.config import Settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -215,6 +216,16 @@ def test_model_pins_agree_between_download_and_workers() -> None:
     for name, (directory, manifest) in settings.items():
         assert config[f"FLINT_GRAPH_NARRATIVE_{directory}"] == f"/models/{name}"
         assert config[f"FLINT_GRAPH_NARRATIVE_{manifest}"] == pins[name]
+
+
+def test_nothing_is_offered_that_no_server_can_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Admission does not check for a worker, so a job with none would take credits and never run.
+    # With a GPU server these all change together, and this test with them.
+    for key, value in {**_config(), **SECRETS}.items():
+        monkeypatch.setenv(key, value)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert expected_kinds(settings) == ()
+    assert _deployments()["gpu-dispatch"]["spec"]["replicas"] == 0
 
 
 def test_the_gpu_cannot_be_stopped_until_it_has_been_set_up() -> None:

@@ -1,10 +1,11 @@
 # Hands queued GPU work to Temporal from the always-on server, so work waits while the GPU sleeps.
+# Off while there is no GPU server, to spare memory on a tight server.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gpu-dispatch
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: gpu-dispatch
