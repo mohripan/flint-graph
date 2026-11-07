@@ -1,6 +1,6 @@
 // What the Assistant shows for its generation actions (ADR 0061). The server decides and
 // starts them; this only reads their state and works out what a click would do.
-import type { ImageJob, NarrativeImage, VoiceJob } from "../lib/api";
+import type { ImageJob, MusicJob, NarrativeImage, VoiceJob } from "../lib/api";
 import type { AssistantThread, StoryDraft } from "./types";
 
 export type ActionState = "offered" | "pending" | "started" | "blocked" | "finished" | "skipped" | "declined";
@@ -12,7 +12,7 @@ export interface ActionQuote {
 export interface ActionStatus {
   index: number; op: string; label: string; status: ActionState; needs_accept: boolean;
   error_code: string | null; detail: string | null;
-  image_job: ImageJob | null; voice_job: VoiceJob | null;
+  image_job: ImageJob | null; voice_job: VoiceJob | null; music_job?: MusicJob | null;
   child_thread?: AssistantThread | null; quote?: ActionQuote | null;
 }
 export type ActionTone = "muted" | "good" | "bad";
@@ -24,11 +24,13 @@ const FAILURES: Record<string, string> = {
   generation_timeout: "This took too long and stopped. Ask again.",
   cutout_failed: "The background couldn't be removed from these pictures. Ask again.",
   voice_generation_unavailable: "The voice worker isn't running.",
+  gpu_unavailable: "This server has no GPU available for this.",
+  worker_interrupted: "The worker stopped before finishing. Ask again.",
   reference_deleted: "The voice reference was deleted. Choose another one in Characters.",
 };
 
-export function actionJob(action: ActionStatus): ImageJob | VoiceJob | null {
-  return action.image_job ?? action.voice_job;
+export function actionJob(action: ActionStatus): ImageJob | VoiceJob | MusicJob | null {
+  return action.image_job ?? action.voice_job ?? action.music_job ?? null;
 }
 export function actionWatching(action: ActionStatus): boolean {
   if (action.status === "pending") return true;
@@ -51,8 +53,9 @@ export function mergeAction(known: ActionStatus | undefined, incoming: ActionSta
   return incoming;
 }
 function jobWith(action: ActionStatus, progress: number): Partial<ActionStatus> {
-  return action.image_job ? { image_job: { ...action.image_job, progress } }
-    : { voice_job: { ...action.voice_job!, progress } };
+  if (action.image_job) return { image_job: { ...action.image_job, progress } };
+  if (action.music_job) return { music_job: { ...action.music_job, progress } };
+  return { voice_job: { ...action.voice_job!, progress } };
 }
 
 export function actionState(action: ActionStatus): { text: string; tone: ActionTone } {

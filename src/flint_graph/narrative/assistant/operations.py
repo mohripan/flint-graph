@@ -170,6 +170,14 @@ class GenerateVoice(_Operation):
     voice: str | None = None
 
 
+class GenerateMusic(_Operation):
+    """An action: one instrumental track that loops (ADR 0067)."""
+
+    op: Literal["generate_music"]
+    description: Annotated[str, Field(min_length=1, max_length=500)]
+    seconds: Annotated[int, Field(ge=15, le=180)] = 60
+
+
 class StartChildSession(_Operation):
     """An action: a separate conversation under this one, working on a task (ADR 0063)."""
 
@@ -186,6 +194,7 @@ ACTIONS = (
     GenerateExpressions,
     GenerateCg,
     GenerateVoice,
+    GenerateMusic,
     StartChildSession,
 )
 
@@ -205,6 +214,7 @@ Operation = Annotated[
     | GenerateExpressions
     | GenerateCg
     | GenerateVoice
+    | GenerateMusic
     | StartChildSession,
     Field(discriminator="op"),
 ]
@@ -221,6 +231,8 @@ def action_label(action: Any) -> str:
     if isinstance(action, GenerateVoice):
         lines = len(action.lines)
         return f"voice for {lines} line{'' if lines == 1 else 's'} of {action.character}"
+    if isinstance(action, GenerateMusic):
+        return f"music: {action.description[:80]}"
     if isinstance(action, GenerateCharacterImages):
         kind = "sprites" if action.transparent else "portraits"
         return f"{kind} of {action.character}"
@@ -301,6 +313,8 @@ def _target(operation: Operation, index: int) -> str:
         return f"actions.cg.{index}"
     if isinstance(operation, GenerateVoice):
         return f"actions.voice.{operation.character}.{index}"
+    if isinstance(operation, GenerateMusic):
+        return f"actions.music.{index}"
     if isinstance(operation, StartChildSession):
         return f"actions.child.{index}"
     if isinstance(operation, SetTheme):

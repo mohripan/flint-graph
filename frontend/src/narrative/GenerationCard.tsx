@@ -11,6 +11,8 @@ const ICONS: Record<string, ReactNode> = {
   count: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
   size: <><rect x="3" y="6" width="18" height="12" rx="2" /></>,
   people: <><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></>,
+  time: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  audio: <><path d="M4 10v4h4l5 4V6L8 10z" /><path d="M16 9a4 4 0 0 1 0 6" /></>,
 };
 const icon = (children: ReactNode, size = 15) => <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none"
   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>;

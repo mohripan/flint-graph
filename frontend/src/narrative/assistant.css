@@ -124,7 +124,7 @@
 .assistant-thread-list li:has(> .selected) > .assistant-thread-toggle { color:#f0f4f6; }
 .assistant-thread-list li:has(> .selected) > .assistant-thread-toggle:hover { background:#36576f; }
 .assistant-thread-list li:has(> .assistant-thread-toggle) > button:first-child { padding-right:32px; }
-.assistant-thread-busy { width:10px; height:10px; margin-right:6px; vertical-align:-1px; }
+.assistant-thread-list button span.assistant-thread-busy { width:10px; height:10px; margin-right:6px; vertical-align:-1px; }
 .assistant-actions li > .studio-link { grid-column:1 / -1; justify-self:start; min-height:24px; font-size:13px; }
 .assistant-bar-title { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; }
 .assistant-bar-title h2 { width:100%; }

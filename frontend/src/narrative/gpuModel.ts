@@ -1,13 +1,13 @@
 // What people are told when the GPU is not up (ADR 0069). The server says what the state is;
 // this words it. It is a little silly on purpose, and always true.
-export type GpuKind = "image" | "voice" | "pose" | "style" | "assistant";
+export type GpuKind = "image" | "voice" | "pose" | "style" | "music" | "assistant";
 export interface GpuStatus {
   state: "ready" | "asleep" | "starting" | "stopping" | "unavailable" | "off";
   detail: string | null; wake_seconds: number | null; waiting: string[];
 }
 export interface GpuMessage { title: string; body: string; bad: boolean }
 
-const WORKERS: Record<GpuKind, string> = { image: "picture", voice: "voice", pose: "pose", style: "training", assistant: "assistant" };
+const WORKERS: Record<GpuKind, string> = { image: "picture", voice: "voice", pose: "pose", style: "training", music: "music", assistant: "assistant" };
 const THRIFT = "We switch it off when nobody is using it, to save money";
 
 export function wakeTime(seconds: number | null): string {
@@ -57,6 +57,6 @@ export function gpuMessage(status: GpuStatus | null, kinds: GpuKind[]): GpuMessa
   }
 }
 
-const ACTION_KINDS: Record<string, GpuKind> = { generate_voice: "voice", start_child_session: "assistant" };
+const ACTION_KINDS: Record<string, GpuKind> = { generate_voice: "voice", generate_music: "music", start_child_session: "assistant" };
 /** The work an assistant action waits on. */
 export const actionGpuKind = (op: string): GpuKind => ACTION_KINDS[op] ?? "image";

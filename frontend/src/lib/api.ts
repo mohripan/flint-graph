@@ -65,6 +65,13 @@ export interface VoiceJob {
   model: string | null; created_at: string; started_at: string | null; finished_at: string | null;
   assets: NarrativeImage[];
 }
+export interface MusicJob {
+  id: string; description: string; seconds: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number; count: number; cancel_requested: boolean; error_code: string | null;
+  model: string | null; created_at: string; started_at: string | null; finished_at: string | null;
+  assets: NarrativeImage[];
+}
 export interface VoiceReference {
   id: string; name: string; speaker_name: string; consent: "self" | "permission";
   consent_declared_by_user_id: string; consent_declared_at: string; transcript: string | null;
@@ -124,7 +131,7 @@ import type {
 } from "./types";
 
 // Invite-only access (ADR 0058) and credits (ADR 0059).
-export type UsageKind = "image" | "voice" | "assistant" | "release" | "training";
+export type UsageKind = "image" | "voice" | "assistant" | "release" | "training" | "music";
 export type UsageLimits = Partial<Record<UsageKind, { daily?: number; total?: number }>>;
 export interface AccessStatus {
   mode: "open" | "invite"; has_access: boolean; is_admin: boolean; status: "none" | "active" | "suspended";
@@ -786,6 +793,23 @@ export const api = {
     Promise<CarriedVoiceLicenses> {
     return jsonRequest(`${projectPath(projectId)}/revisions/${encodeURIComponent(revisionId)}/voice-licenses`, {
       headers: tenantHeaders(tenantId), signal, cache: "no-store",
+    });
+  },
+
+  listMusicJobs(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ available: boolean; jobs: MusicJob[] }> {
+    return jsonRequest(`${projectPath(projectId)}/music-jobs`, { headers: tenantHeaders(tenantId), signal, cache: "no-store" });
+  },
+
+  createMusicJob(tenantId: string, projectId: string, description: string, seconds: number, signal?: AbortSignal): Promise<MusicJob> {
+    return jsonRequest(`${projectPath(projectId)}/music-jobs`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+      json: { description, seconds, idempotency_key: crypto.randomUUID() },
+    });
+  },
+
+  cancelMusicJob(tenantId: string, projectId: string, jobId: string, signal?: AbortSignal): Promise<MusicJob> {
+    return jsonRequest(`${projectPath(projectId)}/music-jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
     });
   },
 

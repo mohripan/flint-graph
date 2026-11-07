@@ -57,20 +57,24 @@ def _written_order(schema: Any) -> Any:
     return result
 
 
-def response_schema(*, child_session: bool = False) -> dict[str, Any]:
+def response_schema(*, child_session: bool = False, music: bool = True) -> dict[str, Any]:
     """What a model may write. Inside a child session it cannot start another: asked nicely,
-    the live model tried anyway, and so did no work on its task."""
+    the live model tried anyway, and so did no work on its task. Likewise it offered music on
+    a server that cannot make any, every time, when only told what was available."""
     schema: dict[str, Any] = _written_order(
         current_snapshot().entry("narrative.assistant.system").data["output_schema"]
     )
-    if child_session:
+    absent = {"start_child_session"} if child_session else set()
+    if not music:
+        absent.add("generate_music")
+    if absent:
         for branch in schema["properties"]["proposal"].get("anyOf", ()):
             items = (branch.get("properties") or {}).get("operations", {}).get("items", {})
             if "anyOf" in items:
                 items["anyOf"] = [
                     shape
                     for shape in items["anyOf"]
-                    if shape["properties"]["op"].get("const") != "start_child_session"
+                    if shape["properties"]["op"].get("const") not in absent
                 ]
     return schema
 
@@ -109,4 +113,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v8": "64b8ef67405cc57c8ef40754ed6c4bbd6c42ea707d1ad2295fae8c24c6eb27e8",
     # Generation cards: nothing runs until the creator presses Generate (ADR 0068).
     "narrative-assistant/v9": "f942d5b9b7e2bfedea8b0636d2553a6731ea58b7fcb686b0a01d284c6a6bfd45",
+    # Generated music: the assistant can make an instrumental track (ADR 0067).
+    "narrative-assistant/v10": "0967688c0d722ce58b3d66a4c722e20d94295f9b6ea8bd2ca448c2b941afceb4",
 }

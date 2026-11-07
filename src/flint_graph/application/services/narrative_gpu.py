@@ -46,6 +46,7 @@ def expected_kinds(settings: Settings) -> tuple[str, ...]:
         ("voice", settings.narrative_voice_generation_enabled),
         ("pose", settings.narrative_pose_generation_enabled),
         ("style", settings.narrative_style_training_enabled),
+        ("music", settings.narrative_music_generation_enabled),
         # A hosted assistant has no GPU to wait for.
         ("assistant", settings.narrative_assistant_provider == "ollama"),
     )

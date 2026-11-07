@@ -106,7 +106,7 @@ async def claim(factory, turn_id, token, run=None):
     return claimed
 
 
-async def work(factory, turn_id, *script):
+async def work(factory, turn_id, *script, capabilities=()):
     token = uuid4()
     claimed = await claim(factory, turn_id, token)
     assert claimed is not None
@@ -116,6 +116,7 @@ async def work(factory, turn_id, *script):
         claimed.request,
         focus=claimed.focus,
         history=claimed.history,
+        capabilities=capabilities,
     )
     async with factory() as session:
         await complete_turn(

@@ -456,3 +456,5 @@
 .studio-stage-motion select { min-height:40px; padding:6px 10px; border:1px solid #c2d0d8; border-radius:7px; background:#fff; color:#182635; }
 .studio-stage-motion select:disabled { opacity:.55; }
 .studio-stage-motion .studio-hint { flex:1 1 100%; margin:0; }
+.studio-music-job { display:flex; flex-direction:column; gap:2px; padding-top:8px; border-top:1px solid #e3eaef; }
+.studio-music-job p { margin:0; }

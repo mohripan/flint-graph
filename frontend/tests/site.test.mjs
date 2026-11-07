@@ -47,7 +47,7 @@ test("sign-in only returns to same-origin paths", () => {
 test("usage rows, amounts and invitation states read plainly", () => {
   const rows = usage.usageRows({ image: { daily: 40, total: 300 }, training: { total: 0 } },
     { image: { day: 3, total: 12 } });
-  assert.deepEqual(rows.map(row => row.kind), ["image", "voice", "assistant", "release", "training"]);
+  assert.deepEqual(rows.map(row => row.kind), ["image", "voice", "assistant", "release", "training", "music"]);
   assert.equal(usage.amount(rows[0].day, rows[0].daily), "3 of 40");
   assert.equal(usage.amount(rows[1].day, rows[1].daily), "0");
   assert.equal(usage.amount(0, rows[4].totalLimit), "not included");

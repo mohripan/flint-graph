@@ -30,6 +30,7 @@ CG = {"op": "generate_cg", "characters": ["mira"], "description": "Mira rings th
 VOICE = {"op": "generate_voice", "character": "mira", "lines": ["hello", "sound"]}
 CHILD = {"op": "start_child_session", "title": "Map", "task": "Draw the routes."}
 BACKGROUND = {"op": "generate_backgrounds", "description": "rainy street"}
+MUSIC = {"op": "generate_music", "description": "gentle piano, slow", "seconds": 90}
 
 
 async def story_with_a_picture(client, factory, store, base, headers):
@@ -58,6 +59,7 @@ async def test_every_card_costs_exactly_what_it_says(v2, oidc_auth):  # noqa: F8
         narrative_image_max_active_jobs_per_workspace=50,
         narrative_voice_generation_enabled=True,
         narrative_voice_max_active_jobs_per_workspace=50,
+        narrative_music_generation_enabled=True,
         narrative_assistant_provider="deterministic",
         narrative_assistant_max_active_turns_per_workspace=50,
     )
@@ -71,6 +73,7 @@ async def test_every_card_costs_exactly_what_it_says(v2, oidc_auth):  # noqa: F8
         "cg": ("image.cg", 4),
         "voice": ("voice.kokoro-82m", 2),
         "child": ("assistant.deterministic", 1),
+        "music": ("music.track", 1),
     }
     operations = {
         "sprite": SPRITE,
@@ -80,6 +83,7 @@ async def test_every_card_costs_exactly_what_it_says(v2, oidc_auth):  # noqa: F8
         "cg": CG,
         "voice": VOICE,
         "child": CHILD,
+        "music": MUSIC,
     }
     for name, operation in operations.items():
         _, proposal = await propose(client, factory, owner, base, head, operation)
@@ -98,8 +102,10 @@ async def test_a_card_says_what_it_will_make_in_the_creators_words(v2, oidc_auth
     base, _ = await project("Words", schema="2")
     configure(narrative_voice_generation_enabled=True, narrative_assistant_provider="deterministic")
     _, head = await story_with_a_picture(client, factory, store, base, owner)
-    _, proposal = await propose(client, factory, owner, base, head, SPRITE, CG, VOICE, BACKGROUND)
-    sprite, cg, voice, background = await actions(client, owner, base, proposal)
+    _, proposal = await propose(
+        client, factory, owner, base, head, SPRITE, CG, VOICE, BACKGROUND, MUSIC
+    )
+    sprite, cg, voice, background, music = await actions(client, owner, base, proposal)
 
     facts = lambda card: [fact["text"] for fact in card["quote"]["facts"]]  # noqa: E731
     assert sprite["quote"]["kind"] == "Sprite of Mira"
@@ -120,6 +126,9 @@ async def test_a_card_says_what_it_will_make_in_the_creators_words(v2, oidc_auth
     assert voice["quote"]["title"].endswith("and 1 more")
     assert "Good" in voice["quote"]["title"]
     assert facts(voice) == ["Kokoro-82M", "2 lines"]
+    assert music["quote"]["title"] == "gentle piano, slow"
+    assert facts(music) == ["ACE-Step 3.5B", "1 minute 30 seconds", "Instrumental, loops"]
+    assert music["quote"]["button"] == "Generate music"
     assert (background["quote"]["button"], background["quote"]["opens"]) == (
         "Generate backgrounds",
         "assets",

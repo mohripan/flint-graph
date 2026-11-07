@@ -223,8 +223,23 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ondelete="RESTRICT",
             use_alter=True,
         ),
+        UniqueConstraint("music_job_id", "job_index", name="uq_narrative_asset_music_job_index"),
+        ForeignKeyConstraint(
+            ["music_job_id", "project_id", "tenant_id"],
+            [
+                "narrative_music_jobs.id",
+                "narrative_music_jobs.project_id",
+                "narrative_music_jobs.tenant_id",
+            ],
+            name="fk_narrative_asset_music_job",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         CheckConstraint(
-            "job_id IS NULL OR voice_job_id IS NULL", name="ck_narrative_asset_one_job"
+            "(CASE WHEN job_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "+ (CASE WHEN voice_job_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "+ (CASE WHEN music_job_id IS NOT NULL THEN 1 ELSE 0 END) <= 1",
+            name="ck_narrative_asset_one_job",
         ),
         CheckConstraint(
             "status <> 'approved' OR approved_at IS NOT NULL",
@@ -275,6 +290,7 @@ class NarrativeAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(120))
     job_id: Mapped[UUID | None]
     voice_job_id: Mapped[UUID | None]
+    music_job_id: Mapped[UUID | None]
     job_index: Mapped[int | None]
     character_id: Mapped[str | None] = mapped_column(String(64))
     folder_id: Mapped[UUID | None]
@@ -383,6 +399,69 @@ class NarrativeVoiceJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     #   "delivery": {"emotion": str, "intensity": float, "tag": str | None}}]
     items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     count: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    execution_token: Mapped[UUID | None]
+    workflow_run_id: Mapped[UUID | None]
+    activity_attempt: Mapped[int | None]
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    model: Mapped[str | None] = mapped_column(String(200))
+    runtime: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NarrativeMusicJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One fenced local model run making one instrumental track (ADR 0067)."""
+
+    __tablename__ = "narrative_music_jobs"
+    __table_args__ = (
+        UniqueConstraint("id", "project_id", "tenant_id", name="uq_narrative_music_job_scope"),
+        UniqueConstraint("project_id", "idempotency_key", name="uq_narrative_music_job_key"),
+        ForeignKeyConstraint(
+            ["project_id", "tenant_id"],
+            ["narrative_projects.id", "narrative_projects.tenant_id"],
+            name="fk_narrative_music_job_project",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('queued','running','completed','failed','cancelled')",
+            name="ck_narrative_music_job_status",
+        ),
+        CheckConstraint(
+            "(status = 'running' AND execution_token IS NOT NULL) OR "
+            "(status <> 'running' AND execution_token IS NULL)",
+            name="ck_narrative_music_job_execution_fence",
+        ),
+        CheckConstraint(
+            "status <> 'completed' OR NOT cancel_requested",
+            name="ck_narrative_music_job_not_cancelled_completed",
+        ),
+        CheckConstraint(
+            "(workflow_run_id IS NULL AND activity_attempt IS NULL) OR "
+            "(workflow_run_id IS NOT NULL AND activity_attempt IS NOT NULL "
+            "AND activity_attempt >= 0)",
+            name="ck_narrative_music_job_workflow_owner",
+        ),
+        CheckConstraint("seconds BETWEEN 15 AND 180", name="ck_narrative_music_job_seconds"),
+        CheckConstraint("progress BETWEEN 0 AND 1", name="ck_narrative_music_job_progress"),
+        Index(
+            "ix_narrative_music_job_active",
+            "tenant_id",
+            postgresql_where=text("status IN ('queued','running')"),
+            sqlite_where=text("status IN ('queued','running')"),
+        ),
+        Index("ix_narrative_music_job_run_status", "status", "workflow_run_id"),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    requested_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    idempotency_key: Mapped[UUID]
+    request_hash: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(500))
+    seconds: Mapped[int] = mapped_column(Integer)
+    seed: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(16), default="queued")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)

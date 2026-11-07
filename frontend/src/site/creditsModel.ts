@@ -87,6 +87,7 @@ export function balanceLabel(status: CreditStatus | null): string | null {
 // POSTs that admit paid work; the Studio reloads the balance after them.
 const PAID = [
   /\/assets\/(background|scene-art)-jobs$/,
+  /\/music-jobs$/,
   /\/characters\/[^/]+\/(portrait|expression|voice)-jobs$/,
   /\/characters\/[^/]+\/looks\/(portrait|expression|pose)-jobs$/,
   /\/characters\/[^/]+\/looks\/pose-repairs$/,

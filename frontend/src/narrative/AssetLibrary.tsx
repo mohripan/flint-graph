@@ -7,6 +7,7 @@ import { folderPath, folderRows, uploadKindForView, viewQuery, viewTitle } from 
 import type { LibraryIndex, LibraryView } from "./assetFolders";
 import { KIND_LABELS, UPLOAD_KINDS, kindForFile, suggestName, uploadProblem } from "./assetModel";
 import { GpuNotice } from "./GpuNotice";
+import { MusicGenerator } from "./MusicGenerator";
 import type { UploadKind } from "./assetModel";
 import { useNarrativeImage } from "./characterImages";
 import { refreshLibrary, useAssetFont } from "./libraryAssets";
@@ -82,6 +83,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
     try { await run(); reindex(); return true; } catch (error) { setNotice(message(error, fallback)); return false; }
   }
   const cgs = view.type === "kind" && view.kind === "image";
+  const music = view.type === "kind" && view.kind === "music";
   const folders = index?.folders ?? [];
   const openFolder = view.type === "folder" ? folders.find(item => item.id === view.id) : undefined;
   const depth = openFolder ? folderRows(folders).find(row => row.folder.id === openFolder.id)?.depth ?? 0 : 0;
@@ -109,8 +111,9 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
     <div className="studio-section-heading"><h2>Assets</h2>
       {canWrite && <button type="button" className="studio-primary" onClick={() => setUploading(true)}>Upload</button>}</div>
     <p className="studio-hint">Backgrounds, character sprites, CGs, fonts, voice clips, music and sound effects for this story. Uploads keep transparency; generated items wait here for your approval. Folders only organize the library: stories and games stay the same.</p>
-    {canWrite && !private_ && <GpuNotice kinds={["image"]} />}
-    {canWrite && !cgs && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
+    {canWrite && !private_ && <GpuNotice kinds={music ? ["music"] : ["image"]} />}
+    {music && <MusicGenerator tenantId={tenantId} projectId={projectId} canWrite={canWrite} onFinished={() => { refreshLibrary(); reindex(); }} />}
+    {canWrite && !cgs && !music && <BackgroundGenerator tenantId={tenantId} projectId={projectId} active={active}
       onStarted={job => { imageJobStarted(tenantId, projectId, job); setView({ type: "review" }); }}
       onCancel={job => void act(async () => {
         const next = await api.cancelImageJob(tenantId, projectId, job.id);

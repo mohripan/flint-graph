@@ -56,6 +56,7 @@ PRICE_ITEMS: dict[str, PriceItem] = {
             _item(f"voice.{model_id}", credits, f"{MODELS[model_id].name} line", "line")
             for model_id, credits in _VOICE_PRICES.items()
         ),
+        _item("music.track", 10, "Music track", "track"),
         _item("assistant.deterministic", 1, "Assistant reply (test model)", "turn"),
         _item("assistant.ollama", 2, "Assistant reply (local model)", "turn"),
         _item("assistant.anthropic", 10, "Assistant reply (Claude)", "turn"),

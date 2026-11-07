@@ -44,7 +44,7 @@ export interface ProposalChange {
 function text(value: unknown): string | undefined {
   return value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : undefined;
 }
-const ACTION_OPS = new Set(["generate_character_images", "generate_backgrounds", "generate_expressions", "generate_cg", "generate_voice", "start_child_session"]);
+const ACTION_OPS = new Set(["generate_character_images", "generate_backgrounds", "generate_expressions", "generate_cg", "generate_voice", "generate_music", "start_child_session"]);
 export function isAction(operation: StoryOperation): operation is AssistantAction {
   return ACTION_OPS.has(operation.op);
 }
@@ -80,6 +80,8 @@ export function proposalActions(story: Pick<StoryDraft, "characters"> | null, op
       case "generate_cg":
         return [{ index, action, ready: action.characters.every(known),
           label: `Generate CGs of ${action.characters.map(named).join(" and ")}: ${action.description}` }];
+      case "generate_music":
+        return [{ index, action, ready: true, label: `Generate music: ${action.description}` }];
       case "generate_voice":
         return [{ index, action, ready: known(action.character),
           label: `Generate voice for ${action.lines.length} ${action.lines.length === 1 ? "line" : "lines"} of ${named(action.character)}` }];

@@ -17,6 +17,7 @@ DEFAULT_ACCESS_LIMITS: dict[str, dict[str, int]] = {
     "assistant": {"daily": 40, "total": 300},
     "release": {"daily": 5, "total": 30},
     "training": {"daily": 1, "total": 4},
+    "music": {"daily": 10, "total": 60},
 }
 # Default real embedding model + dimensions per provider. Dimensions are intrinsic to the
 # model, so switching providers/models requires a new retrieval index version + backfill.
@@ -385,6 +386,26 @@ class Settings(BaseSettings):
     # Only these are offered to creators; licenses and capabilities come from code.
     narrative_voice_models: dict[str, NarrativeVoiceModelInstall] = Field(default_factory=dict)
 
+    # Generated music (ADR 0067): a pinned local ACE-Step model in its own runtime. Off by
+    # default, and the worker is a separate process: it needs about 7 GiB of free GPU memory.
+    narrative_music_generation_enabled: bool = False
+    narrative_music_worker_enabled: bool = False
+    narrative_music_task_queue: str = Field(
+        default="narrative-music", min_length=1, max_length=200
+    )
+    narrative_music_runtime_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_music_model_dir: str | None = Field(default=None, min_length=1, max_length=2048)
+    narrative_music_model_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    narrative_music_max_active_jobs_per_workspace: int = Field(default=2, ge=1, le=20)
+    narrative_music_job_deadline_seconds: int = Field(default=900, ge=60, le=3600)
+    narrative_music_poll_interval_seconds: float = Field(default=1, ge=0.1, le=60)
+    # Lets the worker ask Ollama to unload this model when the GPU is too full to start.
+    narrative_music_release_ollama_model: str | None = Field(
+        default=None, min_length=1, max_length=200
+    )
+
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_exporter_otlp_insecure: bool = True
@@ -526,6 +547,26 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Scene art requires an absolute IP-Adapter directory together "
                     "with its pinned manifest"
+                )
+        if self.narrative_music_worker_enabled:
+            if self.narrative_music_task_queue in {
+                self.temporal_task_queue,
+                self.narrative_task_queue,
+                self.narrative_assistant_task_queue,
+                self.narrative_image_task_queue,
+                self.narrative_voice_task_queue,
+            }:
+                raise ValueError("A separate narrative music task queue is required")
+            if (
+                not self.narrative_music_runtime_dir
+                or not self.narrative_music_model_dir
+                or not Path(self.narrative_music_runtime_dir).is_absolute()
+                or not Path(self.narrative_music_model_dir).is_absolute()
+                or not self.narrative_music_model_manifest_sha256
+            ):
+                raise ValueError(
+                    "The narrative music worker requires absolute runtime and model "
+                    "directories and a pinned model manifest"
                 )
         if self.narrative_voice_worker_enabled:
             queues = {

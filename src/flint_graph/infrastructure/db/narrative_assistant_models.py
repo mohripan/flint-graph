@@ -273,6 +273,7 @@ class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "(CASE WHEN image_job_id IS NOT NULL THEN 1 ELSE 0 END) "
             "+ (CASE WHEN voice_job_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "+ (CASE WHEN music_job_id IS NOT NULL THEN 1 ELSE 0 END) "
             "+ (CASE WHEN child_thread_id IS NOT NULL THEN 1 ELSE 0 END) <= 1",
             name="ck_narrative_assistant_action_one_job",
         ),
@@ -295,6 +296,12 @@ class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_where=text("voice_job_id IS NOT NULL"),
             sqlite_where=text("voice_job_id IS NOT NULL"),
         ),
+        Index(
+            "ix_narrative_assistant_action_music_job",
+            "music_job_id",
+            postgresql_where=text("music_job_id IS NOT NULL"),
+            sqlite_where=text("music_job_id IS NOT NULL"),
+        ),
     )
     tenant_id: Mapped[UUID]
     project_id: Mapped[UUID]
@@ -309,6 +316,9 @@ class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     voice_job_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("narrative_voice_jobs.id", ondelete="RESTRICT")
+    )
+    music_job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("narrative_music_jobs.id", ondelete="RESTRICT")
     )
     child_thread_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("narrative_assistant_threads.id", ondelete="RESTRICT")

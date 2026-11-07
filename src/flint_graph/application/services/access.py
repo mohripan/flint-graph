@@ -32,7 +32,7 @@ from flint_graph.infrastructure.db.models import (
     User,
 )
 
-KINDS = ("image", "voice", "assistant", "release", "training")
+KINDS = ("image", "voice", "assistant", "release", "training", "music")
 DEFAULT_LIMITS = DEFAULT_ACCESS_LIMITS
 _NOUNS = {
     "image": "images",
@@ -40,6 +40,7 @@ _NOUNS = {
     "assistant": "assistant replies",
     "release": "release builds",
     "training": "training runs",
+    "music": "music tracks",
 }
 # No 0/O, 1/I/L: keys are read aloud and retyped.
 _ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"

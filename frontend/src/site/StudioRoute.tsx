@@ -13,7 +13,7 @@ import { navigate } from "./router";
 const OPEN: AccessStatus = {
   mode: "open", has_access: true, is_admin: false, status: "none", email: null, display_name: null,
   limits: null, usage: { image: { day: 0, total: 0 }, voice: { day: 0, total: 0 }, assistant: { day: 0, total: 0 },
-    release: { day: 0, total: 0 }, training: { day: 0, total: 0 } }, email_invitation: false,
+    release: { day: 0, total: 0 }, training: { day: 0, total: 0 }, music: { day: 0, total: 0 } }, email_invitation: false,
   credits: null, unlimited: true,
 };
 

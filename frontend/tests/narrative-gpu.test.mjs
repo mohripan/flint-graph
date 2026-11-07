@@ -58,5 +58,6 @@ test("where nothing wakes it, the message never promises a wake-up", () => {
 test("an action waits on the worker that runs it", () => {
   assert.equal(gpu.actionGpuKind("generate_backgrounds"), "image");
   assert.equal(gpu.actionGpuKind("generate_voice"), "voice");
+  assert.equal(gpu.actionGpuKind("generate_music"), "music");
   assert.equal(gpu.actionGpuKind("start_child_session"), "assistant");
 });

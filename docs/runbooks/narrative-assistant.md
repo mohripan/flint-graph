@@ -131,7 +131,8 @@ Expressions and CGs use the character's stage sprite, else their portrait, else 
 approved picture. With none, the action blocks and says to approve one. A voice action gives
 a character with no voice the stock voice it names, or a default for their type. A voice the
 creator chose is never replaced. A model with an unaccepted license blocks and says so.
-Poses are not available to the assistant yet, and music does not exist in the product.
+Poses are not available to the assistant yet. Music is an action too, where it is turned on
+([ADR 0067](../adr/0067-generated-music.md)); sound effects can only be uploaded.
 
 The schema constrains the model (per-operation shapes, `reply` and `op` first; see the
 ADR), so wrong fields cannot be produced by Ollama. A character with a missing detail still

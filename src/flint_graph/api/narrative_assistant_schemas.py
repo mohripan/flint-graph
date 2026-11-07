@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from flint_graph.api.narrative_character_schemas import ImageJobResponse
+from flint_graph.api.routes.narrative_music import MusicJobResponse
 from flint_graph.api.routes.narrative_voices import VoiceJobResponse
 
 
@@ -41,6 +42,7 @@ class AssistantActionResponse(BaseModel):
     detail: str | None
     image_job: ImageJobResponse | None
     voice_job: VoiceJobResponse | None
+    music_job: MusicJobResponse | None = None
     child_thread: "AssistantThreadResponse | None" = None
     quote: ActionQuoteResponse | None = None
 

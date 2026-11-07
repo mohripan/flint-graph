@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { ImageJob, NarrativeImage, VoiceJob } from "../lib/api";
+import type { ImageJob, MusicJob, NarrativeImage, VoiceJob } from "../lib/api";
 import { useAccessRefresh } from "../site/accessContext";
 import { actionJob, actionShowsCard, actionState, actionWatching, clipUse, imageUse, mergeAction } from "./assistantActions";
 import type { ActionStatus, ImageUse } from "./assistantActions";
@@ -181,6 +181,22 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
     })}</ul>;
   }
 
+  function tracks(job: MusicJob) {
+    return <ul className="assistant-clips">{job.assets.map(asset => {
+      const key = `asset:${asset.id}`;
+      return <li key={asset.id}>
+        <ClipPlayButton assetId={asset.id} />
+        <span>{asset.name}</span>
+        {asset.status === "approved" ? <small className="studio-hint">Approved</small>
+          : canWrite && <button type="button" className="studio-secondary" aria-disabled={busy[key]}
+            onClick={() => { if (!busy[key]) approve(asset); }}>Approve</button>}
+        {canWrite && onAttach && asset.status === "approved" && <button type="button" className="studio-link"
+          onClick={() => onAttach({ kind: "asset", id: asset.id, name: asset.name, asset_kind: asset.kind })}>Attach to message</button>}
+        {errors[key] && <small className="studio-error" role="alert">{errors[key]}</small>}
+      </li>;
+    })}</ul>;
+  }
+
   return <div className="assistant-actions" aria-label="Generation">
     {loadError && <p className="studio-error" role="alert">{loadError} <button type="button" className="studio-link"
       onClick={() => void load()}>Refresh</button></p>}
@@ -209,6 +225,7 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
           onClick={() => onOpenThread(status.child_thread!.id)}>Open this session</button>}
         {status?.image_job?.status === "completed" && pictures(status.image_job)}
         {status?.voice_job?.status === "completed" && clips(status.voice_job)}
+        {status?.music_job?.status === "completed" && tracks(status.music_job)}
       </li>;
     })}</ul>
   </div>;

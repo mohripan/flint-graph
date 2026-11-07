@@ -297,6 +297,12 @@ def _render(
         header.append("generation available: " + ", ".join(capabilities))
         if "voices" in capabilities:
             header.append(_stock_voices())
+        if "music" not in capabilities:
+            # Without its action in the grammar, the live model reached for a voice clip instead.
+            header.append(
+                "music cannot be generated here: if asked for music that is not listed, add no "
+                "action for it and say it can be uploaded in Assets"
+            )
     if earlier:
         # Older turns of this thread, folded from its log; escaped like any other data.
         header += ["earlier in this conversation (oldest first):", *earlier]

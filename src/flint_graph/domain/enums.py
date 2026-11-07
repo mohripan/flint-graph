@@ -221,6 +221,8 @@ class AuditAction(StrEnum):
     NARRATIVE_IMAGE_JOB_CANCELLED = "narrative.image_job_cancelled"
     NARRATIVE_VOICE_JOB_REQUESTED = "narrative.voice_job_requested"
     NARRATIVE_VOICE_JOB_CANCELLED = "narrative.voice_job_cancelled"
+    NARRATIVE_MUSIC_JOB_REQUESTED = "narrative.music_job_requested"
+    NARRATIVE_MUSIC_JOB_CANCELLED = "narrative.music_job_cancelled"
     NARRATIVE_VOICE_REFERENCE_CREATED = "narrative.voice_reference_created"
     NARRATIVE_VOICE_REFERENCE_DELETED = "narrative.voice_reference_deleted"
     NARRATIVE_VOICE_LICENSE_ACCEPTED = "narrative.voice_license_accepted"

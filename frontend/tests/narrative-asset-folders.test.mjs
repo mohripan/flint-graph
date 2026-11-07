@@ -47,7 +47,7 @@ test("the rail groups generated items by kind and character without filing", () 
     [["All assets", 10], ["To review", 2], ["Unsorted", 4]]);
   // CGs stay listed while empty: that view is where they are generated and uploaded.
   assert.deepEqual(groups.kinds.map(item => [item.label, item.count]),
-    [["Backgrounds", 2], ["Sprites", 3], ["CGs", 0], ["Fonts", 1], ["Voice clips", 4]]);
+    [["Backgrounds", 2], ["Sprites", 3], ["CGs", 0], ["Fonts", 1], ["Voice clips", 4], ["Music", 0]]);
   assert.deepEqual(groups.characters.map(item => [item.label, item.count]),
     [["mira", 5], ["Quen Aldwinia", 2]]);
   assert.equal(model.viewTitle({ type: "character", id: "quen" }, index, names), "Quen Aldwinia");

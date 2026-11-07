@@ -141,6 +141,7 @@ export type AssistantAction =
   | { op: "generate_expressions"; character: string; expressions: string[] }
   | { op: "generate_cg"; characters: string[]; description: string }
   | { op: "generate_voice"; character: string; lines: string[]; voice?: string | null }
+  | { op: "generate_music"; description: string; seconds?: number }
   | { op: "start_child_session"; title: string; task: string };
 export interface AssistantProposal extends AssistantProposalSummary {
   turn_id: string; thread_id: string; base_revision_id: string; operations: StoryOperation[];

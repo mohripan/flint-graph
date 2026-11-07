@@ -1,0 +1,31 @@
+[project]
+name = "flint-graph-musicgen"
+version = "0.1.0"
+description = "Isolated local music-generation child for FlintGraph narrative assets"
+requires-python = "==3.12.*"
+dependencies = [
+    "ace-step",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "torchvision==0.26.0",
+    "numpy",
+    "soundfile==0.13.1",
+    "nvidia-ml-py==13.615.71",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+
+[tool.uv.sources]
+# The exact upstream commit; ACE-Step's Apache-2.0 code and weights are pinned separately.
+ace-step = { git = "https://github.com/ace-step/ACE-Step.git", rev = "1bee4c9f5b43e30995f8d4d33b3919197ce1bd68" }
+# CUDA 12.8 wheels, as in runtimes/imagegen and runtimes/voicegen.
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

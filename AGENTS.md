@@ -303,6 +303,12 @@ is what the controller (#197) will call. A new GPU worker needs the heartbeat an
 `FLINT_GRAPH_NARRATIVE_GPU_SLEEPS` is only true with a controller, or the message correctly says it won't wake.
 Read `docs/reports/2026-11-07-gpu-wake-message.md`.
 
+[ADR 0067](docs/adr/0067-generated-music.md) (migration 0053, prompt v10) adds opt-in generated music through
+`narrative_music_worker` and the isolated `runtimes/musicgen` (ACE-Step 3.5B). `music` is a usage kind, so a new
+kind of generation must update `usage_charges`, `KINDS`, `_NOUNS` and `usageModel.ts`, or a real key gets a 500; test
+paid paths in invite mode. Nobody has listened to the output yet. Read `docs/runbooks/narrative-music-generation.md` and
+`docs/reports/2026-11-07-generated-music.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

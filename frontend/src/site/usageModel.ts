@@ -1,11 +1,11 @@
 // Usage allowances shown to invited people and operators (ADR 0058).
-export type Kind = "image" | "voice" | "assistant" | "release" | "training";
+export type Kind = "image" | "voice" | "assistant" | "release" | "training" | "music";
 export type Limits = Partial<Record<Kind, { daily?: number; total?: number }>>;
 export type Usage = Partial<Record<Kind, { day: number; total: number }>>;
 
 export const KINDS: Array<[Kind, string]> = [
   ["image", "Images"], ["voice", "Voice lines"], ["assistant", "Assistant replies"],
-  ["release", "Release builds"], ["training", "Training runs"],
+  ["release", "Release builds"], ["training", "Training runs"], ["music", "Music tracks"],
 ];
 
 export interface UsageRow { kind: Kind; label: string; day: number; daily?: number; total: number; totalLimit?: number }

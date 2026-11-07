@@ -77,6 +77,8 @@ async def note_asset_approved(
         match = NarrativeAssistantAction.image_job_id == asset.job_id
     elif asset.voice_job_id is not None:
         match = NarrativeAssistantAction.voice_job_id == asset.voice_job_id
+    elif asset.music_job_id is not None:
+        match = NarrativeAssistantAction.music_job_id == asset.music_job_id
     else:
         return
     action = await session.scalar(

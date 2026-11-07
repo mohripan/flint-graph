@@ -42,6 +42,7 @@ from flint_graph.api.narrative_assistant_schemas import (
 from flint_graph.api.narrative_schemas import NarrativeRevisionResponse
 from flint_graph.api.routes.narrative import _persist
 from flint_graph.api.routes.narrative_characters import job_response
+from flint_graph.api.routes.narrative_music import music_job_response
 from flint_graph.api.routes.narrative_voices import voice_job_response
 from flint_graph.application.services.narrative_assistant import (
     ThreadNode,
@@ -68,6 +69,7 @@ from flint_graph.application.services.narrative_assistant_actions import (
 from flint_graph.application.services.narrative_assistant_events import events_after
 from flint_graph.application.services.narrative_assistant_log import list_thread_events
 from flint_graph.application.services.narrative_images import get_image_job
+from flint_graph.application.services.narrative_music import get_music_job
 from flint_graph.application.services.narrative_voices import get_voice_job
 from flint_graph.config import Settings
 from flint_graph.domain.errors import NotFoundError, TooManyRequestsError
@@ -85,8 +87,13 @@ STREAM_MAX_SECONDS = 300.0
 async def _action_response(
     session: AsyncSession, *, tenant_id: UUID, project_id: UUID, view: ActionView
 ) -> AssistantActionResponse:
-    image_job = voice_job = None
-    if view.image_job is not None:
+    image_job = voice_job = music_job = None
+    if view.music_job is not None:
+        composed, tracks = await get_music_job(
+            session, tenant_id=tenant_id, project_id=project_id, job_id=view.music_job.id
+        )
+        music_job = music_job_response(composed, tracks)
+    elif view.image_job is not None:
         job, assets = await get_image_job(
             session, tenant_id=tenant_id, project_id=project_id, job_id=view.image_job.id
         )
@@ -123,6 +130,7 @@ async def _action_response(
             if view.quote is not None
             else None
         ),
+        music_job=music_job,
     )
 
 

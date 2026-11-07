@@ -68,6 +68,20 @@ def voice_job_workflow_id(payload: ImageJobPayload) -> str:
     return "narrative-voice-job-" + payload["job_id"]
 
 
+# Music jobs (ADR 0067) use the same IDs-only payload and fenced supervision.
+MUSIC_WORKFLOW = "NarrativeMusicJobWorkflow"
+RUN_MUSIC_ACTIVITY = "run_narrative_music_job"
+FINALIZE_MUSIC_ACTIVITY = "finalize_narrative_music_job"
+RUN_MUSIC_ACTIVITY_ID = "run-music-job"
+FINALIZE_MUSIC_ACTIVITY_ID = "finalize-music-job"
+MUSIC_QUEUED_TOPIC = "narrative.music_job_queued"
+MUSIC_CANCELLED_TOPIC = "narrative.music_job_cancelled"
+
+
+def music_job_workflow_id(payload: ImageJobPayload) -> str:
+    return "narrative-music-job-" + payload["job_id"]
+
+
 def validate_image_outcome(value: object, *, job_id: str) -> ImageJobOutcome:
     if (
         not isinstance(value, dict)

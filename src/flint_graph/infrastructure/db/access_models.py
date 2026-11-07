@@ -91,7 +91,7 @@ class UsageCharge(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "usage_charges"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('image', 'voice', 'assistant', 'release', 'training')",
+            "kind IN ('image', 'voice', 'assistant', 'release', 'training', 'music')",
             name="ck_usage_charges_kind",
         ),
         CheckConstraint("units > 0", name="ck_usage_charges_units"),

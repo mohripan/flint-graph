@@ -27,6 +27,7 @@ from flint_graph.narrative.assistant.operations import (
     GenerateCg,
     GenerateCharacterImages,
     GenerateExpressions,
+    GenerateMusic,
     GenerateVoice,
     Proposal,
     StartChildSession,
@@ -211,7 +212,7 @@ def _tidied_stage(
     for field in ("show", "hide"):
         if node.get(field) == []:
             del changed[field]  # Models write an empty list to mean none, which is not allowed.
-    for field in ("background", "cg"):
+    for field in ("background", "cg", "music", "ambience"):
         if field in generating and isinstance(node.get(field), str) and node[field] not in assets:
             del changed[field]
     show = node.get("show")
@@ -234,6 +235,33 @@ def _tidied_stage(
     return changed
 
 
+_STAGE_CHANGES = ("background", "cg", "show", "hide", "effect", "music", "ambience", "sound")
+
+
+def _repointed(node: dict[str, Any], gone: Mapping[str, str]) -> dict[str, Any]:
+    """Point a node past the steps that were left out."""
+
+    def past(target: Any) -> Any:
+        seen = set()
+        while target in gone and target not in seen:
+            seen.add(target)
+            target = gone[target]
+        return target
+
+    changed = {
+        key: past(value) if key in ("next", "if_true", "if_false") else value
+        for key, value in node.items()
+    }
+    if isinstance(node.get("options"), list):
+        changed["options"] = [
+            {**option, "target": past(option.get("target"))}
+            if isinstance(option, dict) and "target" in option
+            else option
+            for option in node["options"]
+        ]
+    return changed
+
+
 def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
     """Each round trip to correct these costs seconds to minutes, so correct them here."""
     upserted = {item.id: item for item in proposal.operations if isinstance(item, UpsertCharacter)}
@@ -250,14 +278,22 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
     }
     generating = {
         field
-        for field, kind in (("background", GenerateBackgrounds), ("cg", GenerateCg))
+        for field, kind in (
+            ("background", GenerateBackgrounds),
+            ("cg", GenerateCg),
+            ("music", GenerateMusic),
+            ("ambience", GenerateMusic),
+        )
         if any(isinstance(item, kind) for item in proposal.operations)
     }
     pending: dict[str, set[str]] = {}
     for item in proposal.operations:
         if isinstance(item, GenerateExpressions):
             pending.setdefault(item.character, set()).update(item.expressions)
-    operations = []
+    operations: list[Any] = []
+    # New steps that had nothing left to do, and where each one led.
+    gone: dict[str, str] = {}
+    saved = story.get("nodes") or {}
     for item in proposal.operations:
         if isinstance(item, UpsertNode):
             kind = item.node.get("type")
@@ -265,8 +301,21 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
                 item = item.model_copy(update={"node": _tidied_line(item.node, known, assets)})
             elif kind == "stage":
                 node = _tidied_stage(item.node, sprites, assets, generating, pending)
+                target = node.get("next")
+                if isinstance(target, str) and not any(key in node for key in _STAGE_CHANGES):
+                    # It only played a file still being generated, so there is no step yet.
+                    if item.id not in saved:
+                        gone[item.id] = target
+                    continue
                 item = item.model_copy(update={"node": node})
         operations.append(item)
+    if gone:
+        operations = [
+            item.model_copy(update={"node": _repointed(item.node, gone)})
+            if isinstance(item, UpsertNode)
+            else item
+            for item in operations
+        ]
     return proposal.model_copy(update={"operations": operations})
 
 
@@ -373,6 +422,7 @@ def _problem_reasons(
     proposal: Proposal,
     diagnostics: Sequence[Diagnostic],
     library: Sequence[LibraryEntry] = (),
+    capabilities: Sequence[str] = (),
 ) -> dict[str, str]:
     """Say what exists, so a repair can fix a bad reference on its first try."""
     try:
@@ -401,12 +451,6 @@ def _problem_reasons(
             )
         elif field in ("next", "target", "if_true", "if_false", "entry"):
             reasons[item.location] = f"no scene has this id. Scenes: {_listed(nodes)}"
-        elif item.code == "invalid_stage":
-            reasons[item.location] = (
-                "a stage step must change something: a background, cg, show, hide, effect, "
-                "music, ambience or sound. If yours changes nothing, leave the step out and "
-                "point the scene before it straight at the next one."
-            )
         elif field in ("music", "ambience", "sound"):
             wanted = "audio" if field == "sound" else "music"
             files = [
@@ -414,9 +458,14 @@ def _problem_reasons(
                 for key, asset in (edited.get("assets") or {}).items()
                 if isinstance(asset, dict) and asset.get("kind") == wanted
             ] + [entry.key for entry in library if entry.kind == wanted]
+            otherwise = (
+                "add a generate_music action"
+                if wanted == "music" and "music" in capabilities
+                else "tell the creator to upload one in Assets"
+            )
             reasons[item.location] = (
                 f"no file of that kind has this id. Files you can use: {_listed(files)}. "
-                f'If none fits, leave out "{field}" and tell the creator to upload one in Assets.'
+                f'If none fits, leave out "{field}" and {otherwise}.'
             )
         elif field in ("background", "cg", "audio", "asset") or item.code == "invalid_asset_kind":
             reasons[item.location] = (
@@ -547,7 +596,7 @@ async def run_turn(
             "model", "started", {"call": attempt, "of": calls, "provider": model.provider}
         )
         stream = _CallStream(watch, attempt)
-        schema = response_schema(child_session=child_session)
+        schema = response_schema(child_session=child_session, music="music" in capabilities)
         answer = await model.respond(messages, schema, stream)
         done: dict[str, Any] = {"call": attempt}
         if answer.output_tokens is not None:
@@ -575,17 +624,21 @@ async def run_turn(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
             parsed = _with_voice_actions(_with_tidied_nodes(story, parsed), capabilities)
-            if child_session:
-                # A provider without a grammar could still write one; it can only be refused.
+            # A provider without a grammar could still write these; they can only be refused.
+            refused: tuple[type, ...] = (StartChildSession,) if child_session else ()
+            if "music" not in capabilities:
+                refused = (*refused, GenerateMusic)
+            if refused:
                 parsed = parsed.model_copy(
                     update={
                         "operations": [
-                            item
-                            for item in parsed.operations
-                            if not isinstance(item, StartChildSession)
+                            item for item in parsed.operations if not isinstance(item, refused)
                         ]
                     }
                 )
+            if not parsed.operations:
+                parsed = None  # Nothing was left to propose, so the reply stands alone.
+        if parsed is not None:
             check = check_proposal(story, parsed.operations)
             if check.diagnostics and attempt == calls:
                 # Repairs are spent: keep the story edits if only actions are unusable.
@@ -595,7 +648,10 @@ async def run_turn(
                     check = check_proposal(story, parsed.operations)
             proposal = parsed
             diagnostics = check.diagnostics
-            reasons = {**reasons, **_problem_reasons(story, parsed, diagnostics, library)}
+            reasons = {
+                **reasons,
+                **_problem_reasons(story, parsed, diagnostics, library, capabilities),
+            }
         if parsed is not None or diagnostics:
             await watch.step(
                 "validating",

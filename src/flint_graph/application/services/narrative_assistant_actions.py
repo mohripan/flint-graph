@@ -52,6 +52,10 @@ from flint_graph.application.services.narrative_images import (
     create_portrait_job,
     create_scene_art_job,
 )
+from flint_graph.application.services.narrative_music import (
+    MUSIC_PRICE_ITEM,
+    create_music_job,
+)
 from flint_graph.application.services.narrative_projects import get_project, get_revision
 from flint_graph.application.services.narrative_voices import (
     create_voice_job,
@@ -70,6 +74,7 @@ from flint_graph.infrastructure.db.models import (
     NarrativeAssistantTurn,
     NarrativeCharacterProfile,
     NarrativeImageJob,
+    NarrativeMusicJob,
     NarrativeProject,
     NarrativeVoiceJob,
     Tenant,
@@ -95,6 +100,7 @@ from flint_graph.narrative.assistant.operations import (
     GenerateCg,
     GenerateCharacterImages,
     GenerateExpressions,
+    GenerateMusic,
     GenerateVoice,
     Proposal,
     StartChildSession,
@@ -117,6 +123,7 @@ ActionOp = (
     | GenerateExpressions
     | GenerateCg
     | GenerateVoice
+    | GenerateMusic
     | StartChildSession
 )
 _MODELS: dict[str, type[ActionOp]] = {
@@ -125,10 +132,12 @@ _MODELS: dict[str, type[ActionOp]] = {
     "generate_expressions": GenerateExpressions,
     "generate_cg": GenerateCg,
     "generate_voice": GenerateVoice,
+    "generate_music": GenerateMusic,
     "start_child_session": StartChildSession,
 }
 _CANDIDATES = 4
 _IMAGE_MODEL = "Animagine XL 4.0"
+_MUSIC_MODEL = "ACE-Step 3.5B"
 _QUOTED = (OFFERED, BLOCKED, DECLINED)
 _FINISHED_JOB = ("completed", "failed", "cancelled")
 # Expressions repaint a character's usual face first.
@@ -156,6 +165,8 @@ def generation_capabilities(settings: Settings) -> tuple[str, ...]:
             found.append("cgs")
     if settings.narrative_voice_generation_enabled:
         found.append("voices")
+    if settings.narrative_music_generation_enabled:
+        found.append("music")
     return tuple(found)
 
 
@@ -298,6 +309,24 @@ async def _quote(
     settings: Settings,
 ) -> ActionQuote:
     model = ("model", _IMAGE_MODEL)
+    if isinstance(action, GenerateMusic):
+        minutes, seconds = divmod(action.seconds, 60)
+        length = " ".join(
+            part
+            for part in (
+                _counted(minutes, "minute") if minutes else "",
+                _counted(seconds, "second") if seconds else "",
+            )
+            if part
+        )
+        return ActionQuote(
+            "Music",
+            action.description,
+            (("model", _MUSIC_MODEL), ("time", length), ("audio", "Instrumental, loops")),
+            ((MUSIC_PRICE_ITEM, 1),),
+            "Generate music",
+            "assets",
+        )
     if isinstance(action, StartChildSession):
         return ActionQuote(
             "Child session",
@@ -401,6 +430,7 @@ class ActionView:
     voice_job: NarrativeVoiceJob | None
     child_thread: NarrativeAssistantThread | None = None
     quote: ActionQuote | None = None
+    music_job: NarrativeMusicJob | None = None
 
 
 async def _head_story(
@@ -464,13 +494,15 @@ async def list_actions(
     views: list[ActionView] = []
     for index, action, raw in parsed:
         row = rows.get(index)
-        image_job = voice_job = child_thread = None
+        image_job = voice_job = music_job = child_thread = None
         if row is not None and row.child_thread_id is not None:
             child_thread = await session.get(NarrativeAssistantThread, row.child_thread_id)
         elif row is not None and row.image_job_id is not None:
             image_job = await session.get(NarrativeImageJob, row.image_job_id)
         elif row is not None and row.voice_job_id is not None:
             voice_job = await session.get(NarrativeVoiceJob, row.voice_job_id)
+        elif row is not None and row.music_job_id is not None:
+            music_job = await session.get(NarrativeMusicJob, row.music_job_id)
         elif row is None or row.status == OFFERED:
             # Proposals from before actions had rows: Studio jobs may still belong to them.
             image_job = await _legacy_image_job(session, proposal, index, action, raw)
@@ -508,6 +540,7 @@ async def list_actions(
                     if quoting and story is not None and status in _QUOTED
                     else None
                 ),
+                music_job=music_job,
             )
         )
     return views
@@ -687,7 +720,7 @@ async def _admit(
     actor: AuditActor,
     settings: Settings,
     store: AssetBytes,
-) -> NarrativeImageJob | NarrativeVoiceJob | NarrativeAssistantThread:
+) -> NarrativeImageJob | NarrativeVoiceJob | NarrativeMusicJob | NarrativeAssistantThread:
     key = action_key(proposal.id, index)
     if isinstance(action, StartChildSession):
         # Nothing is left behind if the slot is taken: the whole transaction rolls back.
@@ -701,6 +734,19 @@ async def _admit(
             author_user_id=author_user_id,
             actor=actor,
             settings=settings,
+        )
+    if isinstance(action, GenerateMusic):
+        return await create_music_job(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            author_user_id=author_user_id,
+            description=action.description,
+            seconds=action.seconds,
+            idempotency_key=key,
+            actor=actor,
+            available=settings.narrative_music_generation_enabled,
+            max_active_jobs=settings.narrative_music_max_active_jobs_per_workspace,
         )
     if isinstance(action, GenerateVoice):
         model_id = await _ensure_voice(
@@ -962,6 +1008,9 @@ async def start_action(
     elif isinstance(job, NarrativeVoiceJob):
         kind, count = "voice", job.count
         row.voice_job_id = job.id
+    elif isinstance(job, NarrativeMusicJob):
+        kind, count = "music", 1
+        row.music_job_id = job.id
     else:
         kind, count = "image", job.count
         row.image_job_id = job.id
@@ -1179,11 +1228,16 @@ async def reconcile_actions(factory: async_sessionmaker[AsyncSession], limit: in
                     NarrativeVoiceJob,
                     NarrativeVoiceJob.id == NarrativeAssistantAction.voice_job_id,
                 )
+                .outerjoin(
+                    NarrativeMusicJob,
+                    NarrativeMusicJob.id == NarrativeAssistantAction.music_job_id,
+                )
                 .where(
                     NarrativeAssistantAction.status == STARTED,
                     or_(
                         NarrativeImageJob.status.in_(_FINISHED_JOB),
                         NarrativeVoiceJob.status.in_(_FINISHED_JOB),
+                        NarrativeMusicJob.status.in_(_FINISHED_JOB),
                     ),
                 )
                 .limit(limit)
@@ -1200,10 +1254,13 @@ async def reconcile_actions(factory: async_sessionmaker[AsyncSession], limit: in
             )
             if row is None or row.status != STARTED:
                 continue
-            job: NarrativeImageJob | NarrativeVoiceJob | None
+            job: NarrativeImageJob | NarrativeVoiceJob | NarrativeMusicJob | None
             if row.image_job_id is not None:
                 job = await session.get(NarrativeImageJob, row.image_job_id)
                 owner = NarrativeAsset.job_id == row.image_job_id
+            elif row.music_job_id is not None:
+                job = await session.get(NarrativeMusicJob, row.music_job_id)
+                owner = NarrativeAsset.music_job_id == row.music_job_id
             else:
                 job = await session.get(NarrativeVoiceJob, row.voice_job_id)
                 owner = NarrativeAsset.voice_job_id == row.voice_job_id

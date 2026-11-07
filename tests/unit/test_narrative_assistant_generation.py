@@ -21,7 +21,7 @@ from flint_graph.narrative.assistant.operations import (
     apply_operations,
     check_proposal,
 )
-from flint_graph.narrative.assistant.prompts import RESPONSE_SCHEMA
+from flint_graph.narrative.assistant.prompts import RESPONSE_SCHEMA, response_schema
 from flint_graph.narrative.assistant.turn import ModelReply, run_turn
 from flint_graph.narrative.face_box import face_box_from_png
 from flint_graph.narrative.values import Diagnostic
@@ -493,15 +493,46 @@ async def test_an_empty_cast_list_on_a_stage_step_needs_no_repair():
 
 
 @pytest.mark.anyio
-async def test_a_repair_about_an_empty_stage_step_says_what_to_do():
-    empty = {"type": "stage", "next": "ending"}
-    fixed = {"type": "line", "text": "Hi.", "next": "ending"}
+async def test_a_stage_step_that_changes_nothing_is_left_out_without_another_call():
+    pointed = {**story()["nodes"]["opening"], "next": "hi"}
     model = Scripted(
-        answer({"op": "upsert_node", "id": "hi", "node": empty}),
+        answer(
+            {"op": "upsert_node", "id": "opening", "node": pointed},
+            {"op": "upsert_node", "id": "hi", "node": {"type": "stage", "next": "ending"}},
+        )
+    )
+    result = await run_turn(model, story(), "Add a step.")
+    assert len(model.calls) == 1
+    assert [item.id for item in result.proposal.operations] == ["opening"]
+    assert result.proposal.operations[0].node["next"] == "ending"
+
+
+@pytest.mark.anyio
+async def test_when_nothing_is_left_to_propose_the_reply_stands_alone():
+    empty = {"type": "stage", "next": "ending"}
+    model = Scripted(answer({"op": "upsert_node", "id": "opening", "node": empty}, reply="Well."))
+    result = await run_turn(model, story(), "Add a step.")
+    assert result.proposal is None
+    assert result.diagnostics == ()
+    assert result.reply == "Well."
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("capabilities", "advice"),
+    [(("music",), "add a generate_music action"), ((), "upload one in Assets")],
+)
+async def test_a_repair_for_missing_music_only_offers_to_make_it_where_it_can(capabilities, advice):
+    source = story()
+    source["assets"]["dusk"] = {"kind": "image", "path": "assets/dusk.png", "sha256": sha("7")}
+    node = {"type": "stage", "background": "dusk", "music": "sad_piano", "next": "ending"}
+    fixed = {"type": "stage", "background": "dusk", "next": "ending"}
+    model = Scripted(
+        answer({"op": "upsert_node", "id": "hi", "node": node}),
         answer({"op": "upsert_node", "id": "hi", "node": fixed}),
     )
-    await run_turn(model, story(), "Add a step.")
-    assert "must change something" in model.calls[1][-1]["content"]
+    await run_turn(model, source, "Music.", capabilities=capabilities)
+    assert advice in model.calls[1][-1]["content"]
 
 
 def test_a_stage_step_is_written_seen_things_first_then_sound():
@@ -530,6 +561,125 @@ def test_a_stage_step_is_written_seen_things_first_then_sound():
         "transition",
         "effect",
     ]
+
+
+@pytest.mark.anyio
+async def test_music_can_be_generated_and_a_made_up_id_for_it_is_left_out():
+    source = story()
+    source["assets"]["dusk"] = {"kind": "image", "path": "assets/dusk.png", "sha256": sha("7")}
+    node = {"type": "stage", "background": "dusk", "music": "sad_piano", "next": "ending"}
+    action = {"op": "generate_music", "description": "sad piano", "seconds": 45}
+    result = await run_turn(
+        Scripted(answer({"op": "upsert_node", "id": "hi", "node": node}, action)),
+        source,
+        "Add sad piano music.",
+        capabilities=("music",),
+    )
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    made = result.proposal.operations
+    assert made[0].node == {"type": "stage", "background": "dusk", "next": "ending"}
+    assert (made[1].description, made[1].seconds) == ("sad piano", 45)
+
+
+@pytest.mark.anyio
+async def test_a_new_step_only_for_a_track_being_made_is_left_out_and_the_story_joins_up():
+    edits = (
+        {
+            "op": "upsert_node",
+            "id": "opening",
+            "node": {**story()["nodes"]["opening"], "next": "hi"},
+        },
+        {
+            "op": "upsert_node",
+            "id": "hi",
+            "node": {"type": "stage", "music": "sad_piano", "transition": "fade", "next": "ending"},
+        },
+        {"op": "generate_music", "description": "sad piano"},
+    )
+    result = await run_turn(Scripted(answer(*edits)), story(), "Music.", capabilities=("music",))
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    assert [getattr(item, "id", "") for item in result.proposal.operations] == ["opening", ""]
+    assert result.proposal.operations[0].node["next"] == "ending"
+
+
+@pytest.mark.anyio
+async def test_a_saved_scene_rewritten_only_for_a_track_being_made_stays_as_it_was():
+    node = {"type": "stage", "music": "sad_piano", "next": "ending"}
+    result = await run_turn(
+        Scripted(
+            answer(
+                {"op": "upsert_node", "id": "opening", "node": node},
+                {"op": "generate_music", "description": "sad piano"},
+            )
+        ),
+        story(),
+        "Music.",
+        capabilities=("music",),
+    )
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    assert [item.op for item in result.proposal.operations] == ["generate_music"]
+
+
+def test_the_grammar_only_offers_music_where_it_can_be_made():
+    def offered(schema):
+        branch = schema["properties"]["proposal"]["anyOf"][0]
+        shapes = branch["properties"]["operations"]["items"]["anyOf"]
+        return {shape["properties"]["op"].get("const") for shape in shapes}
+
+    assert "generate_music" in offered(response_schema())
+    assert "generate_music" not in offered(response_schema(music=False))
+    assert "generate_voice" in offered(response_schema(music=False))
+
+
+@pytest.mark.anyio
+async def test_a_turn_without_music_refuses_it_whatever_the_provider_writes():
+    class Recording(Scripted):
+        schema = None
+
+        async def respond(self, messages, schema, on_delta=None):
+            self.schema = schema
+            return await super().respond(messages, schema, on_delta)
+
+    model = Recording(
+        answer(
+            {"op": "set_title", "title": "New title"},
+            {"op": "generate_music", "description": "sad piano"},
+        )
+    )
+    result = await run_turn(model, story(), "Music.", capabilities=())
+    assert [item.op for item in result.proposal.operations] == ["set_title"]
+    assert "generate_music" not in json.dumps(model.schema)
+
+
+@pytest.mark.parametrize("seconds", [14, 181])
+def test_a_track_length_outside_the_limits_is_refused(seconds):
+    with pytest.raises(ValidationError):
+        Proposal.model_validate(
+            {
+                "summary": "Music",
+                "operations": [{"op": "generate_music", "description": "x", "seconds": seconds}],
+            }
+        )
+
+
+def test_a_track_defaults_to_a_minute():
+    proposal = Proposal.model_validate(
+        {"summary": "Music", "operations": [{"op": "generate_music", "description": "x"}]}
+    )
+    assert proposal.operations[0].seconds == 60
+
+
+def test_context_says_music_can_be_generated_only_when_it_can():
+    messages, _ = build_turn_messages(story(), "Hi", capabilities=("music",))
+    assert "generation available: music" in messages[-1]["content"]
+    assert "music cannot be generated" not in messages[-1]["content"]
+    messages, _ = build_turn_messages(story(), "Hi", capabilities=("pictures",))
+    assert "music cannot be generated" in messages[-1]["content"]
+    messages, _ = build_turn_messages(story(), "Hi", capabilities=())
+    assert "generation available" not in messages[-1]["content"]
 
 
 @pytest.mark.anyio

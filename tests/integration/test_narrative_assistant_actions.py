@@ -106,6 +106,7 @@ async def propose(client, factory, headers, path, head, *operations, thread=None
                 "proposal": {"summary": "Generate things", "operations": list(operations)},
             }
         ),
+        capabilities=("music",),
     )
     listed = await turns(client, headers, path, thread)
     return thread, listed[-1]["proposal"]["id"]

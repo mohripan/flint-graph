@@ -90,6 +90,9 @@ from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeImageJob as NarrativeImageJob,
 )
 from flint_graph.infrastructure.db.narrative_character_models import (
+    NarrativeMusicJob as NarrativeMusicJob,
+)
+from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeVoiceJob as NarrativeVoiceJob,
 )
 from flint_graph.infrastructure.db.narrative_gpu_models import (
