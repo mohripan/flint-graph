@@ -17,6 +17,12 @@ on:
       oidc_logout_url:
         description: The provider's sign-out page, if it publishes no end-session endpoint
         required: false
+      preview_origin:
+        description: The address playtests are served from, written into the frontend
+        default: https://play.54-253-96-189.sslip.io
+      playtest_parent_origin:
+        description: The one site that may embed a playtest, written into the playtest image
+        default: https://flintgraph.digital
 
 permissions:
   contents: read
@@ -33,6 +39,8 @@ jobs:
             dockerfile: Dockerfile
           - image: flint-graph-frontend
             dockerfile: ops/deploy/frontend.Dockerfile
+          - image: flint-graph-playtest
+            dockerfile: ops/deploy/playtest.Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -54,3 +62,5 @@ jobs:
             VITE_FLINT_GRAPH_OIDC_CLIENT_ID=${{ inputs.oidc_client_id }}
             VITE_FLINT_GRAPH_OIDC_BEARER=${{ inputs.oidc_bearer }}
             VITE_FLINT_GRAPH_OIDC_LOGOUT_URL=${{ inputs.oidc_logout_url }}
+            VITE_FLINT_GRAPH_PREVIEW_ORIGIN=${{ inputs.preview_origin }}
+            PLAYTEST_PARENT_ORIGIN=${{ inputs.playtest_parent_origin }}

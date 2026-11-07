@@ -1,0 +1,6 @@
+*
+!runtimes/godot
+!ops/narrative/toolchain-linux.json
+!ops/deploy/playtest_toolchain.py
+!ops/deploy/playtest.nginx.conf
+!tools/narrative/build_preview.py

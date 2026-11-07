@@ -1,37 +1,58 @@
-"""Build trusted, source-free local studio preview with the explicitly pinned toolchain."""
+"""Build the trusted, source-free studio preview with the explicitly pinned toolchain."""
 
 import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
+WINDOWS_ENGINE = "Godot_v4.7.2-stable_win64.exe"
+LINUX_ENGINE = "Godot_v4.7.2-stable_linux.x86_64"
+# The origin goes into a security header and a script, so only these characters may reach them.
+HOST = re.compile(r"[A-Za-z0-9.-]+\Z")
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def local_parent(value: str) -> str:
+def checked_parent(value: str) -> str:
+    """The one editor that may embed this build: on this computer, or a site served over HTTPS."""
     parsed = urlsplit(value)
+    local = parsed.scheme == "http" and parsed.hostname == "localhost" and bool(parsed.port)
     if (
-        parsed.scheme != "http"
-        or parsed.hostname != "localhost"
+        not (local or parsed.scheme == "https")
+        or not HOST.match(parsed.hostname or "")
         or parsed.username
         or parsed.password
         or parsed.path
         or parsed.query
         or parsed.fragment
-        or not parsed.port
     ):
         raise ValueError(
-            "Local editor origin must be http://localhost:<port>, without path or credentials"
+            "The editor's origin must be http://localhost:<port> or https://<host>, "
+            "without path or credentials"
         )
     return value
+
+
+def pinned_engine(name: str) -> str:
+    if name == WINDOWS_ENGINE:
+        return str(
+            json.loads((ROOT / "runtimes/godot/toolchain.json").read_bytes())["extracted_sha256"][
+                name
+            ]
+        )
+    if name == LINUX_ENGINE:
+        return str(
+            json.loads((ROOT / "ops/narrative/toolchain-linux.json").read_bytes())["engine_sha256"]
+        )
+    raise ValueError("Unqualified toolchain: " + name)
 
 
 def main() -> None:
@@ -41,18 +62,15 @@ def main() -> None:
     parser.add_argument("--parent-origin", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    parent = local_parent(args.parent_origin)
+    parent = checked_parent(args.parent_origin)
     engine, templates = args.engine.resolve(strict=True), args.templates.resolve(strict=True)
     runtime = ROOT / "runtimes/godot"
     pin = json.loads((runtime / "toolchain.json").read_bytes())
-    for path, name in [
-        (engine, "Godot_v4.7.2-stable_win64.exe"),
-        *(
-            (templates / f"web_nothreads_{mode}.zip", f"web_nothreads_{mode}.zip")
-            for mode in ["debug", "release"]
-        ),
-    ]:
-        if digest(path) != pin["extracted_sha256"][name]:
+    if digest(engine) != pinned_engine(engine.name):
+        raise ValueError("Unqualified toolchain: " + engine.name)
+    for mode in ["debug", "release"]:
+        name = f"web_nothreads_{mode}.zip"
+        if digest(templates / name) != pin["extracted_sha256"][name]:
             raise ValueError("Unqualified toolchain: " + name)
     output = args.output.absolute()
     if (
@@ -110,7 +128,16 @@ def main() -> None:
         )
     presets.write_text(text, encoding="utf-8", newline="\n")
     environment = os.environ.copy()
-    for key in ["APPDATA", "LOCALAPPDATA", "TEMP", "TMP"]:
+    for key in [
+        "APPDATA",
+        "LOCALAPPDATA",
+        "TEMP",
+        "TMP",
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+    ]:
         folder = output / "profile" / key
         folder.mkdir(parents=True)
         environment[key] = str(folder)
