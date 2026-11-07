@@ -99,6 +99,23 @@ def test_those_checks_would_notice_a_missing_secret(monkeypatch: pytest.MonkeyPa
         Settings(_env_file=None)  # type: ignore[call-arg]
 
 
+def test_a_smaller_gpu_can_free_the_assistant_model_for_a_picture_or_voice() -> None:
+    # A 16 GB card cannot hold the assistant's model and SDXL together, and without these a job
+    # that finds the GPU busy would fail rather than ask Ollama to let go.
+    config = _config()
+    assistant = config["FLINT_GRAPH_NARRATIVE_ASSISTANT_OLLAMA_MODEL"]
+    assert config["FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL"] == assistant
+    assert config["FLINT_GRAPH_NARRATIVE_VOICE_RELEASE_OLLAMA_MODEL"] == assistant
+
+
+def test_nothing_tries_to_change_the_gpu_type_or_take_backups() -> None:
+    config = _config()
+    assert "FLINT_GRAPH_NARRATIVE_GPU_FALLBACK_INSTANCE_TYPE" not in config
+    assert "FLINT_GRAPH_NARRATIVE_GPU_INSTANCE_TYPE" not in config
+    foundation = ROOT / "deploy/cdk/flintgraph_infra/foundation.py"
+    assert "dlm" not in foundation.read_text("utf-8")
+
+
 def test_the_public_never_gets_development_sign_in() -> None:
     assert _config()["FLINT_GRAPH_AUTH_MODE"] == "oidc"
     assert "FLINT_GRAPH_ALLOW_UNSAFE_DEV_AUTH" not in _config()
@@ -229,6 +246,7 @@ def test_the_daily_limit_matches_the_cost_estimate() -> None:
         ("CONTROL", "control_instance_type"),
         ("CONTROL_ROOT_GB", "control_root_gb"),
         ("DATA_GB", "data_gb"),
+        ("GPU", "gpu_instance_type"),
         ("GPU_ROOT_GB", "gpu_root_gb"),
     ],
 )

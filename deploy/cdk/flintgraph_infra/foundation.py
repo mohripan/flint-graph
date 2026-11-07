@@ -1,19 +1,17 @@
-"""The network, the always-on server, its data disk, backups and the budget alarm."""
+"""The network, the always-on server, its data disk and the budget alarm."""
 
 from typing import Any
 
-from aws_cdk import CfnOutput, CfnTag, RemovalPolicy, Size, Stack, Tags
+from aws_cdk import CfnOutput, RemovalPolicy, Size, Stack
 from aws_cdk import aws_budgets as budgets
-from aws_cdk import aws_dlm as dlm
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
 from flintgraph_infra.common import provisioning, require_imdsv2
-from flintgraph_infra.config import BACKUP_TAG_KEY, GPU_TAG_KEY, GPU_TAG_VALUE, InfraConfig
+from flintgraph_infra.config import GPU_TAG_KEY, GPU_TAG_VALUE, InfraConfig
 
-BACKUP_DAYS = 7
 # k3s control traffic and the encrypted network between the two servers.
 K3S_API = ec2.Port.tcp(6443)
 KUBELET = ec2.Port.tcp(10250)
@@ -67,7 +65,7 @@ class FoundationStack(Stack):
         )
         self.control_role.add_to_policy(
             iam.PolicyStatement(
-                actions=["ec2:StartInstances", "ec2:StopInstances", "ec2:ModifyInstanceAttribute"],
+                actions=["ec2:StartInstances", "ec2:StopInstances"],
                 resources=[self.format_arn(service="ec2", resource="instance", resource_name="*")],
                 conditions={"StringEquals": {f"aws:ResourceTag/{GPU_TAG_KEY}": GPU_TAG_VALUE}},
             )
@@ -85,7 +83,6 @@ class FoundationStack(Stack):
             encrypted=True,
             removal_policy=RemovalPolicy.RETAIN,
         )
-        Tags.of(self.data_volume).add(BACKUP_TAG_KEY, "daily")
 
         self.control = ec2.Instance(
             self,
@@ -136,7 +133,6 @@ class FoundationStack(Stack):
             string_value=f"https://{self.control.instance_private_ip}:6443",
         )
 
-        self._backups()
         self._budget()
         CfnOutput(self, "PublicIp", value=address.attr_public_ip)
         CfnOutput(self, "ControlInstanceId", value=self.control.instance_id)
@@ -165,39 +161,6 @@ class FoundationStack(Stack):
             role.add_to_policy(
                 iam.PolicyStatement(actions=["ssm:PutParameter"], resources=[arn(write)])
             )
-
-    def _backups(self) -> None:
-        role = iam.Role(
-            self,
-            "BackupRole",
-            assumed_by=iam.ServicePrincipal("dlm.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSDataLifecycleManagerServiceRole"
-                )
-            ],
-        )
-        dlm.CfnLifecyclePolicy(
-            self,
-            "DailyBackups",
-            description="Daily snapshots of the FlintGraph data disk",
-            execution_role_arn=role.role_arn,
-            state="ENABLED",
-            policy_details=dlm.CfnLifecyclePolicy.PolicyDetailsProperty(
-                resource_types=["VOLUME"],
-                target_tags=[CfnTag(key=BACKUP_TAG_KEY, value="daily")],
-                schedules=[
-                    dlm.CfnLifecyclePolicy.ScheduleProperty(
-                        name="daily",
-                        copy_tags=True,
-                        create_rule=dlm.CfnLifecyclePolicy.CreateRuleProperty(
-                            interval=24, interval_unit="HOURS", times=["18:00"]
-                        ),
-                        retain_rule=dlm.CfnLifecyclePolicy.RetainRuleProperty(count=BACKUP_DAYS),
-                    )
-                ],
-            ),
-        )
 
     def _budget(self) -> None:
         email = self.config.alert_email

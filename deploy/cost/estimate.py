@@ -14,47 +14,43 @@ HOURS_PER_MONTH = 730
 
 CONTROL = "t3a.medium"
 CONTROL_ROOT_GB = 20
-DATA_GB = 40
+DATA_GB = 20
+GPU = "g4dn.xlarge"
 GPU_ROOT_GB = 70
-# Daily snapshots keep only what changed. An assumption until there is real data to measure.
-SNAPSHOT_GB = 15
 
 # A visit is 15 minutes of use, then the 5 minute idle wait, plus an estimated 3 minute boot.
 VISIT_MINUTES = 15 + 5 + 3
 DAILY_CAP_HOURS = 3
-USAGE = {
-    "nobody uses it": 0.0,
-    "10 visits": 10 * VISIT_MINUTES / 60,
-    "50 visits": 50 * VISIT_MINUTES / 60,
-    "200 visits": 200 * VISIT_MINUTES / 60,
-    f"worst case: {DAILY_CAP_HOURS} h cap every day": DAILY_CAP_HOURS * 30.0,
-}
-GPUS = ("g4dn.xlarge", "g6.xlarge", "g5.xlarge")
+HOURS_ON_FOR_DEMOS = 4
 
 
 def main() -> None:
     prices = json.loads(Path(__file__).with_name("prices.json").read_text("utf-8"))
     hourly = prices["instances_usd_per_hour"]
+    spot = {kind: row["median"] for kind, row in prices["spot_usd_per_hour_last_14_days"].items()}
     gp3 = prices["ebs_gp3_usd_per_gb_month"]
     ipv4 = prices["public_ipv4_usd_per_hour"]
+    lightsail = prices["lightsail"]
 
+    address = ipv4 * HOURS_PER_MONTH
+    disks = (CONTROL_ROOT_GB + DATA_GB) * gp3
+    gpu_disk = GPU_ROOT_GB * gp3
+    on_demand = hourly[GPU] + ipv4
+    interruptible = spot[GPU] + ipv4
+    server = hourly[CONTROL] * HOURS_PER_MONTH
     fixed = {
-        f"{CONTROL} always on": hourly[CONTROL] * HOURS_PER_MONTH,
-        "Its public IP address": ipv4 * HOURS_PER_MONTH,
-        f"Its disks ({CONTROL_ROOT_GB} GB system + {DATA_GB} GB data)": (CONTROL_ROOT_GB + DATA_GB)
-        * gp3,
-        f"Daily backups (about {SNAPSHOT_GB} GB of snapshots)": SNAPSHOT_GB
-        * prices["ebs_snapshot_usd_per_gb_month"],
-        f"GPU server's disk while stopped ({GPU_ROOT_GB} GB)": GPU_ROOT_GB * gp3,
+        f"{CONTROL} always on": server,
+        "Its public IP address": address,
+        f"Its disks ({CONTROL_ROOT_GB} GB system + {DATA_GB} GB data)": disks,
+        f"GPU server's disk while stopped ({GPU_ROOT_GB} GB)": gpu_disk,
     }
-    total = sum(fixed.values())
 
     print(f"Prices fetched {prices['fetched']} for {prices['region']}\n")
-    print("Every month, even if nobody uses it:\n")
+    print("Every month, even if nobody uses it, as prepared:\n")
     print("| Item | USD/month |\n| --- | ---: |")
     for name, cost in fixed.items():
         print(f"| {name} | {cost:.2f} |")
-    print(f"| **Total** | **{total:.2f}** |\n")
+    print(f"| **Total** | **{sum(fixed.values()):.2f}** |\n")
 
     print(f"GPU options, per hour while running (a public IP adds {ipv4:.3f}):\n")
     print("| Type | GPU | On-demand | Spot, median of last 14 days | Runs poses and training? |")
@@ -64,51 +60,54 @@ def main() -> None:
         "g6.xlarge": ("L4, 24 GB", "Yes"),
         "g5.xlarge": ("A10G, 24 GB", "Yes"),
     }
-    spot = prices["spot_usd_per_hour_last_14_days"]
-    for gpu in GPUS:
-        card, poses = notes[gpu]
-        print(f"| {gpu} | {card} | {hourly[gpu]:.3f} | {spot[gpu]['median']:.3f} | {poses} |")
+    for kind, (card, poses) in notes.items():
+        print(f"| {kind} | {card} | {hourly[kind]:.3f} | {spot[kind]:.3f} | {poses} |")
 
-    print("\nWhole monthly bill, on-demand:\n")
-    print("| Usage | GPU hours | " + " | ".join(GPUS) + " |")
-    print("| --- | ---: | " + " | ".join("---:" for _ in GPUS) + " |")
-    for name, hours in USAGE.items():
-        costs = [total + hours * (hourly[gpu] + ipv4) for gpu in GPUS]
-        print(f"| {name} | {hours:.1f} | " + " | ".join(f"{cost:.2f}" for cost in costs) + " |")
+    # (the always-on server's monthly cost, whether a disk and address are extra, GPU per hour)
+    paths = {
+        f"{CONTROL} on-demand, on all the time": (server, True, on_demand),
+        f"{CONTROL} on-demand, on {HOURS_ON_FOR_DEMOS} h a day": (
+            server * HOURS_ON_FOR_DEMOS / 24,
+            True,
+            on_demand,
+        ),
+        "t3a.small on-demand (2 GB), on all the time": (
+            hourly["t3a.small"] * HOURS_PER_MONTH,
+            True,
+            on_demand,
+        ),
+        "Lightsail 2 GB, includes disk and address": (
+            lightsail["small_3_2"]["usd_per_month"],
+            False,
+            on_demand,
+        ),
+        "Lightsail 4 GB, includes disk and address": (
+            lightsail["medium_3_2"]["usd_per_month"],
+            False,
+            on_demand,
+        ),
+        f"{CONTROL} Spot and {GPU} Spot": (spot[CONTROL] * HOURS_PER_MONTH, True, interruptible),
+    }
+    visit = VISIT_MINUTES / 60
+    print(f"\nWhole monthly bill with {GPU}, by usage:\n")
+    print("| Always-on server | Nobody | 10 visits | 50 visits | 200 visits | One visit |")
+    print("| --- | ---: | ---: | ---: | ---: | ---: |")
+    for name, (cost, extras, gpu_hour) in paths.items():
+        idle = cost + gpu_disk + (address + disks if extras else 0.0)
+        row = [idle + count * visit * gpu_hour for count in (0, 10, 50, 200)]
+        print(f"| {name} | " + " | ".join(f"{cell:.2f}" for cell in row), end="")
+        print(f" | {visit * gpu_hour:.2f} |")
 
-    visit_hours = VISIT_MINUTES / 60
-    print("\nOne 15 minute visit costs, in GPU time alone:\n")
-    for gpu in GPUS:
-        print(f"- {gpu}: {visit_hours * (hourly[gpu] + ipv4):.2f} USD")
-
-    print("\nOther choices:\n")
-    print("| Choice | Change, USD/month |\n| --- | ---: |")
+    cap = DAILY_CAP_HOURS * 30.0
+    idle = sum(fixed.values())
     print(
-        f"| t3a.small (2 GB, same CPU allowance) instead of {CONTROL} (4 GB) | "
-        f"{(hourly['t3a.small'] - hourly[CONTROL]) * HOURS_PER_MONTH:.2f} |"
-    )
-    print(
-        f"| t3a.large (8 GB) instead of {CONTROL} (4 GB) | "
-        f"+{(hourly['t3a.large'] - hourly[CONTROL]) * HOURS_PER_MONTH:.2f} |"
-    )
-    print(
-        f"| t4g.medium (Arm, needs Arm images) instead of {CONTROL} | "
-        f"{(hourly['t4g.medium'] - hourly[CONTROL]) * HOURS_PER_MONTH:.2f} |"
-    )
-    s3 = prices["s3_standard_first_tier_usd_per_gb_month"]
-    print(f"| Each 10 GB of art on S3 instead of the server's disk | {(s3 - gp3) * 10:.2f} |")
-    print(f"| Each 10 GB more GPU disk (music, poses, more voices) | +{gp3 * 10:.2f} |")
-
-    credits = 100.0
-    light = total + USAGE["10 visits"] * (hourly["g6.xlarge"] + ipv4)
-    print(
-        f"\nThe {credits:.0f} USD of credits would last {credits / light:.1f} months "
-        "at 10 visits a month on g6.xlarge."
+        f"\nWorst case as prepared, the {DAILY_CAP_HOURS} h daily cap every day: "
+        f"{idle + cap * on_demand:.2f} USD. The 100 USD of credits would last "
+        f"{100 / (idle + 10 * visit * on_demand):.1f} months at 10 visits a month."
     )
     print(
         "\nSame-zone traffic between the servers is free. The first 100 GB out to the internet "
-        "each month is free, then "
-        f"{prices['egress_tiers'][0]['usd']:.3f} USD/GB."
+        f"each month is free, then {prices['egress_tiers'][0]['usd']:.3f} USD/GB."
     )
 
 

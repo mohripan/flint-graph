@@ -4,7 +4,7 @@ import json
 
 import aws_cdk as cdk
 import pytest
-from aws_cdk.assertions import Match, Template
+from aws_cdk.assertions import Template
 from flintgraph_infra.config import GPU_TAG_KEY, InfraConfig
 from flintgraph_infra.foundation import FoundationStack
 from flintgraph_infra.gpu import GpuStack
@@ -75,14 +75,11 @@ def test_the_data_disk_outlives_the_server_and_the_stack(templates):
     volume = next(iter(foundation.find_resources("AWS::EC2::Volume").values()))
     assert volume["DeletionPolicy"] == "Retain"
     assert volume["UpdateReplacePolicy"] == "Retain"
-    tags = {tag["Key"]: tag["Value"] for tag in volume["Properties"]["Tags"]}
-    assert tags["flintgraph-backup"] == "daily"
-    foundation.has_resource_properties(
-        "AWS::DLM::LifecyclePolicy",
-        Match.object_like(
-            {"PolicyDetails": {"TargetTags": [{"Key": "flintgraph-backup", "Value": "daily"}]}}
-        ),
-    )
+
+
+def test_there_are_no_backups_because_the_owner_chose_none(templates):
+    foundation, _ = templates
+    foundation.resource_count_is("AWS::DLM::LifecyclePolicy", 0)
 
 
 def test_the_always_on_server_cannot_run_up_a_surprise_cpu_bill(templates):
@@ -97,7 +94,7 @@ def test_the_gpu_stops_rather_than_terminates_when_it_shuts_itself_down(template
     _, gpu = templates
     properties = only_instance(gpu)
     assert properties["InstanceInitiatedShutdownBehavior"] == "stop"
-    assert properties["InstanceType"] == "g6.xlarge"
+    assert properties["InstanceType"] == "g4dn.xlarge"
     tags = {tag["Key"]: tag["Value"] for tag in properties["Tags"]}
     assert tags[GPU_TAG_KEY] == "1"
     gpu.resource_count_is("AWS::EC2::EIP", 0)
@@ -119,6 +116,7 @@ def test_only_the_tagged_gpu_can_be_started_or_stopped(templates):
     assert len(powerful) == 1
     assert powerful[0]["Condition"] == {"StringEquals": {f"aws:ResourceTag/{GPU_TAG_KEY}": "1"}}
     assert "ec2:TerminateInstances" not in json.dumps(statements)
+    assert "ec2:ModifyInstanceAttribute" not in json.dumps(statements)
     assert not any(
         statement["Resource"] == "*" and statement["Action"] != "ec2:DescribeInstances"
         for statement in statements

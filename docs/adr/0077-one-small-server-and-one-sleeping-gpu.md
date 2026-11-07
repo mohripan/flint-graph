@@ -18,7 +18,7 @@ Two EC2 instances in one zone of ap-southeast-2, joined as one k3s cluster.
 | Server | Type | Runs |
 | --- | --- | --- |
 | Always on | t3a.medium, 4 GB, plus 4 GB swap | Traefik, frontend, API, PostgreSQL, Temporal, MinIO, `narrative_gpu_dispatch`, `narrative_gpu_controller`, Flux |
-| GPU, usually stopped | g6.xlarge, L4, 24 GB | Ollama, assistant, image and voice workers |
+| GPU, usually stopped | g4dn.xlarge, T4, 16 GB | Ollama, assistant, image and voice workers |
 
 Each tool does one job:
 
@@ -31,11 +31,20 @@ Each tool does one job:
 
 ### Choices
 
-**g6, not g4dn.** g4dn is cheaper by $0.14 per 15-minute visit, but pose and training jobs refuse a
-GPU without native bf16, which its T4 is expected to lack. g5 is the fallback when g6 has no capacity.
+**g4dn, not g6.** It is the cheapest GPU that runs what is deployed: $0.26 of GPU time per visit against
+$0.40. Poses and training refuse a GPU without native bf16, which a T4 lacks, but neither is deployed. No
+T4 has actually been tried: it should fit, since this all works on a 12 GB laptop, and
+`*_RELEASE_OLLAMA_MODEL` frees the assistant's model when a picture needs the memory.
 
-**On-demand, not Spot, for now.** Spot is 42% cheaper on g6, and can stop the machine in the middle of
-someone's generation. It is one setting to change once this runs.
+**On-demand, not Spot, because the plan forbids Spot.** The owner wanted Spot, and it would be about half
+the price: t3a.medium $13.72 a month against $34.67, and g4dn $0.30 an hour against $0.68. But `DenySpotMarketType`
+is in AWS's managed policy for the Free Plan and the Paid Plan alike, and a dry-run confirms it. Unlocking it means
+activating advanced features, which AWS says cannot be reversed, and which permanently removes the spend limit. If
+that is ever done: request `persistent` with interruption behaviour `stop`, so disks and the address stay and EC2 restarts
+it when capacity returns. Termination protection is not allowed on Spot, the type cannot change while stopped so there is
+no fallback type, and the request must be cancelled before removing a server. `IncorrectSpotRequestState` needs treating
+as no capacity in `narrative_gpu_ec2.py`. Availability also differs: AWS's placement score for a g4dn was 9 of 10 and for
+g6 and g5 it was 1, on 2026-11-07, so Spot would rule those two out.
 
 **Data on a retained disk.** PostgreSQL, MinIO and Temporal use fixed folders on a separate encrypted
 volume, which survives the server and even the stack being deleted. They mount it as
@@ -64,10 +73,11 @@ once and the timer is not installed yet.
 
 - **Temporal is the development server**, with one SQLite file. It restarts cleanly from that file and
   saves about 1 GB over a real cluster, but has no high availability and no upgrade path of its own.
-- **One server holds everything.** If it dies, the site is down until it is replaced. Daily disk
-  snapshots mean up to a day of work can be lost. That is acceptable for invited visitors, not for paid
-  customers.
+- **One server holds everything.** If it dies, the site is down until it is replaced. That is acceptable
+  for invited visitors, not for paid customers.
 - **One API replica,** because the rate limit lives in its memory.
+- **No backups,** the owner's choice. A lost disk, a bad migration or a mistake permanently loses every
+  project. That is accepted for now.
 - **Files on a disk, not S3, with software nobody upstream maintains.** Keeping everything on one server is
   the owner's choice. MinIO stopped publishing images in October 2025 and archived its repository in February
   2026, and `minio/minio` can no longer be pulled from Docker Hub or Quay. This uses Chainguard's build of it,
@@ -87,8 +97,8 @@ These stop the deployment being complete, and are listed honestly so that nobody
 - **Sign-in.** Real people must sign in with OIDC. No provider is deployed: the issuer in
   `deploy/k8s/production/config.env` is a placeholder. Development sign-in makes everyone the same user
   and must never be exposed.
-- **Poses, training and music.** Their workers and models are not in the first deployment. They would
-  use more of the GPU disk.
+- **Poses, training and music.** Their workers and models are not in the first deployment. Poses and
+  training also refuse this GPU, so adding them means changing its type, and a larger disk.
 
 ## Evidence
 

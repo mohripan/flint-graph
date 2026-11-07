@@ -37,27 +37,49 @@
     "t4g.large": 0.0848,
     "t4g.medium": 0.0424
   },
+  "lightsail": {
+    "medium_3_2": {
+      "memory_gb": 4.0,
+      "usd_per_month": 24.0
+    },
+    "small_3_2": {
+      "memory_gb": 2.0,
+      "usd_per_month": 12.0
+    }
+  },
   "public_ipv4_usd_per_hour": 0.005,
   "region": "ap-southeast-2",
   "s3_standard_first_tier_usd_per_gb_month": 0.025,
   "spot_usd_per_hour_last_14_days": {
     "g4dn.xlarge": {
       "high": 0.3228,
-      "low": 0.2455,
-      "median": 0.29705,
-      "samples": 174
+      "low": 0.291,
+      "median": 0.304,
+      "samples": 62
     },
     "g5.xlarge": {
-      "high": 0.7359,
+      "high": 0.6753,
       "low": 0.5767,
-      "median": 0.6568,
-      "samples": 113
+      "median": 0.6518999999999999,
+      "samples": 58
     },
     "g6.xlarge": {
-      "high": 1.0464,
-      "low": 0.5401,
-      "median": 0.6108,
-      "samples": 172
+      "high": 0.6282,
+      "low": 0.5657,
+      "median": 0.60755,
+      "samples": 60
+    },
+    "t3a.medium": {
+      "high": 0.0198,
+      "low": 0.0181,
+      "median": 0.0188,
+      "samples": 59
+    },
+    "t3a.small": {
+      "high": 0.0101,
+      "low": 0.0094,
+      "median": 0.0096,
+      "samples": 55
     }
   }
 }

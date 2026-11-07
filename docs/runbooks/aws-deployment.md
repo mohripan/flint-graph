@@ -14,8 +14,8 @@ costs a few cents a month at most.
 1. **The paid plan.** The free plan cannot launch `t3a.medium` or any GPU. Upgrade in AWS Settings;
    remaining credits carry over. Set a spend limit there, knowing that reaching it pauses the project.
 2. **A GPU quota.** "Running On-Demand G and VT instances" is 0. In Service Quotas, ask for 4 vCPUs in
-   ap-southeast-2 for one `g6.xlarge`. AWS decides this by hand, so it can take days.
-3. **A domain name**, and the ability to add an `A` record for it.
+   ap-southeast-2 for one `g4dn.xlarge`. AWS decides this by hand, so it can take days.
+3. **A domain name.** Yours is on Cloudflare, which needs one `A` record in step 6.
 4. **A sign-in provider** that speaks OIDC. Cognito is free for up to 10,000 monthly users. Keycloak on the
    always-on server needs about 600 MB more memory than it has spare, so probably a bigger server.
 5. **Locally:** the AWS CLI with the `flintgraph` profile, `uv` and Node 22 or 24. Never paste AWS keys into
@@ -74,7 +74,7 @@ exists but tells nobody.
 
 ## 5. Create the always-on server
 
-This starts about $45 a month, and the GPU server's stopped disk adds about $7 in step 8.
+This starts about $42 a month, and the GPU server's stopped disk adds about $7 in step 8.
 
 ```powershell
 npx aws-cdk@2.1148.0 deploy FlintGraphFoundation --profile flintgraph
@@ -93,7 +93,8 @@ It has no SSH port: Session Manager is the only way in. If provisioning failed, 
 
 ## 6. Open the site
 
-Point the domain's `A` record at `PublicIp`, then turn on Flux, on the server:
+In Cloudflare, add an `A` record pointing the name at `PublicIp`, set to **DNS only** (the grey cloud), so that
+Let's Encrypt and the assistant's long streams reach the server directly. Then turn on Flux, on the server:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -111,7 +112,7 @@ editing by hand, but the assistant and generating wait with nothing to run them.
 
 ## 8. Create the GPU server
 
-CloudFormation cannot create a stopped instance, so **this starts about $1 an hour straight away**. Allow
+CloudFormation cannot create a stopped instance, so **this starts about $0.69 an hour straight away**. Allow
 about an hour for the driver, a reboot, about 19 GB of models and the images. It stops itself after 5 hours
 whatever happens. The controller is off, so nothing stops it sooner than that unless you do.
 
@@ -170,8 +171,7 @@ copy. Find the current digest with `docker buildx imagetools inspect cgr.dev/cha
 then `sudo k3s kubectl rollout restart deployment -n flintgraph`. A new database password must also be set inside
 PostgreSQL, which only reads its variable when the folder is empty.
 
-**Restoring from a snapshot:** stop the always-on server, create a volume from the snapshot in the same zone, swap it
-for the one attached at `/dev/sdf`, start the server. A swapped volume keeps its label, so it mounts by itself.
+**There are no backups,** by choice. If the data disk is lost, every project is gone.
 
 **Replacing the always-on server:** data is safe on its own disk, but the cluster starts empty with a new join token.
 Run `flux resume` again and `sudo rm /var/lib/flintgraph-provisioned` on the GPU server, uninstall k3s there with
@@ -184,5 +184,5 @@ npx aws-cdk@2.1148.0 destroy FlintGraphGpu --profile flintgraph
 ```
 
 Foundation has termination protection and its server has API termination protection, on purpose. To remove it, turn both
-off, then destroy. **The data disk and its snapshots are kept and keep billing** (about $5 a month) until you delete them
+off, then destroy. **The data disk is kept and keeps billing** (about $2 a month) until you delete it
 yourself in the console, which permanently deletes every project.

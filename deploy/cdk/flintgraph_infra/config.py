@@ -9,23 +9,24 @@ from typing import Any
 UBUNTU_AMI = "ami-01e91e94accc42eec"
 GPU_TAG_KEY = "flintgraph-gpu"
 GPU_TAG_VALUE = "1"
-BACKUP_TAG_KEY = "flintgraph-backup"
 
 
 @dataclass(frozen=True)
 class InfraConfig:
     region: str = "ap-southeast-2"
-    # g5.xlarge is only in zones a and c, so stay in a to keep it as the fallback.
     zone: str = "ap-southeast-2a"
     ami: str = UBUNTU_AMI
     repo_url: str = "https://github.com/mohripan/flint-graph.git"
     git_ref: str = "master"
     control_instance_type: str = "t3a.medium"
     control_root_gb: int = 20
-    data_gb: int = 40
-    gpu_instance_type: str = "g6.xlarge"
+    # Disks can grow but not shrink, so this starts small.
+    data_gb: int = 20
+    # The cheapest GPU that runs what is deployed. Poses and training refuse it: they need native
+    # bf16, which a T4 lacks, so adding them means changing this (ADR 0077).
+    gpu_instance_type: str = "g4dn.xlarge"
     gpu_root_gb: int = 70
-    monthly_budget_usd: int = 75
+    monthly_budget_usd: int = 50
     alert_email: str | None = None
 
     @classmethod

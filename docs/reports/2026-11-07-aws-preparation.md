@@ -9,47 +9,45 @@ calls were read-only: prices, Spot history, quotas, and `--dry-run`.
 From `deploy/cost/estimate.py`, using Sydney list prices fetched on 2026-11-07 into `deploy/cost/prices.json`.
 These are estimates, and the disk and visit figures are assumptions until there is real usage.
 
-**About $52 a month with nobody using it:**
+**About $49 a month with nobody using it, as prepared:**
 
 | Item | USD/month |
 | --- | ---: |
 | t3a.medium always on | 34.67 |
 | Its public IP address | 3.65 |
-| Its disks (20 GB system + 40 GB data) | 5.76 |
-| Daily backups (about 15 GB of snapshots) | 0.82 |
+| Its disks (20 GB system + 20 GB data) | 3.84 |
 | GPU server's disk while stopped (70 GB) | 6.72 |
-| **Total** | **51.63** |
+| **Total** | **48.88** |
 
-**Whole monthly bill with use**, on-demand. A visit is 15 minutes of use, the 5-minute idle wait, and an estimated
-3-minute boot. Visits that overlap share the GPU, so these are upper limits for that count.
+There are no backups, by the owner's choice. The GPU is `g4dn.xlarge`, at $0.68 an hour plus $0.005 for its address.
 
-| Usage | GPU hours | g4dn.xlarge | g6.xlarge | g5.xlarge |
-| --- | ---: | ---: | ---: | ---: |
-| nobody uses it | 0.0 | 51.63 | 51.63 | 51.63 |
-| 10 visits | 3.8 | 54.27 | 55.66 | 56.66 |
-| 50 visits | 19.2 | 64.84 | 71.78 | 76.80 |
-| 200 visits | 76.7 | 104.45 | 132.24 | 152.29 |
-| worst case: 3 h cap every day | 90.0 | 113.64 | 146.26 | 169.80 |
+**Whole monthly bill by choice of always-on server,** all with g4dn. A visit is 15 minutes of use, the 5-minute idle wait
+and an estimated 3-minute boot. Visits that overlap share the GPU, so these are upper limits for that count.
 
-One visit costs about $0.40 of GPU time on g6. The 3-hour daily cap is what makes the worst case a known number.
+| Always-on server | Nobody | 10 visits | 50 visits | 200 visits | One visit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| t3a.medium on-demand, on all the time | 48.88 | 51.53 | 62.09 | 101.71 | 0.26 |
+| t3a.medium on-demand, on 4 h a day | 19.99 | 22.63 | 33.20 | 72.81 | 0.26 |
+| t3a.small on-demand (2 GB), on all the time | 31.58 | 34.23 | 44.79 | 84.41 | 0.26 |
+| Lightsail 2 GB, includes disk and address | 18.72 | 21.36 | 31.93 | 71.54 | 0.26 |
+| Lightsail 4 GB, includes disk and address | 30.72 | 33.36 | 43.93 | 83.54 | 0.26 |
+| t3a.medium Spot and g4dn Spot | 27.93 | 29.12 | 33.86 | 51.62 | 0.12 |
 
-**Other ways to change it:**
+Worst case as prepared, the 3-hour daily cap every day: $110.90. The first provisioning is about an hour of GPU time. The first
+100 GB out to the internet each month is free, then $0.114 per GB. GitHub's registry is free for this public repository.
 
-| Choice | Change, USD/month |
-| --- | ---: |
-| t3a.small (2 GB, same CPU allowance) instead of t3a.medium (4 GB) | -17.30 |
-| t3a.large (8 GB) instead of t3a.medium (4 GB) | +34.67 |
-| t4g.medium (Arm, needs Arm images) instead of t3a.medium | -3.72 |
-| Each 10 GB of art on S3 instead of the server's disk | -0.71 |
-| Each 10 GB more GPU disk (music, poses, more voices) | +0.96 |
+**Only the first and third rows can be deployed as written.** Lightsail has no instance role and sits on its own network, so the
+controller would need a stored key and the GPU server another way to reach it. Spot is blocked:
 
-Also: g6 Spot has a 14-day median of $0.61 an hour against $1.05, with interruptions. The first provisioning is about
-an hour of GPU time. The first 100 GB out to the internet each month is free, then $0.114 per GB. GitHub's registry is
-free for this public repository. The $100 of credits would last about 1.8 months at 10 visits a month on g6.
+**Spot needs an irreversible change.** `DenySpotMarketType` is in AWS's managed policy for the Free Plan and the Paid Plan, and a
+`run-instances --dry-run` with Spot options fails on it with an explicit deny while on-demand passes. Unlocking it means
+activating advanced features, which cannot be reversed and permanently removes the spend limit. ADR 0077 has what Spot would
+need if that is ever done. AWS's published interruption bands: t3a.medium 10-15% a month, g4dn over 20%. Placement scores in this
+zone on 2026-11-07: g4dn 9 of 10, t3a.medium 3, g6 and g5 1.
 
 **Sizing evidence:** k3s with every always-on service, at idle with no visitors, used 1,376 MB of real memory in the local
 run below. Flux would add an estimated 200 MB. So `t3a.small` might work with swap, but this is an idle figure, and
-PostgreSQL's cache and uploads need room. It is one setting to change later.
+PostgreSQL's cache and uploads need room. `t3a.small` is one setting to change later.
 
 **The GPU disk is 70 GB, not the 60 GB first planned,** from what the first deployment would store:
 

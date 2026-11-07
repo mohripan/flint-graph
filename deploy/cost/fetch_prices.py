@@ -29,6 +29,11 @@ INSTANCES = (
     "g6.xlarge",
 )
 GPUS = ("g4dn.xlarge", "g5.xlarge", "g6.xlarge")
+# The zone both servers are in. Spot prices differ between zones.
+ZONE = "ap-southeast-2a"
+SPOT_TYPES = ("t3a.small", "t3a.medium", *GPUS)
+# Lightsail bundles, by the memory that matters here.
+LIGHTSAIL = {"small_3_2", "medium_3_2"}
 
 
 def aws_binary() -> str:
@@ -101,7 +106,7 @@ def instance_prices(profile: str) -> dict[str, float]:
 def spot_prices(profile: str) -> dict[str, dict[str, float]]:
     since = (dt.datetime.now(dt.UTC) - dt.timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
     result = {}
-    for kind in GPUS:
+    for kind in SPOT_TYPES:
         history = aws(
             profile,
             REGION,
@@ -111,6 +116,8 @@ def spot_prices(profile: str) -> dict[str, dict[str, float]]:
             kind,
             "--product-descriptions",
             "Linux/UNIX",
+            "--availability-zone",
+            ZONE,
             "--start-time",
             since,
         )["SpotPriceHistory"]
@@ -123,6 +130,15 @@ def spot_prices(profile: str) -> dict[str, dict[str, float]]:
                 "samples": len(values),
             }
     return result
+
+
+def lightsail_prices(profile: str) -> dict[str, dict[str, float]]:
+    bundles = aws(profile, REGION, "lightsail", "get-bundles")["bundles"]
+    return {
+        bundle["bundleId"]: {"usd_per_month": bundle["price"], "memory_gb": bundle["ramSizeInGb"]}
+        for bundle in bundles
+        if bundle["bundleId"] in LIGHTSAIL
+    }
 
 
 def main() -> None:
@@ -185,6 +201,7 @@ def main() -> None:
         "region": REGION,
         "instances_usd_per_hour": instance_prices(profile),
         "spot_usd_per_hour_last_14_days": spot_prices(profile),
+        "lightsail": lightsail_prices(profile),
         "ebs_gp3_usd_per_gb_month": min(gp3),
         "ebs_snapshot_usd_per_gb_month": min(snapshot) if snapshot else None,
         "public_ipv4_usd_per_hour": min(ipv4) if ipv4 else None,
