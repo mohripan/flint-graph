@@ -23,10 +23,10 @@ needs the usual face takes `default`, then `neutral`, then whatever there is.
 
 **A new scene cannot use a character with no image.** Narration needs none, and neither does a story's narrator.
 
-- The assistant's proposal is refused with `needs_approved_picture` (`narrative/pictures.py`), and the repair tells the
-  model what to do instead: add the character and offer an image card. A model that will not change gets a
-  proposal that cannot be accepted. Asked for a story with nobody drawn yet, it now offers cards first, and writes
-  their scenes once images are approved.
+- The assistant's scene is set aside (`narrative/pictures.py`, `_pictures_first` in `turn.py`): the proposal keeps the
+  character and their image card, and the reply says to approve a picture and ask again. Told three times, the live
+  model still wrote the line beside the card, so a repair only ended in a proposal nobody could accept. A repair is
+  only spent when no card was offered, to get one, and if that fails too the answer is a plain reply saying what to do.
 - The editor's speaker menus disable anyone without one, and say why.
 - Only what a change adds counts, so stories saved before this rule stay editable. Rewording a line
   changes nothing about who speaks it.

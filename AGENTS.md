@@ -356,7 +356,7 @@ limits a request to 5.5 minutes and 30 MB; change `deploy/runpod/` and the stand
 writes it, with LF. Failed jobs are not refunded. Prompts and reference images leave AWS while a job runs. Read `docs/runbooks/runpod-models.md`.
 
 [ADR 0079](docs/adr/0079-a-character-needs-an-approved-image.md) (prompt v15) sets two rules from the owner. The first image approved for a character becomes their `default` expression, wherever it is approved (`firstExpression` in `StudioPage.tsx`); a new approval path must call it. A new scene cannot use
-a character with no image: the assistant refuses with `needs_approved_picture` (`narrative/pictures.py`) and the editor's speaker menus disable them, while the raw save path and Source panel do not. Asked for a story with nobody drawn, the assistant offers image cards first. This replaces prompt v13's "write everything now".
+a character with no image: the assistant keeps the character and card and sets the scene aside (`_pictures_first`), and the editor's speaker menus disable them, while the raw save path and Source panel do not. Asked for a story with nobody drawn, the assistant offers image cards first. This replaces prompt v13's "write everything now".
 
 ## Project Snapshot
 

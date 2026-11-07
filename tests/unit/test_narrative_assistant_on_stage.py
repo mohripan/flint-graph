@@ -322,10 +322,42 @@ CHARACTER_FIRST = (
 
 
 @pytest.mark.anyio
-async def test_a_scene_for_someone_with_no_picture_is_refused_until_the_model_makes_them_first():
-    source = story()
+async def test_the_live_model_writing_the_scene_beside_the_card_gets_the_card_at_once():
+    # The real thread: told three times, it wrote her line and offered her card together.
+    model = Scripted(answer(*SCENE_FOR_AGNES, *CHARACTER_FIRST))
+    result = await run_turn(model, story(), "Write a scene.")
+    assert result.attempts == 1
+    assert result.diagnostics == ()
+    # The saved story gains no scene, and the reply says what to do next.
+    assert "talk" not in result.story["nodes"]
+    assert result.story["nodes"]["opening"]["next"] == "end"
+    kinds = [type(item).__name__ for item in result.proposal.operations]
+    assert kinds == ["GenerateCharacterImages"]
+    assert "Agnes needs an approved picture" in result.reply
+    assert "Press Generate" in result.reply
+
+
+@pytest.mark.anyio
+async def test_someone_brand_new_is_added_with_their_card_and_their_scene_waits():
+    hana = (
+        {"op": "upsert_character", "id": "hana", "name": "Hana"},
+        {**CHARACTER_FIRST[1], "character": "hana"},
+        {"op": "generate_backgrounds", "description": "a pier at night"},
+    )
+    model = Scripted(answer(LINK, stage("scene", "talk"), line("talk", "hana", "end"), *hana))
+    result = await run_turn(model, story(), "Write a story about Hana.")
+    assert result.attempts == 1 and result.diagnostics == ()
+    assert result.story["characters"]["hana"]["name"] == "Hana"
+    assert "talk" not in result.story["nodes"]
+    kinds = {type(item).__name__ for item in result.proposal.operations}
+    assert kinds == {"UpsertCharacter", "GenerateCharacterImages", "GenerateBackgrounds"}
+    assert "Hana needs an approved picture" in result.reply
+
+
+@pytest.mark.anyio
+async def test_a_scene_with_no_card_is_sent_back_for_one():
     model = Scripted(answer(*SCENE_FOR_AGNES), answer(*CHARACTER_FIRST))
-    result = await run_turn(model, source, "Write a scene.", capabilities=("images",))
+    result = await run_turn(model, story(), "Write a scene.")
     assert result.attempts == 2
     assert result.diagnostics == ()
     assert "talk" not in result.story["nodes"]
@@ -334,11 +366,13 @@ async def test_a_scene_for_someone_with_no_picture_is_refused_until_the_model_ma
 
 
 @pytest.mark.anyio
-async def test_a_model_that_keeps_writing_the_scene_gets_nothing_it_can_accept():
+async def test_a_model_that_never_offers_a_card_ends_in_a_plain_answer_not_a_dead_end():
     answers = [answer(*SCENE_FOR_AGNES)] * 4
     result = await run_turn(Scripted(*answers), story(), "Write a scene.")
-    assert [item.code for item in result.diagnostics] == ["needs_approved_picture"]
-    assert result.story is None
+    assert result.diagnostics == ()
+    assert result.proposal is None
+    assert "Agnes needs an approved picture" in result.reply
+    assert "Ask me to make a picture" in result.reply
 
 
 @pytest.mark.anyio
@@ -347,7 +381,22 @@ async def test_another_characters_picture_does_not_count():
     result = await run_turn(
         Scripted(*answers), story(), "Write a scene.", library=(sprite_entry("ren_extra", "ren"),)
     )
-    assert [item.code for item in result.diagnostics] == ["needs_approved_picture"]
+    assert result.proposal is None
+    assert "Agnes needs" in result.reply
+
+
+@pytest.mark.anyio
+async def test_several_people_are_all_named():
+    source = story()
+    source["characters"]["kei"] = {"name": "Kei"}
+    both = (
+        LINK,
+        stage("scene", "talk", background="street"),
+        line("talk", "agnes", "more"),
+        line("more", "kei", "end"),
+    )
+    result = await run_turn(Scripted(*[answer(*both)] * 4), source, "Write a scene.")
+    assert "Agnes and Kei" in result.reply
 
 
 @pytest.mark.anyio

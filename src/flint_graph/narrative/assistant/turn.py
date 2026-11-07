@@ -48,7 +48,7 @@ from flint_graph.narrative.assistant.operations import (
 from flint_graph.narrative.assistant.prompts import prompt_sha256, response_schema
 from flint_graph.narrative.assistant.stream import ReplyScanner
 from flint_graph.narrative.pictures import CODE as PICTURE_CODE
-from flint_graph.narrative.pictures import picture_diagnostics
+from flint_graph.narrative.pictures import picture_diagnostics, without_pictures
 from flint_graph.narrative.values import Diagnostic, PackageError
 from flint_graph.prompts.source import render, snapshot_async
 
@@ -531,6 +531,34 @@ def _keeps_who_is_on_stage(story: dict[str, Any], proposal: Proposal, request: s
                 item = item.model_copy(update={"node": {**item.node, "show": [*back, *shown]}})
         operations.append(item)
     return proposal.model_copy(update={"operations": operations})
+
+
+def _pictures_first(
+    proposal: Proposal, edited: dict[str, Any], missing: Sequence[tuple[str, str]]
+) -> tuple[Proposal | None, str]:
+    """What survives of a scene for someone with no picture: them, and the card to draw them. Told
+    three times, the live model still wrote the scene beside the card, so asking again only ends
+    in a proposal nobody can accept. The scene waits, and the reply says what to do next."""
+    kept = [
+        item
+        for item in proposal.operations
+        if isinstance(
+            item, UpsertCharacter | GenerateCharacterImages | GenerateBackgrounds | SetTitle
+        )
+    ]
+    offered = {item.character for item in kept if isinstance(item, GenerateCharacterImages)}
+    wanted = sorted({name for _, name in missing})
+    people = [str((edited["characters"].get(name) or {}).get("name") or name) for name in wanted]
+    listed = people[0] if len(people) == 1 else ", ".join(people[:-1]) + f" and {people[-1]}"
+    if set(wanted) <= offered:
+        step = (
+            "Press Generate on the card below and approve a picture, then ask me for the scene "
+            "again and I'll write it."
+        )
+    else:
+        step = "Ask me to make a picture first, then ask for the scene again and I'll write it."
+    reply = f"{listed} needs an approved picture before appearing in a scene. {step}"
+    return (proposal.model_copy(update={"operations": kept}) if kept else None), reply
 
 
 def _with_library_sprites(
@@ -1138,14 +1166,28 @@ async def run_turn(
                 if trimmed is not None:
                     parsed, dropped = trimmed[0], (*dropped, *trimmed[1])
                     check = check_proposal(story, parsed.operations)
-            proposal = parsed
-            diagnostics = check.diagnostics
-            if check.story is not None:
-                diagnostics = (*diagnostics, *picture_diagnostics(story, check.story))
-            reasons = {
-                **reasons,
-                **_problem_reasons(story, parsed, diagnostics, library, capabilities),
+            missing = without_pictures(story, check.story) if check.story is not None else []
+            offered = {
+                item.character
+                for item in parsed.operations
+                if isinstance(item, GenerateCharacterImages)
             }
+            if missing and (attempt == calls or {name for _, name in missing} <= offered):
+                # With the card already offered there is nothing a repair could add.
+                assert check.story is not None
+                parsed, reply = _pictures_first(parsed, check.story, missing)
+                if parsed is not None:
+                    check = check_proposal(story, parsed.operations)
+                missing = []
+            proposal = parsed
+            diagnostics = () if parsed is None else check.diagnostics
+            if parsed is not None and check.story is not None and missing:
+                diagnostics = (*diagnostics, *picture_diagnostics(story, check.story))
+            if parsed is not None:
+                reasons = {
+                    **reasons,
+                    **_problem_reasons(story, parsed, diagnostics, library, capabilities),
+                }
         if parsed is not None or diagnostics:
             await watch.step(
                 "validating",
