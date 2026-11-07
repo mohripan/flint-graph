@@ -54,7 +54,8 @@ function Candidate({ tenantId, projectId, asset, label, cutOut }: {
 
 // A generation action in the chat: a card that asks first, then where it has got to and its
 // results to approve. A suggestion has a stable server identity, so remounting only reads its job.
-export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onAttach, onOpenThread, onOpenPanel }: {
+export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onApproved, onAttach, onOpenThread, onOpenPanel }: {
+  onApproved?: (asset: NarrativeImage) => Promise<boolean>;
   proposal: AssistantProposal; story: StoryDraft | null; tenantId: string; projectId: string; canWrite: boolean;
   dirty: boolean; onApply: (change: (story: StoryDraft) => StoryDraft, notice: string) => Promise<void>;
   onAttach?: (item: Attachment) => void; onOpenThread?: (id: string) => void;
@@ -134,7 +135,7 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
     return saved;
   }
   function approve(asset: NarrativeImage) {
-    run(`asset:${asset.id}`, async () => { await approved(asset); }, "Couldn't approve this.");
+    run(`asset:${asset.id}`, async () => { await onApproved?.(await approved(asset)); }, "Couldn't approve this.");
   }
   function usePicture(asset: NarrativeImage, use: ImageUse) {
     run(`asset:${asset.id}`, async () => {

@@ -31,8 +31,9 @@ const message = (error: unknown, fallback: string) => error instanceof Error && 
 // The project's art, fonts and voice clips: uploads with a rights declaration and
 // generated items. Only approved assets can be used by the story. Folders and the
 // automatic groups only organize the library (ADR 0043).
-export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {} }: {
+export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {}, onApproved }: {
   tenantId: string; projectId: string; canWrite: boolean; characterNames?: Record<string, string>;
+  onApproved?: (asset: NarrativeImage) => Promise<boolean>;
 }) {
   const [view, setView] = useState<LibraryView>({ type: "all" });
   const [index, setIndex] = useState<LibraryIndex | null>(null);
@@ -184,6 +185,7 @@ export function AssetLibrary({ tenantId, projectId, canWrite, characterNames = {
                 // Under "To review" an approved asset leaves the list; elsewhere it updates in place.
                 if (view.type === "review") setAssets(current => current?.filter(item => item.id !== asset.id) ?? null);
                 else replace(approved);
+                await onApproved?.(approved);
               }, "Could not approve.")}
               onDiscard={() => act(async () => {
                 await api.discardNarrativeImage(tenantId, projectId, asset.id);

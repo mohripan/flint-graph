@@ -100,7 +100,7 @@ const picture = (extra = {}) => ({ id: "a", sha256: "s2", name: "Mira 1", proven
 test("a sprite candidate can go on stage, and says so once it is", () => {
   const sprite = { purpose: "character_portrait", transparent: true, character_id: "ren" };
   const use = model.imageUse(sprite, picture(), story);
-  assert.deepEqual(use, { kind: "sprite", character: "ren", expression: "neutral", label: "Use on stage", done: false });
+  assert.deepEqual(use, { kind: "sprite", character: "ren", expression: "default", label: "Use on stage", done: false });
   assert.equal(model.imageUse({ ...sprite, character_id: "mira" }, picture({ sha256: "s1" }), story).done, true);
   assert.equal(model.imageUse({ ...sprite, character_id: "mira" }, picture(), story).expression, null,
     "a character who already has a neutral sprite gets a new expression name");

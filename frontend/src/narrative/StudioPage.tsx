@@ -1,6 +1,7 @@
 import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApiError, api } from "../lib/api";
+import type { NarrativeImage } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { draftReducer, initialDraftState, prepareSave } from "./draftState";
 import type { SavedConflict, SourceDiagnostic } from "./draftState";
@@ -16,7 +17,7 @@ import { GpuStatusProvider } from "./GpuNotice";
 import { AssetLibrary } from "./AssetLibrary";
 import { CharacterStudio } from "./CharacterStudio";
 import { LookPanel } from "./LookPanel";
-import { stageBefore } from "./stageModel";
+import { stageBefore, withFirstExpression } from "./stageModel";
 import { StatePanel, StoryPanel } from "./RecordPanels";
 import { RouteMap } from "./RouteMap";
 import { SceneForm } from "./SceneForm";
@@ -295,6 +296,33 @@ export function StudioPage({ onDirtyChange }: {
     } catch (error) { failure(error, generation); return null; }
     finally { controllers.current.delete(request); if (epoch.current === generation) saving.current = false; }
   }
+  // The first image approved for a character becomes their default expression (ADR 0079), however
+  // it was approved. One at a time, so two quick approvals cannot both save from the same revision.
+  const approvals = useRef<Promise<unknown>>(Promise.resolve());
+  function firstExpression(asset: NarrativeImage): Promise<boolean> {
+    const done = approvals.current.then(async () => {
+      const current = stateRef.current;
+      if (!canWrite || !current.project || !current.revision) return false;
+      const draft = parsedStory(current.source);
+      const changed = draft && withFirstExpression(draft, asset);
+      if (!changed) return false;
+      const note = `${asset.name} is now ${changed.characters[asset.character_id!].name}'s default expression.`;
+      if (dirtyRef.current) {
+        updateStory(changed); setNotice(`${note} Save your edits to keep it.`);
+        return true;
+      }
+      acceptedRevision(await api.saveNarrativeRevision(tenantId, current.project.id, {
+        base_revision_id: current.revision.id, idempotency_key: crypto.randomUUID(),
+        story_json: JSON.stringify(changed, null, 2), notices: current.revision.notices,
+      }), note);
+      return true;
+    }).catch(() => {
+      setNotice("Approved, but the default expression couldn't be set. Add it under Characters.");
+      return false;
+    });
+    approvals.current = done;
+    return done;
+  }
   function acceptedRevision(revision: NarrativeRevision, note?: string) {
     const current = stateRef.current;
     if (!current.project || revision.project_id !== current.project.id || dirtyRef.current) return;
@@ -493,7 +521,7 @@ export function StudioPage({ onDirtyChange }: {
     </> : assistantView && state.revision ? <AssistantPage key={`${tenantId}:${state.project.id}`}
       tenantId={tenantId} projectId={state.project.id} revision={state.revision} focus={sceneId || null}
       canWrite={canWrite} dirty={dirty} saving={state.saving} scopeRef={assistantScope} onSave={save}
-      onAccepted={acceptedRevision} onConflict={assistantConflict} onInspect={id => void inspectRevision(id)}
+      onAccepted={acceptedRevision} onApproved={firstExpression} onConflict={assistantConflict} onInspect={id => void inspectRevision(id)}
       onOpenEditor={() => chooseView("editor")} onOpenPanel={next => { chooseView("editor"); choosePanel(next); }}
       onAccessLost={releaseAccessLost} />
     : <div className="studio-workspace">
@@ -515,8 +543,8 @@ export function StudioPage({ onDirtyChange }: {
             {historyMore && <button type="button" className="studio-secondary" disabled={historyBusy}
               onClick={() => void refreshHistory(state.project!.id, epoch.current, historyRows[historyRows.length - 1]?.id)}>Load older revisions</button>}
           </div> : common ? panel === "map" ? <RouteMap story={common.story} selected={sceneId} onSelect={id => { setSceneId(id); setPanel("write"); }} />
-            : panel === "characters" ? <CharacterStudio {...common} onUpgrade={canWrite ? () => void upgradeStory() : undefined} />
-            : panel === "assets" && state.project ? <AssetLibrary tenantId={tenantId} projectId={state.project.id} canWrite={canWrite}
+            : panel === "characters" ? <CharacterStudio {...common} onApproved={firstExpression} onUpgrade={canWrite ? () => void upgradeStory() : undefined} />
+            : panel === "assets" && state.project ? <AssetLibrary tenantId={tenantId} projectId={state.project.id} canWrite={canWrite} onApproved={firstExpression}
               characterNames={Object.fromEntries(Object.entries(common.story.characters).map(([id, character]) => [id, character.name]))} />
             : panel === "look" ? <LookPanel {...common} onUpgrade={() => void upgradeStory()} />
             : panel === "state" ? <StatePanel {...common} />

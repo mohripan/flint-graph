@@ -5,7 +5,7 @@ import { deletePassage, describeStage, insertLineAfter, removeLine, replaceScene
 import type { Passage } from "./passages";
 import { SceneForm } from "./SceneForm";
 import { SceneStage, UpgradeNotice } from "./StageEditor";
-import { setLineExpression, setLineSpeaker } from "./stageModel";
+import { hasPicture, setLineExpression, setLineSpeaker } from "./stageModel";
 import type { StageSnapshot } from "./stageModel";
 import type { StoryDraft } from "./types";
 import { LineVoiceControls, SceneVoices, VoiceJobsProvider } from "./VoiceControls";
@@ -66,7 +66,8 @@ export function PassageEditor({ story, passage, readOnly, onChange, onError, onO
             <select aria-label="Speaker" className="studio-script-speaker" disabled={readOnly} value={node.speaker ?? ""}
               onChange={event => run(() => onChange(withSpeaker(setLineSpeaker(story, id, event.target.value || null), story, id), `${id}:speaker`))}>
               <option value="">Narration</option>
-              {characters.map(([key, character]) => <option key={key} value={key}>{character.name}</option>)}
+              {characters.map(([key, character]) => <option key={key} value={key} disabled={key !== node.speaker && !hasPicture(story, key)}>
+                {character.name}{hasPicture(story, key) ? "" : " (needs an approved image)"}</option>)}
             </select>
             {staged && node.speaker && Object.keys(story.characters[node.speaker]?.sprites ?? {}).length > 0 &&
               <select aria-label="Expression" className="studio-script-expression" disabled={readOnly} value={node.expression ?? ""}

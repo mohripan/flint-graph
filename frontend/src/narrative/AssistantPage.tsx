@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, MutableRefObject } from "react";
 import { ApiError, api } from "../lib/api";
+import type { NarrativeImage } from "../lib/api";
 import { CreditCost } from "../components/CreditCost";
 import { useAccess } from "../site/accessContext";
 import {
@@ -80,7 +81,8 @@ function StepIcon({ state }: { state: StepView["state"] }) {
 // steps, thinking and reply stream from persisted events and resume after a reload.
 // Proposals stay suggestions until accepted, which creates a normal saved revision.
 export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, dirty, saving, scopeRef,
-  onSave, onAccepted, onConflict, onInspect, onOpenEditor, onOpenPanel, onAccessLost }: {
+  onSave, onAccepted, onConflict, onInspect, onOpenEditor, onOpenPanel, onAccessLost, onApproved }: {
+  onApproved?: (asset: NarrativeImage) => Promise<boolean>;
   tenantId: string; projectId: string; revision: NarrativeRevision; focus: string | null; canWrite: boolean;
   dirty: boolean; saving: boolean; scopeRef: MutableRefObject<(() => void) | null>;
   onSave: () => Promise<NarrativeRevision | null>; onAccepted: (revision: NarrativeRevision, notice?: string) => void;
@@ -491,7 +493,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                         {!change.after && change.before && <q className="studio-change-before">{change.before.slice(0, 240)}</q>}
                       </li>)}</ul>
                     <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite}
-                      dirty={dirty} onApply={applyToStory} onOpenPanel={onOpenPanel}
+                      dirty={dirty} onApply={applyToStory} onApproved={onApproved} onOpenPanel={onOpenPanel}
                       onAttach={item => { setAttached(current => current.some(known => known.id === item.id) ? current : toggleAttachment(current, item)); compose(text); }}
                       onOpenThread={id => { loadThreads(undefined, false); choose(id); }} />
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules

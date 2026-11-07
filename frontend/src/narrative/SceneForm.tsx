@@ -1,6 +1,7 @@
 import { ConditionEditor } from "./ConditionEditor";
 import { Field, ScalarInput, TargetSelect, VariableSelect } from "./FormFields";
 import { addChoiceOption, defaultCondition, getScene, own, replaceScene } from "./model";
+import { hasPicture } from "./stageModel";
 import type { StoryDraft, StoryNode } from "./types";
 
 export function SceneForm({ story, sceneId, onChange, onError, readOnly }: {
@@ -24,7 +25,8 @@ export function SceneForm({ story, sceneId, onChange, onError, readOnly }: {
         update(next);
       }}><option value="">Narration</option>
         {Object.entries(story.characters).map(([id, character]) =>
-          <option key={id} value={id}>{character.name} · {id}</option>)}
+          <option key={id} value={id} disabled={id !== node.speaker && !hasPicture(story, id)}>
+            {character.name} · {id}{hasPicture(story, id) ? "" : " (needs an approved image)"}</option>)}
       </select></Field>
       <Field label="Scene text" hint={story.player ? "Write {name} where the player's name goes." : undefined}><textarea className="studio-prose" rows={9} value={node.text}
         onChange={event => update({ ...node, text: event.target.value }, "text")} /></Field>

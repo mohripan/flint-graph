@@ -428,6 +428,21 @@ export function setSprite(story: StoryDraft, character: string, expression: stri
   return pruneAssets({ ...story, characters: { ...story.characters, [character]: { ...current, sprites } } });
 }
 
+/** Nobody can speak or go on stage in a new scene without a picture to show (ADR 0079). */
+export function hasPicture(story: StoryDraft, character: string): boolean {
+  return story.schema_version !== "2" || Object.keys(story.characters[character]?.sprites ?? {}).length > 0;
+}
+
+/** Approving a character's first image makes it their default expression, or null if it changes nothing. */
+export function withFirstExpression(story: StoryDraft, asset: LibraryAsset & { character_id: string | null; kind: string }): StoryDraft | null {
+  const character = asset.character_id;
+  if (story.schema_version !== "2" || !character || !story.characters[character]) return null;
+  if (asset.media_type !== "image/png" || !["sprite", "character_portrait"].includes(asset.kind)) return null;
+  if (hasPicture(story, character)) return null;
+  const bound = bindAsset(story, asset);
+  return setSprite(bound.story, character, "default", bound.key);
+}
+
 export function removeSprite(story: StoryDraft, character: string, expression: string): StoryDraft {
   const current = story.characters[character];
   if (!current?.sprites || !has(current.sprites, expression)) throw new Error("Expression no longer exists.");

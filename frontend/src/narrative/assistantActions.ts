@@ -112,7 +112,7 @@ export function imageUse(job: Pick<ImageJob, "purpose" | "transparent" | "charac
   }
   if (job.purpose !== "character_portrait" || !job.transparent) return null;
   const sprites = story.characters[character].sprites ?? {};
-  return { kind: "sprite", character, expression: "neutral" in sprites ? null : "neutral", label: "Use on stage", done };
+  return { kind: "sprite", character, expression: Object.keys(sprites).length ? null : "default", label: "Use on stage", done };
 }
 export interface ClipUse { node: string; label: string; done: boolean }
 export function clipUse(asset: Pick<NarrativeImage, "sha256" | "provenance">, story: StoryDraft | null): ClipUse | null {

@@ -24,6 +24,7 @@ import { CharacterVoice } from "./VoiceControls";
 interface Props {
   story: StoryDraft; readOnly: boolean;
   onChange: (story: StoryDraft, group?: string) => void; onError: (message: string) => void;
+  onApproved?: (asset: NarrativeImage) => Promise<boolean>;
   onUpgrade?: () => void;
 }
 
@@ -31,7 +32,7 @@ const message = (error: unknown, fallback: string) => error instanceof Error && 
 
 // Characters: who speaks, what they look like and the portrait the creator approved.
 // Names live in the story; appearance and portraits are shared editor metadata.
-export function CharacterStudio({ story, readOnly, onChange, onError, onUpgrade }: Props) {
+export function CharacterStudio({ story, readOnly, onChange, onError, onUpgrade, onApproved }: Props) {
   const ids = Object.keys(story.characters);
   const [selected, setSelected] = useState<string | null>(ids[0] ?? null);
   const current = selected && story.characters[selected] ? selected : ids[0] ?? null;
@@ -50,11 +51,11 @@ export function CharacterStudio({ story, readOnly, onChange, onError, onUpgrade 
       </button>)}
     </aside>
     {current ? <CharacterSheet key={current} id={current} story={story} readOnly={readOnly}
-      onChange={onChange} onError={onError} onUpgrade={onUpgrade} /> : null}
+      onChange={onChange} onError={onError} onUpgrade={onUpgrade} onApproved={onApproved} /> : null}
   </div></div>;
 }
 
-function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: Props & { id: string }) {
+function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade, onApproved }: Props & { id: string }) {
   const context = useContext(CharacterProfilesContext);
   const profile: CharacterProfile = context?.profiles[id] ?? {
     character_id: id, appearance: "", character_type: "other", framing: "portrait", portrait: null, version: 0,
@@ -173,7 +174,9 @@ function CharacterSheet({ id, story, readOnly, onChange, onError, onUpgrade }: P
         ...job, assets: job.assets.map(item => item.id === next.id ? next : item),
       })));
       refreshLibrary();
-      setNotice("Sprite approved. Add it as an expression under On stage.");
+      const first = await onApproved?.(next);
+      setNotice(first ? "Sprite approved. It's now the default expression, which you can change under On stage."
+        : "Sprite approved. Add it as an expression under On stage.");
     } catch (error) { setNotice(message(error, "Could not approve this sprite.")); }
   }
 

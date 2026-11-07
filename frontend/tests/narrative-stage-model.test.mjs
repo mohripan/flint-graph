@@ -327,3 +327,26 @@ test("framing mirrors the runtime: fit to the slot by default, or sized from the
   assert.throws(() => stage.setCharacterFraming(story(), "mira", { top: 12.5 }));
   assert.deepEqual(stage.SLOT_CENTERS, { left: 20, center: 50, right: 80 });
 });
+
+test("the first image approved for a character becomes their default expression", () => {
+  const story = { schema_version: "2", characters: { ren: { name: "Ren" } }, assets: {}, nodes: {} };
+  const approved = { sha256: "a".repeat(64), media_type: "image/png", name: "Ren sprite 1", character_id: "ren", kind: "sprite" };
+  const first = stage.withFirstExpression(story, approved);
+  assert.deepEqual(Object.keys(first.characters.ren.sprites), ["default"]);
+  assert.equal(first.assets[first.characters.ren.sprites.default].sha256, approved.sha256);
+  // The second changes nothing: the creator chooses what happens to the others.
+  assert.equal(stage.withFirstExpression(first, { ...approved, sha256: "b".repeat(64), name: "Ren sprite 2" }), null);
+  // A portrait counts. A background, a pose of nobody, another format or a text story do not.
+  assert.ok(stage.withFirstExpression(story, { ...approved, kind: "character_portrait" }));
+  assert.equal(stage.withFirstExpression(story, { ...approved, kind: "background" }), null);
+  assert.equal(stage.withFirstExpression(story, { ...approved, character_id: null }), null);
+  assert.equal(stage.withFirstExpression(story, { ...approved, character_id: "gone" }), null);
+  assert.equal(stage.withFirstExpression({ ...story, schema_version: "1" }, approved), null);
+});
+
+test("nobody without a picture can be chosen to speak, except in a text-only story", () => {
+  const story = { schema_version: "2", characters: { ren: { name: "Ren" }, mira: { name: "Mira", sprites: { default: "x" } } }, assets: {}, nodes: {} };
+  assert.equal(stage.hasPicture(story, "ren"), false);
+  assert.equal(stage.hasPicture(story, "mira"), true);
+  assert.equal(stage.hasPicture({ ...story, schema_version: "1" }, "ren"), true);
+});

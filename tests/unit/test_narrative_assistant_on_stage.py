@@ -52,8 +52,10 @@ class Scripted:
 
     def __init__(self, *answers: str) -> None:
         self.answers = list(answers)
+        self.seen: list[list[dict[str, str]]] = []
 
     async def respond(self, messages, schema, on_delta=None):
+        self.seen.append(list(messages))
         return ModelReply(self.answers.pop(0), "scripted", 1, 1)
 
 
@@ -101,27 +103,29 @@ async def test_the_real_thread_shows_the_character_and_attaches_her_picture():
     )
     assert result.diagnostics == ()
     agnes = result.story["characters"]["agnes"]
-    assert agnes["sprites"] == {"neutral": "agnes_sprite_1"}
+    assert agnes["sprites"] == {"default": "agnes_sprite_1"}
     assert agnes["name"] == "Agnes"
     assert result.story["assets"]["agnes_sprite_1"]["sha256"] == sha("agnes_sprite_1")
     assert result.story["nodes"]["scene"]["show"] == [
-        {"character": "agnes", "sprite": "neutral", "position": "center"}
+        {"character": "agnes", "sprite": "default", "position": "center"}
     ]
 
 
 @pytest.mark.anyio
 async def test_a_step_that_asks_for_her_keeps_her_once_she_has_a_picture():
     # This used to be dropped, as "someone with no pictures cannot be shown yet".
+    # The model still writes "neutral" sometimes, which here is her default.
     wanted = {"character": "agnes", "sprite": "neutral", "position": "left"}
     result = await turn(
         story(),
         LINK,
         stage("scene", "talk", show=[wanted]),
-        line("talk", "agnes", "end"),
+        line("talk", "agnes", "end", expression="neutral"),
         library=(sprite_entry(),),
     )
     assert result.diagnostics == ()
-    assert result.story["nodes"]["scene"]["show"] == [wanted]
+    assert result.story["nodes"]["scene"]["show"] == [{**wanted, "sprite": "default"}]
+    assert result.story["nodes"]["talk"]["expression"] == "default"
 
 
 @pytest.mark.anyio
@@ -299,29 +303,90 @@ async def test_changing_the_words_of_a_saved_line_stages_nobody():
     assert not any(node["type"] == "stage" for node in result.story["nodes"].values())
 
 
+SCENE_FOR_AGNES = (
+    LINK,
+    stage("scene", "talk", background="street"),
+    line("talk", "agnes", "end"),
+)
+CHARACTER_FIRST = (
+    {"op": "upsert_character", "id": "agnes", "name": "Agnes"},
+    {
+        "op": "generate_character_images",
+        "character": "agnes",
+        "appearance": "long pink hair, black coat",
+        "character_type": "girl",
+        "framing": "full_body",
+        "transparent": True,
+    },
+)
+
+
 @pytest.mark.anyio
-async def test_with_no_picture_anywhere_the_line_is_still_written():
-    result = await turn(
-        story(),
-        LINK,
-        stage("scene", "talk", background="street"),
-        line("talk", "agnes", "end"),
-    )
+async def test_a_scene_for_someone_with_no_picture_is_refused_until_the_model_makes_them_first():
+    source = story()
+    model = Scripted(answer(*SCENE_FOR_AGNES), answer(*CHARACTER_FIRST))
+    result = await run_turn(model, source, "Write a scene.", capabilities=("images",))
+    assert result.attempts == 2
     assert result.diagnostics == ()
-    assert "sprites" not in result.story["characters"]["agnes"]
-    assert "show" not in result.story["nodes"]["scene"]
+    assert "talk" not in result.story["nodes"]
+    # The repair says what to do, in words a small model can follow.
+    assert "no approved picture" in model.seen[1][-1]["content"]
 
 
 @pytest.mark.anyio
-async def test_another_characters_picture_is_not_used():
-    result = await turn(
-        story(),
-        LINK,
-        stage("scene", "talk", background="street"),
-        line("talk", "agnes", "end"),
-        library=(sprite_entry("ren_extra", "ren"),),
+async def test_a_model_that_keeps_writing_the_scene_gets_nothing_it_can_accept():
+    answers = [answer(*SCENE_FOR_AGNES)] * 4
+    result = await run_turn(Scripted(*answers), story(), "Write a scene.")
+    assert [item.code for item in result.diagnostics] == ["needs_approved_picture"]
+    assert result.story is None
+
+
+@pytest.mark.anyio
+async def test_another_characters_picture_does_not_count():
+    answers = [answer(*SCENE_FOR_AGNES)] * 4
+    result = await run_turn(
+        Scripted(*answers), story(), "Write a scene.", library=(sprite_entry("ren_extra", "ren"),)
     )
-    assert "sprites" not in result.story["characters"]["agnes"]
+    assert [item.code for item in result.diagnostics] == ["needs_approved_picture"]
+
+
+@pytest.mark.anyio
+async def test_a_portrait_will_do_when_there_is_no_cut_out_and_a_cut_out_is_preferred():
+    portrait = LibraryEntry(
+        "agnes_portrait",
+        "image",
+        "character_portrait",
+        "p",
+        "assets/agnes_portrait.png",
+        sha("agnes_portrait"),
+        character_id="agnes",
+    )
+    alone = await turn(story(), *SCENE_FOR_AGNES, library=(portrait,))
+    assert alone.story["characters"]["agnes"]["sprites"] == {"default": "agnes_portrait"}
+    both = await turn(story(), *SCENE_FOR_AGNES, library=(portrait, sprite_entry()))
+    assert both.story["characters"]["agnes"]["sprites"] == {"default": "agnes_sprite_1"}
+
+
+@pytest.mark.anyio
+async def test_narration_needs_no_picture():
+    result = await turn(story(), line("opening", None, "more"), line("more", None, "end"))
+    assert result.diagnostics == ()
+
+
+@pytest.mark.anyio
+async def test_a_saved_line_for_someone_with_no_picture_can_still_be_reworded():
+    # Stories from before this rule stay editable.
+    source = story()
+    source["nodes"]["talk"] = {
+        "type": "line",
+        "text_id": "talk_text",
+        "speaker": "agnes",
+        "text": "Old words.",
+        "next": "end",
+    }
+    source["nodes"]["opening"]["next"] = "talk"
+    result = await turn(source, line("talk", "agnes", "end"), request="Reword her line.")
+    assert result.diagnostics == ()
 
 
 @pytest.mark.anyio

@@ -55,6 +55,11 @@ Run **Deploy images** in GitHub Actions on `master`, which builds the API and fr
 
 Put the commit it ran on in the API's and frontend's `newTag` lines of `deploy/k8s/production/kustomization.yaml` and push. Flux applies it within 10 minutes.
 
+## Playtests
+
+A playtest is the Godot player compiled for the browser, in a frame on its own address (`https://play.54-253-96-189.sslip.io`), so that what a story does cannot reach the signed-in site. It holds no secrets and calls no API. **Each side has the other's address built in:** the frontend has the
+playtest's, and the playtest image has the one site allowed to embed it, `https://flintgraph.digital`. So a playtest does not work from the `sslip.io` address of the site itself, and changing either address means running **Deploy images** with `preview_origin` or `playtest_parent_origin`. Release builds are not deployed.
+
 ## The domain
 
 `flintgraph.digital` is on Cloudflare: an `A` record for `@`, pointing at `54.253.96.189`, set to **DNS only** (the grey cloud), so that Let's Encrypt and the assistant's long streams reach the server

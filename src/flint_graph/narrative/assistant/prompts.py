@@ -123,4 +123,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v13": "ead5796d3beb8d8aef8a668258cfe1db839ab3e42de368cdbfa751ccf049aa1f",
     # Pictures attached to a message, and framing without rewriting scenes (ADR 0076).
     "narrative-assistant/v14": "dec6ca654b47e3a7e9a5f1d61bf103ce944ae29613cef0f56dc7aadbbc55483d",
+    # Nobody without an approved picture in a new scene, and whoever speaks on stage (ADR 0079).
+    "narrative-assistant/v15": "694ea043d130c0c11fc11025af1b208f62f020aad32df8f34797dacf72a92aa1",
 }

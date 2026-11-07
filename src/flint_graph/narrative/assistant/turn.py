@@ -47,6 +47,8 @@ from flint_graph.narrative.assistant.operations import (
 )
 from flint_graph.narrative.assistant.prompts import prompt_sha256, response_schema
 from flint_graph.narrative.assistant.stream import ReplyScanner
+from flint_graph.narrative.pictures import CODE as PICTURE_CODE
+from flint_graph.narrative.pictures import picture_diagnostics
 from flint_graph.narrative.values import Diagnostic, PackageError
 from flint_graph.prompts.source import render, snapshot_async
 
@@ -207,6 +209,11 @@ def _tidied_line(node: dict[str, Any], known: set[str], assets: set[str]) -> dic
     return node
 
 
+def _usual_face(sprites: Mapping[str, str]) -> str:
+    """The first approved image is "default"; stories from before that may call it "neutral"."""
+    return next((name for name in ("default", "neutral") if name in sprites), next(iter(sprites)))
+
+
 def _tidied_stage(
     node: dict[str, Any],
     sprites: Mapping[str, Mapping[str, str]],
@@ -234,9 +241,11 @@ def _tidied_stage(
                 if wanted not in own and wanted in own.values():
                     named = next(name for name, key in own.items() if key == wanted)
                     entry = {**entry, "sprite": named}
+                elif wanted not in own and own and wanted in ("default", "neutral"):
+                    entry = {**entry, "sprite": _usual_face(own)}
                 elif wanted not in own and wanted in pending.get(character, ()) and own:
                     # An expression still being generated: the usual face until it is approved.
-                    entry = {**entry, "sprite": "neutral" if "neutral" in own else next(iter(own))}
+                    entry = {**entry, "sprite": _usual_face(own)}
                 elif not own and character in sprites:
                     continue  # Someone with no pictures cannot be shown yet, whatever was asked.
             entries.append(entry)
@@ -350,7 +359,12 @@ def _with_tidied_nodes(
         if isinstance(item, UpsertNode):
             kind = item.node.get("type")
             if kind == "line":
-                item = item.model_copy(update={"node": _tidied_line(item.node, known, assets)})
+                node = _tidied_line(item.node, known, assets)
+                face = sprites.get(str(node.get("speaker"))) or {}
+                asked = node.get("expression")
+                if face and asked not in face and asked in ("default", "neutral"):
+                    node = {**node, "expression": _usual_face(face)}
+                item = item.model_copy(update={"node": node})
             elif kind == "stage":
                 node = _tidied_stage(item.node, sprites, assets, generating, pending)
                 target = node.get("next")
@@ -545,17 +559,16 @@ def _with_library_sprites(
             continue
         if isinstance(saved, dict) and saved.get("sprites"):
             continue
-        picture = next(
-            (
-                entry
-                for entry in library
-                if entry.character_id == character and entry.library_kind == "sprite"
-            ),
-            None,
-        )
-        if picture is None:
+        # A cut-out stands on the stage properly, so it beats a portrait with a background.
+        pictures = [
+            entry
+            for kind in ("sprite", "character_portrait")
+            for entry in library
+            if entry.character_id == character and entry.library_kind == kind
+        ]
+        if not pictures:
             continue
-        sprites = {"neutral": picture.key}
+        sprites = {"default": pictures[0].key}
         if chosen is not None:
             at = operations.index(chosen)
             operations[at] = chosen.model_copy(update={"sprites": sprites})
@@ -675,7 +688,7 @@ def _with_speakers_on_stage(story: dict[str, Any], proposal: Proposal, request: 
             continue
         wearing = nodes[key].get("expression")
         if wearing not in sprites:
-            wearing = "neutral" if "neutral" in sprites else next(iter(sprites))
+            wearing = _usual_face(sprites)
         arriving = {"character": speaker, "sprite": wearing, "position": place}
         if step is not None:
             nodes[step] = {**nodes[step], "show": [*shown_there, arriving]}
@@ -902,6 +915,14 @@ def _problem_reasons(
     )
     reasons: dict[str, str] = {}
     for item in diagnostics:
+        if item.code == PICTURE_CODE:
+            reasons[item.location] = (
+                "this character has no approved picture yet, so they cannot speak or be on stage. "
+                "Write no lines for them. Propose upsert_character with their name and one "
+                "generate_character_images action, and say you will write the scene as soon as the "
+                "creator approves a picture. Scenes without them may stay."
+            )
+    for item in diagnostics:
         field = item.location.rsplit(".", 1)[-1]
         if field == "show" or ".show." in item.location:
             reasons[item.location] = (
@@ -1119,6 +1140,8 @@ async def run_turn(
                     check = check_proposal(story, parsed.operations)
             proposal = parsed
             diagnostics = check.diagnostics
+            if check.story is not None:
+                diagnostics = (*diagnostics, *picture_diagnostics(story, check.story))
             reasons = {
                 **reasons,
                 **_problem_reasons(story, parsed, diagnostics, library, capabilities),
@@ -1152,9 +1175,11 @@ async def run_turn(
             if _wrongly_asks_about_looks(request, reply):
                 diagnostics = (Diagnostic("no_proposal", "proposal"),)
                 reasons = {
-                    "proposal": "the creator asked for writing, not pictures, so do not ask how "
-                    "anyone looks or what they wear. Add the characters by name and write the "
-                    "whole story now: every scene, choice and ending, in this proposal."
+                    "proposal": "the creator asked for writing, so do not ask how anyone looks or "
+                    "what they wear. Write every scene now for characters with an approved "
+                    "picture. For anyone without one, propose upsert_character and one "
+                    "generate_character_images action, choosing their look yourself and saying "
+                    "what you chose, and say their scenes can follow once a picture is approved."
                 }
             elif _promised_work(reply):
                 diagnostics = (Diagnostic("no_proposal", "proposal"),)
