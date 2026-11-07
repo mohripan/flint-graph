@@ -21,14 +21,26 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
   const context = useContext(CharacterProfilesContext);
   const tenantId = context?.tenantId ?? "", projectId = context?.projectId ?? "";
   const { assets } = useApprovedAssets(tenantId, projectId);
-  const [screen, setScreen] = useState<"line" | "choice">("line");
+  const [screen, setScreen] = useState<"line" | "choice" | "title">("line");
   const v2 = story.schema_version === "2";
   const theme = resolvedTheme(story);
   const set = <P extends Part>(part: P, field: keyof ResolvedTheme[P], value: string | number | boolean | null) => {
     try { onChange(setThemeValue(story, part, field, value), `theme:${part}.${String(field)}`); }
     catch (error) { onError(message(error)); }
   };
-  const fonts = (assets ?? []).filter(asset => asset.media_type !== "image/png");
+  const fonts = (assets ?? []).filter(asset => asset.media_type.startsWith("font/"));
+  const pictures = (assets ?? []).filter(asset => asset.media_type === "image/png" && (asset.kind === "background" || asset.kind === "image"));
+  const tracks = (assets ?? []).filter(asset => asset.kind === "music");
+  const titleArt = libraryAsset(assets, theme.title.background ? story.assets[theme.title.background]?.sha256 : undefined);
+  const titleMusic = libraryAsset(assets, theme.title.music ? story.assets[theme.title.music]?.sha256 : undefined);
+  const chooseTitle = (field: "background" | "music", id: string, from: typeof pictures) => {
+    const chosen = from.find(asset => asset.id === id);
+    if (!chosen) { set("title", field, null); return; }
+    try {
+      const bound = bindAsset(story, chosen);
+      onChange(setThemeValue(bound.story, "title", field, bound.key), `theme:title.${field}`);
+    } catch (error) { onError(message(error)); }
+  };
   const fontKey = theme.font.asset;
   const fontAsset = libraryAsset(assets, fontKey ? story.assets[fontKey]?.sha256 : undefined);
   const family = useAssetFont(tenantId, projectId, fontAsset?.id ?? null);
@@ -85,15 +97,27 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
           </select></Field>
         <Field label={`Size · ${theme.font.size}px at 1280×720`}><input type="range" min={14} max={48} value={theme.font.size}
           onChange={event => set("font", "size", Number(event.target.value))} /></Field>
+        <h3>Title screen</h3>
+        <p className="studio-hint">Choose art or music and the game opens here, with Start, Continue and Settings. Leave both empty to go straight to the story.</p>
+        <Field label="Art" hint="An approved background or CG.">
+          <select value={titleArt?.id ?? ""} onChange={event => chooseTitle("background", event.target.value, pictures)}>
+            <option value="">None</option>
+            {pictures.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+          </select></Field>
+        <Field label="Music" hint="Approved music, which loops until the story starts.">
+          <select value={titleMusic?.id ?? ""} onChange={event => chooseTitle("music", event.target.value, tracks)}>
+            <option value="">None</option>
+            {tracks.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+          </select></Field>
       </fieldset>
       <div className="studio-look-preview">
         <div className="studio-asset-filters" role="group" aria-label="Preview">
-          {(["line", "choice"] as const).map(item => <button type="button" key={item} aria-pressed={screen === item}
-            className={screen === item ? "selected" : ""} onClick={() => setScreen(item)}>{item === "line" ? "Dialogue" : "Choice"}</button>)}
+          {(["line", "choice", "title"] as const).map(item => <button type="button" key={item} aria-pressed={screen === item}
+            className={screen === item ? "selected" : ""} onClick={() => setScreen(item)}>{{ line: "Dialogue", choice: "Choice", title: "Title screen" }[item]}</button>)}
         </div>
         <StagePreview story={story} theme={theme} screen={screen} tenantId={tenantId} projectId={projectId}
           font={family}
-          background={libraryAsset(assets, firstBackground(story))?.id ?? null} />
+          background={screen === "title" ? titleArt?.id ?? null : libraryAsset(assets, firstBackground(story))?.id ?? null} />
         <p className="studio-hint">The preview uses the story's first background and first character with sprites.</p>
       </div>
     </div>
@@ -102,7 +126,7 @@ export function LookPanel({ story, readOnly, onChange, onError, onUpgrade }: {
 }
 
 function StagePreview({ story, theme, screen, tenantId, projectId, font, background }: {
-  story: StoryDraft; theme: ResolvedTheme; screen: "line" | "choice"; tenantId: string; projectId: string;
+  story: StoryDraft; theme: ResolvedTheme; screen: "line" | "choice" | "title"; tenantId: string; projectId: string;
   font: string | null | false; background: string | null;
 }) {
   const { assets } = useApprovedAssets(tenantId, projectId);
@@ -127,6 +151,16 @@ function StagePreview({ story, theme, screen, tenantId, projectId, font, backgro
     fontFamily: family, fontSize: scaled(theme.font.size), minHeight: scaled(theme.font.size * 4.2),
   };
   const choiceTop = box.position === "bottom" ? "40%" : box.position === "top" ? "66%" : "82%";
+  if (screen === "title") {
+    return <div className="studio-look-stage studio-look-title" style={backdrop ? { backgroundImage: `url(${backdrop})` } : undefined}
+      aria-label="Preview of the title screen" role="img">
+      <strong style={{ fontFamily: family, fontSize: scaled(56) }}>{story.title}</strong>
+      <div>{["Start", "Settings"].map(label => <span key={label} style={{
+        background: theme.choices.background, color: theme.choices.text, border: `${scaled(2)} solid ${theme.choices.border}`,
+        borderRadius: scaled(box.radius), fontFamily: family, fontSize: scaled(20), width: scaled(360), padding: scaled(14),
+      }}>{label}</span>)}</div>
+    </div>;
+  }
   return <div className="studio-look-stage" style={backdrop ? { backgroundImage: `url(${backdrop})` } : undefined}
     aria-label="Preview of the game screen" role="img">
     {sprite && figure && <img className="studio-look-sprite" src={sprite} alt="" style={{ left: `${figure.left}%`,

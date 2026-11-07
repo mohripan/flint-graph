@@ -36,6 +36,8 @@ export interface StoryTheme {
   name?: { show?: boolean; background?: string; text?: string };
   choices?: { background?: string; text?: string; border?: string };
   font?: { asset?: string | null; size?: number };
+  /** A title screen before the story, when either is set (ADR 0071). */
+  title?: { background?: string | null; music?: string | null };
 }
 // ``stage`` framing: drawn height as % of the screen and the top edge as % of its height.
 export interface CharacterFraming { scale?: number; top?: number }
@@ -131,6 +133,7 @@ export type StoryOperation =
   | { op: "upsert_variable"; id: string; declaration: VariableDeclaration }
   | { op: "set_title"; title: string }
   | { op: "set_theme"; theme: StoryTheme | null }
+  | { op: "set_title_screen"; background?: string | null; music?: string | null }
   | { op: "add_asset"; id: string; asset: { kind: "image" | "font" | "audio" | "music"; path: string; sha256: string } }
   | AssistantAction;
 // Generation (story format 2): never applied with the proposal; each becomes a job (ADR 0061).

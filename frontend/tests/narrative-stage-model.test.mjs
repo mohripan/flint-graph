@@ -87,6 +87,20 @@ function story() {
   };
 }
 
+test("a title screen keeps its files in the story, and clearing it removes them", () => {
+  const art = { kind: "image", path: "assets/art.png", sha256: "a" }, tune = { kind: "music", path: "assets/tune.ogg", sha256: "b" };
+  // Each file is bound just before it is chosen, as the Look panel does.
+  let titled = stage.setThemeValue({ ...story(), assets: { art } }, "title", "background", "art");
+  titled = stage.setThemeValue({ ...titled, assets: { ...titled.assets, tune } }, "title", "music", "tune");
+  assert.deepEqual(titled.theme.title, { background: "art", music: "tune" });
+  assert.deepEqual(Object.keys(titled.assets).sort(), ["art", "tune"], "both are in use");
+  assert.equal(stage.resolvedTheme(titled).title.music, "tune");
+  const cleared = stage.setThemeValue(stage.setThemeValue(titled, "title", "background", null), "title", "music", null);
+  assert.equal(cleared.theme, undefined, "nothing is left to say");
+  assert.deepEqual(cleared.assets, {}, "a game never ships stray files");
+  assert.deepEqual(stage.resolvedTheme(story()).title, { background: null, music: null });
+});
+
 test("library files bind once per file under a valid unique story asset ID", () => {
   const dusk = { sha256: sha("a"), media_type: "image/png", name: "Harbor at Dusk (v2)" };
   const first = stage.bindAsset(story(), dusk);

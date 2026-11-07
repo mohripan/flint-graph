@@ -96,7 +96,7 @@ def test_prompt_identity_covers_template_schema_and_version_and_is_pinned():
     assert prompt_sha256() == expected
     # Changing the prompt or schema needs a new version and a deliberate new pin.
     assert PINNED_PROMPTS[PROMPT_VERSION] == expected
-    assert PROMPT_VERSION == "narrative-assistant/v10"
+    assert PROMPT_VERSION == "narrative-assistant/v11"
     assert (
         PINNED_PROMPTS["narrative-assistant/v2"]
         == "99d7090be56e40f350e2e681c7fb59c47a49ce956ef2bfcd29d6be82d814ee8f"
@@ -133,6 +133,7 @@ def test_each_operation_has_its_own_exact_shape_so_a_model_cannot_mix_their_fiel
         "set_entry",
         "set_title",
         "set_theme",
+        "set_title_screen",
         "generate_character_images",
         "generate_backgrounds",
         "generate_expressions",
@@ -179,7 +180,7 @@ def test_a_spoken_line_cannot_lose_its_speaker_and_writes_it_first():
 
 def test_writing_order_is_not_part_of_the_prompts_identity():
     assert list(json.loads(canonical_json(RESPONSE_SCHEMA))["properties"]) == ["proposal", "reply"]
-    assert prompt_sha256() == PINNED_PROMPTS["narrative-assistant/v10"]
+    assert prompt_sha256() == PINNED_PROMPTS["narrative-assistant/v11"]
 
 
 def test_messages_are_system_history_then_request_with_story_as_delimited_data():

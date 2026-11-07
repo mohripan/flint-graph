@@ -316,6 +316,11 @@ needs a step in `narrative_gpu_dispatch.py`, a dispatcher in `build_dispatchers`
 combined mode. Never exercised on real AWS; read `docs/runbooks/gpu-sleep-and-wake.md` and
 `docs/reports/2026-11-07-gpu-that-sleeps.md`.
 
+[ADR 0071](docs/adr/0071-title-screen.md) (runtime 0.11.0, prompt v11) adds an optional title screen: `theme.title` with
+`background` and `music`, drawn by `vn_view.gd`, never in saves or route traces. With neither set a game opens on its first
+line as before, so native probes are unaffected. The assistant uses its own exact `set_title_screen`, because given the whole
+theme the live model invented every colour. Read `docs/reports/2026-11-07-title-screen.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

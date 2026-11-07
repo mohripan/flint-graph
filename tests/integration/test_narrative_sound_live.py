@@ -27,7 +27,7 @@ def line(key, text, target, **extra):
     return {"type": "line", "text_id": key, "text": text, "next": target, **extra}
 
 
-def sound_package(tmp_path):
+def sound_package(tmp_path, theme=None):
     """A story that starts music, adds ambience, switches track, plays an effect and stops."""
     bell = canonical_wav(1, 24000, struct.pack("<h", 900) * 24000)
     files = {
@@ -64,6 +64,8 @@ def sound_package(tmp_path):
             "e1": {"type": "end", "text_id": "e1", "text": "Fin.", "ending": "done"},
         },
     }
+    if theme is not None:
+        story["theme"] = theme
     source = tmp_path / "source"
     (source / "assets").mkdir(parents=True)
     (source / "story.json").write_bytes(canonical_json(story))
@@ -167,7 +169,7 @@ async def test_actual_linux_release_build_carries_music(tmp_path) -> None:
     result = await runner.build(package, execution_id=uuid4(), check=current)
     theme = (AUDIO / "tone_a.ogg").read_bytes()
     with ZipFile(io.BytesIO(result.source_zip)) as source:
-        assert json.loads(source.read("build-manifest.json"))["runtime_version"] == "0.10.0"
+        assert json.loads(source.read("build-manifest.json"))["runtime_version"] == "0.11.0"
         assert source.read("content/assets/theme.ogg") == theme
         assert "runtime/sound_channel.gd" in source.namelist()
     with ZipFile(io.BytesIO(result.web_zip)) as web:

@@ -24,6 +24,7 @@ const DEFAULTS := {
 	"name": {"show": true, "background": "#d5ae68", "text": "#182635"},
 	"choices": {"background": "#f0f4f6", "text": "#182635", "border": "#d5ae68"},
 	"font": {"asset": null, "size": 22},
+	"title": {"background": null, "music": null},
 }
 var _source: Dictionary
 var _hash: String
@@ -117,6 +118,14 @@ var _ambience: RefCounted
 var _effects_player: AudioStreamPlayer
 var _tracks: Dictionary = {}
 var _mute_toggle: CheckButton
+# The title screen (ADR 0071): only when the theme gives it art or music.
+var _title_panel: Control
+var _title_art: TextureRect
+var _title_heading: Label
+var _title_status: Label
+var _title_buttons: Dictionary = {}
+var _story_menu_buttons: Dictionary = {}  # Each button, and whether it starts out disabled.
+var _started := false
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary, notices: String = "") -> void:
@@ -143,7 +152,11 @@ func configure(source: Dictionary, package_hash: String, assets: Dictionary, not
 		# story, where the probe cannot run. It still runs before the first clip starts.
 		_gate_sound.call_deferred()
 	resized.connect(_layout)
-	_render()
+	if _wants_title():
+		_show_title()
+	else:
+		_started = true
+		_render()
 	if OS.has_feature("web"):
 		var browser: Variant = JavaScriptBridge.get_interface("window")
 		if browser != null:
@@ -322,9 +335,139 @@ func _build() -> void:
 	_notice.add_theme_constant_override("outline_size", 4)
 	_notice.add_theme_font_size_override("font_size", 14)
 	add_child(_notice)
+	if _wants_title():
+		_build_title()
 	_build_log()
 	_build_menu_panel()
 	_build_gallery()
+
+
+func _wants_title() -> bool:
+	return _theme["title"]["background"] != null or _theme["title"]["music"] != null
+
+
+func _title_showing() -> bool:
+	return _title_panel != null and _title_panel.visible
+
+
+func _build_title() -> void:
+	_title_panel = Control.new()
+	_title_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_title_panel.hide()
+	add_child(_title_panel)
+	var ground := ColorRect.new()
+	ground.color = INK
+	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ground.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_panel.add_child(ground)
+	_title_art = TextureRect.new()
+	_title_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_title_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_title_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_title_art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_panel.add_child(_title_art)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side: String in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 24)
+	_title_panel.add_child(margin)
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", 12)
+	margin.add_child(column)
+	_title_heading = Label.new()
+	_title_heading.text = _source["title"]  # A Label shows story text as plain text.
+	_title_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_title_heading.add_theme_font_override("font", _font)
+	_title_heading.add_theme_color_override("font_color", PAPER)
+	_title_heading.add_theme_color_override("font_outline_color", INK)
+	_title_heading.add_theme_constant_override("outline_size", 12)
+	column.add_child(_title_heading)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(spacer)
+	_title_status = Label.new()
+	_title_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_title_status.add_theme_color_override("font_color", PAPER)
+	_title_status.add_theme_color_override("font_outline_color", INK)
+	_title_status.add_theme_constant_override("outline_size", 4)
+	column.add_child(_title_status)
+	for item: String in ["Start", "Continue", "Gallery", "Settings", "Quit"]:
+		var button := _choice_button(item)
+		button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		button.pressed.connect(_title_action.bind(item))
+		column.add_child(button)
+		_title_buttons[item] = button
+
+
+func _show_title() -> void:
+	_set_auto(false)
+	_set_skip(false)
+	_voice_player.stop()
+	for control: Control in [_box, _choices, _menu, _notice]:
+		control.hide()  # Out of reach of the keyboard as well as out of sight.
+	_title_art.texture = _texture(_theme["title"]["background"])
+	_title_status.text = ""
+	_title_buttons["Continue"].visible = _has_saved_game()
+	_title_buttons["Gallery"].visible = not _player.gallery.is_empty()
+	_title_buttons["Quit"].visible = not OS.has_feature("web")
+	_title_panel.show()
+	_layout()
+	_title_buttons["Start"].call_deferred("grab_focus")
+	_play_title_music.call_deferred()
+	_publish_qa.call_deferred()
+
+
+func _has_saved_game() -> bool:
+	return SaveStore.read_save(_hash).get("error") != "not_found"
+
+
+func _leave_title() -> void:
+	_title_panel.hide()
+	_title_art.texture = null
+	for control: Control in [_box, _choices, _menu, _notice]:
+		control.show()
+	_notice.text = ""
+
+
+func _play_title_music() -> void:
+	if not _title_showing() or not _sound_allowed():
+		return
+	var id: Variant = _theme["title"]["music"]
+	_music.change(id, _track(id), false)
+	_ambience.change(null, null, false)
+
+
+func _title_action(action: String) -> void:
+	if action == "Start":
+		_leave_title()
+		if _started:
+			_toolbar("Restart")
+			_notice.text = ""
+		else:
+			_started = true
+			_render()
+	elif action == "Continue":
+		var saved: Dictionary = SaveStore.read_save(_hash)
+		if _load_slot(saved, "No saved game on this device yet.", "Saved game loaded."):
+			var loaded: String = _notice.text
+			_started = true
+			_leave_title()
+			_notice.text = loaded
+			_refocus()
+		else:
+			_title_status.text = _notice.text
+	elif action == "Gallery":
+		_toolbar("Gallery")
+	elif action == "Settings":
+		_toolbar("Menu")
+	elif action == "Quit":
+		get_tree().quit()
 
 
 func _panel_label(text: String, size_px: int = 14) -> Label:
@@ -440,11 +583,16 @@ func _build_menu_panel() -> void:
 	actions.add_theme_constant_override("h_separation", 6)
 	actions.add_theme_constant_override("v_separation", 6)
 	column.add_child(actions)
-	for item: String in ["Save", "Load", "Quick save", "Quick load", "Restart", "Gallery"] + (["License"] if _terms != null else []):
+	var story_items: Array[String] = ["Save", "Load", "Quick save", "Quick load", "Restart"]
+	if _wants_title():
+		story_items.append("Title screen")
+	for item: String in story_items + ["Gallery"] + (["License"] if _terms != null else []):
 		var button := _small_button(item)
 		button.pressed.connect(_toolbar.bind(item))
 		actions.add_child(button)
 		_menu_buttons.append(button)
+		if item in story_items:
+			_story_menu_buttons[button] = button.disabled
 	_speed_buttons = _setting_row(column, "Text speed", Reading.TEXT_SPEEDS.keys(), _settings["text_speed"], _set_text_speed)
 	_auto_speed_buttons = _setting_row(column, "Auto speed", Reading.AUTO_SPEEDS.keys(), _settings["auto_speed"], _set_auto_speed)
 	_volume_slider = _volume_row(column, "Voice volume", _voice_volume, _set_volume)
@@ -522,13 +670,16 @@ func _setting_row(parent: Container, title: String, values: Array, current: Stri
 
 
 func _open_menu() -> void:
-	if _overlay_open():
+	if _panel_open():
 		return
 	_pause_controls(_menu_disabled)
 	# The menu's own controls stay usable while it is open.
 	for button: Button in _menu_buttons:
 		button.disabled = _menu_disabled.get(button, false)
 		_menu_disabled.erase(button)
+	# From the title screen, settings only: no story is in progress to save or restart.
+	for button: Button in _story_menu_buttons:
+		button.disabled = _story_menu_buttons[button] or _title_showing()
 	_menu_panel.show()
 	_menu_close.grab_focus()
 	_overlay_changed()
@@ -546,6 +697,10 @@ func _close_menu() -> void:
 
 
 func _overlay_open() -> bool:
+	return _panel_open() or _title_showing()
+
+
+func _panel_open() -> bool:
 	return _gallery_panel.visible or _terms_open() or _log_panel.visible or _menu_panel.visible \
 		or (_sound_gate != null and _sound_gate.visible)
 
@@ -556,7 +711,7 @@ func _overlay_changed() -> void:
 
 func _pause_controls(store: Dictionary) -> void:
 	# Disable underlying focus targets as well as guarding queued action signals.
-	for control: Node in _menu.get_children() + _menu_buttons + _buttons:
+	for control: Node in _menu.get_children() + _menu_buttons + _buttons + _title_buttons.values():
 		if control is Button:
 			store[control] = control.disabled
 			control.disabled = true
@@ -570,7 +725,9 @@ func _resume_controls(store: Dictionary) -> void:
 
 
 func _refocus() -> void:
-	if not _buttons.is_empty():
+	if _title_showing():
+		_title_buttons["Start"].grab_focus()
+	elif not _buttons.is_empty():
 		_buttons[0].grab_focus()
 
 
@@ -939,11 +1096,14 @@ func _play_stage_sound(current: Dictionary, instantly: bool, session: RefCounted
 
 func _resume_stage_sound() -> void:
 	# The input that opened the start screen or license also lets the page play sound.
+	if _title_showing():
+		_play_title_music()
+		return
 	_play_stage_sound(_player.view, true, _player, _player.generation)
 
 
 func _has_sound() -> bool:
-	if _has_voice_clips():
+	if _has_voice_clips() or _theme["title"]["music"] != null:
 		return true
 	for node: Dictionary in _source["nodes"].values():
 		if node.get("music") != null or node.get("ambience") != null or node.get("sound") != null:
@@ -1246,7 +1406,8 @@ func _build_sound_gate() -> void:
 func _open_sound_gate() -> void:
 	# The engine resumes browser audio on this same input; start the settled line's clip.
 	_sound_gate.hide()
-	_start_voice.call_deferred(_voice_generation, _voice_session)
+	if not _title_showing():
+		_start_voice.call_deferred(_voice_generation, _voice_session)
 	_resume_stage_sound.call_deferred()
 	_publish_qa.call_deferred()
 
@@ -1394,6 +1555,12 @@ func _layout() -> void:
 	if size.x <= 0 or size.y <= 0:
 		return
 	var scale_factor := clampf(minf(size.x / 1280.0, size.y / 720.0), 0.6, 1.6)
+	if _title_panel != null:
+		_title_heading.add_theme_font_size_override("font_size", int(round(56 * scale_factor)))
+		_title_status.add_theme_font_size_override("font_size", int(round(16 * scale_factor)))
+		for button: Button in _title_buttons.values():
+			button.add_theme_font_size_override("font_size", int(round(20 * scale_factor)))
+			button.custom_minimum_size.x = minf(size.x - 48.0, 360.0 * scale_factor)
 	var font_size := int(round(int(_theme["font"]["size"]) * scale_factor))
 	_text.add_theme_font_size_override("normal_font_size", font_size)
 	_name.add_theme_font_size_override("font_size", maxi(12, int(font_size * 0.8)))
@@ -1495,6 +1662,8 @@ func _toolbar(action: String) -> void:
 		_open_terms(false)
 	elif action == "Gallery":
 		_open_gallery()
+	elif action == "Title screen":
+		_show_title()
 	elif action == "Restart":
 		_close_gallery()
 		_set_auto(false)
@@ -1522,25 +1691,26 @@ func _toolbar(action: String) -> void:
 		_load_slot(SaveStore.read_quick_save(_hash), "No quick save on this device yet.", "Quick save loaded.")
 
 
-func _load_slot(saved: Dictionary, missing: String, loaded: String) -> void:
+func _load_slot(saved: Dictionary, missing: String, loaded: String) -> bool:
 	if saved.get("error") == "not_found":
 		_notice.text = missing
 		_publish_qa.call_deferred()
-		return
+		return false
 	if saved.get("error", "save_read_failed") != "":
 		_notice.text = "That saved game cannot be loaded. Your progress is unchanged."
 		_publish_qa.call_deferred()
-		return
+		return false
 	if _player.load_save(saved["data"]) != "":
 		_notice.text = "That saved game cannot be loaded. Your progress is unchanged."
 		_publish_qa.call_deferred()
-		return
+		return false
 	_set_auto(false)
 	_set_skip(false)
 	_note_backlog(null, "— " + loaded.trim_suffix(".") + " —")
 	_last_stage = null  # So is arriving from a save.
 	_notice.text = loaded
 	_render()
+	return true
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -1631,6 +1801,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_set_muted(not _settings["muted"])
 		get_viewport().set_input_as_handled()
 		return
+	if _title_showing():
+		get_viewport().set_input_as_handled()  # No story is on screen for a shortcut to act on.
+		return
 	var shortcut: String = {KEY_L: "Log", KEY_A: "Auto", KEY_S: "Skip", KEY_H: "Hide", KEY_ESCAPE: "Menu"}.get(event.keycode, "")
 	if not OS.has_feature("web"):
 		# A browser takes F5 for itself, so web players use the menu.
@@ -1698,6 +1871,7 @@ func _publish_qa() -> void:
 		"auto": _auto, "skip": _skip, "ui_hidden": _ui_hidden, "revealing": _revealing(),
 		"transition": _fx_kind, "effect": _effect_kind, "reduced_motion": _settings["reduced_motion"],
 		"music": _music.current, "ambience": _ambience.current, "music_playing": _music.playing(), "sound_playing": _effects_player.playing, "muted": _settings["muted"],
+		"title_open": _title_showing(), "title_art": _title_art != null and _title_art.texture != null,
 		"log_open": _log_panel.visible, "menu_open": _menu_panel.visible, "backlog": backlog_rows().size(), "read_marks": _read.size()}
 	var browser: Variant = JavaScriptBridge.get_interface("window")
 	var json: Variant = JavaScriptBridge.get_interface("JSON")

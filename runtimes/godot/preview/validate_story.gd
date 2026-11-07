@@ -111,7 +111,7 @@ static func _voice(node: Dictionary, assets: Dictionary) -> bool:
 	return not voice.has("audio") or _asset(voice["audio"], assets, "audio")
 
 static func _theme(theme: Variant, assets: Dictionary) -> bool:
-	if not _fields(theme, [], ["textbox", "name", "choices", "font"]): return false
+	if not _fields(theme, [], ["textbox", "name", "choices", "font", "title"]): return false
 	if theme.has("textbox"):
 		var box: Variant = theme["textbox"]
 		if not _fields(box, [], ["position", "width", "background", "text", "border", "radius"]): return false
@@ -136,6 +136,11 @@ static func _theme(theme: Variant, assets: Dictionary) -> bool:
 		if not _fields(font, [], ["asset", "size"]): return false
 		if font.get("asset") != null and not _asset(font["asset"], assets, "font"): return false
 		if font.has("size") and not _within(font["size"], 14, 48): return false
+	if theme.has("title"):
+		var title: Variant = theme["title"]
+		if not _fields(title, [], ["background", "music"]): return false
+		if title.get("background") != null and not _asset(title["background"], assets, "image"): return false
+		if title.get("music") != null and not _asset(title["music"], assets, "music"): return false
 	return true
 
 static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary, nodes: Dictionary) -> bool:

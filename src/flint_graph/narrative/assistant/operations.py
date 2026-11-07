@@ -81,6 +81,17 @@ class SetTheme(_Operation):
     theme: dict[str, Any] | None
 
 
+class SetTitleScreen(_Operation):
+    """Title screen art and music (ADR 0071). What is left out stays, and null removes it.
+
+    Its own operation because the live model, handed the whole theme, filled in every colour.
+    """
+
+    op: Literal["set_title_screen"]
+    background: _Key | None = None
+    music: _Key | None = None
+
+
 class AddAsset(_Operation):
     """A library file's story entry (kind, path, SHA-256); normally added by the worker."""
 
@@ -208,6 +219,7 @@ Operation = Annotated[
     | SetEntry
     | SetTitle
     | SetTheme
+    | SetTitleScreen
     | AddAsset
     | GenerateCharacterImages
     | GenerateBackgrounds
@@ -319,6 +331,8 @@ def _target(operation: Operation, index: int) -> str:
         return f"actions.child.{index}"
     if isinstance(operation, SetTheme):
         return "theme"
+    if isinstance(operation, SetTitleScreen):
+        return "theme.title"
     return "entry" if isinstance(operation, SetEntry) else "title"
 
 
@@ -358,10 +372,32 @@ def apply_operations(story: dict[str, Any], operations: Sequence[Operation]) -> 
             }
             result["characters"][operation.id] = {**kept, "name": operation.name, **changed}
         elif isinstance(operation, SetTheme):
-            if operation.theme is None:
-                result.pop("theme", None)
+            # The title screen has its own operation, so a new look does not drop it.
+            title = (result.get("theme") or {}).get("title")
+            theme = copy.deepcopy(operation.theme) if operation.theme is not None else {}
+            if title and "title" not in theme:
+                theme["title"] = title
+            if theme:
+                result["theme"] = theme
             else:
-                result["theme"] = copy.deepcopy(operation.theme)
+                result.pop("theme", None)
+        elif isinstance(operation, SetTitleScreen):
+            theme = dict(result.get("theme") or {})
+            screen = dict(theme.get("title") or {})
+            for field in operation.model_fields_set - {"op"}:
+                value = getattr(operation, field)
+                if value is None:
+                    screen.pop(field, None)
+                else:
+                    screen[field] = value
+            if screen:
+                theme["title"] = screen
+            else:
+                theme.pop("title", None)
+            if theme:
+                result["theme"] = theme
+            else:
+                result.pop("theme", None)
         elif isinstance(operation, AddAsset):
             result.setdefault("assets", {})[operation.id] = dict(operation.asset)
         elif isinstance(operation, UpsertVariable):

@@ -30,6 +30,8 @@ from flint_graph.narrative.assistant.operations import (
     GenerateMusic,
     GenerateVoice,
     Proposal,
+    SetTheme,
+    SetTitleScreen,
     StartChildSession,
     UpsertCharacter,
     UpsertNode,
@@ -262,6 +264,18 @@ def _repointed(node: dict[str, Any], gone: Mapping[str, str]) -> dict[str, Any]:
     return changed
 
 
+def _without_blanks(theme: dict[str, Any]) -> dict[str, Any]:
+    """Models write null for what they mean to leave alone; only a font's asset can be null."""
+    tidied = {}
+    for part, section in theme.items():
+        if isinstance(section, dict):
+            section = {k: v for k, v in section.items() if v is not None or k == "asset"}
+            if not section:
+                continue
+        tidied[part] = section
+    return tidied
+
+
 def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
     """Each round trip to correct these costs seconds to minutes, so correct them here."""
     upserted = {item.id: item for item in proposal.operations if isinstance(item, UpsertCharacter)}
@@ -291,6 +305,8 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
         if isinstance(item, GenerateExpressions):
             pending.setdefault(item.character, set()).update(item.expressions)
     operations: list[Any] = []
+    # A title screen waiting on a file still being generated keeps the rest of its choice.
+    title_fields = {"background": GenerateBackgrounds, "music": GenerateMusic}
     # New steps that had nothing left to do, and where each one led.
     gone: dict[str, str] = {}
     saved = story.get("nodes") or {}
@@ -308,6 +324,19 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
                         gone[item.id] = target
                     continue
                 item = item.model_copy(update={"node": node})
+        elif isinstance(item, SetTheme) and item.theme is not None:
+            item = item.model_copy(update={"theme": _without_blanks(item.theme)})
+        elif isinstance(item, SetTitleScreen):
+            kept = {
+                field: getattr(item, field)
+                for field in item.model_fields_set - {"op"}
+                if getattr(item, field) is None
+                or getattr(item, field) in assets
+                or not any(isinstance(other, title_fields[field]) for other in proposal.operations)
+            }
+            if not kept:
+                continue
+            item = SetTitleScreen(op="set_title_screen", **kept)
         operations.append(item)
     if gone:
         operations = [

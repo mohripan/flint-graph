@@ -69,6 +69,8 @@ export function usedAssets(story: StoryDraft): Set<string> {
     for (const key of Object.values(character.sprites ?? {})) used.add(key);
   }
   if (story.theme?.font?.asset) used.add(story.theme.font.asset);
+  if (story.theme?.title?.background) used.add(story.theme.title.background);
+  if (story.theme?.title?.music) used.add(story.theme.title.music);
   return used;
 }
 
@@ -86,6 +88,7 @@ export const THEME_DEFAULTS = {
   name: { show: true, background: "#d5ae68", text: "#182635" },
   choices: { background: "#f0f4f6", text: "#182635", border: "#d5ae68" },
   font: { asset: null as string | null, size: 22 },
+  title: { background: null as string | null, music: null as string | null },
 };
 export type ResolvedTheme = typeof THEME_DEFAULTS;
 type Part = keyof ResolvedTheme;
@@ -97,6 +100,7 @@ export function resolvedTheme(story: StoryDraft): ResolvedTheme {
     name: { ...THEME_DEFAULTS.name, ...theme.name },
     choices: { ...THEME_DEFAULTS.choices, ...theme.choices },
     font: { ...THEME_DEFAULTS.font, ...theme.font },
+    title: { ...THEME_DEFAULTS.title, ...theme.title },
   };
 }
 

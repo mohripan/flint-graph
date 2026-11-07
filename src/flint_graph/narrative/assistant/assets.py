@@ -132,6 +132,9 @@ def _referenced(story: dict[str, Any]) -> set[str]:
     font = theme.get("font") if type(theme) is dict else None
     if type(font) is dict and type(font.get("asset")) is str:
         keys.add(font["asset"])
+    title = theme.get("title") if type(theme) is dict else None
+    if type(title) is dict:
+        keys.update(value for value in title.values() if type(value) is str)
     return keys
 
 

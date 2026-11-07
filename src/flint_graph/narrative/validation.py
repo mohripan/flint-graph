@@ -296,7 +296,7 @@ def _closed(value: Any, allowed: frozenset[str]) -> bool:
 
 def _theme(value: Any, assets: dict[str, Any]) -> None:
     """A closed presentation theme; every part is optional (defaults: ADR 0040 design)."""
-    theme = fields(value, set(), {"textbox", "name", "choices", "font"}, "theme")
+    theme = fields(value, set(), {"textbox", "name", "choices", "font", "title"}, "theme")
     if "textbox" in theme:
         location = "theme.textbox"
         box = fields(
@@ -331,6 +331,12 @@ def _theme(value: Any, assets: dict[str, Any]) -> None:
             asset_of(font["asset"], assets, "font", "theme.font.asset")
         if "size" in font:
             _bounded(font["size"], 14, 48, "theme.font.size")
+    if "title" in theme:
+        title = fields(theme["title"], set(), {"background", "music"}, "theme.title")
+        if title.get("background") is not None:
+            asset_of(title["background"], assets, "image", "theme.title.background")
+        if title.get("music") is not None:
+            asset_of(title["music"], assets, "music", "theme.title.music")
 
 
 def _missing_ending() -> None:

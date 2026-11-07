@@ -18,6 +18,9 @@ func _toolbar(action: String) -> void:
 	if action == "Restart":
 		_notice.text = "Playtest restarted. Progress stays in memory."
 
+func _has_saved_game() -> bool:
+	return false  # A playtest neither reads nor writes saves.
+
 func _read_gallery() -> Array:
 	return []
 

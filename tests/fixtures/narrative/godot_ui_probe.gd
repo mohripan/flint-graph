@@ -308,6 +308,14 @@ func _initialize() -> void:
 		print("UI_RESULT:" + JSON.stringify({"screens": screens}))
 		quit(0)
 		return
+	if config["case"] == "title_gate":
+		await _probe_title_gate(checked)
+		quit(0)
+		return
+	if config["case"] in ["title", "title_preview"]:
+		await _probe_title(checked, config["case"] == "title_preview")
+		quit(0)
+		return
 	if config["case"] == "controls":
 		await _probe_controls(checked)
 		quit(0)
@@ -812,6 +820,96 @@ func _probe_sound(checked: Dictionary) -> void:
 	stage._unhandled_key_input(_key(KEY_M))
 	volumes["m_key_toggles"] = stage._settings["muted"]
 	out["volumes"] = volumes
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _visible_title_buttons(stage: Control) -> Array:
+	var names: Array = []
+	for item: String in stage._title_buttons:
+		if stage._title_buttons[item].visible:
+			names.append(item)
+	return names
+
+
+func _probe_title(checked: Dictionary, preview: bool) -> void:
+	var script: GDScript = load("res://preview/vn_view.gd" if preview else "res://runtime/vn_view.gd")
+	var stage: Control = script.new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	await process_frame
+	var out := {"open": stage._title_showing(), "heading": stage._title_heading.text,
+		"art": stage._title_art.texture != null, "music": stage._music.current,
+		"buttons": _visible_title_buttons(stage), "started": stage._started,
+		"line_on_screen": stage._text.text, "stage_box_visible": stage._box.visible,
+		"focus": root.gui_get_focus_owner().text if root.gui_get_focus_owner() != null else ""}
+	# Nothing the keyboard does here moves a story that has not started.
+	var first: String = _node_of(stage)
+	stage._unhandled_key_input(_key(KEY_A))
+	stage._input(_key(KEY_SPACE))
+	out["auto_after_key"] = stage._auto
+	out["same_node"] = _node_of(stage) == first
+	# Settings from the title: only settings.
+	stage._title_buttons["Settings"].pressed.emit()
+	await process_frame
+	out["menu_open"] = stage._menu_panel.visible
+	out["save_disabled"] = _find(stage._menu_panel, "Save").disabled
+	out["gallery_disabled"] = _find(stage._menu_panel, "Gallery").disabled
+	stage._close_menu()
+	await process_frame
+	out["title_after_menu"] = stage._title_showing()
+	# Start: the story begins at its first line, and its own music takes over.
+	stage._title_buttons["Start"].pressed.emit()
+	for frame in range(4):
+		await process_frame
+	out["after_start"] = {"open": stage._title_showing(), "text": stage._text.text,
+		"music": stage._music.current, "stage_box_visible": stage._box.visible, "art_freed": stage._title_art.texture == null}
+	# Play on, save, and go back: the story waits, and Continue appears.
+	stage._set_text_speed("instant")
+	stage._request_advance()
+	await process_frame
+	await process_frame
+	var saved_at: String = _node_of(stage)
+	var files_before := _list_user_files()
+	stage._toolbar("Save")
+	stage._toolbar("Title screen")
+	for frame in range(3):
+		await process_frame
+	out["back"] = {"open": stage._title_showing(), "music": stage._music.current, "buttons": _visible_title_buttons(stage),
+		"voice_playing": stage._voice_player.playing}
+	if preview:
+		out["files_written"] = _list_user_files().filter(func(item: String) -> bool: return not item in files_before)
+	else:
+		stage._title_buttons["Continue"].pressed.emit()
+		for frame in range(3):
+			await process_frame
+		out["continued"] = {"open": stage._title_showing(), "same_place": _node_of(stage) == saved_at, "notice": stage._notice.text}
+	# A new game from the title starts over.
+	stage._toolbar("Title screen")
+	await process_frame
+	stage._title_buttons["Start"].pressed.emit()
+	for frame in range(3):
+		await process_frame
+	out["new_game"] = {"open": stage._title_showing(), "text": stage._text.text, "notice": stage._notice.text}
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _probe_title_gate(checked: Dictionary) -> void:
+	var muted := GDScript.new()
+	muted.source_code = "extends \"res://runtime/vn_view.gd\"\nfunc _sound_blocked() -> bool:\n\treturn true\n"
+	muted.reload()
+	var stage: Control = muted.new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	await process_frame
+	var out := {"gate": stage._sound_gate != null and stage._sound_gate.visible, "before": stage._music.current}
+	stage._input(_mouse(MOUSE_BUTTON_LEFT))
+	await process_frame
+	await process_frame
+	out["after"] = {"music": stage._music.current, "open": stage._title_showing(), "started": stage._started}
 	print("UI_RESULT:" + JSON.stringify(out))
 
 

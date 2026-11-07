@@ -654,6 +654,92 @@ async def test_a_turn_without_music_refuses_it_whatever_the_provider_writes():
     assert "generate_music" not in json.dumps(model.schema)
 
 
+def with_files():
+    source = story()
+    for key, kind, path in (
+        ("dusk", "image", "assets/dusk.png"),
+        ("theme_a", "music", "assets/theme_a.ogg"),
+    ):
+        source["assets"][key] = {"kind": kind, "path": path, "sha256": sha("7")}
+    return source
+
+
+def title_screen(**fields):
+    return proposal({"op": "set_title_screen", **fields}).operations
+
+
+def test_a_title_screen_leaves_the_rest_of_the_look_alone():
+    source = with_files()
+    source["theme"] = {"textbox": {"position": "top"}}
+    edit = apply_operations(source, title_screen(background="dusk", music="theme_a"))
+    assert edit.story["theme"] == {
+        "textbox": {"position": "top"},
+        "title": {"background": "dusk", "music": "theme_a"},
+    }
+    assert edit.touched == ("theme.title",)
+
+
+def test_what_a_title_screen_leaves_out_stays_and_null_removes_it():
+    source = with_files()
+    source["theme"] = {"title": {"background": "dusk", "music": "theme_a"}}
+    edit = apply_operations(source, title_screen(music=None))
+    assert edit.story["theme"] == {"title": {"background": "dusk"}}
+    gone = apply_operations(source, title_screen(music=None, background=None))
+    assert "theme" not in gone.story
+
+
+def test_a_new_look_does_not_drop_the_title_screen():
+    source = with_files()
+    source["theme"] = {"title": {"background": "dusk"}, "font": {"size": 30}}
+    look = proposal({"op": "set_theme", "theme": {"textbox": {"position": "top"}}}).operations
+    assert apply_operations(source, look).story["theme"] == {
+        "textbox": {"position": "top"},
+        "title": {"background": "dusk"},
+    }
+    reset = proposal({"op": "set_theme", "theme": None}).operations
+    assert apply_operations(source, reset).story["theme"] == {"title": {"background": "dusk"}}
+
+
+def test_a_title_screen_needs_real_files_of_the_right_kind():
+    source = with_files()
+    for bad in ({"background": "theme_a"}, {"music": "dusk"}, {"background": "nothing"}):
+        assert check_proposal(source, title_screen(**bad)).diagnostics, bad
+
+
+@pytest.mark.anyio
+async def test_a_title_screen_waiting_on_a_new_file_keeps_the_rest_of_the_choice():
+    answered = answer(
+        {"op": "set_title_screen", "background": "dusk", "music": "sad_piano"},
+        {"op": "generate_music", "description": "sad piano"},
+    )
+    result = await run_turn(Scripted(answered), with_files(), "Do it.", capabilities=("music",))
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    made = result.proposal.operations[0]
+    assert (made.op, made.background, made.model_fields_set) == (
+        "set_title_screen",
+        "dusk",
+        {"op", "background"},
+    )
+
+
+@pytest.mark.anyio
+async def test_a_theme_full_of_blanks_means_only_what_it_says():
+    theme = {
+        "textbox": {"position": "top", "border": None},
+        "choices": {"background": None},
+        "font": {"asset": None, "size": None},
+    }
+    result = await run_turn(
+        Scripted(answer({"op": "set_theme", "theme": theme})), story(), "Move the box up."
+    )
+    assert result.diagnostics == ()
+    assert result.proposal.operations[0].theme == {
+        "textbox": {"position": "top"},
+        "font": {"asset": None},
+    }
+
+
 @pytest.mark.parametrize("seconds", [14, 181])
 def test_a_track_length_outside_the_limits_is_refused(seconds):
     with pytest.raises(ValidationError):

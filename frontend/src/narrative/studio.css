@@ -458,3 +458,7 @@
 .studio-stage-motion .studio-hint { flex:1 1 100%; margin:0; }
 .studio-music-job { display:flex; flex-direction:column; gap:2px; padding-top:8px; border-top:1px solid #e3eaef; }
 .studio-music-job p { margin:0; }
+.studio-look-title { display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:3%; background-color:#182635; text-align:center; }
+.studio-look-title strong { color:#f0f4f6; font-weight:500; text-shadow:0 0 6px #182635, 0 0 2px #182635; overflow-wrap:anywhere; }
+.studio-look-title div { display:flex; flex-direction:column; align-items:center; gap:6px; width:100%; }
+.studio-look-title span { box-sizing:border-box; max-width:100%; }
