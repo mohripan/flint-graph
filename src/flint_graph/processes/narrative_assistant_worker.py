@@ -28,6 +28,7 @@ from flint_graph.config import Settings, get_settings
 from flint_graph.infrastructure.narrative_artifact_store import S3NarrativeArtifactStore
 from flint_graph.infrastructure.narrative_assistant import build_narrative_assistant
 from flint_graph.infrastructure.narrative_assistant_temporal import TemporalAssistantDispatcher
+from flint_graph.infrastructure.narrative_assistant_vision import build_image_describer
 from flint_graph.infrastructure.object_store import create_s3_client
 from flint_graph.prompts.runtime import run_prompt_process
 from flint_graph.worker.activities.narrative_assistant import NarrativeAssistantActivities
@@ -85,14 +86,16 @@ async def run_worker(settings: Settings | None = None) -> None:
     dispatcher = TemporalAssistantDispatcher(temporal, task_queue=queue)
     engine = create_async_engine(configured.database_url, hide_parameters=True, pool_pre_ping=True)
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    store = S3NarrativeArtifactStore(
+        create_s3_client(configured, max_attempts=3), bucket=configured.object_store_bucket
+    )
     activities = NarrativeAssistantActivities(
         factory=factory,
         model=model,
         context_chars=configured.narrative_assistant_context_chars,
         capabilities=generation_capabilities(configured),
-    )
-    store = S3NarrativeArtifactStore(
-        create_s3_client(configured, max_attempts=3), bucket=configured.object_store_bucket
+        store=store,
+        vision=build_image_describer(configured),
     )
     try:
         async with (

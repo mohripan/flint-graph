@@ -229,3 +229,10 @@ optional authoring/refresh service with Viewer runtime credentials, no tenant-da
 uploads, and no SDK tracing. See [prompt management](prompt-management.md) for
 import, review, activation, diagnosis and rollback. Image TOML overrides remain
 explicit in locked mode and cannot be combined with managed Langfuse mode.
+
+## Screenshots (ADR 0076)
+
+The writing model cannot see, so a small vision model describes each attached picture first. To turn this on, run
+`ollama pull lfm3-vl:2b` wherever Ollama runs, set `FLINT_GRAPH_NARRATIVE_ASSISTANT_VISION_MODEL=lfm3-vl:2b` for the API
+and the assistant worker, and restart them. It needs about 1.5 GB of GPU memory beside the writing model. Its LFM Open
+License v1.0 allows free commercial use below $10M annual revenue.

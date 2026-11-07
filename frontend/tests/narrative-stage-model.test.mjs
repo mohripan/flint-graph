@@ -9,6 +9,40 @@ async function load(name) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText + `\n//# sourceURL=${name}.js`).toString("base64")}`);
 }
 const stage = await load("stageModel");
+const speaking = {
+  entry: "meeting",
+  characters: { kaito: { name: "Kaito", sprites: { neutral: "kaito_1" } }, voice: { name: "A voice" } },
+  nodes: {
+    meeting: { type: "stage", background: "street", next: "greeting" },
+    greeting: { type: "line", speaker: "kaito", text: "Oh, hello.", next: "more" },
+    more: { type: "line", speaker: "voice", text: "Who is there?", next: "later" },
+    later: { type: "line", speaker: "kaito", text: "Only me.", next: "next_step" },
+    next_step: { type: "stage", show: [{ character: "kaito", position: "center", sprite: "neutral" }], next: "after" },
+    after: { type: "line", speaker: "kaito", text: "See?", next: "end" },
+    end: { type: "end", text: "Done.", ending: "fin" },
+  },
+};
+const empty = { background: "street", cg: null, characters: {} };
+
+test("a scene says who speaks without being on stage, if they have a picture to show", () => {
+  // A real story: a rewrite took Kaito off the stage, and nothing on screen said so.
+  assert.deepEqual(stage.offStageSpeakers(speaking, "greeting", empty), ["kaito"]);
+  assert.deepEqual(stage.offStageSpeakers(speaking, "meeting", empty), ["kaito"]);
+});
+
+test("someone on stage, or possibly on stage on another route, is not flagged", () => {
+  const placed = { position: "center", sprite: "neutral" };
+  assert.deepEqual(stage.offStageSpeakers(speaking, "greeting", { ...empty, characters: { kaito: placed } }), []);
+  assert.deepEqual(stage.offStageSpeakers(speaking, "greeting", { ...empty, characters: { kaito: "?" } }), []);
+});
+
+test("a scene ends at the next stage step, and loops end too", () => {
+  assert.deepEqual(stage.offStageSpeakers(speaking, "after", { ...empty, characters: { kaito: { position: "center", sprite: "neutral" } } }), []);
+  const looped = { ...speaking, nodes: { a: { type: "line", speaker: "kaito", text: "Again.", next: "a" } } };
+  assert.deepEqual(stage.offStageSpeakers(looped, "a", empty), ["kaito"]);
+  assert.deepEqual(stage.offStageSpeakers(speaking, "missing", empty), []);
+});
+
 test("inherited image choices show the effective asset without making a scene change", () => {
   assert.deepEqual(stage.stageImageChoice(undefined, "courtyard"), { key: "courtyard", label: "From earlier scenes: courtyard" });
   assert.deepEqual(stage.stageImageChoice(undefined, "?"), { key: null, label: "Varies by path" });

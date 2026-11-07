@@ -266,6 +266,8 @@ class Settings(BaseSettings):
     # budgeted. False is the latency switch (measured ~9x faster on a 12B model).
     # Off: the output grammar already guarantees structure, and thinking made turns about 14
     # times slower with no more right answers (docs/reports/2026-11-06-assistant-library.md).
+    # A small vision model that tells the assistant what an attached picture shows (ADR 0076).
+    narrative_assistant_vision_model: str | None = Field(default=None, min_length=1)
     narrative_assistant_thinking: bool = False
     narrative_assistant_thinking_tokens: int = Field(default=8192, ge=512, le=65536)
     narrative_assistant_context_chars: int = Field(default=24000, ge=4000, le=400000)

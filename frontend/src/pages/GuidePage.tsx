@@ -26,6 +26,10 @@ export function GuidePage() {
             <p className="mt-1">Yes. Its changes only happen when you press Accept, and every saved version stays under History.</p>
           </div>
           <div>
+            <h3 className="font-medium text-slate-800">Can I show the Assistant what I see?</h3>
+            <p className="mt-1">Yes. Paste a screenshot into the chat, drop a file there, or press Picture. It reads what is on screen and answers about it.</p>
+          </div>
+          <div>
             <h3 className="font-medium text-slate-800">How do I delete a project?</h3>
             <p className="mt-1">Choose Move to trash on its card. It stays in the Trash, safe and restorable, until you choose Delete forever.</p>
           </div>

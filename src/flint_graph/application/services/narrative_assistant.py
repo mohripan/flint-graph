@@ -31,6 +31,11 @@ from flint_graph.application.services.narrative_assistant_events import (
     add_turn_event,
     events_after,
 )
+from flint_graph.application.services.narrative_assistant_images import (
+    MAX_IMAGES_PER_MESSAGE,
+    TurnImage,
+    turn_images,
+)
 from flint_graph.application.services.narrative_assistant_log import (
     append_thread_event,
     read_thread_log,
@@ -50,6 +55,7 @@ from flint_graph.domain.errors import (
     TooManyRequestsError,
 )
 from flint_graph.infrastructure.db.models import (
+    NarrativeAssistantImage,
     NarrativeAssistantProposal,
     NarrativeAssistantThread,
     NarrativeAssistantTurn,
@@ -122,6 +128,8 @@ class TurnWork:
     earlier: tuple[str, ...] = ()
     # What the creator attached from the library, described for the model (ADR 0062).
     attached: tuple[str, ...] = ()
+    # Pictures attached to the message, still to be looked at (ADR 0076).
+    images: tuple[TurnImage, ...] = ()
     child_session: bool = False
     # Story format 2: approved library files under story-ready IDs, and each
     # character's described looks (editor metadata the model may reuse).
@@ -554,7 +562,27 @@ async def _resolve_attachments(
         return []
     characters = json.loads(story_json).get("characters") or {}
     resolved: list[dict[str, Any]] = []
+    if sum(item["kind"] == "image" for item in items) > MAX_IMAGES_PER_MESSAGE:
+        raise _invalid_attachment(f"Attach at most {MAX_IMAGES_PER_MESSAGE} pictures to a message.")
     for item in items:
+        if item["kind"] == "image":
+            try:
+                image_id = UUID(item["id"])
+            except ValueError:
+                raise _invalid_attachment("Attach that picture again.") from None
+            image = await session.scalar(
+                select(NarrativeAssistantImage).where(
+                    NarrativeAssistantImage.tenant_id == tenant_id,
+                    NarrativeAssistantImage.project_id == project_id,
+                    NarrativeAssistantImage.id == image_id,
+                )
+            )
+            if image is None:
+                raise _invalid_attachment("Attach that picture again.")
+            resolved.append(
+                {"kind": "image", "id": str(image.id), "name": "Screenshot", "asset_kind": None}
+            )
+            continue
         if item["kind"] == "character":
             character = characters.get(item["id"])
             if character is None:
@@ -1106,6 +1134,12 @@ async def claim_turn(
         history=conversation.recent,
         earlier=earlier,
         attached=attached,
+        images=await turn_images(
+            session,
+            tenant_id=turn.tenant_id,
+            project_id=turn.project_id,
+            attachments=turn.attachments or [],
+        ),
         child_session=bool(thread and thread.parent_thread_id),
         library=library,
         profiles=profiles,

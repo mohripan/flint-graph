@@ -66,6 +66,9 @@ from flint_graph.infrastructure.db.access_models import CreditLedgerEntry as Cre
 from flint_graph.infrastructure.db.access_models import UsageCharge as UsageCharge
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from flint_graph.infrastructure.db.narrative_assistant_models import (
+    NarrativeAssistantImage as NarrativeAssistantImage,
+)
+from flint_graph.infrastructure.db.narrative_assistant_models import (
     NarrativeAssistantProposal as NarrativeAssistantProposal,
 )
 from flint_graph.infrastructure.db.narrative_assistant_models import (

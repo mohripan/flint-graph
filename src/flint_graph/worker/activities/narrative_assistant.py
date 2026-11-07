@@ -31,6 +31,11 @@ from flint_graph.application.services.narrative_assistant import (
     fail_turn,
 )
 from flint_graph.application.services.narrative_assistant_events import TurnEventWriter
+from flint_graph.application.services.narrative_assistant_images import (
+    Describer,
+    ImageStore,
+    describe_attached,
+)
 from flint_graph.infrastructure.db.models import NarrativeAssistantTurn
 from flint_graph.narrative.assistant.turn import AssistantModel, AssistantModelError, run_turn
 from flint_graph.prompts.source import current_snapshot, use_snapshot
@@ -59,8 +64,11 @@ class NarrativeAssistantActivities:
         context_chars: int,
         max_attempts: int = 3,
         capabilities: tuple[str, ...] = (),
+        store: ImageStore | None = None,
+        vision: Describer | None = None,
     ) -> None:
         self.factory, self.model = factory, model
+        self.store, self.vision = store, vision
         self.context_chars, self.max_attempts = context_chars, max_attempts
         self.capabilities = capabilities
 
@@ -116,6 +124,21 @@ class NarrativeAssistantActivities:
         events = TurnEventWriter(self.factory, turn_id=turn_id, execution_token=token)
         try:
             with use_snapshot(work.prompt_bundle or current_snapshot()):
+                attached = work.attached
+                if work.images:
+                    attached = (
+                        *attached,
+                        *await describe_attached(
+                            self.factory,
+                            store=self.store,
+                            vision=self.vision,
+                            tenant_id=work.tenant_id,
+                            project_id=work.project_id,
+                            images=work.images,
+                            request=work.request,
+                            observer=events,
+                        ),
+                    )
                 result = await run_turn(
                     self.model,
                     work.story,
@@ -129,7 +152,7 @@ class NarrativeAssistantActivities:
                     profiles=work.profiles,
                     voices=work.voices,
                     capabilities=self.capabilities,
-                    attached=work.attached,
+                    attached=attached,
                     child_session=work.child_session,
                 )
             await events.flush()

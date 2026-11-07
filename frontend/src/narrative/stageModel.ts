@@ -295,6 +295,22 @@ export interface StageEdit {
   music?: string | null; ambience?: string | null; sound?: string;
 }
 
+/** Who speaks in this scene but is not on stage. Off-screen voices are fine, so this is only a hint. */
+export function offStageSpeakers(story: StoryDraft, head: string, snapshot: StageSnapshot): string[] {
+  const speakers: string[] = [], seen = new Set<string>();
+  let id: string | undefined = head;
+  while (id !== undefined && has(story.nodes, id) && !seen.has(id)) {
+    seen.add(id);
+    const node: StoryNode = story.nodes[id];
+    if (node.type === "stage" && id === head) { id = node.next; continue; }
+    if (node.type !== "line") break;
+    if (node.speaker && !speakers.includes(node.speaker)) speakers.push(node.speaker);
+    id = node.next;
+  }
+  return speakers.filter(speaker => Object.keys(story.characters[speaker]?.sprites ?? {}).length > 0
+    && !has(snapshot.characters, speaker));
+}
+
 export function sceneStage(story: StoryDraft, head: string): StageEdit {
   const node = story.nodes[head];
   if (node?.type !== "stage") return { show: [], hide: [] };

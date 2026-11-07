@@ -364,6 +364,33 @@ class NarrativeAssistantTurnEvent(UUIDPrimaryKeyMixin, Base):
     )
 
 
+class NarrativeAssistantImage(UUIDPrimaryKeyMixin, Base):
+    """A picture attached to a message (ADR 0076). Private, and never part of a story or a game."""
+
+    __tablename__ = "narrative_assistant_images"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["project_id", "tenant_id"],
+            ["narrative_projects.id", "narrative_projects.tenant_id"],
+            name="fk_narrative_assistant_image_project",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("project_id", "sha256", name="uq_narrative_assistant_image_sha"),
+    )
+    tenant_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    uploaded_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    # What the vision model saw, kept so a retried reply does not look again.
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class NarrativeAssistantThreadEvent(UUIDPrimaryKeyMixin, Base):
     """One thing that happened in a conversation; append-only (ADR 0060).
 

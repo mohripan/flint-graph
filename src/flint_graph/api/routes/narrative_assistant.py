@@ -6,10 +6,10 @@ progress is read back from PostgreSQL by sequence, as JSON or server-sent events
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import cast
+from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, File, Header, Query, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -29,7 +29,9 @@ from flint_graph.api.narrative_assistant_schemas import (
     ActionQuoteResponse,
     AssistantActionResponse,
     AssistantAttachmentResponse,
+    AssistantCapabilitiesResponse,
     AssistantDecision,
+    AssistantImageResponse,
     AssistantProposalResponse,
     AssistantProposalSummary,
     AssistantThreadCreate,
@@ -67,14 +69,30 @@ from flint_graph.application.services.narrative_assistant_actions import (
     start_action,
 )
 from flint_graph.application.services.narrative_assistant_events import events_after
+from flint_graph.application.services.narrative_assistant_images import (
+    MAX_IMAGE_BYTES,
+    MAX_IMAGES_PER_MESSAGE,
+    add_image,
+    get_image,
+)
 from flint_graph.application.services.narrative_assistant_log import list_thread_events
 from flint_graph.application.services.narrative_images import get_image_job
 from flint_graph.application.services.narrative_music import get_music_job
 from flint_graph.application.services.narrative_voices import get_voice_job
 from flint_graph.config import Settings
-from flint_graph.domain.errors import NotFoundError, TooManyRequestsError
+from flint_graph.domain.errors import (
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    PayloadTooLargeError,
+    TooManyRequestsError,
+)
 from flint_graph.infrastructure.db.models import NarrativeAssistantProposal, NarrativeAssistantTurn
 from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
+from flint_graph.infrastructure.narrative_artifact_store import (
+    ArtifactStoreError,
+    assistant_image_object_key,
+)
 
 router = APIRouter(prefix="/v1/narrative/projects/{project_id}/assistant", tags=["narrative"])
 
@@ -82,6 +100,89 @@ _TERMINAL = ("completed", "failed", "cancelled")
 STREAM_POLL_SECONDS = 0.25
 STREAM_KEEPALIVE_SECONDS = 10.0
 STREAM_MAX_SECONDS = 300.0
+
+
+@router.get("/capabilities", response_model=AssistantCapabilitiesResponse)
+async def assistant_capabilities_endpoint(
+    project_id: UUID, _tenant_id: TenantIdDep, settings: SettingsDep
+) -> AssistantCapabilitiesResponse:
+    return AssistantCapabilitiesResponse(
+        images=bool(settings.narrative_assistant_vision_model),
+        max_images=MAX_IMAGES_PER_MESSAGE,
+    )
+
+
+@router.post("/images", response_model=AssistantImageResponse, status_code=201)
+async def upload_assistant_image_endpoint(
+    project_id: UUID,
+    file: Annotated[UploadFile, File()],
+    tenant_id: TenantMemberDep,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    store: NarrativeArtifactStoreDep,
+    settings: SettingsDep,
+) -> AssistantImageResponse:
+    if not settings.narrative_assistant_vision_model:
+        raise ConflictError("This Studio can't read pictures yet.")
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise PayloadTooLargeError("That picture is too large to attach.")
+    try:
+        image = await _persist(
+            session,
+            add_image(
+                session,
+                store=store,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=current_user.user.id,
+                data=data,
+            ),
+        )
+    except ArtifactStoreError:
+        raise DomainError(
+            503,
+            "Service unavailable",
+            "The picture could not be saved. Try again in a moment.",
+            "picture-unavailable",
+        ) from None
+    return AssistantImageResponse.model_validate(image)
+
+
+@router.get("/images/{image_id}")
+async def read_assistant_image_endpoint(
+    project_id: UUID,
+    image_id: UUID,
+    tenant_id: TenantIdDep,
+    session: SessionDep,
+    store: NarrativeArtifactStoreDep,
+) -> Response:
+    image = await get_image(session, tenant_id=tenant_id, project_id=project_id, image_id=image_id)
+    try:
+        data = await store.get_verified(
+            assistant_image_object_key(
+                tenant_id=tenant_id, project_id=project_id, image_id=image.id
+            ),
+            expected_size=image.size_bytes,
+            expected_sha256=image.sha256,
+            max_bytes=MAX_IMAGE_BYTES,
+        )
+    except ArtifactStoreError:
+        raise DomainError(
+            503,
+            "Service unavailable",
+            "The picture could not be loaded. Try again in a moment.",
+            "picture-unavailable",
+        ) from None
+    return Response(
+        data,
+        media_type="image/png",
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'inline; filename="screenshot-{image.id}.png"',
+        },
+    )
 
 
 async def _action_response(

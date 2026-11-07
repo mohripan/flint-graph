@@ -485,6 +485,67 @@ def _joined_to_the_start(story: dict[str, Any], proposal: Proposal) -> Proposal:
     return proposal.model_copy(update={"operations": operations})
 
 
+_TAKES_OFF_STAGE = re.compile(
+    r"\b(remove|removes|hide|hides|leave|leaves|leaving|exit|exits|gone|disappear|disappears"
+    r"|without|nobody|no one|alone|empty|off (?:the )?(?:stage|screen)|take\b.*\boff)\b",
+    re.I,
+)
+
+
+def _keeps_who_is_on_stage(story: dict[str, Any], proposal: Proposal, request: str) -> Proposal:
+    """A rewrite replaces the whole step, and models rewriting one for another reason leave out
+    who is on it. Asked to bring someone closer, one took them out of the scene altogether."""
+    if _TAKES_OFF_STAGE.search(request):
+        return proposal
+    nodes = story.get("nodes") or {}
+    operations = []
+    for item in proposal.operations:
+        if isinstance(item, UpsertNode) and item.node.get("type") == "stage":
+            saved = (nodes.get(item.id) or {}).get("show") or []
+            shown = [entry for entry in item.node.get("show") or [] if isinstance(entry, dict)]
+            named = {entry.get("character") for entry in shown} | set(item.node.get("hide") or [])
+            taken = {entry.get("position") for entry in shown}
+            back = [
+                entry
+                for entry in saved
+                if isinstance(entry, dict)
+                and entry.get("character") not in named
+                and entry.get("position") not in taken
+            ]
+            if back:
+                item = item.model_copy(update={"node": {**item.node, "show": [*back, *shown]}})
+        operations.append(item)
+    return proposal.model_copy(update={"operations": operations})
+
+
+def _without_stage_copies(story: dict[str, Any], proposal: Proposal) -> Proposal:
+    """A real thread rewrote a step, then added an exact copy that nothing led to. A new step that
+    is merely unlinked stays, because the creator asked for it and the warning can say so."""
+    saved = story.get("nodes") or {}
+    written = {item.id: item.node for item in proposal.operations if isinstance(item, UpsertNode)}
+    nodes = {**saved, **written}
+    led_to: set[Any] = set()
+    for node in nodes.values():
+        led_to.update(node.get(field) for field in ("next", "if_true", "if_false"))
+        led_to.update(option.get("target") for option in node.get("options", []))
+    led_to.update(item.id for item in proposal.operations if isinstance(item, SetEntry))
+    led_to.add(story.get("entry"))
+    copies = {
+        key
+        for key, node in written.items()
+        if key not in saved
+        and node.get("type") == "stage"
+        and key not in led_to
+        and any(other == node for name, other in nodes.items() if name != key)
+    }
+    operations = [
+        item
+        for item in proposal.operations
+        if not (isinstance(item, UpsertNode) and item.id in copies)
+    ]
+    return proposal.model_copy(update={"operations": operations})
+
+
 def _without_no_ops(story: dict[str, Any], proposal: Proposal) -> Proposal:
     """Writing out a character or scene unchanged is not an edit. Left in, it reads as a change,
     asks to be accepted, and saves a revision identical to the one before."""
@@ -834,6 +895,7 @@ async def run_turn(
             parsed = _without_pending_sprites(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
+            parsed = _keeps_who_is_on_stage(story, _without_stage_copies(story, parsed), request)
             parsed = _with_voice_actions(_with_tidied_nodes(story, parsed, library), capabilities)
             # The question goes before wherever the story begins, so find that first.
             parsed = _with_player(story, _joined_to_the_start(story, parsed))

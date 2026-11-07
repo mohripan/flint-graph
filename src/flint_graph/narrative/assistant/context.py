@@ -202,6 +202,18 @@ def _character(key: str, item: dict[str, Any], looks: str | None, voice: str | N
     return f"  {key}: {_quote(item.get('name'))}" + (f" ({'; '.join(details)})" if details else "")
 
 
+def screenshot_line(description: str | None) -> str:
+    """What the creator's picture shows, quoted as data: it came from another model's reading."""
+    if description is None:
+        return (
+            "  a screenshot that could not be read: say you could not see it, and ask what it shows"
+        )
+    return (
+        "  a screenshot of the creator's screen, not a file, so never add it to the story. "
+        "It shows: " + _safe(_quote(description))
+    )
+
+
 def attached_lines(
     story: dict[str, Any],
     attachments: Sequence[Mapping[str, Any]],
@@ -223,6 +235,8 @@ def attached_lines(
     offered = {entry.sha256: entry.key for entry in library}
     lines: list[str] = []
     for item in attachments:
+        if item["kind"] == "image":
+            continue  # Described separately, once it has been looked at (ADR 0076).
         if item["kind"] == "character":
             character = story["characters"].get(item["id"])
             if character is not None:

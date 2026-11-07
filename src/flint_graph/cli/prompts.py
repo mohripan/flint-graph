@@ -129,7 +129,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 validate_upgrade(previous, raw)
         elif args.command in {"lock", "diff"}:
             candidate = PromptBundle.from_bytes(read(args.candidate))
-            if {e.name for e in candidate.entries} != {e.name for e in lock.snapshot().entries}:
+            known = {e.name for e in lock.snapshot().entries}
+            # A candidate may add a prompt, which review sees. It may not lose one.
+            if not known <= {e.name for e in candidate.entries}:
                 raise PromptError("incomplete_candidate_bundle")
             if args.command == "diff":
                 print(
@@ -138,10 +140,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             e.name: [
                                 key
                                 for key, value in e.data.items()
-                                if lock.snapshot().entry(e.name).data[key] != value
+                                if e.name not in known
+                                or lock.snapshot().entry(e.name).data[key] != value
                             ]
                             for e in candidate.entries
-                            if e.sha256 != lock.snapshot().entry(e.name).sha256
+                            if e.name not in known
+                            or e.sha256 != lock.snapshot().entry(e.name).sha256
                         },
                         sort_keys=True,
                     )

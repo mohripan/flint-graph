@@ -341,6 +341,11 @@ release build costs 5 because it uses no GPU. A test holds a typical visit to th
 operators are unlimited: `own_server` and `credits_used` in the access status, `ownServer` beside `metered` in the frontend, and usage marked
 `own_server` that never counts against an allowance and never gives access. The Assets page groups a job's options with `assetSets`.
 
+[ADR 0076](docs/adr/0076-screenshots-for-the-assistant.md) (migration 0058, prompt v14) lets people paste a screenshot to the assistant. Its writing model
+cannot see, so opt-in `FLINT_GRAPH_NARRATIVE_ASSISTANT_VISION_MODEL` (`lfm3-vl:2b`) describes each picture in words first. Pictures are private, never in a
+story or game, and go with the project. Rewriting a stage step keeps who is on it unless the request is to take them off. Read
+`docs/reports/2026-11-07-assistant-images.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

@@ -74,6 +74,13 @@ def voice_reference_object_key(
     )
 
 
+def assistant_image_object_key(*, tenant_id: UUID, project_id: UUID, image_id: UUID) -> str:
+    """A picture attached to a message (ADR 0076): under the project, so it goes with it."""
+    return (
+        f"tenants/{tenant_id}/narrative/projects/{project_id}/assistant-images/{image_id}/image.png"
+    )
+
+
 _REFERENCE_KEY = re.compile(
     r"tenants/[0-9a-f-]{36}/narrative/projects/[0-9a-f-]{36}/voice-references/[0-9a-f-]{36}/reference\.wav"
 )

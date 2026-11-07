@@ -400,6 +400,8 @@ button.studio-project-open:hover h3 { text-decoration:underline; text-decoration
 .studio-upgrade button { align-self:flex-start; }
 .studio-stage { margin:0 0 18px; padding:12px 14px; border:1px solid #d4dfe6; border-radius:10px; background:#fbfcfd; }
 .studio-stage-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; }
+.studio-stage-note { display:flex; flex-wrap:wrap; align-items:center; gap:2px 12px; margin:8px 0 0; padding:7px 12px; border:1px solid #e3d3ad; border-radius:8px; background:#fbf6e9; color:#5b4620; font-size:13px; }
+.narrative-studio .studio-stage-note .studio-link { min-height:28px; }
 .studio-stage-head h3 { margin:0; font-size:15px; }
 .studio-stage-head p { margin:0; font-size:13px; }
 .studio-stage-fields { border:0; margin:0; padding:0; min-width:0; display:flex; flex-direction:column; gap:10px; }

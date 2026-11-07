@@ -4,7 +4,7 @@ export interface TurnIntent extends TurnWrite {}
 // A lost acknowledgement resends the same key; any change to the message is a new turn.
 export function prepareTurn(previous: TurnIntent | null, request: string, baseRevisionId: string,
   focus: string | null, key = () => crypto.randomUUID(),
-  attachments: Array<{ kind: "character" | "asset"; id: string }> = []): TurnIntent {
+  attachments: Array<{ kind: "character" | "asset" | "image"; id: string }> = []): TurnIntent {
   const chosen = attachments.map(({ kind, id }) => ({ kind, id }));
   return previous && previous.request === request && previous.base_revision_id === baseRevisionId
     && previous.focus_node === focus
@@ -225,6 +225,11 @@ export function activitySteps(activity: TurnActivity, active: boolean): StepView
     const call = number(payload.call);
     if (name === "start") {
       if (activity.attempt > 1) views.push({ key, label: `Reconnected and started again (attempt ${activity.attempt})`, state: "done" });
+    } else if (name === "looking") {
+      const finished = state === "done" || (!active && activity.status === "completed");
+      const pictures = number(payload.pictures);
+      const noun = pictures === 1 ? "your picture" : "your pictures";
+      views.push({ key, state: settle(state === "done" ? "done" : "active"), label: finished ? `Looked at ${noun}` : `Looking at ${noun}` });
     } else if (name === "context") {
       const omitted = number(payload.omitted), focus = string(payload.focus), history = number(payload.history);
       views.push({ key, label: "Read the story", state: "done", detail: plural(number(payload.scenes), "scene")

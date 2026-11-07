@@ -10,6 +10,8 @@ import {
 import type { AssistantTurnEvent, StepView, ThreadIntent, TurnActivity, TurnIntent } from "./assistantModel";
 import { followTurnEvents, listTurnEvents, streamTurnEvents } from "./assistantStream";
 import { attachmentKind, toggleAttachment } from "./assistantLibrary";
+import { imageCount, imagesIn, roomFor, toScreenshotPng } from "./assistantImages";
+import { AssistantPicture } from "./AssistantPicture";
 import { appendThreads, findThread, mergeThreads, placeThread, visibleThreads } from "./assistantThreads";
 import type { Attachment } from "./assistantLibrary";
 import { LibraryPicker } from "./LibraryPicker";
@@ -112,6 +114,9 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const [drawer, setDrawer] = useState(false), [withFocus, setWithFocus] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [pictures, setPictures] = useState<{ images: boolean; max_images: number }>({ images: false, max_images: 3 });
+  const [attaching, setAttaching] = useState(0);
+  const picturePicker = useRef<HTMLInputElement>(null);
   const [attached, setAttached] = useState<Attachment[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const intent = useRef<TurnIntent | null>(null), threadIntent = useRef<ThreadIntent | null>(null);
@@ -251,7 +256,31 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
       else setError(releaseErrorMessage(failure));
     });
   }
-  const blocker = sendBlocker({ canWrite, dirty, saving, sending, active, text });
+  useEffect(() => {
+    const request = new AbortController();
+    // A server without pictures, or a brief failure here, only means no Picture button.
+    api.assistantCapabilities(tenantId, projectId, request.signal).then(setPictures, () => undefined);
+    return () => request.abort();
+  }, [tenantId, projectId]);
+
+  async function attachPictures(files: File[]) {
+    if (!files.length) return;
+    if (!pictures.images) { setError("This Studio can't read pictures yet."); return; }
+    const { take, note } = roomFor(files.length, imageCount(attached) + attaching, pictures.max_images);
+    setError(note);
+    await Promise.all(files.slice(0, take).map(async file => {
+      setAttaching(count => count + 1);
+      try {
+        const png = await toScreenshotPng(file);
+        const image = await api.uploadAssistantImage(tenantId, projectId, png);
+        setAttached(current => current.some(item => item.kind === "image" && item.id === image.id) ? current
+          : [...current, { kind: "image", id: image.id, name: "Screenshot", asset_kind: null }]);
+      } catch (failure) {
+        setError(failure instanceof Error && failure.message ? failure.message : "That picture could not be attached.");
+      } finally { setAttaching(count => count - 1); }
+    }));
+  }
+  const blocker = attaching ? "Attaching your picture…" : sendBlocker({ canWrite, dirty, saving, sending, active, text });
   function send(event?: FormEvent) {
     event?.preventDefault();
     if (blocker) return;
@@ -270,6 +299,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
       return { id, created, turn: await api.postAssistantTurn(tenantId, projectId, id, next, signal) };
     }, ({ id, created, turn }) => {
       intent.current = null; threadIntent.current = null; setText(""); setAttached([]); setLibraryOpen(false);
+      window.requestAnimationFrame(resize);
       if (threadRef.current !== id) {
         threadRef.current = id; setThreadId(id); setChildOf(null); writeSelection(selectionKey, id); linkThread(projectId, id);
         if (created) { const made = created; setThreads(current => placeThread(current, made)); }
@@ -424,8 +454,10 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
             const thinking = calls.filter(call => activity.calls[call].thinking);
             return <li key={turn.id} className="assistant-turn" aria-busy={running}>
               <div className="assistant-user">{turn.request}
-                {!!turn.attachments?.length && <ul className="assistant-attached" aria-label="Attached from the library">
-                  {turn.attachments.map(item => <li key={`${item.kind}:${item.id}`}><small>{attachmentKind(item)}</small> {item.name}</li>)}</ul>}
+                {!!turn.attachments?.length && <ul className="assistant-attached" aria-label="Attached to this message">
+                  {turn.attachments.map(item => item.kind === "image"
+                    ? <li key={`${item.kind}:${item.id}`} className="assistant-attached-picture"><AssistantPicture tenantId={tenantId} projectId={projectId} imageId={item.id} /></li>
+                    : <li key={`${item.kind}:${item.id}`}><small>{attachmentKind(item)}</small> {item.name}</li>)}</ul>}
               </div>
               <div className="assistant-answer">
                 <details className="assistant-activity" open={running}
@@ -486,7 +518,9 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
           })}</ol>
         </div>
       </div>
-      {canWrite ? <form className="assistant-composer" onSubmit={send}>
+      {canWrite ? <form className="assistant-composer" onSubmit={send}
+        onDragOver={event => { if (pictures.images && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+        onDrop={event => { const dropped = imagesIn(event.dataTransfer); if (dropped.length) { event.preventDefault(); void attachPictures(dropped); } }}>
         {text.trim() && !turns.some(turn => turn.status === "queued") && <GpuNotice kinds={["assistant"]} />}
         {dirty && <div className="studio-notice studio-release-dirty"><span>Save your changes so the assistant sees them.</span>
           <button type="button" className="studio-secondary" aria-disabled={saving} onClick={() => { if (!saving) void onSave(); }}>
@@ -495,16 +529,24 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
           onChange={setAttached} onClose={() => { setLibraryOpen(false); composer.current?.focus(); }} />}
         {!!attached.length && <ul className="assistant-chips" aria-label="Attached to this message">
           {attached.map(item => <li key={`${item.kind}:${item.id}`}>
-            <small>{attachmentKind(item)}</small> {item.name}
+            {item.kind === "image" ? <AssistantPicture tenantId={tenantId} projectId={projectId} imageId={item.id} small />
+              : <><small>{attachmentKind(item)}</small> {item.name}</>}
             <button type="button" aria-label={`Remove ${item.name}`} onClick={() => setAttached(current => toggleAttachment(current, item))}>×</button>
           </li>)}</ul>}
         <div className="assistant-input">
           <button type="button" className="assistant-library-open" aria-expanded={libraryOpen} title="Attach characters and files from your library"
             onClick={() => setLibraryOpen(open => !open)}>Library</button>
+          {pictures.images && <>
+            <button type="button" className="assistant-library-open" title="Attach a picture. You can also paste a screenshot or drop a file here."
+              onClick={() => picturePicker.current?.click()}>Picture</button>
+            <input ref={picturePicker} type="file" accept="image/*" multiple hidden aria-label="Attach a picture"
+              onChange={event => { void attachPictures(imagesIn(event.target)); event.target.value = ""; }} />
+          </>}
           <label className="studio-visually-hidden" htmlFor="assistant-message">Message the assistant</label>
           <textarea id="assistant-message" ref={composer} rows={1} value={text} maxLength={8000}
             placeholder="Describe a scene, a choice or a question…"
             onChange={event => { setText(event.target.value); resize(); }}
+            onPaste={event => { const pasted = imagesIn(event.clipboardData); if (pasted.length) { event.preventDefault(); void attachPictures(pasted); } }}
             onKeyDown={event => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
             }} />
@@ -514,7 +556,8 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
           {target ? <span className="assistant-focus">Focused on scene <code>{target}</code>
             <button type="button" className="studio-link" onClick={() => setWithFocus(false)}>Clear</button></span>
             : focus && <button type="button" className="studio-link" onClick={() => setWithFocus(true)}>Focus on scene {focus}</button>}
-          <small>{blocker && !dirty && text.trim() ? blocker : "Enter sends · Shift + Enter adds a line"}</small>
+          <small>{blocker && !dirty && (text.trim() || attaching) ? blocker
+            : `Enter sends · Shift + Enter adds a line${pictures.images ? " · Paste a screenshot to attach it" : ""}`}</small>
           {access?.assistant_item && <CreditCost item={access.assistant_item} />}
         </div>
       </form> : <p className="studio-notice assistant-readonly">Read-only access. You can read conversations but not ask for changes.</p>}

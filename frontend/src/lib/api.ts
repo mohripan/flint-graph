@@ -884,6 +884,30 @@ export const api = {
     });
   },
 
+  // Pictures attached to a message to the assistant (ADR 0076).
+  assistantCapabilities(tenantId: string, projectId: string, signal?: AbortSignal): Promise<{ images: boolean; max_images: number }> {
+    return jsonRequest(`${assistantPath(projectId)}/capabilities`, { headers: tenantHeaders(tenantId), signal });
+  },
+
+  async uploadAssistantImage(tenantId: string, projectId: string, png: Blob, signal?: AbortSignal):
+    Promise<{ id: string; width: number; height: number }> {
+    const form = new FormData();
+    form.set("file", png, "screenshot.png");
+    const response = await fetch(`${BASE}${assistantPath(projectId)}/images`, {
+      method: "POST", body: form, signal, headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) },
+    });
+    if (!response.ok) throw await parseError(response);
+    return await response.json() as { id: string; width: number; height: number };
+  },
+
+  async getAssistantImage(tenantId: string, projectId: string, imageId: string, signal?: AbortSignal): Promise<Blob> {
+    const response = await fetch(`${BASE}${assistantPath(projectId)}/images/${encodeURIComponent(imageId)}`, {
+      headers: { ...(await authHeaders()), ...tenantHeaders(tenantId) }, signal, redirect: "error",
+    });
+    if (!response.ok) throw await parseError(response);
+    return response.blob();
+  },
+
   async uploadNarrativeAsset(tenantId: string, projectId: string, upload: AssetUpload, signal?: AbortSignal):
     Promise<NarrativeImage> {
     const form = new FormData();

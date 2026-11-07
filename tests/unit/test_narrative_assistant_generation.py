@@ -1097,6 +1097,118 @@ async def test_when_nothing_really_changes_the_reply_stands_alone():
     assert result.reply == "It already says so."
 
 
+ON_STAGE = {"character": "mira", "position": "center", "sprite": "neutral"}
+
+
+def staged():
+    source = story()
+    source["entry"] = "meeting"
+    source["nodes"]["meeting"] = {
+        "type": "stage",
+        "background": "mira_neutral",
+        "show": [ON_STAGE],
+        "next": "opening",
+    }
+    return source
+
+
+REWRITTEN = {"type": "stage", "background": "mira_neutral", "effect": "shake", "next": "opening"}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "request_text",
+    ["Make Mira closer.", "More closer, up to the waist.", "Add a shake here."],
+)
+async def test_rewriting_a_stage_step_does_not_take_people_off_it(request_text):
+    # A real thread: asked to bring Kaito closer, the model rewrote the step without him.
+    made = answer(
+        {"op": "upsert_node", "id": "meeting", "node": REWRITTEN},
+        {"op": "upsert_character", "id": "mira", "name": "Mira", "stage": {"scale": 200}},
+    )
+    result = await run_turn(Scripted(made), staged(), request_text)
+    assert result.diagnostics == ()
+    meeting = result.story["nodes"]["meeting"]
+    assert meeting["show"] == [ON_STAGE]
+    assert meeting["effect"] == "shake"
+    assert result.story["characters"]["mira"]["stage"] == {"scale": 200}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "request_text",
+    [
+        "Take Mira off the stage here.",
+        "Remove Mira from this scene.",
+        "Mira leaves before this.",
+        "Hide her here.",
+        "Show the street without anyone in it.",
+    ],
+)
+async def test_asked_to_take_someone_off_they_do_go(request_text):
+    made = answer({"op": "upsert_node", "id": "meeting", "node": REWRITTEN})
+    result = await run_turn(Scripted(made), staged(), request_text)
+    assert "show" not in result.story["nodes"]["meeting"]
+
+
+@pytest.mark.anyio
+async def test_a_step_that_hides_someone_is_not_given_them_back():
+    node = {**REWRITTEN, "hide": ["mira"]}
+    made = answer({"op": "upsert_node", "id": "meeting", "node": node})
+    result = await run_turn(Scripted(made), staged(), "Add a shake.")
+    assert "show" not in result.story["nodes"]["meeting"]
+    assert result.story["nodes"]["meeting"]["hide"] == ["mira"]
+
+
+@pytest.mark.anyio
+async def test_someone_new_on_stage_joins_those_already_there():
+    source = staged()
+    source["characters"]["ren"] = {"name": "Ren", "sprites": {"neutral": "mira_neutral"}}
+    ren = {"character": "ren", "position": "left", "sprite": "neutral"}
+    made = answer({"op": "upsert_node", "id": "meeting", "node": {**REWRITTEN, "show": [ren]}})
+    result = await run_turn(Scripted(made), source, "Bring Ren in on the left.")
+    assert result.story["nodes"]["meeting"]["show"] == [ON_STAGE, ren]
+
+
+@pytest.mark.anyio
+async def test_someone_new_in_the_same_spot_replaces_who_was_there():
+    source = staged()
+    source["characters"]["ren"] = {"name": "Ren", "sprites": {"neutral": "mira_neutral"}}
+    ren = {"character": "ren", "position": "center", "sprite": "neutral"}
+    made = answer({"op": "upsert_node", "id": "meeting", "node": {**REWRITTEN, "show": [ren]}})
+    result = await run_turn(Scripted(made), source, "Put Ren there instead.")
+    assert result.story["nodes"]["meeting"]["show"] == [ren]
+
+
+@pytest.mark.anyio
+async def test_an_exact_copy_of_a_rewritten_step_that_nothing_reaches_is_left_out():
+    # The same thread also added a copy of the step that nothing ever led to.
+    made = answer(
+        {"op": "upsert_node", "id": "meeting", "node": REWRITTEN},
+        {"op": "upsert_node", "id": "meeting_update", "node": REWRITTEN},
+    )
+    result = await run_turn(Scripted(made), staged(), "Make Mira closer.")
+    assert result.diagnostics == ()
+    assert "meeting_update" not in result.story["nodes"]
+    assert result.story["nodes"]["meeting"]["show"] == [ON_STAGE]
+
+
+@pytest.mark.anyio
+async def test_a_new_stage_step_someone_forgot_to_link_stays_and_is_warned_about():
+    step = {"type": "stage", "background": "mira_neutral", "effect": "flash", "next": "ending"}
+    made = answer({"op": "upsert_node", "id": "dusk", "node": step})
+    result = await run_turn(Scripted(made), story(), "Add a flash here.")
+    assert "dusk" in result.story["nodes"]
+    assert any(item.location == "nodes.dusk" for item in result.warnings)
+
+
+@pytest.mark.anyio
+async def test_a_new_scene_with_words_nothing_leads_to_is_kept_for_the_creator_to_link():
+    made = answer({"op": "upsert_node", "id": "aside", "node": {**FIRST, "next": "ending"}})
+    result = await run_turn(Scripted(made), story(), "Write a scene I can link later.")
+    assert "aside" in result.story["nodes"]
+
+
 def test_the_model_sees_a_player_and_a_question_in_the_story():
     source = {
         **story(),

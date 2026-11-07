@@ -5,7 +5,7 @@ import type { StoryDraft } from "./types";
 export const MAX_ATTACHMENTS = 12;
 export type LibraryTab = "characters" | "pictures" | "voices";
 export interface Attachment {
-  kind: "character" | "asset"; id: string; name: string; asset_kind: string | null;
+  kind: "character" | "asset" | "image"; id: string; name: string; asset_kind: string | null;
 }
 
 const PICTURES = new Set(["background", "sprite", "image", "character_portrait"]);
@@ -40,5 +40,6 @@ const KIND_NAMES: Record<string, string> = {
   background: "Background", sprite: "Sprite", image: "Picture", character_portrait: "Portrait", voice: "Voice",
 };
 export function attachmentKind(item: Pick<Attachment, "kind" | "asset_kind">): string {
+  if (item.kind === "image") return "Picture";
   return item.kind === "character" ? "Character" : KIND_NAMES[item.asset_kind ?? ""] ?? "File";
 }

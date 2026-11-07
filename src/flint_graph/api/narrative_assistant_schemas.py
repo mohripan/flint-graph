@@ -48,10 +48,10 @@ class AssistantActionResponse(BaseModel):
 
 
 class AssistantAttachment(BaseModel):
-    """A library item the creator attached: a character's ID or an approved file's ID."""
+    """What the creator attached: a character's ID, an approved file's ID, or a picture's."""
 
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["character", "asset"]
+    kind: Literal["character", "asset", "image"]
     id: str = Field(min_length=1, max_length=64)
 
 
@@ -60,6 +60,18 @@ class AssistantAttachmentResponse(BaseModel):
     id: str
     name: str
     asset_kind: str | None
+
+
+class AssistantImageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    width: int
+    height: int
+
+
+class AssistantCapabilitiesResponse(BaseModel):
+    images: bool
+    max_images: int
 
 
 class AssistantThreadCreate(BaseModel):

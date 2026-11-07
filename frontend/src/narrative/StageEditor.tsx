@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
 import { AssetThumb, IMAGE_KINDS, libraryAsset, useApprovedAssets } from "./libraryAssets";
-import { POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage, stageChanges, stageImageChoice } from "./stageModel";
+import { offStageSpeakers, POSITIONS, SLOT_CENTERS, applyStageNode, bindAsset, describeSnapshot, figureBox, resolvedTheme, sceneStage, setSceneStage, stageChanges, stageImageChoice } from "./stageModel";
 import type { StageEdit, StageSnapshot } from "./stageModel";
 import type { NarrativeImage } from "../lib/api";
 import { EFFECT_LABELS, TRANSITION_LABELS } from "./model";
@@ -48,6 +48,13 @@ export function SceneStage({ story, head, inherited, readOnly, onChange, onError
     <div className="studio-stage-head"><h3>Stage</h3>
       <p className="studio-hint">From earlier scenes: {describeSnapshot(story, inherited).join(" · ")}</p></div>
     <SceneStagePreview story={story} snapshot={snapshot} tenantId={tenantId} projectId={projectId} />
+    {offStageSpeakers(story, head, snapshot).map(id => <p key={id} role="status" className="studio-stage-note">
+      {story.characters[id]?.name ?? id} speaks here but isn&rsquo;t on stage.
+      {!readOnly && free && edit.show.length < 3 && <button type="button" className="studio-link" onClick={() => apply({
+        ...edit, hide: edit.hide.filter(item => item !== id),
+        show: [...edit.show, { character: id, sprite: Object.keys(story.characters[id]?.sprites ?? {})[0], position: free }],
+      })}>Put on stage</button>}
+    </p>)}
     <fieldset className="studio-stage-fields" disabled={readOnly}>
       <div className="studio-stage-background">
         <span className="studio-stage-label">Background</span>
