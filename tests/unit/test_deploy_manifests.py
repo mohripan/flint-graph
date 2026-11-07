@@ -311,7 +311,7 @@ def test_local_virtual_environments_stay_out_of_images() -> None:
 def test_each_data_folder_belongs_to_the_user_its_image_runs_as() -> None:
     tasks = (ROOT / "deploy/ansible/roles/data_volume/tasks/main.yml").read_text("utf-8")
     owners = dict(re.findall(r'\{name: (\w+), owner: "(\d+)"\}', tasks))
-    assert owners == {"postgres": "0", "minio": "65532", "temporal": "1000"}
+    assert owners == {"postgres": "70", "minio": "65532", "temporal": "1000"}
 
 
 def test_minio_comes_from_where_it_can_still_be_pulled() -> None:

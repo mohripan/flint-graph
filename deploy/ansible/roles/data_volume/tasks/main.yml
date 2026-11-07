@@ -52,7 +52,7 @@
     owner: "{{ item.owner }}"
     mode: "0700"
   loop:
-    - {name: postgres, owner: "0"}
+    - {name: postgres, owner: "70"}
     - {name: minio, owner: "65532"}
     - {name: temporal, owner: "1000"}
   loop_control:
