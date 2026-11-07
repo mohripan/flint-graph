@@ -1,14 +1,17 @@
 """The assistant's generation actions become real jobs (ADR 0061).
 
 Each action of a proposal resolves to one durable job through a key derived from the
-proposal and the operation's position, so clicks, the dispatcher, retries and reloads
+proposal and the operation's position, so presses, the dispatcher, retries and reloads
 all converge on the same job. Starting an action only admits a normal job: the same
 policy, credits, audit and outbox as a job started from Characters or Assets. Results
 stay candidates until the creator approves them.
 
-``dispatch_actions`` and ``reconcile_actions`` run in the assistant worker. Automatic
-actions need no open page, a full queue waits rather than fails, and job endings reach
-the thread log without the image and voice workers knowing about conversations.
+Nothing starts until the creator presses Generate on the action's card, which says what
+it will make and what that costs (ADR 0068): ``ActionQuote`` is what they agreed to.
+
+``dispatch_actions`` and ``reconcile_actions`` run in the assistant worker. A press that
+finds the queue full waits rather than fails, and job endings reach the thread log
+without the image and voice workers knowing about conversations.
 """
 
 import asyncio
@@ -23,6 +26,8 @@ from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from flint_graph.application.credit_prices import assistant_item, image_item, voice_item
+from flint_graph.application.services.access import act_for
 from flint_graph.application.services.audit import AuditActor
 from flint_graph.application.services.narrative_assistant import (
     create_thread,
@@ -31,12 +36,12 @@ from flint_graph.application.services.narrative_assistant import (
 )
 from flint_graph.application.services.narrative_assistant_action_state import (
     BLOCKED,
+    DECLINED,
     FINISHED,
     OFFERED,
     PENDING,
     SKIPPED,
     STARTED,
-    WAITING,
 )
 from flint_graph.application.services.narrative_assistant_log import append_thread_event
 from flint_graph.application.services.narrative_characters import save_profile
@@ -79,7 +84,12 @@ from flint_graph.infrastructure.narrative_artifact_store import (
     asset_object_key,
 )
 from flint_graph.infrastructure.narrative_imagegen import IMAGE_LIMIT, THUMBNAIL_LIMIT
-from flint_graph.narrative.assistant.log import ACTION_BLOCKED, ACTION_STARTED, JOB_FINISHED
+from flint_graph.narrative.assistant.log import (
+    ACTION_BLOCKED,
+    ACTION_DECLINED,
+    ACTION_STARTED,
+    JOB_FINISHED,
+)
 from flint_graph.narrative.assistant.operations import (
     GenerateBackgrounds,
     GenerateCg,
@@ -88,6 +98,8 @@ from flint_graph.narrative.assistant.operations import (
     GenerateVoice,
     Proposal,
     StartChildSession,
+    UpsertCharacter,
+    UpsertNode,
     action_label,
     action_needs_accept,
 )
@@ -116,6 +128,8 @@ _MODELS: dict[str, type[ActionOp]] = {
     "start_child_session": StartChildSession,
 }
 _CANDIDATES = 4
+_IMAGE_MODEL = "Animagine XL 4.0"
+_QUOTED = (OFFERED, BLOCKED, DECLINED)
 _FINISHED_JOB = ("completed", "failed", "cancelled")
 # Expressions repaint a character's usual face first.
 _NEUTRAL_FIRST = ("neutral", "default", "normal", "idle", "base")
@@ -227,6 +241,154 @@ async def _legacy_image_job(
 
 
 @dataclass(frozen=True)
+class ActionQuote:
+    """What a card promises before anything runs (ADR 0068).
+
+    ``parts`` are the price items and quantities admission charges, so the price shown is
+    the price paid; a test holds every action to that.
+    """
+
+    kind: str
+    title: str
+    # An icon's name and its text: the model, how many, what shape.
+    facts: tuple[tuple[str, str], ...]
+    parts: tuple[tuple[str, int], ...]
+    button: str
+    # Where the same work has more controls.
+    opens: str | None
+
+
+def _counted(count: int, noun: str) -> str:
+    return f"1 {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _name(story: dict[str, Any], operations: Sequence[Any], key: str) -> str:
+    for item in operations:
+        if isinstance(item, UpsertCharacter) and item.id == key and item.name:
+            return item.name
+    return str((story["characters"].get(key) or {}).get("name") or key)
+
+
+def _spoken(story: dict[str, Any], operations: Sequence[Any], line: str) -> str:
+    node = next(
+        (item.node for item in operations if isinstance(item, UpsertNode) and item.id == line),
+        story["nodes"].get(line),
+    )
+    if not isinstance(node, dict):
+        return ""
+    voice = node.get("voice") or {}
+    return str(voice.get("text") if voice.get("mode") == "vocalization" else node.get("text", ""))
+
+
+def _quoted_voice_model(profile: NarrativeCharacterProfile | None) -> str:
+    """The model ``_ensure_voice`` will settle on."""
+    if profile is not None and (profile.voice or profile.voice_reference_id):
+        return profile.voice_model or DEFAULT_MODEL
+    return DEFAULT_MODEL
+
+
+async def _quote(
+    session: AsyncSession,
+    *,
+    action: ActionOp,
+    tenant_id: UUID,
+    project_id: UUID,
+    story: dict[str, Any],
+    operations: Sequence[Any],
+    settings: Settings,
+) -> ActionQuote:
+    model = ("model", _IMAGE_MODEL)
+    if isinstance(action, StartChildSession):
+        return ActionQuote(
+            "Child session",
+            action.task,
+            (("people", action.title),),
+            ((assistant_item(settings.narrative_assistant_provider or "ollama"), 1),),
+            "Start session",
+            None,
+        )
+    if isinstance(action, GenerateVoice):
+        profile = await session.scalar(
+            select(NarrativeCharacterProfile).where(
+                NarrativeCharacterProfile.tenant_id == tenant_id,
+                NarrativeCharacterProfile.project_id == project_id,
+                NarrativeCharacterProfile.character_id == action.character,
+            )
+        )
+        voice_model = _quoted_voice_model(profile)
+        spec = MODELS.get(voice_model)
+        first = _spoken(story, operations, action.lines[0])[:200]
+        more = len(action.lines) - 1
+        return ActionQuote(
+            f"Voice of {_name(story, operations, action.character)}",
+            f"\u201c{first}\u201d" + (f" and {more} more" if more else ""),
+            (
+                ("model", spec.name if spec is not None else voice_model),
+                ("count", _counted(len(action.lines), "line")),
+            ),
+            ((voice_item(voice_model), len(action.lines)),),
+            "Generate voices",
+            "characters",
+        )
+    if isinstance(action, GenerateBackgrounds):
+        return ActionQuote(
+            "Background",
+            action.description,
+            (model, ("count", _counted(_CANDIDATES, "option")), ("size", "Widescreen")),
+            ((image_item("background", transparent=False, hires=False), _CANDIDATES),),
+            "Generate backgrounds",
+            "assets",
+        )
+    if isinstance(action, GenerateCg):
+        count = _CANDIDATES * len(action.characters)
+        people = ", ".join(_name(story, operations, key) for key in action.characters)
+        return ActionQuote(
+            "Event CG",
+            action.description,
+            (
+                model,
+                ("count", _counted(count, "option")),
+                ("size", "Widescreen"),
+                ("people", people),
+            ),
+            ((image_item("scene_art", transparent=False, hires=False), count),),
+            "Generate CGs",
+            "assets",
+        )
+    if isinstance(action, GenerateExpressions):
+        count = len(action.expressions)
+        return ActionQuote(
+            f"Expressions of {_name(story, operations, action.character)}",
+            ", ".join(action.expressions),
+            (
+                model,
+                ("count", _counted(count, "expression")),
+                ("size", "Repaints the approved face"),
+            ),
+            ((image_item("character_expression", transparent=False, hires=False), count),),
+            "Generate expressions",
+            "characters",
+        )
+    assert isinstance(action, GenerateCharacterImages)
+    shape = "Transparent sprite" if action.transparent else (
+        "Portrait" if action.framing == "portrait" else "Full body"
+    )
+    facts = [model, ("count", _counted(_CANDIDATES, "option")), ("size", shape)]
+    if action.hires:
+        facts.append(("size", "High resolution"))
+    item = image_item("character_portrait", transparent=action.transparent, hires=action.hires)
+    noun = "Sprite" if action.transparent else "Picture"
+    return ActionQuote(
+        f"{noun} of {_name(story, operations, action.character)}",
+        action.appearance,
+        tuple(facts),
+        ((item, _CANDIDATES),),
+        "Generate sprites" if action.transparent else "Generate pictures",
+        "characters",
+    )
+
+
+@dataclass(frozen=True)
 class ActionView:
     index: int
     op: str
@@ -238,6 +400,7 @@ class ActionView:
     image_job: NarrativeImageJob | None
     voice_job: NarrativeVoiceJob | None
     child_thread: NarrativeAssistantThread | None = None
+    quote: ActionQuote | None = None
 
 
 async def _head_story(
@@ -266,7 +429,12 @@ async def _rows(session: AsyncSession, proposal_id: UUID) -> dict[int, Narrative
 
 
 async def list_actions(
-    session: AsyncSession, *, tenant_id: UUID, project_id: UUID, proposal_id: UUID
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    proposal_id: UUID,
+    settings: Settings,
 ) -> list[ActionView]:
     project = await get_project(
         session, tenant_id=tenant_id, project_id=project_id, include_archived=True
@@ -283,7 +451,15 @@ async def list_actions(
         return []
     rows = await _rows(session, proposal.id)
     pending_review = proposal.status == "ready"
-    story = await _head_story(session, project, tenant_id=tenant_id) if pending_review else None
+    # A card can still be waiting after its proposal was accepted.
+    quoting = proposal.status in ("ready", "accepted") and any(
+        index not in rows or rows[index].status in _QUOTED for index, _, _ in parsed
+    )
+    story = (
+        await _head_story(session, project, tenant_id=tenant_id)
+        if pending_review or quoting
+        else None
+    )
     operations = _operations(proposal) if pending_review else ()
     views: list[ActionView] = []
     for index, action, raw in parsed:
@@ -310,13 +486,28 @@ async def list_actions(
                 label=action_label(action),
                 status=status,
                 needs_accept=bool(
-                    story is not None and action_needs_accept(story, operations, action)
+                    pending_review
+                    and story is not None
+                    and action_needs_accept(story, operations, action)
                 ),
                 error_code=row.error_code if row is not None else None,
                 detail=row.detail if row is not None else None,
                 image_job=image_job,
                 voice_job=voice_job,
                 child_thread=child_thread,
+                quote=(
+                    await _quote(
+                        session,
+                        action=action,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                        story=story,
+                        operations=operations,
+                        settings=settings,
+                    )
+                    if quoting and story is not None and status in _QUOTED
+                    else None
+                ),
             )
         )
     return views
@@ -640,7 +831,6 @@ async def _start_child(
     project = await get_project(session, tenant_id=tenant_id, project_id=project_id)
     if project.head_revision_id is None:
         raise ConflictError("The story has no saved revision.")
-    asking = await session.get(NarrativeAssistantTurn, proposal.turn_id)
     child = await create_thread(
         session,
         tenant_id=tenant_id,
@@ -667,7 +857,6 @@ async def _start_child(
         available=settings.narrative_assistant_provider not in (None, "disabled"),
         max_active_turns=settings.narrative_assistant_max_active_turns_per_workspace,
         provider=settings.narrative_assistant_provider,
-        auto_generate=bool(asking and asking.auto_generate),
     )
     return child
 
@@ -716,8 +905,13 @@ async def start_action(
     actor: AuditActor,
     settings: Settings,
     store: AssetBytes,
+    queued: bool = False,
 ) -> None:
-    """Start one action, or do nothing if it already has its job."""
+    """Start one action, or do nothing if it already has its job.
+
+    ``queued`` is the dispatcher: it only starts what is still waiting for it, so a card
+    cancelled after the dispatcher read its queue stays cancelled.
+    """
     # The same lock order as job admission: concurrent starts cannot create two jobs.
     await session.scalar(
         select(Tenant).where(Tenant.id == tenant_id).with_for_update(key_share=True)
@@ -737,7 +931,7 @@ async def start_action(
     row = await _action_row(
         session, proposal=proposal, index=index, action=action, author_user_id=author_user_id
     )
-    if row.status in (STARTED, FINISHED):
+    if row.status in (STARTED, FINISHED) or (queued and row.status != PENDING):
         return
     if row.status == SKIPPED:
         raise ConflictError("This proposal can no longer generate anything.")
@@ -791,10 +985,55 @@ async def start_action(
     )
 
 
+async def decline_action(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    proposal_id: UUID,
+    index: int,
+    author_user_id: UUID,
+) -> None:
+    """The creator pressed Cancel: nothing starts unless they change their mind."""
+    await get_project(session, tenant_id=tenant_id, project_id=project_id, for_update=True)
+    proposal = await get_proposal(
+        session, tenant_id=tenant_id, project_id=project_id, proposal_id=proposal_id
+    )
+    selected = next((item for item in parse_actions(proposal) if item[0] == index), None)
+    if selected is None:
+        raise NotFoundError("This action was not found.")
+    _, action, raw = selected
+    row = await _action_row(
+        session, proposal=proposal, index=index, action=action, author_user_id=author_user_id
+    )
+    if row.status in (DECLINED, SKIPPED):
+        return
+    if row.status in (STARTED, FINISHED) or (
+        await _legacy_image_job(session, proposal, index, action, raw) is not None
+    ):
+        raise ConflictError("This has already started.")
+    row.status, row.error_code, row.detail = DECLINED, None, None
+    await session.flush()
+    await append_thread_event(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        thread_id=proposal.thread_id,
+        kind=ACTION_DECLINED,
+        payload={
+            "proposal_id": str(proposal.id),
+            "index": index,
+            "op": action.op,
+            "label": action_label(action),
+        },
+        actor_user_id=author_user_id,
+    )
+
+
 async def queue_action(
     session: AsyncSession, *, tenant_id: UUID, project_id: UUID, proposal_id: UUID, index: int
 ) -> None:
-    """Hand an action to the dispatcher, for when a click finds the queue full."""
+    """Hand an action to the dispatcher, for when a press finds the queue full."""
     row = await session.scalar(
         select(NarrativeAssistantAction)
         .where(
@@ -805,7 +1044,7 @@ async def queue_action(
         )
         .with_for_update()
     )
-    if row is not None and row.status in (OFFERED, BLOCKED, WAITING):
+    if row is not None and row.status in (OFFERED, BLOCKED, DECLINED):
         row.status, row.error_code, row.detail = PENDING, None, None
         await session.flush()
 
@@ -888,6 +1127,7 @@ async def dispatch_actions(
     for tenant_id, project_id, proposal_id, index, author in rows:
         try:
             async with factory() as session:
+                act_for(session, user_id=author, settings=settings)
                 await start_action(
                     session,
                     tenant_id=tenant_id,
@@ -898,6 +1138,7 @@ async def dispatch_actions(
                     actor=AuditActor(user_id=author),
                     settings=settings,
                     store=store,
+                    queued=True,
                 )
                 await session.commit()
             started += 1

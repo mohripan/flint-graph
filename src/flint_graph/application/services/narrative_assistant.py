@@ -24,7 +24,6 @@ from flint_graph.application.services.access import charge_usage
 from flint_graph.application.services.audit import AuditActor, record_audit_event
 from flint_graph.application.services.narrative_assistant_action_state import (
     create_actions,
-    release_waiting_actions,
     skip_open_actions,
 )
 from flint_graph.application.services.narrative_assistant_events import (
@@ -84,7 +83,12 @@ from flint_graph.narrative.assistant.log import (
     conversation_from_log,
     fold_thread,
 )
-from flint_graph.narrative.assistant.operations import Proposal, check_proposal
+from flint_graph.narrative.assistant.operations import (
+    ACTIONS,
+    Proposal,
+    action_label,
+    check_proposal,
+)
 from flint_graph.narrative.assistant.turn import TurnResult
 from flint_graph.narrative.values import canonical_json
 from flint_graph.prompts.source import PromptBundle
@@ -394,7 +398,6 @@ async def post_turn(
     available: bool,
     max_active_turns: int,
     provider: str | None = None,
-    auto_generate: bool = False,
     attachments: Sequence[dict[str, str]] = (),
 ) -> NarrativeAssistantTurn:
     # NO KEY UPDATE serializes workspace admission without blocking audit FK checks.
@@ -419,9 +422,6 @@ async def post_turn(
         "base_revision_id": str(base_revision_id),
         "focus_node": focus_node,
     }
-    # Only when set, so earlier messages keep their hashes.
-    if auto_generate:
-        identity["auto_generate"] = True
     chosen = list({(item["kind"], item["id"]): item for item in attachments}.values())
     if chosen:
         identity["attachments"] = chosen
@@ -479,7 +479,6 @@ async def post_turn(
         focus_node=focus_node,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
-        auto_generate=auto_generate,
         attachments=resolved,
         status="queued",
         cancel_requested=False,
@@ -860,8 +859,6 @@ async def accept_proposal(
         what="kept as a conflict copy" if revision.conflicted else "accepted",
         summary=proposal.summary,
     )
-    if not revision.conflicted:
-        await release_waiting_actions(session, proposal.id)
     await record_audit_event(
         session,
         tenant_id=tenant_id,
@@ -1216,24 +1213,25 @@ async def complete_turn(
                 "summary": proposal.summary,
                 "status": proposal.status,
                 "operations": len(proposal.operations),
+                # What the conversation knows is waiting on a card (ADR 0068).
+                "actions": [
+                    {"index": index, "label": action_label(operation)}
+                    for index, operation in enumerate(
+                        result.proposal.operations
+                        if proposal.status == "ready" and result.proposal is not None
+                        else ()
+                    )
+                    if isinstance(operation, ACTIONS)
+                ],
             },
         )
         if proposal.status == "ready" and result.proposal is not None:
-            base = await session.scalar(
-                select(NarrativeRevision).where(
-                    NarrativeRevision.id == turn.base_revision_id,
-                    NarrativeRevision.project_id == turn.project_id,
-                    NarrativeRevision.tenant_id == turn.tenant_id,
-                )
+            await create_actions(
+                session,
+                turn=turn,
+                proposal=proposal,
+                operations=result.proposal.operations,
             )
-            if base is not None:
-                await create_actions(
-                    session,
-                    turn=turn,
-                    proposal=proposal,
-                    story=json.loads(base.story_json),
-                    operations=result.proposal.operations,
-                )
     await session.flush()
     return turn
 

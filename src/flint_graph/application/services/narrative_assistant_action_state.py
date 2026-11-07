@@ -6,7 +6,6 @@ those services in turn.
 """
 
 from collections.abc import Sequence
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -20,17 +19,17 @@ from flint_graph.infrastructure.db.narrative_assistant_models import (
     NarrativeAssistantTurn,
 )
 from flint_graph.narrative.assistant.log import ASSET_APPROVED
-from flint_graph.narrative.assistant.operations import ACTIONS, Operation, action_needs_accept
+from flint_graph.narrative.assistant.operations import ACTIONS, Operation
 
-OFFERED = "offered"  # Waits for the creator to click.
-WAITING = "waiting"  # Waits for the proposal's acceptance, then starts on its own.
-PENDING = "pending"  # The dispatcher starts it as soon as there is room.
+OFFERED = "offered"  # Shows its card, and waits for the creator to press Generate (ADR 0068).
+PENDING = "pending"  # Pressed with the queue full; the dispatcher starts it when there is room.
 STARTED = "started"  # Bound to a job.
-BLOCKED = "blocked"  # Could not start; says why, and a click retries it.
+BLOCKED = "blocked"  # Could not start; says why, and a press retries it.
 FINISHED = "finished"  # Its job ended, and the thread log says how.
 SKIPPED = "skipped"  # The proposal was rejected first.
+DECLINED = "declined"  # The creator pressed Cancel; they can still change their mind.
 
-_OPEN = (OFFERED, WAITING, PENDING, BLOCKED)
+_OPEN = (OFFERED, PENDING, BLOCKED)
 
 
 async def create_actions(
@@ -38,13 +37,11 @@ async def create_actions(
     *,
     turn: NarrativeAssistantTurn,
     proposal: NarrativeAssistantProposal,
-    story: dict[str, Any],
     operations: Sequence[Operation],
 ) -> None:
     for index, operation in enumerate(operations):
         if not isinstance(operation, ACTIONS):
             continue
-        waits = action_needs_accept(story, operations, operation)
         session.add(
             NarrativeAssistantAction(
                 tenant_id=proposal.tenant_id,
@@ -54,22 +51,10 @@ async def create_actions(
                 op_index=index,
                 op=operation.op,
                 author_user_id=turn.author_user_id,
-                status=(WAITING if waits else PENDING) if turn.auto_generate else OFFERED,
+                status=OFFERED,
             )
         )
     await session.flush()
-
-
-async def release_waiting_actions(session: AsyncSession, proposal_id: UUID) -> None:
-    """Accepting a proposal lets the actions that depended on it start."""
-    await session.execute(
-        update(NarrativeAssistantAction)
-        .where(
-            NarrativeAssistantAction.proposal_id == proposal_id,
-            NarrativeAssistantAction.status == WAITING,
-        )
-        .values(status=PENDING)
-    )
 
 
 async def skip_open_actions(session: AsyncSession, proposal_id: UUID) -> None:

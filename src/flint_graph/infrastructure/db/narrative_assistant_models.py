@@ -267,7 +267,7 @@ class NarrativeAssistantAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "status IN ('offered','waiting','pending','started','blocked','finished','skipped')",
+            "status IN ('offered','pending','started','blocked','finished','skipped','declined')",
             name="ck_narrative_assistant_action_status",
         ),
         CheckConstraint(

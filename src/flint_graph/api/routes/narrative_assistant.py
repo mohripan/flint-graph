@@ -24,6 +24,9 @@ from flint_graph.api.dependencies import (
     TenantMemberDep,
 )
 from flint_graph.api.narrative_assistant_schemas import (
+    ActionFactResponse,
+    ActionPartResponse,
+    ActionQuoteResponse,
     AssistantActionResponse,
     AssistantAttachmentResponse,
     AssistantDecision,
@@ -57,6 +60,7 @@ from flint_graph.application.services.narrative_assistant import (
 )
 from flint_graph.application.services.narrative_assistant_actions import (
     ActionView,
+    decline_action,
     list_actions,
     queue_action,
     start_action,
@@ -65,6 +69,7 @@ from flint_graph.application.services.narrative_assistant_events import events_a
 from flint_graph.application.services.narrative_assistant_log import list_thread_events
 from flint_graph.application.services.narrative_images import get_image_job
 from flint_graph.application.services.narrative_voices import get_voice_job
+from flint_graph.config import Settings
 from flint_graph.domain.errors import NotFoundError, TooManyRequestsError
 from flint_graph.infrastructure.db.models import NarrativeAssistantProposal, NarrativeAssistantTurn
 from flint_graph.infrastructure.db.narrative_assistant_models import NarrativeAssistantTurnEvent
@@ -106,6 +111,18 @@ async def _action_response(
         detail=view.detail,
         image_job=image_job,
         voice_job=voice_job,
+        quote=(
+            ActionQuoteResponse(
+                kind=view.quote.kind,
+                title=view.quote.title,
+                facts=[ActionFactResponse(icon=i, text=t) for i, t in view.quote.facts],
+                parts=[ActionPartResponse(item=i, quantity=n) for i, n in view.quote.parts],
+                button=view.quote.button,
+                opens=view.quote.opens,
+            )
+            if view.quote is not None
+            else None
+        ),
     )
 
 
@@ -115,9 +132,14 @@ async def list_actions_endpoint(
     proposal_id: UUID,
     tenant_id: TenantIdDep,
     session: SessionDep,
+    settings: SettingsDep,
 ) -> list[AssistantActionResponse]:
     views = await list_actions(
-        session, tenant_id=tenant_id, project_id=project_id, proposal_id=proposal_id
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        proposal_id=proposal_id,
+        settings=settings,
     )
     return [
         await _action_response(session, tenant_id=tenant_id, project_id=project_id, view=view)
@@ -169,8 +191,66 @@ async def start_action_endpoint(
                 index=index,
             ),
         )
+    return await _one_action(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        proposal_id=proposal_id,
+        index=index,
+        settings=settings,
+    )
+
+
+@router.post(
+    "/proposals/{proposal_id}/actions/{index}/decline",
+    response_model=AssistantActionResponse,
+)
+async def decline_action_endpoint(
+    project_id: UUID,
+    proposal_id: UUID,
+    index: int,
+    tenant_id: TenantMemberDep,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> AssistantActionResponse:
+    """Cancel on a generation card. Pressing Generate afterwards still starts it."""
+    await _persist(
+        session,
+        decline_action(
+            session,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            proposal_id=proposal_id,
+            index=index,
+            author_user_id=current_user.user.id,
+        ),
+    )
+    return await _one_action(
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        proposal_id=proposal_id,
+        index=index,
+        settings=settings,
+    )
+
+
+async def _one_action(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    project_id: UUID,
+    proposal_id: UUID,
+    index: int,
+    settings: Settings,
+) -> AssistantActionResponse:
     views = await list_actions(
-        session, tenant_id=tenant_id, project_id=project_id, proposal_id=proposal_id
+        session,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        proposal_id=proposal_id,
+        settings=settings,
     )
     view = next((item for item in views if item.index == index), None)
     if view is None:
@@ -329,7 +409,6 @@ async def post_turn_endpoint(
             available=settings.narrative_assistant_provider not in (None, "disabled"),
             max_active_turns=settings.narrative_assistant_max_active_turns_per_workspace,
             provider=settings.narrative_assistant_provider,
-            auto_generate=payload.auto_generate,
             attachments=[item.model_dump() for item in payload.attachments],
         ),
     )

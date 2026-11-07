@@ -149,8 +149,6 @@ export interface AssistantProposal extends AssistantProposalSummary {
 }
 export interface TurnWrite {
   request: string; base_revision_id: string; focus_node: string | null; idempotency_key: string;
-  /** Let this turn's generation actions start by themselves (ADR 0061). */
-  auto_generate?: boolean;
   /** Library items the creator attached to this message (ADR 0062). */
   attachments?: Array<Pick<Attachment, "kind" | "id">>;
 }

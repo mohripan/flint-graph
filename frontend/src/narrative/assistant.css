@@ -171,7 +171,29 @@
 .assistant-candidates .studio-link { align-self:center; min-height:24px; font-size:12px; }
 
 /* Generation results in the chat (ADR 0061). */
-.assistant-action-start { display:inline-flex; align-items:center; gap:8px; }
+.assistant-actions li.assistant-gen-item { display:block; }
+.assistant-gen-card { display:flex; flex-direction:column; gap:12px; max-width:560px; padding:18px; border-radius:14px; background:#141c24; color:#eef3f6; }
+.assistant-gen-card button:focus-visible { outline:2px solid #8ec5ff; outline-offset:2px; }
+.assistant-gen-kind { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#9fb2c0; }
+.assistant-gen-title { margin:0; font-size:15px; font-weight:600; line-height:1.45; overflow-wrap:anywhere; }
+.assistant-actions .assistant-gen-facts { flex-direction:row; flex-wrap:wrap; gap:6px 16px; color:#c6d3dc; }
+.assistant-actions .assistant-gen-facts li { display:inline-flex; align-items:center; gap:6px; }
+.assistant-gen-facts svg { flex:none; color:#9fb2c0; }
+.assistant-gen-cost { display:flex; align-items:center; justify-content:center; gap:7px; margin:2px 0 0; font-size:14px; font-weight:600; color:#fff; }
+.assistant-gen-cost svg { color:#7fd6a0; }
+.assistant-gen-cost.is-over, .assistant-gen-cost.is-over svg { color:#ffb4b4; }
+.assistant-gen-note { margin:0; font-size:13px; line-height:1.45; text-align:center; color:#c6d3dc; }
+.assistant-gen-note.is-bad { color:#ffb4b4; }
+.assistant-gen-buttons { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.narrative-studio .assistant-gen-buttons button { min-height:46px; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:600; }
+.narrative-studio .assistant-gen-buttons button:disabled { opacity:.55; cursor:not-allowed; }
+.narrative-studio .assistant-gen-cancel { background:transparent; border:1px solid #3d4c5a; color:#eef3f6; }
+.narrative-studio .assistant-gen-cancel:hover:not(:disabled) { background:#1f2a35; }
+.narrative-studio .assistant-gen-go { background:#1f6fc4; border:1px solid #1f6fc4; color:#fff; }
+.narrative-studio .assistant-gen-go:hover:not(:disabled) { background:#2a7fd8; border-color:#2a7fd8; }
+.assistant-gen-foot { margin:0; padding-top:12px; border-top:1px solid #2a3642; text-align:center; font-size:13px; color:#9fb2c0; }
+.narrative-studio .assistant-gen-foot button { padding:0; background:none; border:0; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+.narrative-studio .assistant-gen-foot button:hover { text-decoration:underline; }
 .assistant-actions li > ul { grid-column:1 / -1; }
 .assistant-actions small progress { display:block; width:100%; margin-top:4px; }
 .assistant-candidates { list-style:none; margin:4px 0 0; padding:0; display:grid!important; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
@@ -189,7 +211,6 @@
 .assistant-clips li { display:grid!important; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; font-size:13px; }
 .assistant-clips .studio-secondary { min-height:30px; padding:2px 10px; font-size:12px; }
 .assistant-actions .assistant-clips li > small:not(.studio-error) { grid-column:auto; }
-.assistant-auto { display:inline-flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap; }
 
 /* The conversation's append-only log (ADR 0060), beside the chat or over it on phones. */
 .assistant-body { flex:1; min-height:0; display:flex; }

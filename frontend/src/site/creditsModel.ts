@@ -62,6 +62,16 @@ export function partsCostView(status: CreditStatus | null, parts: Array<[string,
   return { cost, over, text: over ? `${creditsText(cost)} · you have ${status.credits}` : creditsText(cost) };
 }
 
+export interface QuoteView { text: string; over: boolean }
+
+/** The price on a generation card: anyone who pays nothing is told so, not shown a blank. */
+export function quoteView(status: CreditStatus | null, parts: Array<[string, number]>): QuoteView | null {
+  if (!status?.prices || !parts.length || parts.some(([item]) => !status.prices![item])) return null;
+  const cost = parts.reduce((total, [item, quantity]) => total + status.prices![item].credits * quantity, 0);
+  if (!metered(status)) return { text: `${creditsText(cost)} · free for you`, over: false };
+  return { text: `${creditsText(cost)} · you have ${status.credits}`, over: cost > status.credits };
+}
+
 /** "3 credits per line", for choosing between models; empty when no price should show. */
 export function unitPrice(status: CreditStatus | null, item: string): string {
   const price = metered(status) ? status.prices?.[item] : undefined;

@@ -197,7 +197,6 @@ async def test_accepting_in_a_child_reaches_the_parents_log(narrative_env, setup
         head,
         {"op": "upsert_character", "id": "ren", "name": "Ren"},
         thread=child,
-        auto=False,
     )
     accepted = await client.post(
         f"{path}/assistant/proposals/{proposal}/accept",
@@ -220,9 +219,11 @@ async def test_the_assistant_can_start_a_child_session_that_runs_by_itself(
     thread, proposal = await propose(
         client, factory, headers, path, project["head_revision_id"], CHILD
     )
-    assert await dispatch_actions(factory, settings=settings, store=store) == 1
-    # Running again starts no second session.
+    # It waits for the creator, like everything else that spends credits.
     assert await dispatch_actions(factory, settings=settings, store=store) == 0
+    url = f"{path}/assistant/proposals/{proposal}/actions/0"
+    pressed = [await client.post(url, headers=headers) for _ in range(2)]
+    assert pressed[0].json()["child_thread"]["id"] == pressed[1].json()["child_thread"]["id"]
 
     [root] = await listed(client, headers, path)
     [child] = root["children"]
@@ -237,7 +238,7 @@ async def test_the_assistant_can_start_a_child_session_that_runs_by_itself(
 
     [first] = await turns(client, headers, path, child)
     assert first["request"] == "Add three characters."
-    assert first["auto_generate"] is True, "it inherits the creator's choice"
+    assert first["auto_generate"] is False, "what it suggests waits for a press too"
     assert first["status"] == "queued"
 
     await work(factory, first["id"], SILENT)
@@ -259,7 +260,9 @@ async def test_a_busy_assistant_makes_child_sessions_wait_their_turn(
         client, factory, headers, path, project["head_revision_id"], CHILD, other
     )
     # One active reply at a time: the first child's turn fills the only slot.
-    assert await dispatch_actions(factory, settings=settings, store=store) == 1
+    for index in (0, 1):
+        url = f"{path}/assistant/proposals/{proposal}/actions/{index}"
+        assert (await client.post(url, headers=headers)).status_code == 202
     first, second = await actions(client, headers, path, proposal)
     assert (first["status"], second["status"]) == ("started", "pending")
     [child] = (await listed(client, headers, path))[0]["children"]
@@ -288,14 +291,16 @@ async def test_a_child_session_alongside_story_edits_waits_for_accept(
         CHILD,
     )
     [waiting] = await actions(client, headers, path, proposal)
-    assert (waiting["status"], waiting["needs_accept"]) == ("waiting", True)
-    assert await dispatch_actions(factory, settings=settings, store=store) == 0
+    assert (waiting["status"], waiting["needs_accept"]) == ("offered", True)
+    url = f"{path}/assistant/proposals/{proposal}/actions/1"
+    assert (await client.post(url, headers=headers)).status_code == 409
     await client.post(
         f"{path}/assistant/proposals/{proposal}/accept",
         headers=headers,
         json={"idempotency_key": str(uuid4())},
     )
-    assert await dispatch_actions(factory, settings=settings, store=store) == 1
+    assert await dispatch_actions(factory, settings=settings, store=store) == 0
+    assert (await client.post(url, headers=headers)).json()["status"] == "started"
 
 
 async def test_a_thread_says_when_it_is_working(narrative_env, setup):  # noqa: F811

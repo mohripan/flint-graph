@@ -39,6 +39,7 @@ function describe(kind: string, data: Record<string, unknown>): Pick<LogLine, "l
       : { label: "Proposal accepted", detail: short(data.summary), tone: "good" };
     case "proposal.rejected": return { label: "Proposal rejected", detail: short(data.summary), tone: "muted" };
     case "action.started": return { label: "Generating", detail: short(data.label), tone: "neutral" };
+    case "action.declined": return { label: "Not generated", detail: short(data.label), tone: "muted" };
     case "action.blocked": return { label: "Couldn't start", detail: short(data.detail ?? data.label), tone: "bad" };
     case "job.finished": return data.status === "completed"
       ? { label: "Generation finished", detail: `${String(data.candidates ?? 0)} to review`, tone: "good" }

@@ -95,6 +95,18 @@ test("the Studio mirrors the server's price items", () => {
   assert.equal(credits.assistantItem("anthropic"), "assistant.anthropic");
 });
 
+test("a generation card always says what it costs, and whether this person pays", () => {
+  const parts = [["image.sprite", 4]];
+  assert.deepEqual(credits.quoteView(invited(), parts), { text: "12 credits · you have " + invited().credits, over: false });
+  assert.deepEqual(credits.quoteView(invited({ credits: 5 }), parts), { text: "12 credits · you have 5", over: true });
+  for (const free of [invited({ mode: "open" }), invited({ unlimited: true }), invited({ is_admin: true }), invited({ credits: null })])
+    assert.deepEqual(credits.quoteView(free, parts), { text: "12 credits · free for you", over: false });
+  assert.equal(credits.quoteView(null, parts), null);
+  assert.equal(credits.quoteView(invited(), []), null);
+  // A price the server does not list is not guessed.
+  assert.equal(credits.quoteView(invited(), [["image.mystery", 1]]), null);
+});
+
 test("prices show only to people who spend credits, and warn when the balance is short", () => {
   assert.equal(credits.costView(invited(), "image.sprite", 4).text, "12 credits");
   assert.equal(credits.costView(invited(), "image.sprite", 4).over, false);

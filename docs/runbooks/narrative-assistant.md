@@ -101,25 +101,26 @@ backgrounds, expressions that repaint an approved picture's face, event CGs, and
 lines. Results appear in the chat with **Approve** and **Use**. They stay candidates until
 the creator approves them, and story edits still need **Accept**.
 
-**Generate automatically** in the composer is on by default and is remembered per browser.
-When it is on, the worker starts each action with no page open. When it is off, each action
-waits for a click. It applies per message and is stored on the turn.
+Nothing starts by itself ([ADR 0068](../adr/0068-generation-waits-for-the-creators-press.md)).
+Each action appears in the chat as a card: what it will make, the model, how many, what it costs,
+**Cancel** and **Generate**. A balance that is too low disables Generate and says so.
 
 | State | Meaning |
 | --- | --- |
-| `offered` | Waits for a click (automatic generation was off) |
-| `waiting` | Needs something the proposal adds; starts when it is accepted |
-| `pending` | The worker starts it when the queue has room; a full queue waits, not fails |
+| `offered` | Shows its card and waits; `needs_accept` means the proposal must be accepted first |
+| `pending` | Pressed with the queue full; the worker starts it when there is room |
 | `started` | Has a job |
-| `blocked` | Could not start, with the reason shown; **Try again** retries it |
+| `blocked` | Could not start from the queue, with the reason shown; **Try again** retries it |
 | `finished` | Its job ended, and the Activity log says how |
+| `declined` | Cancelled, with nothing generated or charged; **Show again** brings the card back |
 | `skipped` | The proposal was rejected first |
 
 The API and the assistant worker both admit jobs, so the worker needs the same image, voice
 and object-store settings as the API. Each start is an ordinary job: the same content policy,
 credits, audit and outbox as Characters and Assets, and one job per action however many
 times it is started. `GET .../assistant/proposals/{id}/actions` reads the state, and
-`POST .../actions/{index}` starts or retries one.
+`POST .../actions/{index}` starts or retries one, and `POST .../actions/{index}/decline` is Cancel.
+The response's `quote` is the card, including the price items admission will charge.
 
 Expressions and CGs use the character's stage sprite, else their portrait, else their newest
 approved picture. With none, the action blocks and says to approve one. A voice action gives

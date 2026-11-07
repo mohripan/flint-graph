@@ -199,6 +199,41 @@ def test_conversation_summary_reaches_the_model_as_escaped_data():
     assert stats.history == 2
 
 
+def _offered_turn(*later: RecordedEvent) -> str:
+    created = event(
+        2,
+        "proposal.created",
+        turn_id="t1",
+        proposal_id="p1",
+        summary="A background",
+        status="ready",
+        actions=[{"index": 0, "label": "backgrounds: harbor"}],
+    )
+    replied = event(3, "turn.completed", turn_id="t1", reply="Here.")
+    state = fold_thread([requested(1, 1, "Draw the harbor."), created, replied, *later])
+    return conversation_from_log(state, before_turn=2).recent[-1].content
+
+
+def test_the_model_knows_a_card_is_still_waiting_for_the_creator():
+    told = _offered_turn()
+    assert "backgrounds: harbor: not started, waiting for the creator to press Generate" in told
+
+
+def test_the_model_knows_the_creator_cancelled_a_card():
+    declined = event(
+        4, "action.declined", proposal_id="p1", index=0, label="backgrounds: harbor", op="x"
+    )
+    assert "the creator cancelled this, so it was not generated" in _offered_turn(declined)
+
+
+def test_a_proposal_logged_before_cards_existed_still_folds():
+    created = event(
+        2, "proposal.created", turn_id="t1", proposal_id="p1", summary="Old", status="ready"
+    )
+    state = fold_thread([requested(1, 1, "Hi."), created])
+    assert state.turns[0].proposal.actions == ()
+
+
 def test_every_kind_the_service_writes_is_declared():
     for kind in (
         "thread.created",

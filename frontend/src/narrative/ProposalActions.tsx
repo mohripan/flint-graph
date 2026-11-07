@@ -1,37 +1,22 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { ImageJob, NarrativeImage, VoiceJob } from "../lib/api";
-import { CreditCost } from "../components/CreditCost";
-import { useAccess, useAccessRefresh } from "../site/accessContext";
-import { imageItem, voiceItem } from "../site/creditsModel";
-import { actionClick, actionJob, actionState, actionWatching, clipUse, imageUse, mergeAction } from "./assistantActions";
+import { useAccessRefresh } from "../site/accessContext";
+import { actionJob, actionShowsCard, actionState, actionWatching, clipUse, imageUse, mergeAction } from "./assistantActions";
 import type { ActionStatus, ImageUse } from "./assistantActions";
 import type { Attachment } from "./assistantLibrary";
 import { proposalActions } from "./assistantModel";
 import { CharacterProfilesContext, useNarrativeImage } from "./characterImages";
+import { GenerationCard } from "./GenerationCard";
 import { refreshLibrary } from "./libraryAssets";
 import { bindAsset, expressionId, setSprite } from "./stageModel";
 import { StudioDialog } from "./StudioDialog";
 import { ClipPlayButton } from "./VoiceControls";
 import { setLineClip, setLineVoice } from "./voiceModel";
-import type { AssistantAction, AssistantProposal, StoryDraft } from "./types";
+import type { AssistantProposal, StoryDraft } from "./types";
 
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
 const POLL_MS = 1500;
-// Each picture action starts one job of four candidates on the server.
-const CANDIDATES = 4;
-
-function cost(action: AssistantAction, voiceModel: string | null | undefined, assistantItem?: string | null): [string, number] {
-  switch (action.op) {
-    case "generate_character_images":
-      return [imageItem({ purpose: "character_portrait", transparent: action.transparent, hires: action.hires ?? action.transparent }), CANDIDATES];
-    case "generate_expressions": return [imageItem({ purpose: "character_expression" }), action.expressions.length];
-    case "generate_cg": return [imageItem({ purpose: "scene_art" }), CANDIDATES * action.characters.length];
-    case "generate_voice": return [voiceItem(voiceModel ?? "kokoro-82m"), action.lines.length];
-    case "start_child_session": return [assistantItem ?? "assistant.ollama", 1];
-    default: return [imageItem({ purpose: "background" }), CANDIDATES];
-  }
-}
 
 function applyImageUse(story: StoryDraft, use: ImageUse, asset: NarrativeImage): StoryDraft {
   const bound = bindAsset(story, asset);
@@ -65,22 +50,24 @@ function Candidate({ tenantId, projectId, asset, label, cutOut }: {
   </>;
 }
 
-// A generation action in the chat: what it is, where it has got to, and its results to
-// approve. A suggestion has a stable server identity, so remounting only reads its job.
-export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onAttach, onOpenThread }: {
+// A generation action in the chat: a card that asks first, then where it has got to and its
+// results to approve. A suggestion has a stable server identity, so remounting only reads its job.
+export function ProposalActions({ proposal, story, tenantId, projectId, canWrite, dirty, onApply, onAttach, onOpenThread, onOpenPanel }: {
   proposal: AssistantProposal; story: StoryDraft | null; tenantId: string; projectId: string; canWrite: boolean;
   dirty: boolean; onApply: (change: (story: StoryDraft) => StoryDraft, notice: string) => Promise<void>;
   onAttach?: (item: Attachment) => void; onOpenThread?: (id: string) => void;
+  onOpenPanel?: (panel: "assets" | "characters") => void;
 }) {
   const profiles = useContext(CharacterProfilesContext);
   const refreshAccess = useAccessRefresh();
-  const access = useAccess();
   const mounted = useRef(false), pending = useRef(new Set<number>());
   const [loaded, setLoaded] = useState(false);
   const [statuses, setStatuses] = useState<Record<number, ActionStatus>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Cancelled cards this person asked to see again; the server only knows they were cancelled.
+  const [reopened, setReopened] = useState<Record<number, boolean>>({});
   const actions = proposalActions(story, proposal.operations);
   const merge = useCallback((rows: ActionStatus[]) => setStatuses(current => {
     const next = { ...current };
@@ -130,6 +117,12 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
       try { merge([await api.startAssistantAction(tenantId, projectId, proposal.id, index)]); }
       finally { pending.current.delete(index); }
     }, "Couldn't start this.");
+  }
+  function decline(index: number) {
+    setReopened(current => ({ ...current, [index]: false }));
+    run(`start:${index}`, async () => {
+      merge([await api.declineAssistantAction(tenantId, projectId, proposal.id, index)]);
+    }, "Couldn't cancel this.");
   }
   async function approved(asset: NarrativeImage): Promise<NarrativeImage> {
     if (asset.status === "approved") return asset;
@@ -189,21 +182,24 @@ export function ProposalActions({ proposal, story, tenantId, projectId, canWrite
   return <div className="assistant-actions" aria-label="Generation">
     {loadError && <p className="studio-error" role="alert">{loadError} <button type="button" className="studio-link"
       onClick={() => void load()}>Refresh</button></p>}
-    <ul>{actions.map(({ index, action, label }) => {
+    <ul>{actions.map(({ index, label }) => {
       const status = statuses[index];
       const state = status ? actionState(status) : { text: loaded ? "" : "Checking…", tone: "muted" as const };
-      const click = status && canWrite ? actionClick(status) : null;
       const job = status ? actionJob(status) : null;
-      const voice = action.op === "generate_voice" ? profiles?.profiles[action.character]?.voice_model : null;
       const active = job && (job.status === "queued" || job.status === "running");
+      if (status?.quote && canWrite && actionShowsCard(status, Boolean(reopened[index]))) {
+        return <li key={index} className="assistant-gen-item">
+          <GenerationCard quote={status.quote} status={status} busy={Boolean(busy[`start:${index}`])} error={errors[`start:${index}`]}
+            note={state.text && status.status !== "declined" ? { text: state.text, bad: state.tone === "bad" } : null}
+            onGenerate={() => start(index)} onCancel={() => decline(index)} onOpen={onOpenPanel} />
+        </li>;
+      }
       return <li key={index}>
         <span>{label}</span>
-        {click && <span className="assistant-action-start">
-          <CreditCost item={cost(action, voice, access?.assistant_item)[0]} quantity={cost(action, voice, access?.assistant_item)[1]} />
-          <button type="button" className="studio-secondary" disabled={busy[`start:${index}`]}
-            onClick={() => start(index)}>{busy[`start:${index}`] ? "Starting…" : click}</button></span>}
         {state.text && <small className={state.tone === "bad" ? "studio-error" : "studio-hint"} role="status">
-          {state.text}{active && <progress max={job.count} value={job.progress} aria-label="Progress" />}</small>}
+          {state.text}{status?.status === "declined" && canWrite && <> <button type="button" className="studio-link"
+            onClick={() => setReopened(current => ({ ...current, [index]: true }))}>Show again</button></>}
+          {active && <progress max={job.count} value={job.progress} aria-label="Progress" />}</small>}
         {errors[`start:${index}`] && <small className="studio-error" role="alert">{errors[`start:${index}`]}</small>}
         {status?.child_thread && onOpenThread && <button type="button" className="studio-link"
           onClick={() => onOpenThread(status.child_thread!.id)}>Open this session</button>}

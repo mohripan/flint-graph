@@ -934,6 +934,13 @@ export const api = {
     });
   },
 
+  declineAssistantAction(tenantId: string, projectId: string, proposalId: string, index: number,
+    signal?: AbortSignal): Promise<ActionStatus> {
+    return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/actions/${index}/decline`, {
+      method: "POST", headers: tenantHeaders(tenantId), signal,
+    });
+  },
+
   startAssistantAction(tenantId: string, projectId: string, proposalId: string, index: number,
     signal?: AbortSignal): Promise<ActionStatus> {
     return jsonRequest(`${assistantPath(projectId)}/proposals/${encodeURIComponent(proposalId)}/actions/${index}`, {

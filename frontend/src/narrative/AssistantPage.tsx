@@ -41,11 +41,6 @@ function readSelection(key: string): string | null {
 function writeSelection(key: string, id: string | null): void {
   try { if (id) localStorage.setItem(key, id); else localStorage.removeItem(key); } catch { /* Optional convenience. */ }
 }
-const AUTO_KEY = "flintgraph.assistant.autoGenerate";
-// On unless the creator turned it off: asking for a picture should get a picture.
-function readAuto(): boolean {
-  return readSelection(AUTO_KEY) !== "off";
-}
 // The open conversation is part of the link, so it can be shared or reported by ID.
 export function linkedThread(): string | null {
   try { return new URLSearchParams(location.search).get("thread"); } catch { return null; }
@@ -82,12 +77,12 @@ function StepIcon({ state }: { state: StepView["state"] }) {
 // steps, thinking and reply stream from persisted events and resume after a reload.
 // Proposals stay suggestions until accepted, which creates a normal saved revision.
 export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, dirty, saving, scopeRef,
-  onSave, onAccepted, onConflict, onInspect, onOpenEditor, onAccessLost }: {
+  onSave, onAccepted, onConflict, onInspect, onOpenEditor, onOpenPanel, onAccessLost }: {
   tenantId: string; projectId: string; revision: NarrativeRevision; focus: string | null; canWrite: boolean;
   dirty: boolean; saving: boolean; scopeRef: MutableRefObject<(() => void) | null>;
   onSave: () => Promise<NarrativeRevision | null>; onAccepted: (revision: NarrativeRevision, notice?: string) => void;
   onConflict: (conflictRevisionId: string) => void; onInspect: (revisionId: string) => void;
-  onOpenEditor: () => void; onAccessLost: () => void;
+  onOpenEditor: () => void; onOpenPanel: (panel: "assets" | "characters") => void; onAccessLost: () => void;
 }) {
   const { run, cancel, invalidate } = useReleaseRequests(onAccessLost);
   const access = useAccess();
@@ -115,7 +110,6 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
   const [visible, setVisible] = useState(() => document.visibilityState !== "hidden");
   const [drawer, setDrawer] = useState(false), [withFocus, setWithFocus] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [autoGenerate, setAutoGenerate] = useState(readAuto);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [attached, setAttached] = useState<Attachment[]>([]);
   const [now, setNow] = useState(() => Date.now());
@@ -261,7 +255,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
     event?.preventDefault();
     if (blocker) return;
     setSending(true); setError(null); stick.current = true;
-    const message = text.trim(), next = prepareTurn(intent.current, message, revision.id, target, undefined, autoGenerate, attached);
+    const message = text.trim(), next = prepareTurn(intent.current, message, revision.id, target, undefined, attached);
     intent.current = next;
     void run("send", async signal => {
       let id = threadRef.current;
@@ -463,7 +457,7 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
                         {!change.after && change.before && <q className="studio-change-before">{change.before.slice(0, 240)}</q>}
                       </li>)}</ul>
                     <ProposalActions proposal={detail} story={story} tenantId={tenantId} projectId={projectId} canWrite={canWrite}
-                      dirty={dirty} onApply={applyToStory}
+                      dirty={dirty} onApply={applyToStory} onOpenPanel={onOpenPanel}
                       onAttach={item => { setAttached(current => current.some(known => known.id === item.id) ? current : toggleAttachment(current, item)); compose(text); }}
                       onOpenThread={id => { loadThreads(undefined, false); choose(id); }} />
                     {detail.status === "invalid" && <p className="studio-error">The assistant's change didn't fit the story's rules
@@ -517,10 +511,6 @@ export function AssistantPage({ tenantId, projectId, revision, focus, canWrite, 
           {target ? <span className="assistant-focus">Focused on scene <code>{target}</code>
             <button type="button" className="studio-link" onClick={() => setWithFocus(false)}>Clear</button></span>
             : focus && <button type="button" className="studio-link" onClick={() => setWithFocus(true)}>Focus on scene {focus}</button>}
-          <label className="assistant-auto" title="Pictures and voices start as soon as the assistant proposes them, and use your credits. Turn off to start each one yourself.">
-            <input type="checkbox" checked={autoGenerate} onChange={event => {
-              setAutoGenerate(event.target.checked); writeSelection(AUTO_KEY, event.target.checked ? null : "off");
-            }} /> Generate automatically</label>
           <small>{blocker && !dirty && text.trim() ? blocker : "Enter sends · Shift + Enter adds a line"}</small>
           {access?.assistant_item && <CreditCost item={access.assistant_item} />}
         </div>

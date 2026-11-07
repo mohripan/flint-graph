@@ -21,7 +21,7 @@ test("the page keeps watching only while something can still change", () => {
   assert.equal(model.actionWatching(action("started", { voice_job: job("queued") })), true);
   assert.equal(model.actionWatching(action("started", { image_job: job("completed") })), false);
   assert.equal(model.actionWatching(action("finished", { image_job: job("completed") })), false);
-  for (const status of ["offered", "waiting", "blocked", "skipped"]) {
+  for (const status of ["offered", "declined", "blocked", "skipped"]) {
     assert.equal(model.actionWatching(action(status)), false, status);
   }
 });
@@ -36,10 +36,13 @@ test("a slow read cannot undo a start, progress or a finish", () => {
   assert.equal(behind.image_job.progress, 2);
   assert.equal(model.mergeAction(action("blocked"), action("pending")).status, "pending", "a retry moves on");
   assert.equal(model.mergeAction(undefined, started), started);
+  assert.equal(model.mergeAction(action("offered"), action("declined")).status, "declined");
+  assert.equal(model.mergeAction(action("declined"), action("offered")).status, "declined", "a stale read cannot undo Cancel");
+  assert.equal(model.mergeAction(started, action("declined")), started, "or a change of mind");
 });
 
 test("each state tells the creator what is happening in plain words", () => {
-  assert.deepEqual(model.actionState(action("waiting")), { text: "Starts when you accept the proposal.", tone: "muted" });
+  assert.deepEqual(model.actionState(action("declined")), { text: "Cancelled. Nothing was generated.", tone: "muted" });
   assert.deepEqual(model.actionState(action("offered", { needs_accept: true })),
     { text: "Accept the proposal before generating this.", tone: "muted" });
   assert.deepEqual(model.actionState(action("pending")), { text: "Waiting for a free slot…", tone: "muted" });
@@ -62,13 +65,29 @@ test("a failed job says why, and a busy GPU reads as temporary", () => {
   assert.match(other.text, /failed/i);
 });
 
-test("a click is offered only when it can do something", () => {
-  assert.equal(model.actionClick(action("offered")), "Generate");
-  assert.equal(model.actionClick(action("blocked")), "Try again");
-  assert.equal(model.actionClick(action("offered", { needs_accept: true })), null);
-  for (const status of ["waiting", "pending", "started", "finished", "skipped"]) {
-    assert.equal(model.actionClick(action(status)), null, status);
+const quote = {
+  kind: "Background", title: "rainy street", facts: [{ icon: "model", text: "Animagine XL 4.0" }],
+  parts: [{ item: "image.standard", quantity: 4 }], button: "Generate backgrounds", opens: "assets",
+};
+
+test("a card asks before anything runs, and stays out of the way once answered", () => {
+  for (const status of ["offered", "blocked"]) {
+    assert.equal(model.actionShowsCard(action(status, { quote }), false), true, status);
   }
+  assert.equal(model.actionShowsCard(action("offered", { quote, needs_accept: true }), false), true, "it can explain what it needs");
+  assert.equal(model.actionShowsCard(action("declined", { quote }), false), false);
+  assert.equal(model.actionShowsCard(action("declined", { quote }), true), true, "shown again on request");
+  assert.equal(model.actionShowsCard(action("offered"), false), false, "no card without a quote from the server");
+  for (const status of ["pending", "started", "finished", "skipped"]) {
+    assert.equal(model.actionShowsCard(action(status, { quote }), true), false, status);
+  }
+});
+
+test("the button says what will be made, or that this is another try", () => {
+  assert.equal(model.cardLabel(action("offered"), quote), "Generate backgrounds");
+  assert.equal(model.cardLabel(action("declined"), quote), "Generate backgrounds");
+  assert.equal(model.cardLabel(action("blocked"), quote), "Try again");
+  assert.deepEqual(model.quoteParts(quote), [["image.standard", 4]]);
 });
 
 const story = {
@@ -114,5 +133,5 @@ test("a child session reads as a conversation, not a job", () => {
   const done = action("finished", { op: "start_child_session", child_thread: session });
   assert.deepEqual(model.actionState(done), { text: "It has replied. Open it to review.", tone: "good" });
   assert.equal(model.actionWatching(done), false);
-  assert.equal(model.actionClick(action("offered", { op: "start_child_session" })), "Start");
+  assert.equal(model.cardLabel(action("offered", { op: "start_child_session" }), { button: "Start session" }), "Start session");
 });

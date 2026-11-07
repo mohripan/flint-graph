@@ -348,6 +348,17 @@ async def join(
     await session.flush()
 
 
+def act_for(session: AsyncSession, *, user_id: UUID, settings: Settings) -> None:
+    """Charge like the person's own request would, for work a worker starts after it ended.
+
+    A press that finds the queue full is started later (ADR 0068), and must cost what its card
+    said. Operators have no grant to charge, so only open mode and the prices need carrying.
+    """
+    session.info[_REQUEST_ACCESS] = RequestAccess(
+        user_id, settings.access_mode == "open", dict(settings.access_credit_prices)
+    )
+
+
 async def charge_usage(
     session: AsyncSession,
     *,

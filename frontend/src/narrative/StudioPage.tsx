@@ -464,7 +464,8 @@ export function StudioPage({ onDirtyChange }: {
       tenantId={tenantId} projectId={state.project.id} revision={state.revision} focus={sceneId || null}
       canWrite={canWrite} dirty={dirty} saving={state.saving} scopeRef={assistantScope} onSave={save}
       onAccepted={acceptedRevision} onConflict={assistantConflict} onInspect={id => void inspectRevision(id)}
-      onOpenEditor={() => chooseView("editor")} onAccessLost={releaseAccessLost} />
+      onOpenEditor={() => chooseView("editor")} onOpenPanel={next => { chooseView("editor"); choosePanel(next); }}
+      onAccessLost={releaseAccessLost} />
     : <div className="studio-workspace">
       <div className="studio-editor">
       <nav className="studio-tabs" aria-label="Story editor panels">{panels.map(([id, label]) => <button type="button" key={id}

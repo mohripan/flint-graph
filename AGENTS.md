@@ -290,6 +290,13 @@ stops; in `stage`, left out while silent) and `sound` (view only). A new asset k
 real playtest and a real release prove them all. `prompts.py` orders stage fields seen before heard, because
 a grammar cannot go back for an earlier field. Read `docs/reports/2026-11-07-music-and-sound.md`.
 
+[ADR 0068](docs/adr/0068-generation-waits-for-the-creators-press.md) (migration 0051, prompt v9)
+ends **Generate automatically**: every action and child session shows a card in the chat, and nothing
+runs until the person presses Generate. `ActionQuote` is written by the server, and its `parts` must be
+what admission charges (`test_every_card_costs_exactly_what_it_says`), so a new action needs a quote and
+a row in that test. `act_for` gives the worker's session the deployment's prices. Read
+`docs/reports/2026-11-07-generation-cards.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

@@ -21,7 +21,7 @@ export const STEPS: Step[] = [
     title: "Ask the assistant",
     body: [
       "Open the Assistant and describe what you want in plain words: a new scene, a rewrite, a character, a change to the stage or the text box. You can watch it work as it reads your story, drafts the changes and checks them against the story's rules.",
-      "It replies with a proposal you can read change by change. Nothing in your story changes until you accept it. If something important is missing, such as a character's name or outfit, it asks first. When a character needs a picture, the proposal suggests one, and you start it with Generate.",
+      "It replies with a proposal you can read change by change. Nothing in your story changes until you accept it. If something important is missing, such as a character's name or outfit, it asks first. When something needs generating, such as a picture or a voice, a card in the chat shows what it will make and what it costs, and nothing runs until you press Generate.",
     ],
   },
   {
@@ -72,6 +72,6 @@ export const STEPS: Step[] = [
 export const FAQ: Array<[string, string]> = [
   ["Who can join?", "Anyone with an invitation key or an email invitation. If you would like one, ask the person who told you about FlintGraph."],
   ["Can I use my work email?", "Yes, but you don't have to. A key works with any account. An email invitation needs the exact address it was sent to, verified by your sign-in provider."],
-  ["Is there a limit on generating?", "Each invitation includes credits. Generating spends them: a standard image or a simple voice line costs little, while a pose, a CG, a release build or a training run costs more, and the Studio shows the price before you start. There are also daily caps on how much you can make. If you run out of either, the Studio says which. Writing, editing and playtesting are free."],
+  ["Is there a limit on generating?", "Each invitation includes credits. Generating spends them: a standard image or a simple voice line costs little, while a pose, a CG, a release build or a training run costs more, and the Studio shows the price before you start. There are also daily caps on how much you can make. If you run out of either, the Studio says which. Chatting with the assistant spends a little too, because it runs on the same GPU. Writing, editing and playtesting are free."],
   ["Who owns what I make?", "Your stories and the art and voices you approve are yours to use in your game. Exported Godot projects are ordinary source projects you can keep editing."],
 ];

@@ -8,6 +8,27 @@ from flint_graph.api.narrative_character_schemas import ImageJobResponse
 from flint_graph.api.routes.narrative_voices import VoiceJobResponse
 
 
+class ActionFactResponse(BaseModel):
+    icon: str
+    text: str
+
+
+class ActionPartResponse(BaseModel):
+    item: str
+    quantity: int
+
+
+class ActionQuoteResponse(BaseModel):
+    """What a generation card promises before anything runs (ADR 0068)."""
+
+    kind: str
+    title: str
+    facts: list[ActionFactResponse]
+    parts: list[ActionPartResponse]
+    button: str
+    opens: str | None
+
+
 class AssistantActionResponse(BaseModel):
     """One generation action of a proposal and the job it became, if any (ADR 0061)."""
 
@@ -21,6 +42,7 @@ class AssistantActionResponse(BaseModel):
     image_job: ImageJobResponse | None
     voice_job: VoiceJobResponse | None
     child_thread: "AssistantThreadResponse | None" = None
+    quote: ActionQuoteResponse | None = None
 
 
 class AssistantAttachment(BaseModel):
@@ -52,6 +74,7 @@ class AssistantTurnCreate(BaseModel):
     base_revision_id: UUID
     focus_node: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     idempotency_key: UUID
+    # Ignored, and only accepted so a tab opened before ADR 0068 can still send a message.
     auto_generate: bool = False
     attachments: list[AssistantAttachment] = Field(default_factory=list, max_length=12)
 

@@ -107,4 +107,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v7": "3be93c56725998b4a76097b56c8037e1552840df8815b27eadf6cadfa06df2cf",
     # Music, ambience and sound effects from the library (ADR 0066).
     "narrative-assistant/v8": "64b8ef67405cc57c8ef40754ed6c4bbd6c42ea707d1ad2295fae8c24c6eb27e8",
+    # Generation cards: nothing runs until the creator presses Generate (ADR 0068).
+    "narrative-assistant/v9": "f942d5b9b7e2bfedea8b0636d2553a6731ea58b7fcb686b0a01d284c6a6bfd45",
 }

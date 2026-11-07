@@ -3,12 +3,17 @@
 import type { ImageJob, NarrativeImage, VoiceJob } from "../lib/api";
 import type { AssistantThread, StoryDraft } from "./types";
 
-export type ActionState = "offered" | "waiting" | "pending" | "started" | "blocked" | "finished" | "skipped";
+export type ActionState = "offered" | "pending" | "started" | "blocked" | "finished" | "skipped" | "declined";
+/** What a generation card promises before anything runs (ADR 0068). */
+export interface ActionQuote {
+  kind: string; title: string; facts: Array<{ icon: string; text: string }>;
+  parts: Array<{ item: string; quantity: number }>; button: string; opens: string | null;
+}
 export interface ActionStatus {
   index: number; op: string; label: string; status: ActionState; needs_accept: boolean;
   error_code: string | null; detail: string | null;
   image_job: ImageJob | null; voice_job: VoiceJob | null;
-  child_thread?: AssistantThread | null;
+  child_thread?: AssistantThread | null; quote?: ActionQuote | null;
 }
 export type ActionTone = "muted" | "good" | "bad";
 
@@ -31,7 +36,7 @@ export function actionWatching(action: ActionStatus): boolean {
   return action.status === "started" && (!job || ACTIVE.has(job.status));
 }
 
-const STATE_RANK: Record<ActionState, number> = { offered: 0, waiting: 0, pending: 1, blocked: 1, started: 2, finished: 3, skipped: 3 };
+const STATE_RANK: Record<ActionState, number> = { offered: 0, pending: 1, blocked: 1, declined: 1, started: 2, finished: 3, skipped: 3 };
 const JOB_RANK: Record<string, number> = { queued: 0, running: 1, completed: 2, failed: 2, cancelled: 2 };
 /** Responses can arrive out of order; a slow one must not undo a start, progress or a finish. */
 export function mergeAction(known: ActionStatus | undefined, incoming: ActionStatus): ActionStatus {
@@ -53,7 +58,7 @@ function jobWith(action: ActionStatus, progress: number): Partial<ActionStatus> 
 export function actionState(action: ActionStatus): { text: string; tone: ActionTone } {
   const job = actionJob(action);
   if (action.status === "blocked") return { text: action.detail ?? "This couldn't start.", tone: "bad" };
-  if (action.status === "waiting") return { text: "Starts when you accept the proposal.", tone: "muted" };
+  if (action.status === "declined") return { text: "Cancelled. Nothing was generated.", tone: "muted" };
   if (action.status === "pending") return { text: "Waiting for a free slot…", tone: "muted" };
   if (action.status === "skipped") return { text: "Not generated: the proposal was rejected.", tone: "muted" };
   if (action.status === "offered") {
@@ -72,11 +77,16 @@ export function actionState(action: ActionStatus): { text: string; tone: ActionT
   }
   return { text: `${job.assets.length} to review.`, tone: "good" };
 }
-export function actionClick(action: ActionStatus): string | null {
-  if (action.status === "blocked") return "Try again";
-  if (action.status !== "offered" || action.needs_accept) return null;
-  return action.op === "start_child_session" ? "Start" : "Generate";
+/** A card asks before anything runs; a cancelled one stays folded unless asked to show again. */
+export function actionShowsCard(action: ActionStatus, reopened: boolean): boolean {
+  if (!action.quote) return false;
+  return action.status === "offered" || action.status === "blocked" || (action.status === "declined" && reopened);
 }
+export function cardLabel(action: Pick<ActionStatus, "status">, quote: Pick<ActionQuote, "button">): string {
+  return action.status === "blocked" ? "Try again" : quote.button;
+}
+export const quoteParts = (quote: Pick<ActionQuote, "parts">): Array<[string, number]> =>
+  quote.parts.map(({ item, quantity }) => [item, quantity]);
 
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 const spriteHashes = (story: StoryDraft, character: string) => Object.values(story.characters[character]?.sprites ?? {})

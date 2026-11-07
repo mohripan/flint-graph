@@ -21,6 +21,7 @@ PROPOSAL_ACCEPTED = "proposal.accepted"
 PROPOSAL_REJECTED = "proposal.rejected"
 ACTION_STARTED = "action.started"
 ACTION_BLOCKED = "action.blocked"
+ACTION_DECLINED = "action.declined"
 JOB_FINISHED = "job.finished"
 ASSET_APPROVED = "asset.approved"
 CHILD_STARTED = "child.started"
@@ -38,6 +39,7 @@ ALL_KINDS = frozenset(
         PROPOSAL_REJECTED,
         ACTION_STARTED,
         ACTION_BLOCKED,
+        ACTION_DECLINED,
         JOB_FINISHED,
         ASSET_APPROVED,
         CHILD_STARTED,
@@ -69,7 +71,7 @@ class ActionRecord:
 
     index: int
     label: str
-    status: str  # started, blocked, completed, failed or cancelled
+    status: str  # offered, declined, started, blocked, completed, failed or cancelled
     detail: str | None = None
     candidates: int = 0
     approved: tuple[str, ...] = ()
@@ -183,7 +185,13 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
             turns[turn.turn_id] = replace(
                 turn,
                 proposal=ProposalRecord(
-                    proposal_id, str(data.get("summary", "")), str(data.get("status", "ready"))
+                    proposal_id,
+                    str(data.get("summary", "")),
+                    str(data.get("status", "ready")),
+                    actions=tuple(
+                        ActionRecord(int(item["index"]), str(item.get("label", "")), "offered")
+                        for item in data.get("actions") or ()
+                    ),
                 ),
             )
         elif event.kind == PROPOSAL_ACCEPTED:
@@ -198,6 +206,8 @@ def fold_thread(events: Iterable[RecordedEvent]) -> ThreadState:
             update_proposal(str(data["proposal_id"]), status="rejected")
         elif event.kind == ACTION_STARTED:
             update_action(data, status="started", label=str(data.get("label", "")))
+        elif event.kind == ACTION_DECLINED:
+            update_action(data, status="declined", label=str(data.get("label", "")))
         elif event.kind == ACTION_BLOCKED:
             update_action(
                 data,
@@ -258,6 +268,10 @@ def _proposal_outcome(proposal: ProposalRecord) -> str:
 
 
 def _action_outcome(action: ActionRecord) -> str:
+    if action.status == "offered":
+        return f"{action.label}: not started, waiting for the creator to press Generate"
+    if action.status == "declined":
+        return f"{action.label}: the creator cancelled this, so it was not generated"
     if action.status == "started":
         return f"{action.label}: generating now"
     if action.status == "blocked":
