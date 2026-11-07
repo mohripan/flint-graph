@@ -1,0 +1,4 @@
+---
+# One playbook, not shared roles, so variable names need no role prefix.
+skip_list:
+  - var-naming[no-role-prefix]

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      nodeSelector:
+        flintgraph.io/gpu: "true"
+      # Stopping the GPU server is normal here, so its pods wait for it rather than being evicted.
+      tolerations:
+        - key: flintgraph.io/gpu
+          operator: Exists
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.40.15@sha256:0e59999e0e8f9fd4e704bd788a89b7e4cad399367fb1365f8c102ac662288761
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+          ports:
+            - containerPort: 11434
+          readinessProbe:
+            tcpSocket:
+              port: 11434
+            periodSeconds: 10
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+      volumes:
+        - name: models
+          hostPath:
+            path: /var/lib/flintgraph/ollama
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434

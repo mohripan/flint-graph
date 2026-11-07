@@ -1,0 +1,34 @@
+---
+# Run on each server by ansible-pull, from the service CDK's user data installs. It repeats at each
+# boot until it succeeds, because installing the GPU driver reboots partway through.
+- name: Set up a FlintGraph server
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  vars_files:
+    - vars/versions.yml
+    - vars/models.yml
+  pre_tasks:
+    - name: Refuse an unknown role
+      ansible.builtin.assert:
+        that: flintgraph_role in ['control', 'gpu']
+  roles:
+    # First, so a later failure cannot leave a GPU running without a limit.
+    - role: gpu_watchdog
+      when: flintgraph_role == 'gpu'
+    - role: base
+    - role: data_volume
+      when: flintgraph_role == 'control'
+    - role: k3s_server
+      when: flintgraph_role == 'control'
+    - role: app_secrets
+      when: flintgraph_role == 'control'
+    - role: flux
+      when: flintgraph_role == 'control'
+    - role: nvidia
+      when: flintgraph_role == 'gpu'
+    - role: k3s_agent
+      when: flintgraph_role == 'gpu'
+    - role: models
+      when: flintgraph_role == 'gpu'

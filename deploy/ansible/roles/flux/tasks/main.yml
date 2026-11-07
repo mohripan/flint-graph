@@ -1,0 +1,26 @@
+---
+- name: Download Flux, checked against its published hashes
+  ansible.builtin.get_url:
+    url: "https://github.com/fluxcd/flux2/releases/download/v{{ flux_version }}/flux_{{ flux_version }}_linux_amd64.tar.gz"
+    dest: "/tmp/flux_{{ flux_version }}.tar.gz"
+    checksum: "sha256:https://github.com/fluxcd/flux2/releases/download/v{{ flux_version }}/flux_{{ flux_version }}_checksums.txt"
+    mode: "0644"
+
+- name: Unpack Flux
+  ansible.builtin.unarchive:
+    src: "/tmp/flux_{{ flux_version }}.tar.gz"
+    dest: /usr/local/bin
+    include: [flux]
+    remote_src: true
+    creates: /usr/local/bin/flux
+
+# Only the two controllers this needs, to save memory on a 4 GB server.
+- name: Install Flux in the cluster
+  ansible.builtin.command: flux install --components=source-controller,kustomize-controller
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: true
+
+- name: Point Flux at this repository
+  ansible.builtin.command: "k3s kubectl apply -k {{ flintgraph_src }}/deploy/flux/production"
+  changed_when: true

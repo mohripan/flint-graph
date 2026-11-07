@@ -1,0 +1,65 @@
+---
+- name: Download the k3s installer of this exact version
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version | urlencode }}/install.sh"
+    dest: /usr/local/sbin/k3s-install.sh
+    mode: "0700"
+
+# The label keeps k3s's load balancer on this server, away from the one that is usually stopped.
+- name: Install k3s as the cluster server
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/k3s-install.sh
+    creates: /usr/local/bin/k3s
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: >-
+      server
+      --flannel-backend=wireguard-native
+      --disable=metrics-server
+      --node-label=svccontroller.k3s.cattle.io/enablelb=true
+      --write-kubeconfig-mode=600
+
+- name: Wait for the cluster to answer
+  ansible.builtin.command: k3s kubectl get --raw=/readyz
+  register: k3s_ready
+  retries: 30
+  delay: 10
+  until: k3s_ready.rc == 0
+  changed_when: false
+
+- name: Read the email for HTTPS certificates
+  ansible.builtin.command: >
+    /snap/bin/aws ssm get-parameter --region {{ aws_region }}
+    --name /flintgraph/config/acme-email --query Parameter.Value --output text
+  register: acme_email
+  changed_when: false
+
+- name: Have Traefik obtain HTTPS certificates
+  ansible.builtin.template:
+    src: traefik-config.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+    mode: "0600"
+
+- name: Read the token that lets the GPU server join
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token
+  no_log: true
+
+- name: Store the join token for the GPU server
+  ansible.builtin.command:
+    argv:
+      - /snap/bin/aws
+      - ssm
+      - put-parameter
+      - --region
+      - "{{ aws_region }}"
+      - --name
+      - /flintgraph/k3s/token
+      - --type
+      - SecureString
+      - --overwrite
+      - --value
+      - "{{ k3s_token.content | b64decode | trim }}"
+  no_log: true
+  changed_when: true

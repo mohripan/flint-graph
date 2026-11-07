@@ -1,0 +1,50 @@
+---
+- name: Install the GPU driver
+  ansible.builtin.apt:
+    name:
+      - "nvidia-driver-{{ nvidia_driver_branch }}-server"
+      - "linux-modules-nvidia-{{ nvidia_driver_branch }}-server-aws"
+    state: present
+    update_cache: true
+
+- name: Create the package key folder
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add NVIDIA's container package key
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    dest: /etc/apt/keyrings/nvidia-container-toolkit.asc
+    mode: "0644"
+
+- name: Add NVIDIA's container package repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.asc] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /"
+    filename: nvidia-container-toolkit
+    state: present
+
+# k3s finds this when it starts and adds the "nvidia" container runtime by itself.
+- name: Install the container toolkit
+  ansible.builtin.apt:
+    name: nvidia-container-toolkit
+    state: present
+    update_cache: true
+
+- name: Check the driver is loaded
+  ansible.builtin.command: nvidia-smi
+  register: nvidia_smi
+  changed_when: false
+  failed_when: false
+
+# The service CDK installs runs this playbook again after the reboot.
+- name: Reboot to load the driver
+  ansible.builtin.command: systemd-run --on-active=15 /usr/bin/systemctl reboot
+  when: nvidia_smi.rc != 0
+  changed_when: true
+
+- name: Stop here until the reboot
+  ansible.builtin.fail:
+    msg: Rebooting to load the GPU driver. Provisioning continues on the next boot.
+  when: nvidia_smi.rc != 0

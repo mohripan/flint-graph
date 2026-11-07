@@ -1,0 +1,182 @@
+# These run only on the GPU server and wait with it while it sleeps. Each only executes work:
+# narrative_gpu_dispatch, on the always-on server, is what queues it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assistant-worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: assistant-worker
+  template:
+    metadata:
+      labels:
+        app: assistant-worker
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        flintgraph.io/gpu: "true"
+      tolerations:
+        - key: flintgraph.io/gpu
+          operator: Exists
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+      initContainers:
+        # Downloads only what is missing, so waking costs nothing and a model cannot change unseen.
+        - name: pull-models
+          image: ollama/ollama:0.40.15@sha256:0e59999e0e8f9fd4e704bd788a89b7e4cad399367fb1365f8c102ac662288761
+          command:
+            - sh
+            - -c
+            - >-
+              until ollama list; do sleep 3; done;
+              for model in "$FLINT_GRAPH_NARRATIVE_ASSISTANT_OLLAMA_MODEL" "$FLINT_GRAPH_NARRATIVE_ASSISTANT_VISION_MODEL"; do
+              ollama show "$model" > /dev/null || ollama pull "$model" || exit 1;
+              done
+          env:
+            - name: OLLAMA_HOST
+              value: http://ollama:11434
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+      containers:
+        - name: worker
+          # Reaches its model through Ollama, so it needs no GPU of its own.
+          image: ghcr.io/mohripan/flint-graph-api:unset
+          command: [python, -m, flint_graph.processes.narrative_assistant_worker]
+          env:
+            - name: FLINT_GRAPH_NARRATIVE_ASSISTANT_WORKER_ENABLED
+              value: "true"
+            - name: FLINT_GRAPH_NARRATIVE_GPU_EXECUTE_ONLY
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: image-worker
+  template:
+    metadata:
+      labels:
+        app: image-worker
+    spec:
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      nodeSelector:
+        flintgraph.io/gpu: "true"
+      tolerations:
+        - key: flintgraph.io/gpu
+          operator: Exists
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+      containers:
+        - name: worker
+          image: ghcr.io/mohripan/flint-graph-gpu-worker:unset
+          command: [python, -m, flint_graph.processes.narrative_image_worker]
+          env:
+            - name: FLINT_GRAPH_NARRATIVE_IMAGE_WORKER_ENABLED
+              value: "true"
+            - name: FLINT_GRAPH_NARRATIVE_GPU_EXECUTE_ONLY
+              value: "true"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: models
+          hostPath:
+            path: /var/lib/flintgraph/models
+            type: Directory
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: voice-worker
+  template:
+    metadata:
+      labels:
+        app: voice-worker
+    spec:
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      nodeSelector:
+        flintgraph.io/gpu: "true"
+      tolerations:
+        - key: flintgraph.io/gpu
+          operator: Exists
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+      containers:
+        - name: worker
+          image: ghcr.io/mohripan/flint-graph-gpu-worker:unset
+          command: [python, -m, flint_graph.processes.narrative_voice_worker]
+          env:
+            - name: FLINT_GRAPH_NARRATIVE_VOICE_WORKER_ENABLED
+              value: "true"
+            - name: FLINT_GRAPH_NARRATIVE_GPU_EXECUTE_ONLY
+              value: "true"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: models
+          hostPath:
+            path: /var/lib/flintgraph/models
+            type: Directory

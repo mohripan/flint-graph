@@ -1,0 +1,39 @@
+# Hands queued GPU work to Temporal from the always-on server, so work waits while the GPU sleeps.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-dispatch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-dispatch
+  template:
+    metadata:
+      labels:
+        app: gpu-dispatch
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: dispatch
+          image: ghcr.io/mohripan/flint-graph-api:unset
+          command: [python, -m, flint_graph.processes.narrative_gpu_dispatch]
+          env:
+            - name: FLINT_GRAPH_NARRATIVE_GPU_DISPATCH_ENABLED
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]

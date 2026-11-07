@@ -1,0 +1,32 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flintgraph
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/mohripan/flint-graph.git
+  ref:
+    branch: master
+  # Only what is applied, to spare memory and bandwidth on a small server.
+  ignore: |
+    /*
+    !/deploy/k8s/
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: flintgraph
+  namespace: flux-system
+spec:
+  # Stays off until the images exist and the placeholders are filled in. See the runbook.
+  suspend: true
+  interval: 10m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flintgraph
+  path: ./deploy/k8s/production
+  prune: true
+  # Not "wait": pods for a sleeping GPU server are pending by design, and would count as failure.
+  wait: false

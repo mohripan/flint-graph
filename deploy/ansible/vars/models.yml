@@ -1,0 +1,111 @@
+---
+# The models for the first deployment: sprites, backgrounds, CGs and Kokoro voices. Generated from
+# the manifests of the verified local copies. Assistant models come from Ollama (deploy/k8s).
+flintgraph_models:
+  - name: animagine-xl-4.0
+    repo: cagliostrolab/animagine-xl-4.0
+    revision: 2b7c1b397761bf5bd3cc42e5b39ec99314a75a96
+    license: openrail++
+    manifest_sha256: 9c2308313c36fd1479e178b34eb0b4f861257177d222b87dfbbab07e2feac900
+    files:
+      - "README.md"
+      - "model_index.json"
+      - "scheduler/scheduler_config.json"
+      - "text_encoder/config.json"
+      - "text_encoder/model.safetensors"
+      - "text_encoder_2/config.json"
+      - "text_encoder_2/model.safetensors"
+      - "tokenizer/merges.txt"
+      - "tokenizer/special_tokens_map.json"
+      - "tokenizer/tokenizer_config.json"
+      - "tokenizer/vocab.json"
+      - "tokenizer_2/merges.txt"
+      - "tokenizer_2/special_tokens_map.json"
+      - "tokenizer_2/tokenizer_config.json"
+      - "tokenizer_2/vocab.json"
+      - "unet/config.json"
+      - "unet/diffusion_pytorch_model.safetensors"
+      - "vae/config.json"
+      - "vae/diffusion_pytorch_model.safetensors"
+  - name: anime-seg
+    repo: skytnt/anime-seg
+    revision: 493cb60893f47441b26ec4fb9a306bce9e342982
+    license: apache-2.0
+    manifest_sha256: 18ecb336c1f48792b68f26830ae51723c13a837d66377ec46ebdae0b1b5551fc
+    files:
+      - "README.md"
+      - "isnetis.onnx"
+  - name: ip-adapter
+    repo: h94/IP-Adapter
+    revision: 018e402774aeeddd60609b4ecdb7e298259dc729
+    license: apache-2.0
+    manifest_sha256: 760958414c3111196983fee599755d99c5146bd2b8d62e9526d7d245a20823ee
+    files:
+      - "README.md"
+      - "models/image_encoder/config.json"
+      - "models/image_encoder/model.safetensors"
+      - "sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors"
+  - name: kokoro-82m
+    repo: hexgrad/Kokoro-82M
+    revision: f3ff3571791e39611d31c381e3a41a3af07b4987
+    license: apache-2.0
+    manifest_sha256: 1c0ddde2d06e6999bbc93c8fe9ff1ba0663bf2f37df948b211c9284b30d6a140
+    files:
+      - "README.md"
+      - "VOICES.md"
+      - "config.json"
+      - "kokoro-v1_0.pth"
+      - "voices/af_alloy.pt"
+      - "voices/af_aoede.pt"
+      - "voices/af_bella.pt"
+      - "voices/af_heart.pt"
+      - "voices/af_jessica.pt"
+      - "voices/af_kore.pt"
+      - "voices/af_nicole.pt"
+      - "voices/af_nova.pt"
+      - "voices/af_river.pt"
+      - "voices/af_sarah.pt"
+      - "voices/af_sky.pt"
+      - "voices/am_adam.pt"
+      - "voices/am_echo.pt"
+      - "voices/am_eric.pt"
+      - "voices/am_fenrir.pt"
+      - "voices/am_liam.pt"
+      - "voices/am_michael.pt"
+      - "voices/am_onyx.pt"
+      - "voices/am_puck.pt"
+      - "voices/am_santa.pt"
+      - "voices/bf_alice.pt"
+      - "voices/bf_emma.pt"
+      - "voices/bf_isabella.pt"
+      - "voices/bf_lily.pt"
+      - "voices/bm_daniel.pt"
+      - "voices/bm_fable.pt"
+      - "voices/bm_george.pt"
+      - "voices/bm_lewis.pt"
+      - "voices/ef_dora.pt"
+      - "voices/em_alex.pt"
+      - "voices/em_santa.pt"
+      - "voices/ff_siwis.pt"
+      - "voices/hf_alpha.pt"
+      - "voices/hf_beta.pt"
+      - "voices/hm_omega.pt"
+      - "voices/hm_psi.pt"
+      - "voices/if_sara.pt"
+      - "voices/im_nicola.pt"
+      - "voices/jf_alpha.pt"
+      - "voices/jf_gongitsune.pt"
+      - "voices/jf_nezumi.pt"
+      - "voices/jf_tebukuro.pt"
+      - "voices/jm_kumo.pt"
+      - "voices/pf_dora.pt"
+      - "voices/pm_alex.pt"
+      - "voices/pm_santa.pt"
+      - "voices/zf_xiaobei.pt"
+      - "voices/zf_xiaoni.pt"
+      - "voices/zf_xiaoxiao.pt"
+      - "voices/zf_xiaoyi.pt"
+      - "voices/zm_yunjian.pt"
+      - "voices/zm_yunxi.pt"
+      - "voices/zm_yunxia.pt"
+      - "voices/zm_yunyang.pt"

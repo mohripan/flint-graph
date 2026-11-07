@@ -1,0 +1,37 @@
+---
+# Weights stay on this server's disk, so they are not downloaded again when it wakes. They are
+# checked against the same pins the workers verify (see vars/models.yml).
+- name: Create the models folder
+  ansible.builtin.file:
+    path: "{{ flintgraph_data_dir }}/models"
+    state: directory
+    mode: "0755"
+
+- name: Download each pinned model
+  ansible.builtin.command:
+    argv: >-
+      {{ ['python3', flintgraph_src ~ '/tools/narrative/fetch_model.py',
+          '--repo', item.repo, '--revision', item.revision, '--license', item.license,
+          '--out', flintgraph_data_dir ~ '/models/' ~ item.name]
+         + (item.files | map('regex_replace', '^', '--file=') | list) }}
+    creates: "{{ flintgraph_data_dir }}/models/{{ item.name }}/flintgraph-download.json"
+  loop: "{{ flintgraph_models }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Hash each downloaded manifest
+  ansible.builtin.stat:
+    path: "{{ flintgraph_data_dir }}/models/{{ item.name }}/flintgraph-download.json"
+    checksum_algorithm: sha256
+  loop: "{{ flintgraph_models }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: model_manifests
+
+- name: Refuse a model that does not match its pin
+  ansible.builtin.assert:
+    that: item.stat.checksum == item.item.manifest_sha256
+    fail_msg: "{{ item.item.name }} does not match its pin."
+  loop: "{{ model_manifests.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"

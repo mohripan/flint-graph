@@ -22,7 +22,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN useradd --create-home --uid 10001 flintgraph
 WORKDIR /app
 COPY --from=builder --chown=flintgraph:flintgraph /app /app
-USER flintgraph
+# A number, so Kubernetes can verify that this is not root.
+USER 10001
 
 EXPOSE 8000
 CMD ["uvicorn", "flint_graph.main:app", "--host", "0.0.0.0", "--port", "8000"]

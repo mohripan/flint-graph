@@ -346,6 +346,12 @@ cannot see, so opt-in `FLINT_GRAPH_NARRATIVE_ASSISTANT_VISION_MODEL` (`lfm3-vl:2
 story or game, and go with the project. Rewriting a stage step keeps who is on it unless the request is to take them off. Read
 `docs/reports/2026-11-07-assistant-images.md`.
 
+[ADR 0077](docs/adr/0077-one-small-server-and-one-sleeping-gpu.md) prepares the AWS deployment: k3s on a `t3a.medium` and a sleeping `g6.xlarge`, with CDK in
+`deploy/cdk`, Ansible in `deploy/ansible`, Flux in `deploy/flux`, manifests in `deploy/k8s` and the estimate in `deploy/cost`. Nothing has been created in AWS, and
+creating it spends money, so never run `cdk bootstrap` or `cdk deploy` without being asked each time. `FLINT_GRAPH_*` lists are JSON in `config.env`; `tests/unit/test_deploy_manifests.py`
+runs them through `Settings`. A new GPU worker needs a Deployment like those in `gpu-workers.yaml`. Playtests, release builds and a sign-in provider are not deployed yet. Read
+`docs/runbooks/aws-deployment.md` and `docs/reports/2026-11-07-aws-preparation.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

@@ -1,0 +1,39 @@
+---
+- name: Find the cluster
+  ansible.builtin.command: >
+    /snap/bin/aws ssm get-parameter --region {{ aws_region }}
+    --name /flintgraph/k3s/url --query Parameter.Value --output text
+  register: k3s_url
+  changed_when: false
+
+- name: Read the join token
+  ansible.builtin.command: >
+    /snap/bin/aws ssm get-parameter --region {{ aws_region }} --with-decryption
+    --name /flintgraph/k3s/token --query Parameter.Value --output text
+  register: k3s_token
+  changed_when: false
+  no_log: true
+  retries: 30
+  delay: 20
+  until: k3s_token.rc == 0
+
+- name: Download the k3s installer of this exact version
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version | urlencode }}/install.sh"
+    dest: /usr/local/sbin/k3s-install.sh
+    mode: "0700"
+
+# The taint keeps everything else off an expensive machine that is usually stopped.
+- name: Install k3s and join the cluster
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/k3s-install.sh
+    creates: /usr/local/bin/k3s
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    K3S_URL: "{{ k3s_url.stdout | trim }}"
+    K3S_TOKEN: "{{ k3s_token.stdout | trim }}"
+    INSTALL_K3S_EXEC: >-
+      agent
+      --node-label=flintgraph.io/gpu=true
+      --node-taint=flintgraph.io/gpu=true:NoSchedule
+  no_log: true

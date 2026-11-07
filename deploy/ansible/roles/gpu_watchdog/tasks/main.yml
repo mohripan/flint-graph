@@ -1,0 +1,36 @@
+---
+# The controller normally stops this server long before. This covers the always-on server being
+# down, when nothing else could. It runs from every boot, so each start gets the same limit. The
+# very first boot is covered by a scheduled shutdown in the user data, until this is installed.
+- name: Install the shutdown service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/flintgraph-gpu-watchdog.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Stop this GPU server after its longest allowed session
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/sbin/shutdown -h now
+
+- name: Install the timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/flintgraph-gpu-watchdog.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Limit how long this GPU server can run
+
+      [Timer]
+      OnBootSec={{ gpu_max_uptime }}
+
+      [Install]
+      WantedBy=timers.target
+
+- name: Turn the timer on
+  ansible.builtin.systemd_service:
+    name: flintgraph-gpu-watchdog.timer
+    enabled: true
+    state: started
+    daemon_reload: true

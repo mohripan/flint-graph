@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flintgraph
+resources:
+  - namespace.yaml
+  - network-policy.yaml
+  - postgres.yaml
+  - temporal.yaml
+  - minio.yaml
+  - api.yaml
+  - frontend.yaml
+  - dispatch.yaml
+  - controller.yaml
+  - gpu-runtime.yaml
+  - ollama.yaml
+  - gpu-workers.yaml
+configMapGenerator:
+  - name: flintgraph-config
+    envs:
+      - config.env

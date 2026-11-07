@@ -1,0 +1,13 @@
+---
+k3s_version: v1.37.2+k3s1
+flux_version: 2.10.0
+# Unverified on Ubuntu 24.04 until the first real provisioning run.
+nvidia_driver_branch: "570"
+aws_region: ap-southeast-2
+flintgraph_data_dir: /var/lib/flintgraph
+flintgraph_src: /opt/flintgraph/src
+# Kubernetes keeps pods out of swap by default, so this relieves k3s and the system, which frees
+# memory for the pods. About 2 GB of the 4 GB is expected to be in use.
+control_swap_gb: 4
+# Longer than the controller's 4 hour session limit, so this only fires if the controller is gone.
+gpu_max_uptime: 5h

@@ -1,0 +1,31 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    deployment:
+      replicas: 1
+    persistence:
+      enabled: true
+      size: 128Mi
+    # Keeps each visitor's real address, which the API's rate limit and audit log depend on.
+    service:
+      spec:
+        externalTrafficPolicy: Local
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
+    certificatesResolvers:
+      letsencrypt:
+        acme:
+          email: "{{ acme_email.stdout | trim }}"
+          storage: /data/acme.json
+          httpChallenge:
+            entryPoint: web

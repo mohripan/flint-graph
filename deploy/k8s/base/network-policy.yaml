@@ -1,0 +1,18 @@
+# The servers' roles can read every secret and start the GPU, and the instance metadata address
+# hands them to anything that asks. Only the controller, which starts and stops the GPU, may ask.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: no-instance-role
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: NotIn
+        values: [gpu-controller]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [169.254.169.254/32]

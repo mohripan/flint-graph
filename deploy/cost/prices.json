@@ -1,0 +1,63 @@
+{
+  "ebs_gp3_usd_per_gb_month": 0.096,
+  "ebs_snapshot_usd_per_gb_month": 0.055,
+  "ecr_usd_per_gb_month": 0.07,
+  "egress_tiers": [
+    {
+      "begin": "0",
+      "end": "10240",
+      "usd": 0.114
+    },
+    {
+      "begin": "10240",
+      "end": "51200",
+      "usd": 0.098
+    },
+    {
+      "begin": "51200",
+      "end": "153600",
+      "usd": 0.094
+    },
+    {
+      "begin": "153600",
+      "end": "Inf",
+      "usd": 0.092
+    }
+  ],
+  "fetched": "2026-11-07",
+  "instances_usd_per_hour": {
+    "g4dn.xlarge": 0.684,
+    "g5.xlarge": 1.308,
+    "g6.xlarge": 1.0464,
+    "m7i-flex.large": 0.1197,
+    "t3.medium": 0.0528,
+    "t3a.large": 0.095,
+    "t3a.medium": 0.0475,
+    "t3a.small": 0.0238,
+    "t4g.large": 0.0848,
+    "t4g.medium": 0.0424
+  },
+  "public_ipv4_usd_per_hour": 0.005,
+  "region": "ap-southeast-2",
+  "s3_standard_first_tier_usd_per_gb_month": 0.025,
+  "spot_usd_per_hour_last_14_days": {
+    "g4dn.xlarge": {
+      "high": 0.3228,
+      "low": 0.2455,
+      "median": 0.29705,
+      "samples": 174
+    },
+    "g5.xlarge": {
+      "high": 0.7359,
+      "low": 0.5767,
+      "median": 0.6568,
+      "samples": 113
+    },
+    "g6.xlarge": {
+      "high": 1.0464,
+      "low": 0.5401,
+      "median": 0.6108,
+      "samples": 172
+    }
+  }
+}

@@ -1,12 +1,13 @@
 .git
 .github
-.venv
-__pycache__
+**/.venv
+**/__pycache__
+**/node_modules
 .pytest_cache
 .mypy_cache
 .ruff_cache
 .env
-*.pyc
+**/*.pyc
 tests
 docs
 dist

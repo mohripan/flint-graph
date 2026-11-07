@@ -1,0 +1,30 @@
+---
+- name: Install the packages every server needs
+  ansible.builtin.apt:
+    name: [curl, jq, python3, wireguard-tools]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install the AWS CLI, to read settings from Parameter Store
+  ansible.builtin.command: snap install aws-cli --classic
+  args:
+    creates: /snap/bin/aws
+
+- name: Create the swap file on the always-on server
+  ansible.builtin.command: "fallocate -l {{ control_swap_gb }}G /swapfile"
+  args:
+    creates: /swapfile
+  when: flintgraph_role == 'control'
+  register: swap_created
+
+- name: Turn the swap file on
+  ansible.builtin.shell: chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  when: flintgraph_role == 'control' and swap_created is changed
+  changed_when: true
+
+- name: Keep the swap file across reboots
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: /swapfile none swap sw 0 0
+  when: flintgraph_role == 'control'

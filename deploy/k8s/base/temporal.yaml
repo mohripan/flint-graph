@@ -1,0 +1,63 @@
+# A single file-backed Temporal server. It is the development server, chosen for its memory use: see
+# ADR 0077 for what that gives up. Nothing but the two services below can reach it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: temporal
+          image: temporalio/temporal@sha256:ad4c82c97bd12b417d1ea942610dbcd511afb250c4d5ed26c694009533df447e
+          args:
+            - server
+            - start-dev
+            - --ip=0.0.0.0
+            - --namespace=default
+            - --headless
+            - --db-filename=/data/temporal.db
+          ports:
+            - containerPort: 7233
+          readinessProbe:
+            tcpSocket:
+              port: 7233
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/flintgraph/temporal
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+spec:
+  selector:
+    app: temporal
+  ports:
+    - port: 7233

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flintgraph
+resources:
+  - ../base
+  - ingress.yaml
+configMapGenerator:
+  - name: flintgraph-config
+    behavior: merge
+    envs:
+      - config.env
+# After running the deploy-images workflow, put the commit it built here. See the runbook.
+images:
+  - name: ghcr.io/mohripan/flint-graph-api
+    newTag: unset
+  - name: ghcr.io/mohripan/flint-graph-frontend
+    newTag: unset
+  - name: ghcr.io/mohripan/flint-graph-gpu-worker
+    newTag: unset

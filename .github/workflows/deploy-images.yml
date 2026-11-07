@@ -1,0 +1,55 @@
+name: Deploy images
+
+# Run by hand. Builds the images for the commit it runs on and publishes them under that commit's
+# hash. Nothing deploys them until deploy/k8s/production/kustomization.yaml names that hash.
+on:
+  workflow_dispatch:
+    inputs:
+      oidc_authority:
+        description: Sign-in issuer URL, written into the frontend
+        required: true
+      oidc_client_id:
+        description: Sign-in client ID, written into the frontend
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: flint-graph-api
+            dockerfile: Dockerfile
+          - image: flint-graph-frontend
+            dockerfile: ops/deploy/frontend.Dockerfile
+          - image: flint-graph-gpu-worker
+            dockerfile: ops/deploy/gpu-worker.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      # PyTorch with CUDA does not fit in the runner's free disk space otherwise.
+      - name: Free disk space
+        if: matrix.image == 'flint-graph-gpu-worker'
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ghcr.io/mohripan/${{ matrix.image }}:${{ github.sha }}
+          # Reuses the GPU runtimes when only the application changed, instead of about 25 minutes.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          build-args: |
+            VITE_FLINT_GRAPH_OIDC_AUTHORITY=${{ inputs.oidc_authority }}
+            VITE_FLINT_GRAPH_OIDC_CLIENT_ID=${{ inputs.oidc_client_id }}

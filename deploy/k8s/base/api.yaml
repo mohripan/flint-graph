@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  # One: the rate limit is held in this process's memory.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        # The application expects its bucket to exist already. Retries until MinIO answers.
+        - name: create-bucket
+          image: ghcr.io/mohripan/flint-graph-api:unset
+          command:
+            - python
+            - -c
+            - |
+              import os, time
+              import boto3
+              from botocore.exceptions import BotoCoreError, ClientError
+
+              store = boto3.client(
+                  "s3",
+                  endpoint_url=os.environ["FLINT_GRAPH_OBJECT_STORE_ENDPOINT_URL"],
+                  aws_access_key_id=os.environ["FLINT_GRAPH_OBJECT_STORE_ACCESS_KEY_ID"],
+                  aws_secret_access_key=os.environ["FLINT_GRAPH_OBJECT_STORE_SECRET_ACCESS_KEY"],
+                  region_name="us-east-1",
+              )
+              while True:
+                  try:
+                      store.create_bucket(Bucket=os.environ["FLINT_GRAPH_OBJECT_STORE_BUCKET"])
+                      break
+                  except store.exceptions.BucketAlreadyOwnedByYou:
+                      break
+                  except (BotoCoreError, ClientError) as error:
+                      print(error, flush=True)
+                      time.sleep(3)
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+        - name: migrate
+          image: ghcr.io/mohripan/flint-graph-api:unset
+          command: [alembic, upgrade, head]
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: api
+          image: ghcr.io/mohripan/flint-graph-api:unset
+          # Only Traefik reaches this port, and Traefik replaces any forwarded headers a client sent.
+          # Without trusting them, the TLS requirement sees plain HTTP and redirects forever.
+          command:
+            - uvicorn
+            - flint_graph.main:app
+            - --host=0.0.0.0
+            - --port=8000
+            - --forwarded-allow-ips=*
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          ports:
+            - containerPort: 8000
+          # "api" is a trusted host that the public route cannot reach.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+              httpHeaders:
+                - {name: Host, value: api}
+                - {name: X-Forwarded-Proto, value: https}
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+              httpHeaders:
+                - {name: Host, value: api}
+                - {name: X-Forwarded-Proto, value: https}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 8000

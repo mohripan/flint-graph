@@ -1,0 +1,33 @@
+---
+# Secrets are never in this public repository. Each parameter under /flintgraph/app/ becomes one
+# key of the flintgraph-env Secret, using the last part of its name.
+- name: Create the namespace
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f -
+    stdin: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: flintgraph
+  changed_when: false
+
+- name: Read the application's secrets
+  ansible.builtin.command: >
+    /snap/bin/aws ssm get-parameters-by-path --region {{ aws_region }}
+    --path /flintgraph/app/ --recursive --with-decryption --output json
+  register: app_parameters
+  changed_when: false
+  no_log: true
+
+- name: Refuse to continue without secrets
+  ansible.builtin.assert:
+    that: (app_parameters.stdout | from_json).Parameters | length > 0
+    fail_msg: Put the application's secrets under /flintgraph/app/ first; see docs/runbooks/aws-deployment.md.
+  no_log: true
+
+- name: Write the secrets into the cluster
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'secret.yaml.j2') }}"
+  no_log: true
+  changed_when: true
