@@ -9,12 +9,15 @@ resources:
   - minio.yaml
   - api.yaml
   - frontend.yaml
-  - dispatch.yaml
-  - controller.yaml
-  - gpu-runtime.yaml
-  - ollama.yaml
-  - gpu-workers.yaml
+  - studio-workers.yaml
 configMapGenerator:
   - name: flintgraph-config
     envs:
       - config.env
+  # The exact bytes their pins hash: only these name the models here. The weights are on Runpod.
+  - name: model-manifests
+    files:
+      - model-manifests/animagine-xl-4.0.json
+      - model-manifests/anime-seg.json
+      - model-manifests/ip-adapter.json
+      - model-manifests/kokoro-82m.json

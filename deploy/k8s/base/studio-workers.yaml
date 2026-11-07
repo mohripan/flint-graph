@@ -1,0 +1,58 @@
+# The assistant, image and voice workers, in one process on this server. Their models run on Runpod
+# (ADR 0078), so these only wait on the network. Only the pinned manifests are mounted: they name the
+# models for provenance, and the weights themselves stay on Runpod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studio-workers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: studio-workers
+  template:
+    metadata:
+      labels:
+        app: studio-workers
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: workers
+          image: ghcr.io/mohripan/flint-graph-api:unset
+          command: [python, -m, flint_graph.processes.narrative_studio_workers]
+          env:
+            - name: FLINT_GRAPH_NARRATIVE_ASSISTANT_WORKER_ENABLED
+              value: "true"
+            - name: FLINT_GRAPH_NARRATIVE_IMAGE_WORKER_ENABLED
+              value: "true"
+            - name: FLINT_GRAPH_NARRATIVE_VOICE_WORKER_ENABLED
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: flintgraph-config
+            - secretRef:
+                name: flintgraph-env
+          resources:
+            requests:
+              cpu: 20m
+              memory: 160Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: manifests
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: manifests
+          configMap:
+            name: model-manifests
+            items:
+              - {key: animagine-xl-4.0.json, path: animagine-xl-4.0/flintgraph-download.json}
+              - {key: anime-seg.json, path: anime-seg/flintgraph-download.json}
+              - {key: ip-adapter.json, path: ip-adapter/flintgraph-download.json}
+              - {key: kokoro-82m.json, path: kokoro-82m/flintgraph-download.json}

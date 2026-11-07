@@ -346,11 +346,14 @@ cannot see, so opt-in `FLINT_GRAPH_NARRATIVE_ASSISTANT_VISION_MODEL` (`lfm3-vl:2
 story or game, and go with the project. Rewriting a stage step keeps who is on it unless the request is to take them off. Read
 `docs/reports/2026-11-07-assistant-images.md`.
 
-[ADR 0077](docs/adr/0077-one-small-server-and-one-sleeping-gpu.md) is the live AWS deployment: k3s on a `t3.small` at `54.253.96.189` (`https://54-253-96-189.sslip.io`, Cognito sign-in, no backups, Free Plan). There is no GPU
-server: AWS declined the quota and the owner does not want to appeal or ask AWS for anything more, so the assistant and generation are switched off, because admission does not check that a worker exists. CDK is in
-`deploy/cdk`, Ansible in `deploy/ansible`, Flux in `deploy/flux`, manifests in `deploy/k8s` and the estimate in `deploy/cost`. Creating AWS resources spends money, so never deploy without being asked each time. `FLINT_GRAPH_*` lists are JSON in
-`config.env`; `tests/unit/test_deploy_manifests.py` runs them through `Settings`. A new data folder's owner must be the user its image runs as. The frontend sends Cognito's ID token, because its access token has no audience or email.
-Playtests and release builds are not deployed yet. Read `docs/runbooks/aws-deployment.md` and `docs/reports/2026-11-07-aws-preparation.md`.
+[ADR 0077](docs/adr/0077-one-small-server-and-one-sleeping-gpu.md) is the live AWS deployment: k3s on a `t3.small` at `54.253.96.189` (`https://flintgraph.digital`, Cognito sign-in, no backups, Paid Plan). CDK is in
+`deploy/cdk`, Ansible in `deploy/ansible`, Flux in `deploy/flux`, manifests in `deploy/k8s` and the estimate in `deploy/cost`. Creating AWS resources spends money, so never deploy without being asked each time, and pass `-c alert_email=` on every Foundation deploy or
+the budget stops emailing. `FLINT_GRAPH_*` lists are JSON in `config.env`; `tests/unit/test_deploy_manifests.py` runs them through `Settings`. A new data folder's owner must be the user its image runs as. The frontend sends Cognito's ID token, because its access token has no audience or email.
+Flux applies `deploy/k8s/production` from `master`, but only **Deploy images** builds images, so code reaches the site when a commit's hash goes in `kustomization.yaml`. Playtests and release builds are not deployed yet. Read `docs/runbooks/aws-deployment.md`.
+
+[ADR 0078](docs/adr/0078-models-on-runpod-by-the-second.md) runs the models on two Runpod load-balancing endpoints that scale to zero, because AWS declined a GPU. `narrative_remote_child.py` stands in for `generate.py` under the same trusted parent, so every check stays. A job is started, then collected in parts, because Runpod
+limits a request to 5.5 minutes and 30 MB; change `deploy/runpod/` and the stand-in together. `narrative_studio_workers` runs the three workers in one process. Poses, cloned voices, music and training are not offered there, because no worker runs them: a job with no worker takes credits and never runs. A pin must hash a manifest as `fetch_model.py`
+writes it, with LF. Failed jobs are not refunded. Prompts and reference images leave AWS while a job runs. Read `docs/runbooks/runpod-models.md`.
 
 ## Project Snapshot
 

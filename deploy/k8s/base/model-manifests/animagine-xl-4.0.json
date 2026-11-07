@@ -1,0 +1,102 @@
+{
+  "repo": "cagliostrolab/animagine-xl-4.0",
+  "revision": "2b7c1b397761bf5bd3cc42e5b39ec99314a75a96",
+  "license": "openrail++",
+  "files": {
+    "README.md": {
+      "size": 15494,
+      "sha256": "33c0532ffd945653223eea317756976a9af52faa2d6122b860dc56fe62e4cdc9",
+      "lfs_verified": false
+    },
+    "model_index.json": {
+      "size": 671,
+      "sha256": "38099bdb63000c6ef48d1d0d86f3f439faad88ca3e21ad549a246ecc4bee4867",
+      "lfs_verified": false
+    },
+    "scheduler/scheduler_config.json": {
+      "size": 613,
+      "sha256": "b48856048bbe9165658ed5830ecb9199049b3546b116d5da4df3d0d0ca864279",
+      "lfs_verified": false
+    },
+    "text_encoder/config.json": {
+      "size": 560,
+      "sha256": "6081c0e7e9c02c78e8d932f34ef4f118c009a4321b6d708b06fb0f766dce0eca",
+      "lfs_verified": false
+    },
+    "text_encoder/model.safetensors": {
+      "size": 246144152,
+      "sha256": "73528dedc471ea62c5d24bab6621e2ef6890aa136ca080c53f2d205c39ab18df",
+      "lfs_verified": true
+    },
+    "text_encoder_2/config.json": {
+      "size": 570,
+      "sha256": "786ac791f8ae2168eca583978d89e97b704579e4873a2ca36e2d8b5af561f625",
+      "lfs_verified": false
+    },
+    "text_encoder_2/model.safetensors": {
+      "size": 1389382176,
+      "sha256": "1669a15b906d7a8cc7e919fa44769750e612fe580e3d8ceed60acbc212aea1ca",
+      "lfs_verified": true
+    },
+    "tokenizer/merges.txt": {
+      "size": 524619,
+      "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+      "lfs_verified": false
+    },
+    "tokenizer/special_tokens_map.json": {
+      "size": 472,
+      "sha256": "c4864a9376a8401918425bed71fc14fc0e81f9b59ec45c1cf96cccb2df508eac",
+      "lfs_verified": false
+    },
+    "tokenizer/tokenizer_config.json": {
+      "size": 704,
+      "sha256": "7eb36a76a02551ce8583dbee08d062e672997a5fe1db82ebc642d88c7e79cc96",
+      "lfs_verified": false
+    },
+    "tokenizer/vocab.json": {
+      "size": 1059962,
+      "sha256": "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349",
+      "lfs_verified": false
+    },
+    "tokenizer_2/merges.txt": {
+      "size": 524619,
+      "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+      "lfs_verified": false
+    },
+    "tokenizer_2/special_tokens_map.json": {
+      "size": 460,
+      "sha256": "f118ab3a983206e4f32583448de6bd6aae4ee21869135cef1f5848a753cdaab6",
+      "lfs_verified": false
+    },
+    "tokenizer_2/tokenizer_config.json": {
+      "size": 855,
+      "sha256": "516314ccab66918d7cb647480ac27abd3520d14e1e5825aac99f50c851c16071",
+      "lfs_verified": false
+    },
+    "tokenizer_2/vocab.json": {
+      "size": 1059962,
+      "sha256": "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349",
+      "lfs_verified": false
+    },
+    "unet/config.json": {
+      "size": 1772,
+      "sha256": "bc592d0b27ebb7eae3891d714a63b4866e25d18a9086197a0be0db7b2b095ebf",
+      "lfs_verified": false
+    },
+    "unet/diffusion_pytorch_model.safetensors": {
+      "size": 5135149760,
+      "sha256": "3e16857a3a195315e01b47d8b76b7e932856cc71e9b5812c03f891de98551743",
+      "lfs_verified": true
+    },
+    "vae/config.json": {
+      "size": 782,
+      "sha256": "c766e609678a4d4de02cd678277a955ba1e5fa1a85b429312e6023aea06ffc11",
+      "lfs_verified": false
+    },
+    "vae/diffusion_pytorch_model.safetensors": {
+      "size": 167335342,
+      "sha256": "6353737672c94b96174cb590f711eac6edf2fcce5b6e91aa9d73c5adc589ee48",
+      "lfs_verified": true
+    }
+  }
+}

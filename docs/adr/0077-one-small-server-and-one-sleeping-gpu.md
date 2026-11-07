@@ -1,6 +1,6 @@
 # ADR 0077: One small server and one sleeping GPU
 
-- Status: accepted. The always-on server runs since 2026-11-07. AWS declined the GPU quota, so the GPU server does not exist, and that half of this design is unused
+- Status: accepted. The always-on server runs since 2026-11-07. AWS declined the GPU quota, so the GPU server does not exist, and [ADR 0078](0078-models-on-runpod-by-the-second.md) runs the models on Runpod instead.
 - Date: 2026-11-07
 - Issues: #200 (its managed-service plan is replaced for now), builds on ADR 0070
 

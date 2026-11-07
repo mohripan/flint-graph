@@ -6,7 +6,7 @@ flintgraph_models:
     repo: cagliostrolab/animagine-xl-4.0
     revision: 2b7c1b397761bf5bd3cc42e5b39ec99314a75a96
     license: openrail++
-    manifest_sha256: 9c2308313c36fd1479e178b34eb0b4f861257177d222b87dfbbab07e2feac900
+    manifest_sha256: 287e1dfcaf82434e89e6789702b41e23660962e94e1b01a99f570fe48aa769c9
     files:
       - "README.md"
       - "model_index.json"
@@ -31,7 +31,7 @@ flintgraph_models:
     repo: skytnt/anime-seg
     revision: 493cb60893f47441b26ec4fb9a306bce9e342982
     license: apache-2.0
-    manifest_sha256: 18ecb336c1f48792b68f26830ae51723c13a837d66377ec46ebdae0b1b5551fc
+    manifest_sha256: b3669c56f0bc7ace473c9ad5b834a98f81a802bd64b36918d004e881b9af66ad
     files:
       - "README.md"
       - "isnetis.onnx"
@@ -39,7 +39,7 @@ flintgraph_models:
     repo: h94/IP-Adapter
     revision: 018e402774aeeddd60609b4ecdb7e298259dc729
     license: apache-2.0
-    manifest_sha256: 760958414c3111196983fee599755d99c5146bd2b8d62e9526d7d245a20823ee
+    manifest_sha256: 77dfd34677fada8a7d7bcaca08d6d9c221302696a11eaa5a482b940cd091d766
     files:
       - "README.md"
       - "models/image_encoder/config.json"
@@ -49,7 +49,7 @@ flintgraph_models:
     repo: hexgrad/Kokoro-82M
     revision: f3ff3571791e39611d31c381e3a41a3af07b4987
     license: apache-2.0
-    manifest_sha256: 1c0ddde2d06e6999bbc93c8fe9ff1ba0663bf2f37df948b211c9284b30d6a140
+    manifest_sha256: 0cc3d3d7559c475f6915f0a8f2a5d45e3366fb83d34eaeac74a50a0df1628fbc
     files:
       - "README.md"
       - "VOICES.md"

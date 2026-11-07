@@ -8,20 +8,17 @@
 
 | Step | State |
 | --- | --- |
-| Always-on server, sign-in, site | **Running since 2026-11-07** at `54.253.96.189`, `https://54-253-96-189.sslip.io` |
-| Your own domain | Not yet: see [Moving to your domain](#moving-to-your-domain) |
-| GPU server | **None.** AWS declined the quota, and the owner chose not to appeal: see below |
+| Always-on server, sign-in, site | **Running since 2026-11-07** at `https://flintgraph.digital` and `https://54-253-96-189.sslip.io`, on `54.253.96.189` |
+| The models | **On Runpod, billed by the second:** see [the Runpod runbook](runpod-models.md) |
+| A GPU server on AWS | **None.** AWS declined the quota, and the owner chose not to appeal |
 
-The site, sign-in, invitations and editing by hand work. The assistant and generating are switched off, because nothing could run them.
+## The plan and its credits
 
-## Why there is no GPU
+The project moved to the **Paid Plan** on 2026-11-07. The $120 of credits still apply first, and the server costs about $26.76 a month, so they last about 4.5 months. After that it bills
+the card. The budget emails at $50.
 
-AWS declined the request for 4 vCPUs of "Running On-Demand G and VT instances" on 2026-11-07 (case 179405038200148), and the quota stays at 0. The owner chose not to appeal: this is a personal
-project, and it runs on what exists. The Free Plan also refuses every GPU (`The specified instance type is not eligible for Free Tier`), so there is no reason to upgrade for now.
-
-Admission does not check that a worker exists, so a job with none would take credits and never run. That is why the assistant and generating are off rather than waiting.
-
-**The Free Plan ends.** The $120 of credits last about 4.5 months at this size, and the plan itself expires on 2027-05-07. Decide before then whether to upgrade or take the site down.
+AWS declined the request for 4 vCPUs of "Running On-Demand G and VT instances" on 2026-11-07 (case 179405038200148). A second request cannot be opened while that one stands. The manifests
+for an AWS GPU are kept in `deploy/k8s/aws-gpu`, unused and still tested, and [the steps below](#creating-a-gpu-server-on-aws) remain.
 
 ## Running CDK
 
@@ -37,13 +34,13 @@ npx aws-cdk@2.1148.0 diff FlintGraphFoundation
 
 Read the diff before every deploy. `cdk.context.json` holds the project ID and is git-ignored, so it never reaches this public repository.
 
-To get budget emails, add `-c alert_email=you@example.com` to `diff` and `deploy`. Without it the budget exists but tells nobody.
+**Always add `-c alert_email=<the owner's address>` to `diff` and `deploy`.** Without it, a deploy removes the budget's email and the budget then tells nobody. The address is not in this public repository.
 
 ## Looking inside
 
 The server has no SSH port. With the Session Manager plugin, `aws ssm start-session --target <ControlInstanceId> --profile flintgraph`.
 Without it, `aws ssm send-command --document-name AWS-RunShellScript` runs a command and `get-command-invocation` reads the result.
-Then `sudo k3s kubectl get pods -n flintgraph`. GPU pods stay `Pending` while there is no GPU server, which is correct.
+Then `sudo k3s kubectl get pods -n flintgraph`.
 
 ## Deploying a change
 
@@ -58,20 +55,23 @@ Run **Deploy images** in GitHub Actions on `master`, which builds the API and fr
 
 Put the commit it ran on in the API's and frontend's `newTag` lines of `deploy/k8s/production/kustomization.yaml` and push. Flux applies it within 10 minutes.
 
-## Moving to your domain
+## The domain
 
-Say the name is `studio.example.com`, on Cloudflare.
+`flintgraph.digital` is on Cloudflare: an `A` record for `@`, pointing at `54.253.96.189`, set to **DNS only** (the grey cloud), so that Let's Encrypt and the assistant's long streams reach the server
+directly. With the orange cloud the certificate check fails.
 
-1. In Cloudflare, add an `A` record for the name pointing at `54.253.96.189`, set to **DNS only** (the grey cloud), so that Let's Encrypt and
-   the assistant's long streams reach the server directly.
-2. Replace `54-253-96-189.sslip.io` with the name in `deploy/k8s/production/config.env` and `ingress.yaml`, and push.
-3. Change `site_url` in `deploy/cdk/flintgraph_infra/config.py`, then `cdk deploy FlintGraphFoundation`, so that sign-in may return there. No new
-   frontend image is needed, because it uses its own address.
+**If a certificate fails, do not restart Traefik.** It asks as soon as it starts, before traffic reaches it, so Let's Encrypt gets `Connection refused`, or a `404` from the old pod during a rollout. Only
+a few failures an hour are allowed. Make the running Traefik look again by adding a route that wants no certificate, then deleting it: an `Ingress` for a name such as `nudge.invalid`, with the annotation
+`traefik.ingress.kubernetes.io/router.entrypoints: web`. Certificates are kept on a small volume, so restarts do not lose them.
 
-## Creating the GPU server
+To move to another name, change it in `deploy/k8s/production/config.env` and `ingress.yaml`, change `site_url` in `deploy/cdk/flintgraph_infra/config.py`, and deploy `FlintGraphFoundation`, so that sign-in may
+return there. No new frontend image is needed, because it uses its own address.
 
-Once the plan and the quota are both done. First turn the features back on: in `deploy/k8s/base/config.env`, set `FLINT_GRAPH_NARRATIVE_ASSISTANT_PROVIDER=ollama` and both
-`*_GENERATION_ENABLED=true`. Set `gpu-dispatch` to `replicas: 1`, and put the GPU image back in `deploy-images.yml`, as commit `f18f0c4` removed it. `test_nothing_is_offered_that_no_server_can_run` changes with them.
+## Creating a GPU server on AWS
+
+Not in use: the models are on Runpod. These steps need the AWS quota, and the manifests moved back from `deploy/k8s/aws-gpu` to `base`.
+
+Set `gpu-dispatch` to `replicas: 1`, and put the GPU image back in `deploy-images.yml`, as commit `f18f0c4` removed it. `test_everything_offered_has_a_worker_and_a_place_to_run` changes with them.
 CloudFormation cannot create a stopped instance, so **this starts about $0.69 an hour straight away**.
 Allow about an hour for the driver, a reboot, about 19 GB of models and the images. It stops itself after 5 hours whatever happens. The controller
 is off, so nothing stops it sooner than that unless you do.
@@ -106,9 +106,9 @@ The controller's alarms are listed in [the sleep runbook](gpu-sleep-and-wake.md#
 ## Everyday
 
 **If the server runs out of memory:** it has 2 GB, with very little spare. Move to `t3a.medium` by changing `control_instance_type` and deploying,
-which restarts it. On the Paid Plan `t3a.small` also becomes possible, for $1.90 a month less.
+which restarts it. On the Paid Plan `t3a.small` is also possible, for $1.90 a month less.
 
-**If the GPU disk fills up:** raise `gpu_root_gb` in `deploy/cdk/flintgraph_infra/config.py` and `GPU_ROOT_GB` in `deploy/cost/estimate.py`, then deploy. Disks
+**If the disk of an AWS GPU server fills up:** raise `gpu_root_gb` in `deploy/cdk/flintgraph_infra/config.py` and `GPU_ROOT_GB` in `deploy/cost/estimate.py`, then deploy. Disks
 can only grow. Ubuntu extends the filesystem at the next boot, which here is the next wake.
 
 **If MinIO's image will not pull:** Chainguard offers only `latest` for free, so the pinned digest can disappear. A running server keeps its copy. Find the

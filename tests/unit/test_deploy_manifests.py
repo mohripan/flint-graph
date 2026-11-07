@@ -5,7 +5,9 @@ GPU pod without its tolerations disappears the first time the GPU server sleeps,
 checked where they are cheap to find.
 """
 
+import hashlib
 import importlib.util
+import json
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,6 +23,7 @@ from flint_graph.config import Settings
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "deploy/k8s/base"
 PRODUCTION = ROOT / "deploy/k8s/production"
+AWS_GPU = ROOT / "deploy/k8s/aws-gpu"
 GPU_KEY = "flintgraph.io/gpu"
 # A deployment's own secrets, which the Secret holds and this public repository never does.
 SECRETS = {
@@ -28,6 +31,7 @@ SECRETS = {
     "FLINT_GRAPH_OBJECT_STORE_ACCESS_KEY_ID": "dummy-access-key",
     "FLINT_GRAPH_OBJECT_STORE_SECRET_ACCESS_KEY": "dummy-secret-key",
     "FLINT_GRAPH_ACCESS_ADMIN_EMAILS": "operator@example.com",
+    "FLINT_GRAPH_NARRATIVE_REMOTE_GPU_TOKEN": "dummy-remote-token",
 }
 
 
@@ -41,7 +45,8 @@ def _config() -> dict[str, str]:
 
 
 def _documents() -> Iterator[dict[str, Any]]:
-    for path in sorted(BASE.glob("*.yaml")):
+    # The AWS GPU manifests are not deployed, and are still held to the same rules.
+    for path in sorted([*BASE.glob("*.yaml"), *AWS_GPU.glob("*.yaml")]):
         if path.name != "kustomization.yaml":
             yield from yaml.safe_load_all(path.read_text("utf-8"))
 
@@ -100,15 +105,6 @@ def test_those_checks_would_notice_a_missing_secret(monkeypatch: pytest.MonkeyPa
         Settings(_env_file=None)  # type: ignore[call-arg]
 
 
-def test_a_smaller_gpu_can_free_the_assistant_model_for_a_picture_or_voice() -> None:
-    # A 16 GB card cannot hold the assistant's model and SDXL together, and without these a job
-    # that finds the GPU busy would fail rather than ask Ollama to let go.
-    config = _config()
-    assistant = config["FLINT_GRAPH_NARRATIVE_ASSISTANT_OLLAMA_MODEL"]
-    assert config["FLINT_GRAPH_NARRATIVE_IMAGE_RELEASE_OLLAMA_MODEL"] == assistant
-    assert config["FLINT_GRAPH_NARRATIVE_VOICE_RELEASE_OLLAMA_MODEL"] == assistant
-
-
 def test_nothing_tries_to_change_the_gpu_type_or_take_backups() -> None:
     config = _config()
     assert "FLINT_GRAPH_NARRATIVE_GPU_FALLBACK_INSTANCE_TYPE" not in config
@@ -146,7 +142,8 @@ def test_each_worker_is_a_real_process_with_its_own_switch() -> None:
 def test_a_switch_is_on_only_where_its_process_runs(name: str, flag: str) -> None:
     assert flag not in _config()
     owners = [key for key, value in _deployments().items() if flag in _env_names(value)]
-    assert owners == [name]
+    assert name in owners
+    assert set(owners) <= {name, "studio-workers"}
 
 
 def test_gpu_pods_wait_for_the_gpu_server_and_nothing_else_lands_there() -> None:
@@ -218,14 +215,54 @@ def test_model_pins_agree_between_download_and_workers() -> None:
         assert config[f"FLINT_GRAPH_NARRATIVE_{manifest}"] == pins[name]
 
 
-def test_nothing_is_offered_that_no_server_can_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Admission does not check for a worker, so a job with none would take credits and never run.
-    # With a GPU server these all change together, and this test with them.
+def test_everything_offered_has_a_worker_and_a_place_to_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Admission does not check for a worker: a feature with none takes credits and never runs.
     for key, value in {**_config(), **SECRETS}.items():
         monkeypatch.setenv(key, value)
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert expected_kinds(settings) == ()
-    assert _deployments()["gpu-dispatch"]["spec"]["replicas"] == 0
+    assert set(expected_kinds(settings)) == {"image", "voice", "assistant"}
+    flags = _env_names(_deployments()["studio-workers"])
+    for kind in ("ASSISTANT", "IMAGE", "VOICE"):
+        assert f"FLINT_GRAPH_NARRATIVE_{kind}_WORKER_ENABLED" in flags
+    assert settings.narrative_remote_gpu_image_url and settings.narrative_remote_gpu_voice_url
+    assert settings.ollama_base_url.startswith("https://")
+    # Nothing here waits for a machine to wake, and nothing here can wake one.
+    assert not settings.narrative_gpu_sleeps
+    assert "FLINT_GRAPH_NARRATIVE_GPU_EXECUTE_ONLY" not in flags
+
+
+def test_only_what_is_deployed_is_listed() -> None:
+    listed = yaml.safe_load((BASE / "kustomization.yaml").read_text("utf-8"))["resources"]
+    assert set(listed) == {path.name for path in BASE.glob("*.yaml")} - {"kustomization.yaml"}
+
+
+def test_the_mounted_manifests_are_the_exact_files_their_pins_hash() -> None:
+    models = yaml.safe_load((ROOT / "deploy/ansible/vars/models.yml").read_text("utf-8"))
+    for model in models["flintgraph_models"]:
+        data = (BASE / "model-manifests" / f"{model['name']}.json").read_bytes()
+        assert hashlib.sha256(data).hexdigest() == model["manifest_sha256"], model["name"]
+    volume = _deployments()["studio-workers"]["spec"]["template"]["spec"]["volumes"][0]
+    assert {item["key"] for item in volume["configMap"]["items"]} == {
+        f"{model['name']}.json" for model in models["flintgraph_models"]
+    }
+
+
+def test_a_fresh_download_on_any_machine_reproduces_the_pins() -> None:
+    # fetch_model.py writes exactly this. A manifest saved with Windows line endings hashes
+    # differently, so a pin taken from one could never match a download on Linux.
+    for path in (BASE / "model-manifests").glob("*.json"):
+        data = path.read_bytes()
+        assert data == (json.dumps(json.loads(data), indent=2) + "\n").encode(), path.name
+
+
+def test_runpod_gets_the_same_models_and_the_same_ollama() -> None:
+    fetch = (ROOT / "ops/deploy/runpod-generation.Dockerfile").read_text("utf-8")
+    assert "deploy/ansible/vars/models.yml" in fetch
+    assistant = (ROOT / "ops/deploy/runpod-assistant.Dockerfile").read_text("utf-8")
+    pin = re.search(r"ollama/ollama:[^\s]+", (AWS_GPU / "ollama.yaml").read_text("utf-8"))
+    assert pin is not None and pin[0] in assistant
 
 
 def test_the_gpu_cannot_be_stopped_until_it_has_been_set_up() -> None:

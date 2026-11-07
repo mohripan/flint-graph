@@ -18,3 +18,4 @@ runtimes/character_eval/*.py text eol=lf
 runtimes/character_lab/*.py text eol=lf
 runtimes/posegen/*.py text eol=lf
 src/flint_graph/narrative/character_bench.py text eol=lf
+deploy/k8s/base/model-manifests/*.json -text

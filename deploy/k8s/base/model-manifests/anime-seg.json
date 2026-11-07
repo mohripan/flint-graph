@@ -1,0 +1,17 @@
+{
+  "repo": "skytnt/anime-seg",
+  "revision": "493cb60893f47441b26ec4fb9a306bce9e342982",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "size": 692,
+      "sha256": "ef8db0bc53094bdf64c5e9397deea15a2b651436b4e2f5daf4a1de4628bcc138",
+      "lfs_verified": false
+    },
+    "isnetis.onnx": {
+      "size": 176069933,
+      "sha256": "f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99",
+      "lfs_verified": true
+    }
+  }
+}
