@@ -60,6 +60,8 @@ Put the commit it ran on in the API's and frontend's `newTag` lines of `deploy/k
 A playtest is the Godot player compiled for the browser, in a frame on its own address (`https://play.54-253-96-189.sslip.io`), so that what a story does cannot reach the signed-in site. It holds no secrets and calls no API. **Each side has the other's address built in:** the frontend has the
 playtest's, and the playtest image has the one site allowed to embed it, `https://flintgraph.digital`. So a playtest does not work from the `sslip.io` address of the site itself, and changing either address means running **Deploy images** with `preview_origin` or `playtest_parent_origin`. Release builds are not deployed.
 
+**If a playtest says "The story player did not start":** the dialog has already given the player 90 s, started a fresh one, and given that 90 s too. Closing it and retrying is safe. To see how far the download got, run `sudo k3s kubectl logs -n flintgraph deploy/playtest | grep index.wasm`. The last number is the bytes sent, and a whole download is about 10 MB. Fewer means it was cut off, as in [this report](../reports/2026-11-07-models-on-runpod.md#the-stalled-playtest).
+
 ## The domain
 
 `flintgraph.digital` is on Cloudflare: an `A` record for `@`, pointing at `54.253.96.189`, set to **DNS only** (the grey cloud), so that Let's Encrypt and the assistant's long streams reach the server
