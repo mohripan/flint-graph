@@ -23,3 +23,12 @@ class NarrativeGpuStatus(Base):
     state: Mapped[str] = mapped_column(String(16))
     detail: Mapped[str | None] = mapped_column(String(40), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NarrativeGpuSession(Base):
+    """One time the machine ran, from its launch to when it was last seen up: paid GPU time."""
+
+    __tablename__ = "narrative_gpu_sessions"
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

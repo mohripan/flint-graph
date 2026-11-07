@@ -102,13 +102,17 @@ async def read_gpu_view(session: AsyncSession, settings: Settings) -> GpuView:
 
 
 async def record_gpu_state(
-    session: AsyncSession, name: str, state: str = "ready", detail: str | None = None
+    session: AsyncSession,
+    name: str,
+    state: str = "ready",
+    detail: str | None = None,
+    now: datetime | None = None,
 ) -> None:
     """A worker saying it is up, or the controller saying what the machine is doing."""
     if state not in CONTROLLER_STATES:
         raise ValueError(f"Unknown GPU state: {state}.")
     row = await session.get(NarrativeGpuStatus, name)
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     if row is None:
         session.add(NarrativeGpuStatus(name=name, state=state, detail=detail, updated_at=now))
     else:
@@ -128,6 +132,11 @@ async def _beat_forever(
             # Only a message depends on this; a worker must keep working without it.
             logger.warning("gpu heartbeat unavailable: %s", worker)
         await asyncio.sleep(every)
+
+
+async def stay_up() -> None:
+    """An execute-only worker has nothing else to do while Temporal hands it work (ADR 0070)."""
+    await asyncio.Event().wait()
 
 
 @asynccontextmanager

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from flint_graph.application.services.narrative_gpu import gpu_heartbeat
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat, stay_up
 from flint_graph.application.services.narrative_image_relay import (
     ImageDispatcher,
     recover_stale_image_jobs,
@@ -147,6 +147,8 @@ async def run_worker(settings: Settings | None = None) -> None:
             ),
             gpu_heartbeat(factory, "image"),
         ):
+            if configured.narrative_gpu_execute_only:
+                await stay_up()
             await maintain(
                 factory,
                 dispatcher=dispatcher,

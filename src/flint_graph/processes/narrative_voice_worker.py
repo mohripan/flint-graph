@@ -17,7 +17,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from flint_graph.application.narrative_image_workflow import VOICE_WORKFLOW, voice_job_workflow_id
-from flint_graph.application.services.narrative_gpu import gpu_heartbeat
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat, stay_up
 from flint_graph.application.services.narrative_image_relay import ImageDispatcher
 from flint_graph.application.services.narrative_voice_relay import (
     recover_stale_voice_jobs,
@@ -163,6 +163,8 @@ async def run_worker(settings: Settings | None = None) -> None:
             ),
             gpu_heartbeat(factory, "voice"),
         ):
+            if configured.narrative_gpu_execute_only:
+                await stay_up()
             await maintain(
                 factory,
                 dispatcher=dispatcher,

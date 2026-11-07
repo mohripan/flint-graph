@@ -293,6 +293,24 @@ class Settings(BaseSettings):
     # This deployment's GPU sleeps and a controller wakes it (#197). Without one, leave this off:
     # the Studio would promise a wake-up that never comes.
     narrative_gpu_sleeps: bool = False
+    # Dispatch GPU work from the always-on tier, and let GPU workers only execute (ADR 0070).
+    narrative_gpu_dispatch_enabled: bool = False
+    narrative_gpu_dispatch_poll_interval_seconds: float = Field(default=1.0, ge=0.1, le=60)
+    narrative_gpu_execute_only: bool = False
+    # The controller that starts and stops the machine (ADR 0070), and its safety nets.
+    narrative_gpu_controller_enabled: bool = False
+    narrative_gpu_controller_poll_seconds: float = Field(default=15.0, ge=1, le=300)
+    narrative_gpu_region: str | None = None
+    # key=value of the tag on the one machine it may touch.
+    narrative_gpu_instance_tag: str | None = Field(default=None, pattern=r"^[^=]+=.+$")
+    narrative_gpu_instance_type: str | None = None
+    narrative_gpu_fallback_instance_type: str | None = None
+    narrative_gpu_idle_seconds: int = Field(default=300, ge=30, le=86400)
+    narrative_gpu_max_session_seconds: int = Field(default=14400, ge=300, le=604800)
+    narrative_gpu_boot_grace_seconds: int = Field(default=600, ge=60, le=3600)
+    narrative_gpu_silent_seconds: int = Field(default=300, ge=60, le=3600)
+    # The guard on the bill. Per-person credits still apply first.
+    narrative_gpu_daily_cap_hours: float | None = Field(default=8.0, gt=0, le=24)
     # A measured wake-up time, shown to people; unset says "a few minutes".
     narrative_gpu_wake_seconds: int | None = Field(default=None, ge=10, le=3600)
     narrative_style_reference_training_enabled: bool = False

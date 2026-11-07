@@ -309,6 +309,13 @@ kind of generation must update `usage_charges`, `KINDS`, `_NOUNS` and `usageMode
 paid paths in invite mode. Nobody has listened to the output yet. Read `docs/runbooks/narrative-music-generation.md` and
 `docs/reports/2026-11-07-generated-music.md`.
 
+[ADR 0070](docs/adr/0070-a-gpu-that-sleeps.md) (migration 0054, #196-#198) lets the GPU sleep: `narrative_gpu_dispatch`
+relays every GPU topic from the always-on tier, `NARRATIVE_GPU_EXECUTE_ONLY` stops workers relaying, and
+`narrative_gpu_controller` starts and stops one tagged EC2 instance (pure `decide`, port `GpuInstance`). A new GPU kind
+needs a step in `narrative_gpu_dispatch.py`, a dispatcher in `build_dispatchers`, and a table in `gpu_work`. The laptop keeps
+combined mode. Never exercised on real AWS; read `docs/runbooks/gpu-sleep-and-wake.md` and
+`docs/reports/2026-11-07-gpu-that-sleeps.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

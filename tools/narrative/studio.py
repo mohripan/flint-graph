@@ -39,9 +39,10 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "studio.local.env"
 SERVICES = ("api", "worker", "relay", "assistant", "image", "voice", "preview", "frontend")
-OPTIONAL_SERVICES = ("pose", "style", "music")
+OPTIONAL_SERVICES = ("pose", "style", "music", "dispatch")
 WORKERS = {
     "music": ("FLINT_GRAPH_NARRATIVE_MUSIC_WORKER_ENABLED", "narrative_music_worker"),
+    "dispatch": ("FLINT_GRAPH_NARRATIVE_GPU_DISPATCH_ENABLED", "narrative_gpu_dispatch"),
     "style": ("FLINT_GRAPH_NARRATIVE_STYLE_WORKER_ENABLED", "narrative_style_worker"),
     "pose": ("FLINT_GRAPH_NARRATIVE_POSE_WORKER_ENABLED", "narrative_pose_worker"),
     "worker": ("FLINT_GRAPH_NARRATIVE_WORKER_ENABLED", "narrative_worker"),

@@ -14,7 +14,7 @@ from flint_graph.application.narrative_image_workflow import (
     MUSIC_WORKFLOW,
     music_job_workflow_id,
 )
-from flint_graph.application.services.narrative_gpu import gpu_heartbeat
+from flint_graph.application.services.narrative_gpu import gpu_heartbeat, stay_up
 from flint_graph.application.services.narrative_image_relay import ImageDispatcher
 from flint_graph.application.services.narrative_music_relay import (
     recover_stale_music_jobs,
@@ -117,6 +117,8 @@ async def run_worker(settings: Settings | None = None) -> None:
             max_heartbeat_throttle_interval=timedelta(seconds=5),
             graceful_shutdown_timeout=timedelta(seconds=30),
         ), gpu_heartbeat(factory, "music"):
+            if configured.narrative_gpu_execute_only:
+                await stay_up()
             await maintain(
                 factory,
                 dispatcher=dispatcher,

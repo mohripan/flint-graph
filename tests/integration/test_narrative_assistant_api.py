@@ -106,9 +106,9 @@ async def claim(factory, turn_id, token, run=None):
     return claimed
 
 
-async def work(factory, turn_id, *script, capabilities=()):
+async def work(factory, turn_id, *script, capabilities=(), run=None):
     token = uuid4()
-    claimed = await claim(factory, turn_id, token)
+    claimed = await claim(factory, turn_id, token, run)
     assert claimed is not None
     result = await run_turn(
         DeterministicNarrativeAssistant(script),

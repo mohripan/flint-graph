@@ -96,6 +96,9 @@ from flint_graph.infrastructure.db.narrative_character_models import (
     NarrativeVoiceJob as NarrativeVoiceJob,
 )
 from flint_graph.infrastructure.db.narrative_gpu_models import (
+    NarrativeGpuSession as NarrativeGpuSession,
+)
+from flint_graph.infrastructure.db.narrative_gpu_models import (
     NarrativeGpuStatus as NarrativeGpuStatus,
 )
 from flint_graph.infrastructure.db.narrative_look_models import (
