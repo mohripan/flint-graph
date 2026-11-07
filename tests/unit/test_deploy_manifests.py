@@ -362,6 +362,11 @@ def test_the_production_example_can_be_read_by_the_application(
     assert settings.trusted_hosts == ["api.example.com"]
 
 
+def test_cdks_local_cache_cannot_be_committed() -> None:
+    ignored = (ROOT / "deploy/cdk/.gitignore").read_text("utf-8").splitlines()
+    assert "cdk.context.json" in ignored
+
+
 def test_nothing_private_is_in_the_public_repository() -> None:
     account = re.compile(r"\b\d{12}\b")
     email = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -371,7 +376,9 @@ def test_nothing_private_is_in_the_public_repository() -> None:
         for path in (ROOT / folder).rglob("*"):
             if not path.is_file() or path.suffix not in kinds:
                 continue
-            if {"cdk.out", ".venv"} & set(path.parts) or path.name in {"prices.json", "uv.lock"}:
+            # cdk.context.json is CDK's local cache, holds the project ID, and is git-ignored.
+            skipped = {"prices.json", "uv.lock", "cdk.context.json"}
+            if {"cdk.out", ".venv"} & set(path.parts) or path.name in skipped:
                 continue
             text = path.read_text("utf-8")
             assert not account.search(text), path
