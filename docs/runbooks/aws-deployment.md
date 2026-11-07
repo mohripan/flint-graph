@@ -10,17 +10,18 @@
 | --- | --- |
 | Always-on server, sign-in, site | **Running since 2026-11-07** at `54.253.96.189`, `https://54-253-96-189.sslip.io` |
 | Your own domain | Not yet: see [Moving to your domain](#moving-to-your-domain) |
-| GPU server | **Blocked on two things only you and AWS can do**: see below |
-| Letting it sleep | After the GPU server |
+| GPU server | **None.** AWS declined the quota, and the owner chose not to appeal: see below |
 
-Until the GPU server exists the Studio works for editing by hand, and the assistant and generating have nothing to run them.
+The site, sign-in, invitations and editing by hand work. The assistant and generating are switched off, because nothing could run them.
 
-## What the GPU server is waiting for
+## Why there is no GPU
 
-1. **The Paid Plan.** The Free Plan refuses every GPU: `The specified instance type is not eligible for Free Tier`. Upgrade in AWS
-   Settings. The API refuses this project (`aws freetier upgrade-account-plan`: `Account information ... not found`), so it must be
-   done there, by hand. Remaining credits carry over. Set a spend limit at the same time, knowing that reaching it pauses the project.
-2. **The GPU quota.** "Running On-Demand G and VT instances" was 0. Case 179405038200148 asks for 4 vCPUs, and AWS is reviewing it by hand.
+AWS declined the request for 4 vCPUs of "Running On-Demand G and VT instances" on 2026-11-07 (case 179405038200148), and the quota stays at 0. The owner chose not to appeal: this is a personal
+project, and it runs on what exists. The Free Plan also refuses every GPU (`The specified instance type is not eligible for Free Tier`), so there is no reason to upgrade for now.
+
+Admission does not check that a worker exists, so a job with none would take credits and never run. That is why the assistant and generating are off rather than waiting.
+
+**The Free Plan ends.** The $120 of credits last about 4.5 months at this size, and the plan itself expires on 2027-05-07. Decide before then whether to upgrade or take the site down.
 
 ## Running CDK
 
@@ -46,7 +47,7 @@ Then `sudo k3s kubectl get pods -n flintgraph`. GPU pods stay `Pending` while th
 
 ## Deploying a change
 
-Run **Deploy images** in GitHub Actions on `master`, with:
+Run **Deploy images** in GitHub Actions on `master`, which builds the API and frontend, with:
 
 | Input | Value |
 | --- | --- |
@@ -55,8 +56,7 @@ Run **Deploy images** in GitHub Actions on `master`, with:
 | `oidc_bearer` | `id_token` |
 | `oidc_logout_url` | The `SignInLogoutUrl` output |
 
-Put the commit it ran on in the `newTag` lines of `deploy/k8s/production/kustomization.yaml` and push. Flux applies it within 10 minutes.
-GPU pods change when that server next wakes. The GPU image takes about 30 minutes when its runtimes changed.
+Put the commit it ran on in the API's and frontend's `newTag` lines of `deploy/k8s/production/kustomization.yaml` and push. Flux applies it within 10 minutes.
 
 ## Moving to your domain
 
@@ -70,7 +70,9 @@ Say the name is `studio.example.com`, on Cloudflare.
 
 ## Creating the GPU server
 
-Once the plan and the quota are both done. CloudFormation cannot create a stopped instance, so **this starts about $0.69 an hour straight away**.
+Once the plan and the quota are both done. First turn the features back on: in `deploy/k8s/base/config.env`, set `FLINT_GRAPH_NARRATIVE_ASSISTANT_PROVIDER=ollama` and both
+`*_GENERATION_ENABLED=true`. Set `gpu-dispatch` to `replicas: 1`, and put the GPU image back in `deploy-images.yml`, as commit `f18f0c4` removed it. `test_nothing_is_offered_that_no_server_can_run` changes with them.
+CloudFormation cannot create a stopped instance, so **this starts about $0.69 an hour straight away**.
 Allow about an hour for the driver, a reboot, about 19 GB of models and the images. It stops itself after 5 hours whatever happens. The controller
 is off, so nothing stops it sooner than that unless you do.
 

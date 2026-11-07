@@ -1,6 +1,6 @@
 # ADR 0077: One small server and one sleeping GPU
 
-- Status: accepted. The always-on server runs since 2026-11-07, and the GPU server waits for the Paid Plan and a quota
+- Status: accepted. The always-on server runs since 2026-11-07. AWS declined the GPU quota, so the GPU server does not exist, and that half of this design is unused
 - Date: 2026-11-07
 - Issues: #200 (its managed-service plan is replaced for now), builds on ADR 0070
 
@@ -103,7 +103,8 @@ These stop the deployment being complete, and are listed honestly so that nobody
   the Play button has nothing to reach. It needs a production mode on its own hostname.
 - **Release builds.** `narrative_worker` builds games by calling `docker`, and k3s has only containerd.
   `FLINT_GRAPH_NARRATIVE_RELEASES_ENABLED` stays false.
-- **The GPU.** Every GPU type is refused on the Free Plan, the quota was 0, and AWS is reviewing a request. So the assistant and generating have nothing to run them yet.
+- **The GPU.** AWS declined the quota on 2026-11-07, and the owner chose not to appeal. The assistant and generating are switched off, because admission does not check that a worker exists, so a job
+  would take credits and never run. The Studio is for editing by hand until a GPU exists somewhere. The Free Plan refuses every GPU too, so it stays on the Free Plan.
 - **The owner's domain.** The site uses a free `sslip.io` name for its address until then.
 - **Poses, training and music.** Their workers and models are not in the first deployment. Poses and
   training also refuse this GPU, so adding them means changing its type, and a larger disk.

@@ -2,8 +2,8 @@
 
 [ADR 0077](../adr/0077-one-small-server-and-one-sleeping-gpu.md), [runbook](../runbooks/aws-deployment.md).
 
-**The always-on server is live**: `54.253.96.189`, at `https://54-253-96-189.sslip.io`, with a real certificate and working sign-in. **The GPU server is not**:
-AWS refuses every GPU on the Free Plan, and the quota was 0. So people can see the site, sign in and edit by hand, and the assistant and generating have nothing to run them yet.
+**The always-on server is live**: `54.253.96.189`, at `https://54-253-96-189.sslip.io`, with a real certificate and working sign-in. **There is no GPU server**:
+AWS declined the quota on 2026-11-07, and the owner chose not to appeal. People can see the site, sign in and edit by hand. The assistant and generating are switched off.
 
 ## What it costs
 
@@ -37,11 +37,12 @@ this: g4dn is $0.684 an hour there, $0.71 in Tokyo and Osaka, $0.736 in Singapor
 
 | | |
 | --- | --- |
-| Memory at rest, after 10 minutes | 1,520 MB used of 1,905, plus 385 MB in swap, with 395 MB available |
+| Memory at rest, with the dispatcher still on | 1,520 MB used of 1,905, plus 385 MB in swap, with 395 MB available |
+| Memory with it off, just after the final rollout | 1,429 MB used, plus 435 MB in swap, with 488 MB available |
 | CPU at rest | about 8%, under the 20% baseline, so credits slowly build. They start at 0 on this type |
 | Disk | 10 GB of 19 on the system disk, 69 MB of 20 on the data disk |
 | Reboot | Main page and API back by themselves about 3.5 minutes later, with the data disk and swap in place |
-| Main page in a browser, from Indonesia | 3.5 seconds. Each connection takes about 0.35 s to Sydney |
+| Main page in a browser, from Indonesia | 3.5 seconds before compression. Each connection takes about 0.35 s to Sydney. The main script is now 91 KB instead of 264 KB |
 
 It is tight, as expected. It holds at rest with no visitors. Nobody has used the Studio on it for real yet, so how it feels under one person editing is unknown. One early run took over 40 seconds to load
 the main page, while pods were still settling. It did not recur, and the reason was not established.
@@ -77,7 +78,7 @@ Each would otherwise have shown up on a billed server or a billed hour, and each
 5. **HTTP gave a 404,** because the Traefik chart silently ignored a setting name that had changed.
 6. **A failed k3s download could go unnoticed** with `curl | sh`.
 7. **The GPU image was 24.1 GB,** because both runtimes carry the same 7 GB of PyTorch. Hard links keep one copy: 13 GB to store and 4.5 GB to download.
-8. **Any code change would have re-downloaded all of that** on a machine billed by the hour. The runtimes are now their own layer, built from their locks alone. This one is by reading the file: its saving has not been measured.
+8. **Any code change would have re-downloaded all of that** on a machine billed by the hour. The runtimes are now their own layer, built from their locks alone. Its saving has not been measured.
 9. **PostgreSQL crashed on the real server,** because its folder was root's with mode 0700, and its image works as uid 70. The local run missed it because its folders were open to everyone.
 10. **Cognito's sign-out had no endpoint to call,** and its access token no audience or email. See ADR 0077.
 
@@ -87,7 +88,7 @@ Each would otherwise have shown up on a billed server or a billed hour, and each
   `FailedCreatePodSandBox ... unable to get OCI runtime`, which is what to look for.
 - **The controller against real EC2,** as ADR 0070 already says. It has only run against a fake.
 - **A person using the Studio on the server,** and an operator signing in with a real address.
-- **Image or voice generation inside the GPU image.** Its imports and CUDA were checked on the laptop's GPU, in an earlier layout.
+- **Image or voice generation inside the GPU image.** Its imports and CUDA were checked on the laptop's GPU, in an earlier layout. Its final two-layer form did build on GitHub's runner.
 
 ## Not built
 
