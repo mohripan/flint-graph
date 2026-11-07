@@ -346,12 +346,12 @@ cannot see, so opt-in `FLINT_GRAPH_NARRATIVE_ASSISTANT_VISION_MODEL` (`lfm3-vl:2
 story or game, and go with the project. Rewriting a stage step keeps who is on it unless the request is to take them off. Read
 `docs/reports/2026-11-07-assistant-images.md`.
 
-[ADR 0077](docs/adr/0077-one-small-server-and-one-sleeping-gpu.md) prepares the AWS deployment: k3s on a `t3a.medium` and a sleeping `g4dn.xlarge`, with no backups, and CDK in
-`deploy/cdk`, Ansible in `deploy/ansible`, Flux in `deploy/flux`, manifests in `deploy/k8s` and the estimate in `deploy/cost`. Nothing has been created in AWS, and
-creating it spends money, so never run `cdk bootstrap` or `cdk deploy` without being asked each time. `FLINT_GRAPH_*` lists are JSON in `config.env`; `tests/unit/test_deploy_manifests.py`
-runs them through `Settings`. A new GPU worker needs a Deployment like those in `gpu-workers.yaml`. Playtests, release builds and a sign-in provider are not deployed yet. AWS's managed policy denies Spot on the Free and Paid Plans alike. Unlocking it is
-irreversible and removes the spend limit, so that is the owner's call, not ours. Read
-`docs/runbooks/aws-deployment.md` and `docs/reports/2026-11-07-aws-preparation.md`.
+[ADR 0077](docs/adr/0077-one-small-server-and-one-sleeping-gpu.md) is the live AWS deployment: k3s on a `t3.small` at `54.253.96.189` (`https://54-253-96-189.sslip.io`, Cognito sign-in, no backups),
+with a sleeping `g4dn.xlarge` still to come, once the owner upgrades to the Paid Plan in AWS Settings and AWS grants the quota. CDK is in `deploy/cdk`, Ansible in `deploy/ansible`, Flux in `deploy/flux`,
+manifests in `deploy/k8s` and the estimate in `deploy/cost`. Creating AWS resources spends money, so never deploy without being asked each time. `FLINT_GRAPH_*` lists are JSON in `config.env`;
+`tests/unit/test_deploy_manifests.py` runs them through `Settings`. A new GPU worker needs a Deployment like those in `gpu-workers.yaml`. A new data folder's owner must be the user its image runs as. The frontend
+sends Cognito's ID token, because its access token has no audience or email. Playtests and release builds are not deployed yet. AWS's managed policy denies Spot on the Free and Paid Plans alike, and unlocking it
+is irreversible and removes the spend limit, so that is the owner's call. Read `docs/runbooks/aws-deployment.md` and `docs/reports/2026-11-07-aws-preparation.md`.
 
 ## Project Snapshot
 

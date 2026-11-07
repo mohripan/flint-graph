@@ -1,157 +1,100 @@
-# Preparing the AWS deployment
+# The AWS deployment
 
 [ADR 0077](../adr/0077-one-small-server-and-one-sleeping-gpu.md), [runbook](../runbooks/aws-deployment.md).
-**Nothing was created in AWS.** The project was checked before and after: no instances, no stacks. The only AWS
-calls were read-only: prices, Spot history, quotas, and `--dry-run`.
 
-## What it would cost
+**The always-on server is live**: `54.253.96.189`, at `https://54-253-96-189.sslip.io`, with a real certificate and working sign-in. **The GPU server is not**:
+AWS refuses every GPU on the Free Plan, and the quota was 0. So people can see the site, sign in and edit by hand, and the assistant and generating have nothing to run them yet.
 
-From `deploy/cost/estimate.py`, using Sydney list prices fetched on 2026-11-07 into `deploy/cost/prices.json`.
-These are estimates, and the disk and visit figures are assumptions until there is real usage.
+## What it costs
 
-**About $49 a month with nobody using it, as prepared:**
+From `deploy/cost/estimate.py`, using Sydney list prices fetched on 2026-11-07 into `deploy/cost/prices.json`, before tax. The project has $120 of credits.
 
 | Item | USD/month |
 | --- | ---: |
-| t3a.medium always on | 34.67 |
+| t3.small always on | 19.27 |
 | Its public IP address | 3.65 |
 | Its disks (20 GB system + 20 GB data) | 3.84 |
-| GPU server's disk while stopped (70 GB) | 6.72 |
-| **Total** | **48.88** |
+| **Now** | **26.76** |
+| GPU server's disk while stopped (70 GB), once it exists | 6.72 |
+| **With the GPU server, nobody using it** | **33.48** |
 
-There are no backups, by the owner's choice. The GPU is `g4dn.xlarge`, at $0.68 an hour plus $0.005 for its address.
+Credits last about 4.5 months as it is now, or 3.6 with the GPU server. There are no backups, by the owner's choice. Sign-in is free for up to 10,000 people a month. GitHub's registry is free
+for this public repository. The GPU costs $0.69 an hour while running, about $0.26 for a visit: 15 minutes of use, the 5-minute idle wait and an estimated 3-minute boot.
 
-**Whole monthly bill by choice of always-on server,** all with g4dn. A visit is 15 minutes of use, the 5-minute idle wait
-and an estimated 3-minute boot. Visits that overlap share the GPU, so these are upper limits for that count.
+**What else was priced:**
 
-| Always-on server | Nobody | 10 visits | 50 visits | 200 visits | One visit |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| t3a.medium on-demand, on all the time | 48.88 | 51.53 | 62.09 | 101.71 | 0.26 |
-| t3a.medium on-demand, on 4 h a day | 19.99 | 22.63 | 33.20 | 72.81 | 0.26 |
-| t3a.small on-demand (2 GB), on all the time | 31.58 | 34.23 | 44.79 | 84.41 | 0.26 |
-| Lightsail 2 GB, includes disk and address | 18.72 | 21.36 | 31.93 | 71.54 | 0.26 |
-| Lightsail 4 GB, includes disk and address | 30.72 | 33.36 | 43.93 | 83.54 | 0.26 |
-| t3a.medium Spot and g4dn Spot | 27.93 | 29.12 | 33.86 | 51.62 | 0.12 |
+| Always-on server | Nobody | 10 visits | 50 visits | Why it is not the one running |
+| --- | ---: | ---: | ---: | --- |
+| t3.small, running | 33.48 | 36.12 | 46.69 | |
+| t3a.small | 31.58 | 34.23 | 44.79 | The Free Plan refuses it. An option after the upgrade, for $1.90 a month less |
+| Lightsail 2 GB | 18.72 | 21.36 | 31.93 | Refused: `your account can not create an instance using this Lightsail plan size` |
+| t3a.medium Spot and g4dn Spot | 27.93 | 29.12 | 33.86 | Refused on the Free and Paid Plans alike. Unlocking it is irreversible and removes the spend limit |
 
-Worst case as prepared, the 3-hour daily cap every day: $110.90. The first provisioning is about an hour of GPU time. The first
-100 GB out to the internet each month is free, then $0.114 per GB. GitHub's registry is free for this public repository.
+**Other Regions would not help.** `RegionFloor` in AWS's managed policy locks the project to Sydney, and only the same irreversible unlock changes that. Sydney was also among the cheapest in Asia for
+this: g4dn is $0.684 an hour there, $0.71 in Tokyo and Osaka, $0.736 in Singapore and $0.647 in Seoul. AWS's China Regions are a separate service altogether.
 
-**Only the first and third rows can be deployed as written.** Lightsail has no instance role and sits on its own network, so the
-controller would need a stored key and the GPU server another way to reach it. Spot is blocked:
+## What the running server measures
 
-**Spot needs an irreversible change.** `DenySpotMarketType` is in AWS's managed policy for the Free Plan and the Paid Plan, and a
-`run-instances --dry-run` with Spot options fails on it with an explicit deny while on-demand passes. Unlocking it means
-activating advanced features, which cannot be reversed and permanently removes the spend limit. ADR 0077 has what Spot would
-need if that is ever done. AWS's published interruption bands: t3a.medium 10-15% a month, g4dn over 20%. Placement scores in this
-zone on 2026-11-07: g4dn 9 of 10, t3a.medium 3, g6 and g5 1.
+| | |
+| --- | --- |
+| Memory at rest, after 10 minutes | 1,520 MB used of 1,905, plus 385 MB in swap, with 395 MB available |
+| CPU at rest | about 8%, under the 20% baseline, so credits slowly build. They start at 0 on this type |
+| Disk | 10 GB of 19 on the system disk, 69 MB of 20 on the data disk |
+| Reboot | Main page and API back by themselves about 3.5 minutes later, with the data disk and swap in place |
+| Main page in a browser, from Indonesia | 3.5 seconds. Each connection takes about 0.35 s to Sydney |
 
-**Sizing evidence:** k3s with every always-on service, at idle with no visitors, used 1,376 MB of real memory in the local
-run below. Flux would add an estimated 200 MB. So `t3a.small` might work with swap, but this is an idle figure, and
-PostgreSQL's cache and uploads need room. `t3a.small` is one setting to change later.
+It is tight, as expected. It holds at rest with no visitors. Nobody has used the Studio on it for real yet, so how it feels under one person editing is unknown. One early run took over 40 seconds to load
+the main page, while pods were still settling. It did not recur, and the reason was not established.
 
-**The GPU disk is 70 GB, not the 60 GB first planned,** from what the first deployment would store:
-
-| Item | GB |
-| --- | ---: |
-| GPU worker image (measured) | 13.0 |
-| API image (measured) | 0.6 |
-| Ollama image (3.39 GB download, stored size estimated at 2.5 times that) | 8.5 |
-| Pinned models (measured) | 10.1 |
-| Assistant and vision models (measured) | 8.5 |
-| Ubuntu, driver, k3s, AWS CLI, repository (estimate) | 10.0 |
-| **Total** | **50.7** |
-
-That is 84% of 60 GB, where Kubernetes starts removing images at 85%, and is 72% of 70 GB. An update that changes the runtimes'
-locks stores another 13 GB until the old image is cleaned up, reaching 91%. Poses and music need the disk to grow. A
-disk can grow but not shrink, so it starts here.
-
-## What was exercised, and how
-
-No AWS was involved. The local run used k3s v1.37.2+k3s1 in a Docker container capped at 2.5 GB, with the real
-manifests, the real Traefik settings and locally built images. It has been removed.
+## What was exercised for real
 
 | Claim | Evidence |
 | --- | --- |
-| CDK templates are valid | `cdk synth --strict` exits 0. 12 tests on the templates pass |
-| Manifests are valid | `kustomize build`, then `kubeconform -strict`: 22 and 2 resources, all valid |
-| Settings are accepted | `test_deploy_manifests.py` runs them through the application's own `Settings` |
-| Ansible is well formed | `ansible-playbook --syntax-check` and `ansible-lint`. The model download arguments were run for real with `echo` |
-| Always-on services start | PostgreSQL, Temporal, MinIO, frontend, dispatcher and API all reached `Available` |
-| Migrations run | The init container applied them all on real PostgreSQL, to `0058` |
-| Readiness is real | `/health/ready` is 200 through checks of PostgreSQL, MinIO and Temporal |
-| No TLS redirect loop | `/health/live` over HTTPS through Traefik is 200, with `FLINT_GRAPH_REQUIRE_TLS=true` |
-| HTTP redirects | `http://…/studio?x=1` gives 301 to `https://…/studio?x=1` |
-| Only the right things are public | `/v1` without sign-in is 401, and with dev headers too. `/health/ready` and `/docs` get the page. Host `api` and other names are 404 |
-| A client cannot forge its address | `X-Forwarded-For: 6.6.6.6` does not appear in the API's log |
-| Data survives | Deleting every stateful pod keeps the bucket, the database at `0058` and Temporal's file |
-| Only the controller reaches the instance role | With a fake metadata service off the node: the node and a pod with the controller's label reach it, the API and dispatcher are refused, ordinary traffic still works |
-| GPU pods land only on the GPU server | A second k3s node with the real label and taint got the GPU pods, and nothing else. k3s's load balancer stayed on the always-on node |
-| **Stopping the GPU server is safe** | Stopped for 6 min 41 s. The pod with the real tolerations was untouched, while a control with the default limit was evicted at about 6 min 19 s. The site stayed up |
-| **Waking brings pods back** | The same pod (same UID) was ready 5 s after the node started. Real boot and model loading come on top of this |
+| CDK creates it | `cdk bootstrap` and `cdk deploy FlintGraphFoundation`, after reading each diff |
+| Ansible sets it up | `ansible-pull` on first boot: 30 tasks, none failed |
+| Flux deploys it | Fetched `master`, applied revision `8d1610d`, `Ready` |
+| Images can be pulled | Built by GitHub Actions, anonymous pull works |
+| A real certificate | Traefik obtained one from Let's Encrypt without an email address, and `curl` trusts it |
+| Migrations run | All of them, to `0058`, on real PostgreSQL |
+| HTTP redirects | 301 to HTTPS |
+| Only the right things are public | Unsigned `/v1` is 401. `/health/ready` and `/docs` get the page |
+| **Sign-in works** | A real browser with a throwaway account (since deleted): auth code with PKCE S256, Cognito's page, back to the site |
+| **The API trusts real tokens** | `/v1/access/me` is 200 with the real ID token |
+| **The invitation gate works** | That account got `has_access=false`, and `/studio` sent it to `/join` |
 
-### Problems this found
+The local run before that, on k3s of the same version, also proved: no TLS redirect loop; a client cannot forge its address; data survives every pod being replaced; only pods with the controller's label reach the
+instance role; GPU pods land only on the GPU server; and stopping a GPU server for 6 min 41 s leaves its pods in place, while a control with the default limit was evicted at about 6 min 19 s, and they return 5 s after the node starts.
 
-Each would otherwise have shown up on a billed server or a billed hour, and each now has a test.
+### Problems found
 
-1. **MinIO could not be pulled.** The pin worked only from this machine's cache: the `minio/minio` repository is gone from
-   Docker Hub, and Quay refuses too. Now Chainguard's build, as a non-root user. **`compose.yaml` and `ops/langfuse/compose.yml`
-   still name the old image, so they fail on a machine without a cached copy.** That was left alone as a separate problem.
-2. **Every application pod failed** with `CreateContainerConfigError`, because the images named their user, which
-   `runAsNonRoot` cannot verify. The images now use the number.
+Each would otherwise have shown up on a billed server or a billed hour, and each now has a test where a test can hold it.
+
+1. **MinIO could not be pulled.** The pin worked only from this machine's cache: `minio/minio` is gone from Docker Hub, and Quay refuses too. Now Chainguard's build. **`compose.yaml` and `ops/langfuse/compose.yml` still
+   name the old image, so they fail on a machine without a cached copy.** That was left alone as a separate problem.
+2. **Every application pod failed** with `CreateContainerConfigError`, because the images named their user, which `runAsNonRoot` cannot verify.
 3. **A 606 MB image came out at 9.5 GB,** because `.dockerignore` only matched `.venv` at the top level.
 4. **List settings crashed the application** as bare URLs, including in `.env.production.example`. They must be JSON.
 5. **HTTP gave a 404,** because the Traefik chart silently ignored a setting name that had changed.
-6. **A failed k3s download could go unnoticed** with `curl | sh`. The installer is now fetched from the pinned release first.
-7. **The GPU image was 24.1 GB,** because both runtimes carry the same 7 GB of PyTorch. Hard links keep one copy, making it 13 GB to
-   store and 4.5 GB to download instead of 8.5 GB.
-8. **Any code change would have rebuilt and re-downloaded all of that** on a machine billed by the hour, with the runtimes and
-   application in one layer. The runtimes now build from their locks alone, as their own layer. This one is by reading the
-   file, as its build did not finish: see below.
+6. **A failed k3s download could go unnoticed** with `curl | sh`.
+7. **The GPU image was 24.1 GB,** because both runtimes carry the same 7 GB of PyTorch. Hard links keep one copy: 13 GB to store and 4.5 GB to download.
+8. **Any code change would have re-downloaded all of that** on a machine billed by the hour. The runtimes are now their own layer, built from their locks alone. This one is by reading the file: its saving has not been measured.
+9. **PostgreSQL crashed on the real server,** because its folder was root's with mode 0700, and its image works as uid 70. The local run missed it because its folders were open to everyone.
+10. **Cognito's sign-out had no endpoint to call,** and its access token no audience or email. See ADR 0077.
 
 ## What has not been exercised
 
-Everything below happens for the first time on real AWS, and the runbook marks it.
-
-- **Any real GPU use in the cluster:** the driver install and reboot, k3s picking up the `nvidia` runtime, and pods seeing the
-  GPU through `NVIDIA_VISIBLE_DEVICES`. The stand-in node had no GPU. Without the toolkit a pod reports
-  `FailedCreatePodSandBox … unable to get OCI runtime`, which is what to look for.
+- **Anything on the GPU:** the driver install, k3s picking up the `nvidia` runtime, pods seeing the GPU, a T4 running these models, and WireGuard between real servers. Without the toolkit a pod reports
+  `FailedCreatePodSandBox ... unable to get OCI runtime`, which is what to look for.
 - **The controller against real EC2,** as ADR 0070 already says. It has only run against a fake.
-- **WireGuard between the servers.** The local run used k3s's default network, since Docker Desktop's kernel may lack it.
-- **A real certificate.** Traefik accepted the settings and tried Let's Encrypt, which needs a real domain to succeed.
-- **`ansible-pull` on a real server.** Only syntax, lint and one expression were checked.
-- **Flux,** and **the GPU image as committed:** see the sections below.
-- **A signed-in visit.** No sign-in provider exists yet, so nothing past 401 was tried in this deployment.
+- **A person using the Studio on the server,** and an operator signing in with a real address.
+- **Image or voice generation inside the GPU image.** Its imports and CUDA were checked on the laptop's GPU, in an earlier layout.
 
 ## Not built
 
-- **Playtests:** `serve_preview.py` refuses anything but a `localhost` parent on `127.0.0.1`, deliberately. The Play button will not
-  work until it has a production mode on its own hostname. This matters for a first demo.
+- **Playtests:** `serve_preview.py` refuses anything but a `localhost` parent on `127.0.0.1`, deliberately. The Play button will not work until it has a production mode on its own hostname.
 - **Release builds:** `narrative_worker` runs `docker`, and k3s has only containerd.
-- **A sign-in provider,** and the CDK for one. Real people cannot use the site until this exists.
-- **Poses, training and music** on the deployed GPU.
-
-## The GPU worker image
-
-Be exact about which version each result belongs to, as the file changed twice.
-
-| Version of `gpu-worker.Dockerfile` | Result |
-| --- | --- |
-| One layer | Built in about 28 minutes, 24.1 GB. Both runtimes and both worker modules import. With this laptop's RTX 5070 Ti (`--gpus all`), `nvidia-smi` works and PyTorch sees the GPU, reports bf16 and runs a small tensor on it |
-| One layer, hard links | 13 GB stored, 4.46 GB download. Both runtimes import, and `torch` has one inode with two links. No GPU run on this version |
-| Two layers (**the file as committed**) | **Has not finished a build.** Claude Code stopped it at about 30 minutes because the machine ran critically low on memory, and it was not retried. It passes `docker buildx build --check`. The commands are the same as the version above, in a different order |
-
-So the saving on code changes follows from the file's structure, and has not been measured. No image or voice was generated inside the
-container either, as loading a model was not worth the risk with memory this short. The first full build of this file should check
-`stat -c %h` on `lib/python3.12/site-packages/torch/lib/libtorch_cpu.so` in both runtimes, which should say 2.
+- **Poses, training and music** on the deployed GPU. Poses and training also refuse a T4.
 
 ## Checks run
 
-Passed: `uv run pytest tests/unit/test_deploy_manifests.py tests/unit/test_narrative_builder_prepare.py` (36 tests),
-`uv run --frozen pytest` in `deploy/cdk` (12), `uv run ruff check .`, `uv run mypy`, `cdk synth --strict`, the eval gate,
-`alembic upgrade head --sql`, `docker compose config -q`, `kustomize build` with `kubeconform -strict`,
-`ansible-playbook --syntax-check` and `ansible-lint`.
-
-Not run locally: the full `uv run pytest`, because of the same memory shortage. No application code changed (nothing under `src`, `migrations`,
-`frontend`, `prompts`, `runtimes` or `tools`), and CI runs the full suite on the push. Flux itself has not been run: its files passed
-`kubeconform`, and the manifests were applied directly with `kubectl`. It can only fetch from `master`, so it needs this commit
-first, and another local cluster.
+Passed: `uv run pytest tests/unit/test_deploy_manifests.py`, `uv run --frozen pytest` in `deploy/cdk`, `node --test tests/oidc-tokens.test.mjs`, `npx tsc --noEmit`, `uv run ruff check .`, `cdk synth --strict`, and CI on GitHub, which runs the full test suite, for each push reported here.

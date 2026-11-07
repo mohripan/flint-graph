@@ -1,6 +1,6 @@
 # ADR 0077: One small server and one sleeping GPU
 
-- Status: accepted for preparation; nothing has been created in AWS
+- Status: accepted. The always-on server runs since 2026-11-07, and the GPU server waits for the Paid Plan and a quota
 - Date: 2026-11-07
 - Issues: #200 (its managed-service plan is replaced for now), builds on ADR 0070
 
@@ -13,16 +13,16 @@ server here, and the traffic does not need any of them yet.
 
 ## Decision
 
-Two EC2 instances in one zone of ap-southeast-2, joined as one k3s cluster.
+Two EC2 instances in one zone of ap-southeast-2, joined as one k3s cluster, on Ubuntu 24.04.
 
 | Server | Type | Runs |
 | --- | --- | --- |
-| Always on | t3a.medium, 4 GB, plus 4 GB swap | Traefik, frontend, API, PostgreSQL, Temporal, MinIO, `narrative_gpu_dispatch`, `narrative_gpu_controller`, Flux |
+| Always on | t3.small, 2 GB, plus 4 GB swap | Traefik, frontend, API, PostgreSQL, Temporal, MinIO, `narrative_gpu_dispatch`, `narrative_gpu_controller`, Flux |
 | GPU, usually stopped | g4dn.xlarge, T4, 16 GB | Ollama, assistant, image and voice workers |
 
 Each tool does one job:
 
-- **CDK** creates what AWS bills for: network, servers, disks, roles, backups, budget.
+- **CDK** creates what AWS bills for: network, servers, disks, roles, sign-in, budget.
 - **Ansible**, run by `ansible-pull` on each server at first boot, sets up what is inside it: k3s, the
   NVIDIA driver, swap, secrets and model downloads.
 - **Flux** keeps the cluster equal to `deploy/k8s/production` in Git. It stays suspended until the
@@ -30,6 +30,15 @@ Each tool does one job:
 - **GitHub Container Registry** holds the images, free for this public repository.
 
 ### Choices
+
+**t3.small, because the account refused anything else that small.** At most one or two people a month are invited, and most visitors only see
+static pages, so 2 GB is enough. Lightsail's 2 GB plan was the first choice, at $12 a month with its disk and address, and was built and tried: it answered
+`your account can not create an instance using this Lightsail plan size`. t3a.small is $1.90 a month less, but the Free Plan refuses it as `not eligible for
+Free Tier`. t3.small is the cheapest 2 GB server that plan allows, so nothing irreversible was needed to get the site up. The Lightsail code is in commit `750d53d`.
+
+**Cognito, sending the ID token.** Real people need a real sign-in. It is free for up to 10,000 people a month. The API checks the token's audience and needs its
+email, and Cognito's access token has neither without its paid feature plan, while its ID token has both. So the frontend sends the ID token, by a setting that
+leaves other providers unchanged. Anyone may create an account: the invitation check in the API is what lets them in, and a real browser run confirmed it keeps them out.
 
 **g4dn, not g6.** It is the cheapest GPU that runs what is deployed: $0.26 of GPU time per visit against
 $0.40. Poses and training refuse a GPU without native bf16, which a T4 lacks, but neither is deployed. No
@@ -94,14 +103,12 @@ These stop the deployment being complete, and are listed honestly so that nobody
   the Play button has nothing to reach. It needs a production mode on its own hostname.
 - **Release builds.** `narrative_worker` builds games by calling `docker`, and k3s has only containerd.
   `FLINT_GRAPH_NARRATIVE_RELEASES_ENABLED` stays false.
-- **Sign-in.** Real people must sign in with OIDC. No provider is deployed: the issuer in
-  `deploy/k8s/production/config.env` is a placeholder. Development sign-in makes everyone the same user
-  and must never be exposed.
+- **The GPU.** Every GPU type is refused on the Free Plan, the quota was 0, and AWS is reviewing a request. So the assistant and generating have nothing to run them yet.
+- **The owner's domain.** The site uses a free `sslip.io` name for its address until then.
 - **Poses, training and music.** Their workers and models are not in the first deployment. Poses and
   training also refuse this GPU, so adding them means changing its type, and a larger disk.
 
 ## Evidence
 
-See `docs/reports/2026-11-07-aws-preparation.md` for the estimate and for what was and was not exercised.
-The GPU path has not run anywhere yet: the driver install, the `nvidia` runtime class and waking on real
-AWS are all unproven until the first real launch. The GPU image's final form has not finished a build either.
+See `docs/reports/2026-11-07-aws-preparation.md` for the estimate and for what was and was not exercised. The always-on server, Flux, Traefik, its certificate and
+sign-in have all run for real. The GPU path has not: the driver install, the `nvidia` runtime class and waking on real AWS are unproven until the first launch.
