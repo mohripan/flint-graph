@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type CreditEntry } from "../lib/api";
 import { useAccess } from "../site/accessContext";
-import { balanceLabel, creditsText, keepsGoing, ledgerText, signed } from "../site/creditsModel";
+import { balanceLabel, creditsText, ledgerText, ownServer, signed } from "../site/creditsModel";
 import { amount, KINDS, usageRows } from "../site/usageModel";
 
 // An invited person's credits, prices and allowance (ADR 0058, 0059).
@@ -33,17 +33,17 @@ export function UsagePage() {
         {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         {balance && <section aria-label="Credit balance" className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-          <p className="text-sm text-amber-900">Credits left</p>
+          <p className="text-sm text-amber-900">{ownServer(status) ? "Your credits" : "Credits left"}</p>
           <p className="mt-1 text-3xl font-semibold text-slate-900">{balance}</p>
-          {balance !== "Unlimited" && <p className="mt-2 text-sm text-amber-900">{keepsGoing(status)
-            ? "This is your own server, so you can keep generating even at zero."
-            : "Need more? Ask the person who invited you."}</p>}
+          {ownServer(status)
+            ? <p className="mt-2 text-sm text-amber-900">You've used {creditsText(status?.credits_used ?? 0)} so far. Nothing is charged to you on your own server.</p>
+            : balance !== "Unlimited" && <p className="mt-2 text-sm text-amber-900">Need more? Ask the person who invited you.</p>}
         </section>}
 
         {status && <section aria-labelledby="allowance">
           <h2 id="allowance" className="font-semibold text-slate-900">Allowance</h2>
           <p className="mt-1 text-sm text-slate-500">
-            {keepsGoing(status) ? "Your own server has no caps." : status.unlimited ? "Unlimited access has no caps." : "Caps limit how much you can make, whatever its price."}
+            {ownServer(status) ? "Your own server has no caps." : status.unlimited ? "Unlimited access has no caps." : "Caps limit how much you can make, whatever its price."}
           </p>
           <table className="mt-3 w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-sm">
             <thead className="bg-slate-50 text-left text-slate-500">
@@ -61,7 +61,7 @@ export function UsagePage() {
           </table>
         </section>}
 
-        {(!status?.unlimited || keepsGoing(status)) && prices.length > 0 && <section aria-labelledby="prices">
+        {(!status?.unlimited || ownServer(status)) && prices.length > 0 && <section aria-labelledby="prices">
           <h2 id="prices" className="font-semibold text-slate-900">Prices</h2>
           <div className="mt-3 grid gap-4 sm:grid-cols-2">
             {KINDS.map(([kind, label]) => {

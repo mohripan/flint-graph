@@ -45,7 +45,7 @@ export function AccessAdminPage() {
       setInvitations(list.invitations); setGrants(people.grants); setDefaults(list.default_limits);
       setLimits(current => Object.keys(current).length ? current : limitsForm(list.default_limits));
       if (list.default_credits !== undefined) setDefaultCredits(list.default_credits);
-      setCredits(current => current ?? String(list.default_credits ?? 500));
+      setCredits(current => current ?? String(list.default_credits ?? 100));
     } catch (failure) {
       setError(message(failure));
     }

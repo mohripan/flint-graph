@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     )
     # Credits (ADR 0059): what a new invitation grants when the operator gives none,
     # and per-item overrides of the code price table, e.g. {"image.pose": 10}.
-    access_default_credits: int = Field(default=500, ge=0, le=10_000_000)
+    access_default_credits: int = Field(default=100, ge=0, le=10_000_000)
     access_credit_prices: dict[str, int] = Field(default_factory=dict)
     service_name: str = "flint-graph-api"
     service_version: str = "0.1.0"

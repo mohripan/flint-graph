@@ -30,8 +30,9 @@ class AccessStatus(BaseModel):
     credits: int | None
     # True when nothing is enforced: open mode, an operator, or an unlimited grant.
     unlimited: bool
-    # On their own server: ``credits`` is a real balance that never stops them (ADR 0074).
-    keeps_going: bool = False
+    # On their own server: nothing is charged, and what they use is counted (ADR 0075).
+    own_server: bool = False
+    credits_used: int = 0
     prices: dict[str, PriceResponse]
     # The price item of an assistant turn on this server; None when it is off.
     assistant_item: str | None

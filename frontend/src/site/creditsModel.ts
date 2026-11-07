@@ -6,8 +6,9 @@ export type Prices = Record<string, Price>;
 /** The parts of the access status that decide whether credits are shown. */
 export interface CreditStatus {
   mode: "open" | "invite"; is_admin: boolean; credits: number | null; unlimited: boolean; prices?: Prices;
-  /** On your own server: a real balance, which never stops you (ADR 0074). */
-  keeps_going?: boolean;
+  credits_used?: number;
+  /** On your own server: nothing is charged, and what you use is counted (ADR 0075). */
+  own_server?: boolean;
 }
 
 export interface LedgerEntry {
@@ -47,9 +48,9 @@ export function metered(status: CreditStatus | null): status is CreditStatus & {
   return Boolean(status && status.mode === "invite" && !status.unlimited && !status.is_admin && typeof status.credits === "number");
 }
 
-/** Someone running their own server, who has a balance like anyone else but is never stopped by it. */
-export function keepsGoing(status: CreditStatus | null): status is CreditStatus & { credits: number } {
-  return Boolean(status?.keeps_going && typeof status.credits === "number");
+/** Someone running their own server: unlimited, but still shown what things cost. */
+export function ownServer(status: CreditStatus | null): boolean {
+  return Boolean(status?.own_server);
 }
 
 export interface CostView { cost: number; text: string; over: boolean }
@@ -61,7 +62,7 @@ export function costView(status: CreditStatus | null, item: string, quantity: nu
 
 /** The total of several items, e.g. one voice job per speaker, each with its own model. */
 export function partsCostView(status: CreditStatus | null, parts: Array<[string, number]>): CostView | null {
-  if (!metered(status) && !keepsGoing(status)) return null;
+  if (!status || (!metered(status) && !ownServer(status))) return null;
   const counted = parts.filter(([, quantity]) => quantity > 0);
   if (!counted.length || counted.some(([item]) => !status.prices?.[item])) return null;
   const cost = counted.reduce((total, [item, quantity]) => total + status.prices![item].credits * quantity, 0);
@@ -75,19 +76,18 @@ export interface QuoteView { text: string; over: boolean }
 export function quoteView(status: CreditStatus | null, parts: Array<[string, number]>): QuoteView | null {
   if (!status?.prices || !parts.length || parts.some(([item]) => !status.prices![item])) return null;
   const cost = parts.reduce((total, [item, quantity]) => total + status.prices![item].credits * quantity, 0);
-  if (keepsGoing(status)) return { text: `${creditsText(cost)} · you have ${status.credits}`, over: false };
   if (!metered(status)) return { text: `${creditsText(cost)} · free for you`, over: false };
   return { text: `${creditsText(cost)} · you have ${status.credits}`, over: cost > status.credits };
 }
 
 /** "3 credits per line", for choosing between models; empty when no price should show. */
 export function unitPrice(status: CreditStatus | null, item: string): string {
-  const price = metered(status) || keepsGoing(status) ? status.prices?.[item] : undefined;
+  const price = metered(status) || ownServer(status) ? status?.prices?.[item] : undefined;
   return price ? `${creditsText(price.credits)} per ${price.unit}` : "";
 }
 
 export function balanceLabel(status: CreditStatus | null): string | null {
-  if (keepsGoing(status)) return creditsText(status.credits);
+  if (ownServer(status)) return "Unlimited";
   if (!status || status.mode !== "invite") return null;
   if (status.unlimited || status.is_admin) return "Unlimited";
   return typeof status.credits === "number" ? creditsText(status.credits) : null;

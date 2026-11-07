@@ -28,7 +28,7 @@ does this. The Studio is a separate JavaScript chunk, so the public pages stay l
 | `FLINT_GRAPH_ACCESS_ADMIN_EMAILS` | empty | Comma-separated operator emails; in OIDC mode the token's `email_verified` must be true |
 | `FLINT_GRAPH_OIDC_SYSTEM_ADMIN_GROUP` | none | Operators may come from this group claim (`FLINT_GRAPH_OIDC_GROUPS_CLAIM`) instead |
 | `FLINT_GRAPH_ACCESS_DEFAULT_LIMITS` | see below | JSON: what a new invitation grants when the operator leaves the form as is |
-| `FLINT_GRAPH_ACCESS_DEFAULT_CREDITS` | `500` | Credits a new invitation grants when the operator gives none |
+| `FLINT_GRAPH_ACCESS_DEFAULT_CREDITS` | `100` | Credits a new invitation grants when the operator gives none |
 | `FLINT_GRAPH_ACCESS_CREDIT_PRICES` | `{}` | JSON overrides of single prices, e.g. `{"image.pose": 10}`; unknown items stop the API from starting |
 | `FLINT_GRAPH_PUBLIC_BASE_URL` | none | Makes invitation links absolute; the Invitations page uses the browser origin otherwise |
 

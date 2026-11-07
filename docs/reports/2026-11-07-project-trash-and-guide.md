@@ -15,8 +15,8 @@ Feedback after using the updated Studio, delivered together. See
 - **All projects** has no box and a larger font.
 - **Assets** groups the options from one Generate into a set under a heading such as "Kaito · Sprite, 4 options, Nov 7",
   instead of scattering repeats of "kaito sprite 1" through the grid. Uploads keep their place between the sets.
-- **Your own credits.** See [ADR 0074](../adr/0074-a-balance-on-your-own-server.md). A balance at the top of the page and
-  a Usage page in every mode.
+- **Your own credits.** A pill at the top of the page and a Usage page in every mode. These first showed a balance
+  (ADR 0074); the owner then chose Unlimited, with what was used still shown (ADR 0075). The balance checks below predate that.
 
 ## Real proof
 

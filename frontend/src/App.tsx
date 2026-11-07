@@ -10,7 +10,7 @@ import { AccessAdminPage } from "./pages/AccessAdminPage";
 import { GuidePage } from "./pages/GuidePage";
 import { UsagePage } from "./pages/UsagePage";
 import { useAccess } from "./site/accessContext";
-import { balanceLabel, keepsGoing, metered } from "./site/creditsModel";
+import { balanceLabel, metered, ownServer } from "./site/creditsModel";
 import { linkProps } from "./site/router";
 
 // The GraphRAG Ask and Documents pages are hidden from the studio shell (#169); their
@@ -69,8 +69,8 @@ export default function App() {
 
         <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto sm:gap-4">
           <HealthDot healthy={healthy} />
-          {balance && <button type="button" onClick={() => navigate(access?.is_admin && !keepsGoing(access) ? "invitations" : "usage")}
-            title={keepsGoing(access) ? "Your credits. On your own server, running out won't stop you." : access?.is_admin || access?.unlimited ? "Generation spends no credits" : "Your credit balance"}
+          {balance && <button type="button" onClick={() => navigate(access?.is_admin && !ownServer(access) ? "invitations" : "usage")}
+            title={ownServer(access) ? "Nothing is charged to you here. Usage shows what you've used." : access?.is_admin || access?.unlimited ? "Generation spends no credits" : "Your credit balance"}
             aria-label={`Credits: ${balance}`}
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${metered(access) && access.credits < 10 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
             {balance === "Unlimited" ? "Unlimited credits" : balance}
@@ -110,7 +110,7 @@ export default function App() {
           {tab === "studio" && <div ref={setStudioNav} className="hidden md:block" />}
           <NavItem active={tab === "setup"} onClick={() => navigate("setup")} label="Setup" icon={<SetupIcon />} />
           {access?.is_admin && <NavItem active={tab === "invitations"} onClick={() => navigate("invitations")} label="Invitations" icon={<KeyIcon />} />}
-          {(keepsGoing(access) || (access?.mode === "invite" && !access.is_admin)) && <NavItem active={tab === "usage"} onClick={() => navigate("usage")} label="Usage" icon={<GaugeIcon />} />}
+          {(ownServer(access) || (access?.mode === "invite" && !access.is_admin)) && <NavItem active={tab === "usage"} onClick={() => navigate("usage")} label="Usage" icon={<GaugeIcon />} />}
           <NavItem active={tab === "guide"} onClick={() => navigate("guide")} label="Guide" icon={<BookIcon />} />
         </nav>
 

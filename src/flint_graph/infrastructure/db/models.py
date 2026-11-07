@@ -63,7 +63,6 @@ from flint_graph.domain.enums import (
 from flint_graph.infrastructure.db.access_models import AccessGrant as AccessGrant
 from flint_graph.infrastructure.db.access_models import AccessInvitation as AccessInvitation
 from flint_graph.infrastructure.db.access_models import CreditLedgerEntry as CreditLedgerEntry
-from flint_graph.infrastructure.db.access_models import OwnCredits as OwnCredits
 from flint_graph.infrastructure.db.access_models import UsageCharge as UsageCharge
 from flint_graph.infrastructure.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from flint_graph.infrastructure.db.narrative_assistant_models import (

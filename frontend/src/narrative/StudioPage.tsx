@@ -435,7 +435,7 @@ export function StudioPage({ onDirtyChange }: {
       intents={releaseIntentStore.current} scopeRef={releaseScope}
       onInspect={id => void inspectRevision(id)} onClose={closeReleases} onAccessLost={releaseAccessLost} />}
     {preview && <PreviewDialog key={preview.id} revision={preview} onClose={closePreview} />}
-    {navSlot && state.project && createPortal(<StudioSideNav projectName={state.project.name}
+    {navSlot && state.project && createPortal(<StudioSideNav
       current={currentSection(assistantView, panel)} assistantReady={Boolean(state.revision)} onProjects={collection}
       onAssistant={() => chooseView("assistant")} onPanel={next => { chooseView("editor"); choosePanel(next); }} />, navSlot)}
     <header className="studio-heading"><div><p className="studio-eyebrow">Narrative studio</p>

@@ -1,6 +1,7 @@
 # ADR 0074: A balance on your own server
 
-Status: accepted, 2026-11-07
+Status: replaced the same day by [ADR 0075](0075-credits-for-a-short-visit.md), which keeps the `own_server` marking
+and the rule that this usage gives no access, and drops the balance.
 
 ## Context
 

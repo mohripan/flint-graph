@@ -139,7 +139,7 @@ export interface AccessStatus {
   email: string | null; display_name: string | null; limits: UsageLimits | null;
   usage: Record<UsageKind, { day: number; total: number }>; email_invitation: boolean;
   // Missing on an API from before ADR 0059.
-  credits: number | null; unlimited: boolean; keeps_going?: boolean; prices?: Prices; assistant_item?: string | null;
+  credits: number | null; unlimited: boolean; own_server?: boolean; credits_used?: number; prices?: Prices; assistant_item?: string | null;
 }
 export interface Invitation {
   id: string; kind: "key" | "email"; label: string; key_hint: string | null; email: string | null;

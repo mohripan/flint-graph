@@ -85,22 +85,6 @@ class AccessGrant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class OwnCredits(TimestampMixin, Base):
-    """The balance of someone running their own server: open mode, or an operator (ADR 0074).
-
-    It counts down like anyone's and never stops them. It is deliberately not a grant, so it can
-    never give anyone access: leaving the operator list leaves them with nothing but this number.
-    """
-
-    __tablename__ = "own_credits"
-    __table_args__ = (CheckConstraint("credits >= 0", name="ck_own_credits_credits"),)
-
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    credits: Mapped[int] = mapped_column(Integer, nullable=False)
-
-
 class UsageCharge(UUIDPrimaryKeyMixin, Base):
     """Units admitted for one person, counted against their grant's limits."""
 
@@ -122,7 +106,7 @@ class UsageCharge(UUIDPrimaryKeyMixin, Base):
     # The price item (ADR 0059); NULL on charges made before credits.
     item: Mapped[str | None] = mapped_column(String(40), nullable=True)
     subject: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    # Made on their own server (ADR 0074), so it never counts against a later allowance.
+    # Made on their own server (ADR 0075), so it never counts against a later allowance.
     own_server: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

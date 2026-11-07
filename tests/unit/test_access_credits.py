@@ -40,7 +40,7 @@ def test_cheap_work_costs_less_than_expensive_work():
     assert price["image.standard"] < price["image.high_res"] < price["image.cg"]
     assert price["image.high_res"] < price["image.pose"]
     assert price["assistant.ollama"] < price["assistant.anthropic"]
-    assert price["release.build"] > price["image.pose"]
+    assert price["release.build"] < price["music.track"], "a build uses no GPU (ADR 0075)"
     assert price["training.style"] < price["training.character"]
     assert price["training.character"] < price["training.character_reference"]
 
@@ -105,7 +105,7 @@ def test_settings_validate_prices_and_default_credits(monkeypatch):
     assert settings.access_default_credits == 250
     assert Settings(env="test", access_credit_prices={}).access_default_credits == 250
     monkeypatch.delenv("FLINT_GRAPH_ACCESS_DEFAULT_CREDITS")
-    assert Settings(env="test").access_default_credits == 500
+    assert Settings(env="test").access_default_credits == 100
     with pytest.raises(ValidationError):
         Settings(env="test", access_credit_prices={"image.gold": 1})
     with pytest.raises(ValidationError):
@@ -114,9 +114,9 @@ def test_settings_validate_prices_and_default_credits(monkeypatch):
 
 def test_out_of_credit_messages_name_the_cost_the_balance_and_the_action():
     prices = resolve_prices({})
-    one = credit_problem(prices["release.build"], quantity=1, balance=10)
+    one = credit_problem(prices["release.build"], quantity=1, balance=2)
     assert one == (
-        "Release build costs 25 credits, but you have 10 left."
+        "Release build costs 5 credits, but you have 2 left."
         " Ask the person who invited you for more credits."
     )
     many = credit_problem(prices["image.sprite"], quantity=4, balance=5)

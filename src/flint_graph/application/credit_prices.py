@@ -60,7 +60,8 @@ PRICE_ITEMS: dict[str, PriceItem] = {
         _item("assistant.deterministic", 1, "Assistant reply (test model)", "turn"),
         _item("assistant.ollama", 2, "Assistant reply (local model)", "turn"),
         _item("assistant.anthropic", 10, "Assistant reply (Claude)", "turn"),
-        _item("release.build", 25, "Release build", "build"),
+        # No GPU: only some CPU and storage (ADR 0075).
+        _item("release.build", 5, "Release build", "build"),
         _item("training.style", 20, "Project style training", "100 training steps", 100),
         _item("training.character", 25, "Character training", "100 training steps", 100),
         _item(

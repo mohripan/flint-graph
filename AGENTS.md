@@ -336,9 +336,10 @@ rename and a first-time guide. A purge removes files, then rows; `project_tables
 holding a project's rows needs only a `project_id`. Immutable tables allow one thing: a `DELETE` of a row whose own project has
 `purge_started_at` set. A new kind of job must join `RUNNING_WORK`. Read `docs/reports/2026-11-07-project-trash-and-guide.md`.
 
-[ADR 0074](docs/adr/0074-a-balance-on-your-own-server.md) (migration 0056) gives open-mode users and operators a real balance that never stops
-them: `own_credits` (never a grant, so it gives no access), `keeps_going` in the access status, and `own_server` usage that never counts against
-an allowance. In the frontend, check `keepsGoing` beside `metered`. The Assets page groups a job's options with `assetSets`.
+[ADR 0075](docs/adr/0075-credits-for-a-short-visit.md) (migrations 0056-0057) sets credits for a 15-minute visit: new invitations grant 100, and a
+release build costs 5 because it uses no GPU. A test holds a typical visit to that default, so check it when changing prices. Open-mode users and
+operators are unlimited: `own_server` and `credits_used` in the access status, `ownServer` beside `metered` in the frontend, and usage marked
+`own_server` that never counts against an allowance and never gives access. The Assets page groups a job's options with `assetSets`.
 
 ## Project Snapshot
 
