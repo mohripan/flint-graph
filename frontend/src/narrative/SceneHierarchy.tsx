@@ -22,7 +22,7 @@ function useRowHeight() {
   return treeRowHeight(coarse);
 }
 type Drop = { index: number; where: "before" | "after" | "inside" };
-const glyph: Record<Passage["kind"], string> = { scene: "¶", choice: "⑂", branch: "◇", end: "■", state: "⚙" };
+const glyph: Record<Passage["kind"], string> = { name: "✎", scene: "¶", choice: "⑂", branch: "◇", end: "■", state: "⚙" };
 
 // Godot-style scene hierarchy: folders (routes, chapters) and scenes, reordered by
 // dragging or with Alt+arrow keys. The layout is editor-only, shared and versioned;

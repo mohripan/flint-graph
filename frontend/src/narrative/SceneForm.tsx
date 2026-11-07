@@ -14,6 +14,7 @@ export function SceneForm({ story, sceneId, onChange, onError, readOnly }: {
   return <fieldset disabled={readOnly} className="studio-form">
     <div className="studio-section-heading"><h2>{node.type === "line" ? "Write the scene" :
       node.type === "choice" ? "Give the player a choice" : node.type === "end" ? "Write the ending" :
+      node.type === "name" ? "Ask the player's name" :
       node.type === "set" ? "Change story state" : "Route by a condition"}</h2>
       <code>{sceneId}</code></div>
     {node.type === "line" && <>
@@ -25,10 +26,25 @@ export function SceneForm({ story, sceneId, onChange, onError, readOnly }: {
         {Object.entries(story.characters).map(([id, character]) =>
           <option key={id} value={id}>{character.name} · {id}</option>)}
       </select></Field>
-      <Field label="Scene text"><textarea className="studio-prose" rows={9} value={node.text}
+      <Field label="Scene text" hint={story.player ? "Write {name} where the player's name goes." : undefined}><textarea className="studio-prose" rows={9} value={node.text}
         onChange={event => update({ ...node, text: event.target.value }, "text")} /></Field>
       <TargetSelect story={story} value={node.next} label="Next scene"
         onChange={next => update({ ...node, next })} />
+    </>}
+    {node.type === "name" && <>
+      <Field label="Question" hint="The player types their answer below this. Write {name} in any later text where it goes.">
+        <textarea className="studio-prose" rows={3} value={node.text}
+          onChange={event => update({ ...node, text: event.target.value }, "text")} /></Field>
+      <Field label="Name if they leave it empty"><input maxLength={32} value={story.player?.default_name ?? ""}
+        onChange={event => onChange({ ...story, player: { ...story.player, default_name: event.target.value } }, "player.default_name")} /></Field>
+      <Field label="Who the name belongs to" hint="That character's name shows as what the player typed.">
+        <select value={story.player?.character ?? ""} onChange={event => {
+          const { character: _, ...rest } = story.player ?? { default_name: "Alex" };
+          onChange({ ...story, player: event.target.value ? { ...rest, character: event.target.value } : rest });
+        }}><option value="">Nobody on stage</option>
+          {Object.entries(story.characters).map(([id, character]) => <option key={id} value={id}>{character.name} · {id}</option>)}
+        </select></Field>
+      <TargetSelect story={story} value={node.next} label="Next scene" onChange={next => update({ ...node, next })} />
     </>}
     {node.type === "end" && <>
       <Field label="Ending text"><textarea className="studio-prose" rows={7} value={node.text}

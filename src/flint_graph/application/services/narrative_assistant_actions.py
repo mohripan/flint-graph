@@ -664,6 +664,8 @@ async def _voice_items(
         voice = node.get("voice") or {}
         mode = voice.get("mode", "full")
         text = voice.get("text", "") if mode == "vocalization" else " ".join(node["text"].split())
+        # A clip is recorded once, so it says the default name (ADR 0072).
+        text = text.replace("{name}", (story.get("player") or {}).get("default_name", "{name}"))
         spec = MODELS.get(model_id) or MODELS[DEFAULT_MODEL]
         delivery = line_delivery(saved.get(line), node.get("expression"), spec)
         items.append({"mode": mode, "text": text, "node_id": line, "delivery": delivery})

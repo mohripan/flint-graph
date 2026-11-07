@@ -117,4 +117,6 @@ PINNED_PROMPTS = {
     "narrative-assistant/v10": "0967688c0d722ce58b3d66a4c722e20d94295f9b6ea8bd2ca448c2b941afceb4",
     # Title screens: art and music on the theme (ADR 0071).
     "narrative-assistant/v11": "a875a87c83634ab6ade3a8291fde4cf8642ffcb9fd44b49248f76580520f7184",
+    # Letting the player name the protagonist (ADR 0072).
+    "narrative-assistant/v12": "4983aa99b91571aefc8900305a6e79a234046368c412cbd5ae8042c647d082f7",
 }

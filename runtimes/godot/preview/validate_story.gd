@@ -6,6 +6,7 @@
 extends RefCounted
 const StrictJson = preload("res://runtime/strict_json.gd")
 const PlayerTerms = preload("res://runtime/player_terms.gd")
+const PlayerScript = preload("res://runtime/player.gd")
 const POSITIONS := ["left", "center", "right"]
 const RESERVED := ["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6",
 	"com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]
@@ -175,7 +176,7 @@ static func _stage(node: Dictionary, characters: Dictionary, assets: Dictionary,
 
 static func _story(story: Variant) -> bool:
 	var v2: bool = story is Dictionary and story.get("schema_version") is String and story["schema_version"] == "2"
-	if not _fields(story, ["schema_version", "id", "title", "language", "entry", "characters", "variables", "nodes", "assets"], ["theme"] if v2 else []): return false
+	if not _fields(story, ["schema_version", "id", "title", "language", "entry", "characters", "variables", "nodes", "assets"], ["theme", "player"] if v2 else []): return false
 	if not story["schema_version"] is String or not story["schema_version"] in ["1", "2"] or not _id(story["id"]) or not _text(story["title"]): return false
 	if not story["language"] is String or _languages.search(story["language"]) == null: return false
 	if not _map(story["characters"], 256) or not _map(story["variables"], 256) or not _map(story["nodes"], 10000): return false
@@ -187,6 +188,12 @@ static func _story(story: Variant) -> bool:
 	var variables: Dictionary = story["variables"]
 	var nodes: Dictionary = story["nodes"]
 	if not _ref(story["entry"], nodes): return false
+	if story.has("player"):
+		var player: Variant = story["player"]
+		if not _fields(player, ["default_name"], ["character"]): return false
+		var default_name: Variant = player["default_name"]
+		if not default_name is String or default_name == "" or PlayerScript.clean_name(default_name, "") != default_name: return false
+		if player.has("character") and not _ref(player["character"], characters): return false
 	for character: Variant in characters.values():
 		if not _fields(character, ["name"], ["color", "sprites", "stage"] if v2 else []) or not _text(character["name"]): return false
 		if character.has("stage"):
@@ -223,6 +230,9 @@ static func _story(story: Variant) -> bool:
 				if node.has("background") or node.has("portrait"): return false
 				if node.has("expression") and (not node.has("speaker") or not _ref(node["expression"], characters[node["speaker"]].get("sprites", {}))): return false
 				if node.has("voice") and not _voice(node, assets): return false
+			"name":
+				if not story.has("player") or not _fields(node, ["type", "text_id", "text", "next"]): return false
+				if not _display(node, text_ids) or not _ref(node["next"], nodes): return false
 			"stage":
 				if not v2 or not _stage(node, characters, assets, nodes): return false
 			"end":

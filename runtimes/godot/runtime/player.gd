@@ -7,6 +7,11 @@ const StrictJson = preload("res://runtime/strict_json.gd")
 const SAVE_LIMIT := 6291456
 const POSITIONS := ["left", "center", "right"]
 const PLAYING := ["music", "ambience"]  # What keeps playing between screens (ADR 0066).
+const NAME_LIMIT := 32
+# The same as the Python player's clean_name (ADR 0072): the joiners U+200C and U+200D stay.
+const NOT_IN_NAMES := [[0x0000, 0x001F], [0x007F, 0x009F], [0x200B, 0x200B], [0x200E, 0x200F],
+	[0x2028, 0x202E], [0x2060, 0x2069], [0xD800, 0xDFFF], [0xFEFF, 0xFEFF], [0xFFFE, 0xFFFF]]
+const NAME_EDGES := [0x0020, 0x00A0, 0x3000]
 var _story: Dictionary
 var _package_hash: String
 var _variables: Dictionary = {}
@@ -22,6 +27,8 @@ var _seen_cgs: Dictionary = {}
 var _transition: Variant = null
 var _effect: Variant = null
 var _sound: Variant = null
+# Absent from saves and frames without a declared player, so other stories keep theirs.
+var _player_name: Variant = null
 
 var gallery: Array:
 	get:
@@ -49,6 +56,8 @@ var state: Dictionary:
 			"ending": _ending, "fault": _fault}
 		if _v2:
 			current["stage"] = _stage.duplicate(true)
+		if _player_name != null:
+			current["player_name"] = _player_name
 		return current
 
 var view: Dictionary:
@@ -83,13 +92,45 @@ func _view_v2() -> Dictionary:
 	var character: Variant = _story["characters"][speaker] if speaker != null else null
 	var options: Array = []
 	for option: Dictionary in _visible(node, _variables):
-		options.append({"id": option["id"], "text_id": option["text_id"], "text": option["text"]})
-	return {"type": node["type"], "text_id": node["text_id"], "text": node["text"],
+		options.append({"id": option["id"], "text_id": option["text_id"], "text": _spoken(option["text"])})
+	var named: bool = _player_name != null and speaker != null and _story["player"].get("character") == speaker
+	var shown := {"type": node["type"], "text_id": node["text_id"], "text": _spoken(node["text"]),
 		"speaker": speaker,
-		"speaker_name": character["name"] if character != null else null,
+		"speaker_name": _player_name if named else (character["name"] if character != null else null),
 		"speaker_color": character.get("color") if character != null else null,
 		"stage": _stage.duplicate(true), "transition": _transition, "effect": _effect, "sound": _sound,
 		"voice": _voice(node), "options": options}
+	if _player_name != null:
+		shown["player_name"] = _player_name
+	return shown
+
+
+func _spoken(text: String) -> String:
+	# The name is plain data in a plain string; nothing else in a text is special.
+	return text if _player_name == null else text.replace("{name}", _player_name)
+
+
+static func clean_name(raw: String, fallback: String) -> String:
+	var kept: Array[int] = []
+	for index in range(raw.length()):
+		var code := raw.unicode_at(index)
+		var allowed := true
+		for span: Array in NOT_IN_NAMES:
+			if code >= span[0] and code <= span[1]:
+				allowed = false
+		if allowed:
+			kept.append(code)
+	while not kept.is_empty() and kept[0] in NAME_EDGES:
+		kept.pop_front()
+	kept = kept.slice(0, NAME_LIMIT)
+	while not kept.is_empty() and kept[-1] in NAME_EDGES:
+		kept.pop_back()
+	if kept.is_empty():
+		return fallback
+	var cleaned := ""
+	for code in kept:
+		cleaned += String.chr(code)
+	return cleaned
 
 
 func _voice(node: Dictionary) -> Variant:
@@ -109,6 +150,8 @@ func _init(source: Dictionary, content_hash: String, unlocked: Array = []) -> vo
 			_seen_cgs[id] = true
 	for key: String in _story["variables"]:
 		_variables[key] = _story["variables"][key]["initial"]
+	if _story.has("player"):
+		_player_name = _story["player"]["default_name"]
 	_settle(_story["entry"])
 	_unlock_cg()
 
@@ -133,7 +176,7 @@ static func cg_gallery_assets(story: Dictionary) -> Array:
 			assets.append(node["cg"])
 		var targets: Array = []
 		match node["type"]:
-			"line", "stage", "set": targets.append(node["next"])
+			"line", "stage", "set", "name": targets.append(node["next"])
 			"choice":
 				for option: Dictionary in node["options"]:
 					targets.append(option["target"])
@@ -245,7 +288,7 @@ func _settle(target: String) -> void:
 		_node_id = target
 		var node: Dictionary = _story["nodes"][target]
 		var kind: String = node["type"]
-		if kind in ["line", "choice"]:
+		if kind in ["line", "choice", "name"]:
 			if kind == "choice" and _visible(node, _variables).is_empty():
 				_status = "fault"
 				_fault = "no_available_choices"
@@ -294,6 +337,9 @@ func act(action: Variant, expected_generation: Variant = null) -> String:
 		for option: Dictionary in _visible(node, _variables):
 			if option["id"] == action.substr(7):
 				target = option["target"]
+	elif action.begins_with("name:") and node["type"] == "name":
+		_player_name = clean_name(action.substr(5), _story["player"]["default_name"])
+		target = node["next"]
 	if target == "":
 		return "invalid_action"
 	_settle(target)
@@ -313,6 +359,8 @@ func frame(action: Variant = null) -> Dictionary:
 	if _v2:
 		result["stage"] = _stage.duplicate(true)
 		result["voice"] = current["voice"]
+	if _player_name != null:
+		result["player_name"] = _player_name
 	return result
 
 
@@ -386,6 +434,11 @@ func load_save(data: PackedByteArray) -> String:
 	var required := ["schema_version", "package_hash", "node_id", "variables", "status", "ending", "fault"]
 	if _v2:
 		required.append("stage")
+	if _player_name != null:
+		required.append("player_name")
+		var name: Variant = saved.get("player_name")
+		if not name is String or name == "" or clean_name(name, "") != name:
+			return "invalid_save"
 	if saved.size() != required.size():
 		return "invalid_save"
 	for key: String in required:
@@ -411,7 +464,7 @@ func load_save(data: PackedByteArray) -> String:
 	var kind: String = node["type"]
 	var valid := false
 	if saved["status"] == "playing" and saved["ending"] == null and saved["fault"] == null:
-		valid = kind == "line" or (kind == "choice" and not _visible(node, saved["variables"]).is_empty())
+		valid = kind in ["line", "name"] or (kind == "choice" and not _visible(node, saved["variables"]).is_empty())
 	elif saved["status"] == "ended" and saved["fault"] == null:
 		valid = kind == "end" and saved["ending"] is String and saved["ending"] == node["ending"]
 	elif saved["status"] == "fault" and saved["ending"] == null and saved["fault"] is String:
@@ -423,6 +476,8 @@ func load_save(data: PackedByteArray) -> String:
 		return "invalid_save"
 	_node_id = saved["node_id"]
 	_variables = saved["variables"].duplicate(true)
+	if _player_name != null:
+		_player_name = saved["player_name"]
 	_status = saved["status"]
 	_ending = saved["ending"]
 	_fault = saved["fault"]

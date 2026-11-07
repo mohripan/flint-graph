@@ -17,7 +17,7 @@ function availableId(prefix: string, occupied: Iterable<string>): string {
 
 function textIds(story: StoryDraft): string[] {
   return Object.values(story.nodes).flatMap(node => {
-    if (node.type === "line" || node.type === "end") return [node.text_id];
+    if (node.type === "line" || node.type === "end" || node.type === "name") return [node.text_id];
     if (node.type === "choice") return [node.text_id, ...node.options.map(option => option.text_id)];
     return [];
   });
@@ -37,6 +37,9 @@ export function addScene(story: StoryDraft, kind: StoryNode["type"]): {
   let node: StoryNode;
   if (kind === "line") {
     node = { type: "line", text_id: textId, text: "A new scene begins.", next: target };
+  } else if (kind === "name") {
+    node = { type: "name", text_id: textId, text: "What is your name?", next: target };
+    next.player ??= { default_name: "Alex" };
   } else if (kind === "end") {
     const endings = Object.values(story.nodes).flatMap(item => item.type === "end" ? [item.ending] : []);
     node = { type: "end", text_id: textId, text: "The end.", ending: availableId("ending", endings) };
@@ -77,7 +80,7 @@ export function defaultCondition(story: StoryDraft, variable?: string): Conditio
 
 export function sceneTargets(node: StoryNode): string[] {
   switch (node.type) {
-    case "line": case "set": case "stage": return [node.next];
+    case "line": case "set": case "stage": case "name": return [node.next];
     case "choice": return node.options.map(option => option.target);
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
@@ -217,7 +220,7 @@ export function removeLine(story: StoryDraft, id: string): StoryDraft {
   const nodes: Record<string, StoryNode> = {};
   for (const [key, item] of Object.entries(story.nodes)) {
     if (key === id) continue;
-    nodes[key] = item.type === "line" || item.type === "set" || item.type === "stage" ? { ...item, next: follow(item.next) }
+    nodes[key] = item.type === "line" || item.type === "set" || item.type === "stage" || item.type === "name" ? { ...item, next: follow(item.next) }
       : item.type === "choice" ? { ...item, options: item.options.map(option => ({ ...option, target: follow(option.target) })) }
       : item.type === "branch" ? { ...item, if_true: follow(item.if_true), if_false: follow(item.if_false) } : item;
   }

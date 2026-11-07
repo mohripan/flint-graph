@@ -346,7 +346,11 @@ def static_font() -> bytes:
 
 
 def stage_package(
-    tmp_path: Path, nodes: dict | None = None, entry: str = "s0", framed: bool = False
+    tmp_path: Path,
+    nodes: dict | None = None,
+    entry: str = "s0",
+    framed: bool = False,
+    player: dict | None = None,
 ) -> StoryPackage:
     """Story format 2 with every stage rule: set, clear, move, replace, hide, expressions."""
     files = {
@@ -448,6 +452,8 @@ def stage_package(
         # Runtime 0.4.0: Mira drawn at 160% of the screen height from 4% down, at x 30.
         story["characters"]["mira"]["stage"] = {"scale": 160, "top": 4}
         story["nodes"]["s0"]["show"][0]["x"] = 30
+    if player:
+        story["player"] = player
     source = tmp_path / "source"
     (source / "assets").mkdir(parents=True)
     (source / "story.json").write_text(json.dumps(story), encoding="utf-8")

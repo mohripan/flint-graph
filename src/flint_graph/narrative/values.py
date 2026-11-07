@@ -12,6 +12,38 @@ def canonical_json(value: object) -> bytes:
     ).encode("utf-8")
 
 
+NAME_LIMIT = 32
+# Invisible, line-breaking or text-reversing characters have no place in a name on screen. The
+# joiners U+200C and U+200D stay: some scripts and emoji need them.
+_NOT_IN_NAMES = (
+    (0x0000, 0x001F),
+    (0x007F, 0x009F),
+    (0x200B, 0x200B),
+    (0x200E, 0x200F),
+    (0x2028, 0x202E),
+    (0x2060, 0x2069),
+    (0xD800, 0xDFFF),
+    (0xFEFF, 0xFEFF),
+    (0xFFFE, 0xFFFF),
+)
+_NAME_EDGES = {0x0020, 0x00A0, 0x3000}
+
+
+def clean_name(raw: str, fallback: str) -> str:
+    """What a typed name becomes; the Godot player does exactly the same (ADR 0072)."""
+    kept = [
+        code
+        for code in map(ord, raw)
+        if not any(low <= code <= high for low, high in _NOT_IN_NAMES)
+    ]
+    while kept and kept[0] in _NAME_EDGES:
+        kept.pop(0)
+    kept = kept[:NAME_LIMIT]
+    while kept and kept[-1] in _NAME_EDGES:
+        kept.pop()
+    return "".join(map(chr, kept)) or fallback
+
+
 @dataclass(frozen=True)
 class Diagnostic:
     code: str

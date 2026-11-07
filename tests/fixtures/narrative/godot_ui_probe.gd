@@ -308,6 +308,21 @@ func _initialize() -> void:
 		print("UI_RESULT:" + JSON.stringify({"screens": screens}))
 		quit(0)
 		return
+	if config["case"] == "name_cleaning":
+		var cleaned: Array = []
+		for typed: String in config["typed"]:
+			cleaned.append(load("res://runtime/player.gd").clean_name(typed, "Alex"))
+		print("UI_RESULT:" + JSON.stringify({"cleaned": cleaned}))
+		quit(0)
+		return
+	if config["case"] == "name_font":
+		await _probe_name_font(checked)
+		quit(0)
+		return
+	if config["case"] in ["name", "name_preview"]:
+		await _probe_name(checked, config["typed"], config["case"] == "name_preview")
+		quit(0)
+		return
 	if config["case"] == "title_gate":
 		await _probe_title_gate(checked)
 		quit(0)
@@ -820,6 +835,92 @@ func _probe_sound(checked: Dictionary) -> void:
 	stage._unhandled_key_input(_key(KEY_M))
 	volumes["m_key_toggles"] = stage._settings["muted"]
 	out["volumes"] = volumes
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _probe_name(checked: Dictionary, typed: String, preview: bool) -> void:
+	var before := _list_user_files()
+	var script: GDScript = load("res://preview/vn_view.gd" if preview else "res://runtime/vn_view.gd")
+	var stage: Control = script.new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	stage._set_text_speed("instant")
+	await process_frame
+	await process_frame
+	var out := {"asked": stage._name_field != null, "prefilled": stage._name_field.text if stage._name_field != null else "",
+		"confirm": stage._buttons[0].text if not stage._buttons.is_empty() else ""}
+	out["focus"] = "field" if root.gui_get_focus_owner() == stage._name_field else "other"
+	# Auto and Skip wait at the question, like at a choice.
+	stage._set_auto(true)
+	stage._tick_auto(60.0)
+	out["auto_stopped_at_question"] = stage._player.view["type"] == "name"
+	stage._set_auto(false)
+	# A letter typed into the field never reaches the shortcuts.
+	var letter := _key(KEY_A)
+	letter.unicode = 97
+	root.push_input(letter)
+	await process_frame
+	out["shortcut_typed"] = stage._auto
+	if not preview:
+		stage._toolbar("Save")
+	stage._name_field.text = typed
+	stage._name_field.text_submitted.emit(typed)
+	for frame in range(3):
+		await process_frame
+	out["text"] = stage._text.get_parsed_text()
+	out["bbcode"] = stage._text.bbcode_enabled
+	out["other_speaker"] = stage._name.text
+	stage._request_advance()
+	await process_frame
+	await process_frame
+	out["own_line_speaker"] = stage._name.text
+	if preview:
+		out["files_written"] = _list_user_files().filter(func(item: String) -> bool: return not item in before)
+	else:
+		var log_rows: Array = []
+		for row: Variant in stage.backlog_rows():
+			log_rows.append(str(row))
+		out["log"] = log_rows
+		# Back to the saved question, where an empty answer takes the default.
+		stage._toolbar("Load")
+		await process_frame
+		await process_frame
+		stage._name_field.text = "   "
+		stage._confirm_name(stage._player.generation, stage._player)
+		await process_frame
+		out["empty_takes_default"] = stage._player.state["player_name"]
+		stage._toolbar("Save")
+		var named := PackedByteArray()
+		var fresh: RefCounted = load("res://runtime/player.gd").new(checked["story"], checked["package_hash"])
+		fresh.act("name:" + typed)
+		named = fresh.save()
+		var again: RefCounted = load("res://runtime/player.gd").new(checked["story"], checked["package_hash"])
+		var error: String = again.load_save(named)
+		out["state_after_load"] = again.state["player_name"] if error == "" else error
+	print("UI_RESULT:" + JSON.stringify(out))
+
+
+func _probe_name_font(checked: Dictionary) -> void:
+	var web := GDScript.new()
+	web.source_code = "extends \"res://runtime/vn_view.gd\"\nfunc _font_falls_back() -> bool:\n\treturn false\n"
+	web.reload()
+	var stage: Control = web.new()
+	root.add_child(stage)
+	stage.size = Vector2(1280, 720)
+	stage.configure(checked["story"], checked["package_hash"], checked["assets"])
+	await process_frame
+	await process_frame
+	var out := {}
+	stage._name_field.text = "ミラ"
+	stage._confirm_name(stage._player.generation, stage._player)
+	await process_frame
+	out["blocked"] = {"still_asked": stage._name_field != null, "notice": stage._notice.text, "name": stage._player.state["player_name"]}
+	stage._name_field.text = "Zoë"
+	stage._confirm_name(stage._player.generation, stage._player)
+	await process_frame
+	await process_frame
+	out["accepted"] = {"name": stage._player.state["player_name"], "still_asked": stage._name_field != null, "notice": stage._notice.text}
 	print("UI_RESULT:" + JSON.stringify(out))
 
 

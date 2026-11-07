@@ -18,7 +18,7 @@ from flint_graph.narrative.validation import ID, collect_story_diagnostics
 from flint_graph.narrative.values import Diagnostic, PackageError, canonical_json
 
 MAX_OPERATIONS = 64
-_DISPLAY = {"line", "choice", "end"}
+_DISPLAY = {"line", "choice", "end", "name"}
 _Key = Annotated[str, Field(min_length=1, max_length=64)]
 _Text = Annotated[str, Field(min_length=1, max_length=16384)]
 
@@ -90,6 +90,14 @@ class SetTitleScreen(_Operation):
     op: Literal["set_title_screen"]
     background: _Key | None = None
     music: _Key | None = None
+
+
+class SetPlayer(_Operation):
+    """Lets the player name the protagonist (ADR 0072), with a name node where the game asks."""
+
+    op: Literal["set_player"]
+    default_name: Annotated[str, Field(min_length=1, max_length=32)]
+    character: _Key | None = None
 
 
 class AddAsset(_Operation):
@@ -220,6 +228,7 @@ Operation = Annotated[
     | SetTitle
     | SetTheme
     | SetTitleScreen
+    | SetPlayer
     | AddAsset
     | GenerateCharacterImages
     | GenerateBackgrounds
@@ -333,6 +342,8 @@ def _target(operation: Operation, index: int) -> str:
         return "theme"
     if isinstance(operation, SetTitleScreen):
         return "theme.title"
+    if isinstance(operation, SetPlayer):
+        return "player"
     return "entry" if isinstance(operation, SetEntry) else "title"
 
 
@@ -381,6 +392,11 @@ def apply_operations(story: dict[str, Any], operations: Sequence[Operation]) -> 
                 result["theme"] = theme
             else:
                 result.pop("theme", None)
+        elif isinstance(operation, SetPlayer):
+            result["player"] = {
+                "default_name": operation.default_name,
+                **({"character": operation.character} if operation.character else {}),
+            }
         elif isinstance(operation, SetTitleScreen):
             theme = dict(result.get("theme") or {})
             screen = dict(theme.get("title") or {})

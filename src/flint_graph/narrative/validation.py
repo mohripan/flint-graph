@@ -6,7 +6,7 @@ from collections.abc import Callable
 from functools import partial
 from typing import Any, TypeVar
 
-from flint_graph.narrative.values import Diagnostic, PackageError
+from flint_graph.narrative.values import Diagnostic, PackageError, clean_name
 
 ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 COLOR = re.compile(r"#[0-9a-f]{6}(?:[0-9a-f]{2})?\Z")
@@ -339,6 +339,16 @@ def _theme(value: Any, assets: dict[str, Any]) -> None:
             asset_of(title["music"], assets, "music", "theme.title.music")
 
 
+def _player(value: Any, characters: dict[str, Any]) -> None:
+    """The player's name (ADR 0072): a default, and optionally who the name belongs to."""
+    player = fields(value, {"default_name"}, {"character"}, "player")
+    name = player["default_name"]
+    if type(name) is not str or not name or clean_name(name, "") != name:
+        raise PackageError("invalid_text", "player.default_name")
+    if "character" in player:
+        reference(player["character"], characters, "player.character")
+
+
 def _missing_ending() -> None:
     raise PackageError("missing_ending", "nodes")
 
@@ -349,7 +359,9 @@ def _validate(story: Any, errors: _Errors) -> tuple[Diagnostic, ...]:
     # whose sprites reference them; v1 order and fields are unchanged.
     v2 = type(story) is dict and story.get("schema_version") == "2"
     if (
-        errors.check(lambda: fields(story, _STORY_FIELDS, {"theme"} if v2 else set(), "story"))
+        errors.check(
+            lambda: fields(story, _STORY_FIELDS, {"theme", "player"} if v2 else set(), "story")
+        )
         is None
     ):
         return ()
@@ -368,6 +380,8 @@ def _validate(story: Any, errors: _Errors) -> tuple[Diagnostic, ...]:
         variables = errors.check(lambda: _variables(story["variables"]))
         if assets is not None and "theme" in story:
             errors.check(lambda: _theme(story["theme"], known))
+        if "player" in story:
+            errors.check(lambda: _player(story["player"], characters or {}))
     else:
         characters = errors.check(lambda: _characters(story["characters"]))
         variables = errors.check(lambda: _variables(story["variables"]))
@@ -376,7 +390,7 @@ def _validate(story: Any, errors: _Errors) -> tuple[Diagnostic, ...]:
     if characters is None or variables is None or assets is None or nodes is None:
         return ()
     errors.check(lambda: reference(story["entry"], nodes, "entry"))
-    scenes = _Nodes(characters, variables, assets, nodes, v2=v2)
+    scenes = _Nodes(characters, variables, assets, nodes, v2=v2, named="player" in story)
     for key, node in nodes.items():
         errors.check(partial(scenes.check, key, node))
     if not scenes.endings:
@@ -398,6 +412,7 @@ class _Nodes:
         nodes: dict[str, Any],
         *,
         v2: bool = False,
+        named: bool = False,
     ) -> None:
         self.characters, self.variables, self.assets, self.nodes = (
             characters,
@@ -405,7 +420,7 @@ class _Nodes:
             assets,
             nodes,
         )
-        self.v2 = v2
+        self.v2, self.named = v2, named
         self.text_ids: set[str] = set()
         self.endings: set[str] = set()
         self.graph: dict[str, list[str]] = {}
@@ -549,6 +564,10 @@ class _Nodes:
                     taken.add(entry["position"])
             if not effect:
                 raise PackageError("invalid_stage", location)
+            targets.append(reference(node["next"], nodes, location + ".next"))
+        elif kind == "name" and self.named:
+            fields(node, {"type", "text_id", "text", "next"}, set(), location)
+            display(node, location)
             targets.append(reference(node["next"], nodes, location + ".next"))
         elif kind == "choice":
             fields(node, {"type", "text_id", "text", "options"}, set(), location)

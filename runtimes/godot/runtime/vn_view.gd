@@ -126,6 +126,7 @@ var _title_status: Label
 var _title_buttons: Dictionary = {}
 var _story_menu_buttons: Dictionary = {}  # Each button, and whether it starts out disabled.
 var _started := false
+var _name_field: LineEdit  # While the story asks for the player's name (ADR 0072).
 
 
 func configure(source: Dictionary, package_hash: String, assets: Dictionary, notices: String = "") -> void:
@@ -727,6 +728,8 @@ func _resume_controls(store: Dictionary) -> void:
 func _refocus() -> void:
 	if _title_showing():
 		_title_buttons["Start"].grab_focus()
+	elif _name_field != null:
+		_name_field.grab_focus()
 	elif not _buttons.is_empty():
 		_buttons[0].grab_focus()
 
@@ -906,7 +909,7 @@ func _begin_screen(current: Dictionary) -> void:
 	_reveal_elapsed = 0.0
 	_reveal_total = 0.0 if _skip else Reading.reveal_seconds(current["text"], _settings["text_speed"])
 	_text.visible_ratio = 0.0 if _reveal_total > 0.0 else 1.0
-	if current["type"] in ["line", "choice", "end"] and current["text"] != "":
+	if current["type"] in ["line", "choice", "end", "name"] and current["text"] != "":
 		_note_backlog(current["speaker_name"], current["text"], current["speaker_color"])
 
 
@@ -1493,6 +1496,7 @@ func _render() -> void:
 		_choices.remove_child(child)
 		child.queue_free()
 	_buttons.clear()
+	_name_field = null
 	var generation: int = _player.generation
 	if current["type"] == "line":
 		_buttons.append(_continue)
@@ -1500,13 +1504,17 @@ func _render() -> void:
 		for index in range(current["options"].size()):
 			var option: Dictionary = current["options"][index]
 			_add_choice(option["text"], "choose:" + option["id"], generation)
+	elif current["type"] == "name":
+		_add_name_field(current["player_name"], generation)
 	elif current["type"] in ["end", "fault"]:
 		var again := _choice_button("Play again")
 		again.pressed.connect(_toolbar.bind("Restart"))
 		_choices.add_child(again)
 		_buttons.append(again)
 	_layout()
-	if not _buttons.is_empty():
+	if _name_field != null:
+		_name_field.call_deferred("grab_focus")
+	elif not _buttons.is_empty():
 		_buttons[0].call_deferred("grab_focus")
 	_publish_qa.call_deferred()
 	_persist_gallery()
@@ -1537,6 +1545,59 @@ func _choice_button(label: String) -> Button:
 	return button
 
 
+func _add_name_field(current: String, generation: int) -> void:
+	var palette: Dictionary = _theme["choices"]
+	_name_field = LineEdit.new()
+	_name_field.text = current
+	_name_field.select_all_on_focus = true
+	_name_field.max_length = PlayerScript.NAME_LIMIT
+	_name_field.custom_minimum_size.y = 52
+	_name_field.placeholder_text = "Your name"
+	_name_field.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_field.add_theme_font_override("font", _font)
+	_name_field.add_theme_color_override("font_color", _color(palette["text"]))
+	_name_field.add_theme_color_override("caret_color", _color(palette["text"]))
+	var box := _style(_color(palette["background"]), _color(palette["border"]), _theme["textbox"]["radius"])
+	_name_field.add_theme_stylebox_override("normal", box)
+	var focused := box.duplicate()
+	focused.set_border_width_all(4)
+	_name_field.add_theme_stylebox_override("focus", focused)
+	_name_field.text_submitted.connect(_submit_name.bind(generation, _player))
+	_choices.add_child(_name_field)
+	var confirm := _choice_button("That's me")
+	confirm.pressed.connect(_confirm_name.bind(generation, _player))
+	_choices.add_child(confirm)
+	_buttons.append(confirm)
+
+
+func _confirm_name(generation: int, session: RefCounted) -> void:
+	if _name_field != null:
+		_submit_name(_name_field.text, generation, session)
+
+
+func _submit_name(typed: String, generation: int, session: RefCounted) -> void:
+	if not _can_show(PlayerScript.clean_name(typed, "")):
+		# It would be empty boxes in every line that says it, so ask rather than save that.
+		_notice.text = "This game's font can't show some of those letters. Please try others."
+		_publish_qa.call_deferred()
+		return
+	_action("name:" + typed, generation, session)
+
+
+func _can_show(typed: String) -> bool:
+	if _font_falls_back():
+		return true
+	for index in range(typed.length()):
+		var code := typed.unicode_at(index)
+		if code != 0x200C and code != 0x200D and not _font.has_char(code):
+			return false
+	return true
+
+
+func _font_falls_back() -> bool:
+	return not OS.has_feature("web")  # A desktop has system fonts to borrow; a browser gives none.
+
+
 func _add_choice(label: String, action: String, generation: int) -> void:
 	var button := _choice_button(label)
 	button.pressed.connect(_action.bind(action, generation, _player))
@@ -1564,6 +1625,8 @@ func _layout() -> void:
 	var font_size := int(round(int(_theme["font"]["size"]) * scale_factor))
 	_text.add_theme_font_size_override("normal_font_size", font_size)
 	_name.add_theme_font_size_override("font_size", maxi(12, int(font_size * 0.8)))
+	if _name_field != null:
+		_name_field.add_theme_font_size_override("font_size", font_size)
 	for button: Button in _buttons:
 		if button != _continue:
 			button.add_theme_font_size_override("font_size", font_size)
@@ -1633,6 +1696,8 @@ func _action(action: String, generation: int, session: RefCounted) -> void:
 		for option: Dictionary in left["options"]:
 			if action == "choose:" + option["id"]:
 				_note_backlog(null, "› " + option["text"])
+	elif left["type"] == "name":
+		_note_backlog(null, "› " + _player.state["player_name"])
 	_notice.text = ""
 	_render()
 
@@ -1871,6 +1936,7 @@ func _publish_qa() -> void:
 		"auto": _auto, "skip": _skip, "ui_hidden": _ui_hidden, "revealing": _revealing(),
 		"transition": _fx_kind, "effect": _effect_kind, "reduced_motion": _settings["reduced_motion"],
 		"music": _music.current, "ambience": _ambience.current, "music_playing": _music.playing(), "sound_playing": _effects_player.playing, "muted": _settings["muted"],
+		"player_name": _player.state.get("player_name"), "name_asked": _name_field != null,
 		"title_open": _title_showing(), "title_art": _title_art != null and _title_art.texture != null,
 		"log_open": _log_panel.visible, "menu_open": _menu_panel.visible, "backlog": backlog_rows().size(), "read_marks": _read.size()}
 	var browser: Variant = JavaScriptBridge.get_interface("window")

@@ -27,6 +27,8 @@ export type StoryNode =
   | (Display & { type: "line"; next: string; speaker?: string; background?: string; portrait?: string; expression?: string; voice?: LineVoice })
   | { type: "stage"; next: string; background?: string | null; cg?: string | null; show?: StageShow[]; hide?: string[]; transition?: StageTransition; effect?: StageEffect; music?: string | null; ambience?: string | null; sound?: string }
   | (Display & { type: "choice"; options: ChoiceOption[] })
+  /** Asks the player's name (ADR 0072). */
+  | (Display & { type: "name"; next: string })
   | { type: "set"; next: string; operations: Array<{ op: "set" | "increment"; variable: string; value: Scalar }> }
   | { type: "branch"; condition: Condition; if_true: string; if_false: string }
   | (Display & { type: "end"; ending: string });
@@ -42,6 +44,7 @@ export interface StoryTheme {
 // ``stage`` framing: drawn height as % of the screen and the top edge as % of its height.
 export interface CharacterFraming { scale?: number; top?: number }
 export interface StoryCharacter { name: string; color?: string; sprites?: Record<string, string>; stage?: CharacterFraming }
+export interface StoryPlayer { default_name: string; character?: string }
 export interface StoryDraft {
   schema_version: "1" | "2";
   id: string;
@@ -52,6 +55,8 @@ export interface StoryDraft {
   variables: Record<string, VariableDeclaration>;
   assets: Record<string, { kind?: "image" | "font" | "audio" | "music"; path: string; sha256: string }>;
   theme?: StoryTheme;
+  /** With one, {name} in any text is the name the player typed (ADR 0072). */
+  player?: StoryPlayer;
   nodes: Record<string, StoryNode>;
 }
 export interface NarrativeProject {
@@ -134,6 +139,7 @@ export type StoryOperation =
   | { op: "set_title"; title: string }
   | { op: "set_theme"; theme: StoryTheme | null }
   | { op: "set_title_screen"; background?: string | null; music?: string | null }
+  | { op: "set_player"; default_name: string; character?: string | null }
   | { op: "add_asset"; id: string; asset: { kind: "image" | "font" | "audio" | "music"; path: string; sha256: string } }
   | AssistantAction;
 // Generation (story format 2): never applied with the proposal; each becomes a job (ADR 0061).

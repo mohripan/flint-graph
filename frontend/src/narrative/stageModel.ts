@@ -191,7 +191,7 @@ function join(left: StageSnapshot, right: StageSnapshot): StageSnapshot {
 
 function targets(node: StoryNode): string[] {
   switch (node.type) {
-    case "line": case "set": case "stage": return [node.next];
+    case "line": case "set": case "stage": case "name": return [node.next];
     case "choice": return node.options.map(option => option.target);
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
@@ -327,7 +327,7 @@ function retarget(story: StoryDraft, from: string, to: string): StoryDraft {
   const follow = (target: string) => target === from ? to : target;
   const nodes: Record<string, StoryNode> = {};
   for (const [key, item] of Object.entries(story.nodes)) {
-    nodes[key] = item.type === "line" || item.type === "set" || item.type === "stage" ? { ...item, next: follow(item.next) }
+    nodes[key] = item.type === "line" || item.type === "set" || item.type === "stage" || item.type === "name" ? { ...item, next: follow(item.next) }
       : item.type === "choice" ? { ...item, options: item.options.map(option => ({ ...option, target: follow(option.target) })) }
       : item.type === "branch" ? { ...item, if_true: follow(item.if_true), if_false: follow(item.if_false) } : item;
   }

@@ -740,6 +740,136 @@ async def test_a_theme_full_of_blanks_means_only_what_it_says():
     }
 
 
+def test_set_player_names_who_the_player_is():
+    edit = apply_operations(
+        story(),
+        proposal({"op": "set_player", "default_name": "Alex", "character": "mira"}).operations,
+    )
+    assert edit.story["player"] == {"default_name": "Alex", "character": "mira"}
+    assert edit.touched == ("player",)
+
+
+ASKING = {
+    "op": "upsert_node",
+    "id": "ask",
+    "node": {"type": "name", "text": "Name?", "next": "ending"},
+}
+
+
+@pytest.mark.anyio
+async def test_asking_for_a_name_brings_the_player_it_needs():
+    result = await run_turn(Scripted(answer(ASKING)), story(), "Ask the player's name.")
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    assert [item.op for item in result.proposal.operations] == ["set_player", "upsert_node"]
+    assert result.proposal.operations[0].default_name == "Alex"
+    assert result.story["nodes"]["ask"]["text_id"], "text IDs are filled in like any other"
+
+
+@pytest.mark.anyio
+async def test_writing_the_placeholder_brings_the_player_it_needs():
+    line = {"type": "line", "text": "Hello, {name}.", "next": "ending"}
+    made = answer({"op": "upsert_node", "id": "hi", "node": line})
+    result = await run_turn(Scripted(made), story(), "Greet the player.")
+    assert result.proposal.operations[0].op == "set_player"
+    assert result.story["player"] == {"default_name": "Alex"}
+
+
+@pytest.mark.anyio
+async def test_a_player_the_model_or_the_story_already_set_is_left_alone():
+    chosen = answer(ASKING, {"op": "set_player", "default_name": "Sam"})
+    result = await run_turn(Scripted(chosen), story(), "Ask the player's name.")
+    assert [
+        item.default_name for item in result.proposal.operations if item.op == "set_player"
+    ] == ["Sam"]
+    source = {**story(), "player": {"default_name": "Sam"}}
+    again = await run_turn(Scripted(answer(ASKING)), source, "Ask again.")
+    assert [item.op for item in again.proposal.operations] == ["upsert_node"]
+
+
+@pytest.mark.anyio
+async def test_an_ordinary_scene_brings_no_player():
+    line = {"type": "line", "text": "Hello, {nobody}.", "next": "ending"}
+    made = answer({"op": "upsert_node", "id": "hi", "node": line})
+    result = await run_turn(Scripted(made), story(), "Say hello.")
+    assert [item.op for item in result.proposal.operations] == ["upsert_node"]
+
+
+@pytest.mark.anyio
+async def test_a_name_nobody_asked_for_gets_a_question_before_the_story_starts():
+    line = {"type": "line", "text": "Hello, {name}.", "next": "ending"}
+    made = answer({"op": "upsert_node", "id": "hi", "node": line}, {"op": "set_entry", "id": "hi"})
+    result = await run_turn(Scripted(made), story(), "Greet the player by name.")
+    assert result.diagnostics == ()
+    edited = result.story
+    assert edited["entry"] == "ask_name"
+    assert edited["nodes"]["ask_name"]["type"] == "name"
+    assert edited["nodes"]["ask_name"]["next"] == "hi", "then on to where the story was to begin"
+    assert edited["player"] == {"default_name": "Alex"}
+
+
+@pytest.mark.anyio
+async def test_setting_a_player_alone_also_gets_the_question():
+    made = answer({"op": "set_player", "default_name": "Kai", "character": "mira"})
+    result = await run_turn(Scripted(made), story(), "Let the player name Mira.")
+    assert result.story["entry"] == "ask_name"
+    assert result.story["nodes"]["ask_name"]["next"] == story()["entry"]
+    assert result.story["player"]["default_name"] == "Kai"
+
+
+@pytest.mark.anyio
+async def test_showing_someone_with_no_pictures_is_left_out():
+    show = [{"character": "ren", "sprite": "neutral", "position": "left"}]
+    first = {"type": "stage", "show": show, "next": "hi"}
+    line = {"type": "line", "text": "Hi.", "next": "ending"}
+    made = answer(
+        {"op": "upsert_node", "id": "s1", "node": first},
+        {"op": "upsert_node", "id": "hi", "node": line},
+        {"op": "set_entry", "id": "s1"},
+    )
+    source = story()
+    source["characters"]["ren"] = {"name": "Ren"}
+    result = await run_turn(Scripted(made), source, "Show Ren.")
+    assert result.diagnostics == ()
+    assert result.attempts == 1
+    assert "s1" not in result.story["nodes"], "there was nothing else to this step"
+    assert result.story["entry"] == "hi", "and the story joins up around it"
+
+
+@pytest.mark.anyio
+async def test_what_leads_into_a_rewritten_scene_with_nothing_left_goes_straight_on():
+    empty = {"type": "stage", "next": "hi"}
+    line = {"type": "line", "text": "Hi.", "next": "ending"}
+    lead = {"type": "line", "text": "First.", "next": "opening"}
+    made = answer(
+        {"op": "upsert_node", "id": "lead", "node": lead},
+        {"op": "upsert_node", "id": "opening", "node": empty},
+        {"op": "upsert_node", "id": "hi", "node": line},
+        {"op": "set_entry", "id": "lead"},
+    )
+    result = await run_turn(Scripted(made), story(), "Add these.")
+    assert result.diagnostics == ()
+    assert result.story["nodes"]["lead"]["next"] == "hi"
+    assert result.story["nodes"]["opening"] == story()["nodes"]["opening"]
+
+
+def test_the_model_sees_a_player_and_a_question_in_the_story():
+    source = {
+        **story(),
+        "player": {"default_name": "Sam", "character": "mira"},
+        "nodes": {
+            **story()["nodes"],
+            "ask": {"type": "name", "text_id": "ask", "text": "Name?", "next": "ending"},
+        },
+    }
+    messages, _ = build_turn_messages(source, "Hi")
+    content = messages[-1]["content"]
+    assert 'player: {"character":"mira","default_name":"Sam"}' in content or (
+        '"default_name":"Sam"' in content
+    )
+    assert "ask | asks the player's name | " in content
+
+
 @pytest.mark.parametrize("seconds", [14, 181])
 def test_a_track_length_outside_the_limits_is_refused(seconds):
     with pytest.raises(ValidationError):

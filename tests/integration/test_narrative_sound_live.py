@@ -169,7 +169,7 @@ async def test_actual_linux_release_build_carries_music(tmp_path) -> None:
     result = await runner.build(package, execution_id=uuid4(), check=current)
     theme = (AUDIO / "tone_a.ogg").read_bytes()
     with ZipFile(io.BytesIO(result.source_zip)) as source:
-        assert json.loads(source.read("build-manifest.json"))["runtime_version"] == "0.11.0"
+        assert json.loads(source.read("build-manifest.json"))["runtime_version"] == "0.12.0"
         assert source.read("content/assets/theme.ogg") == theme
         assert "runtime/sound_channel.gd" in source.namelist()
     with ZipFile(io.BytesIO(result.web_zip)) as web:

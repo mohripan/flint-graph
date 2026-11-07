@@ -122,6 +122,8 @@ export function proposalChanges(story: Pick<StoryDraft, "nodes" | "characters" |
         return { kind: "changed", target: "title", label: `Title → ${operation.title}` };
       case "set_theme":
         return { kind: operation.theme ? "changed" : "removed", target: "theme", label: "Look (theme)" };
+      case "set_player":
+        return { kind: "changed", target: "player", label: `Player's name · defaults to ${operation.default_name}` };
       case "set_title_screen":
         return { kind: "changed", target: "theme.title", label: "Title screen" };
       case "add_asset":

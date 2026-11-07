@@ -13,7 +13,7 @@ from flint_graph.narrative.validation import (
     reference,
     typed_value,
 )
-from flint_graph.narrative.values import PackageError, StoryPackage, canonical_json
+from flint_graph.narrative.values import PackageError, StoryPackage, canonical_json, clean_name
 
 # All variable literals are bounded by a 5 MiB source package; leave a full MiB
 # for integer growth, variable keys and fixed save metadata, not just small games.
@@ -75,7 +75,7 @@ def cg_gallery_assets(story: dict[str, Any]) -> list[str]:
         kind = node["type"]
         targets = (
             [node["next"]]
-            if kind in ("line", "stage", "set")
+            if kind in ("line", "stage", "set", "name")
             else [item["target"] for item in node["options"]]
             if kind == "choice"
             else [node["if_true"], node["if_false"]]
@@ -101,6 +101,9 @@ class Player:
         self._sound: str | None = None
         self._cg_assets = cg_gallery_assets(self._story)
         self._seen_cgs = {key for key in seen_cgs if type(key) is str and key in self._cg_assets}
+        # Absent without a declared player, so other stories save as they always have.
+        declared = self._story.get("player")
+        self._player_name: str | None = declared["default_name"] if declared else None
         self._variables = {key: value["initial"] for key, value in self._story["variables"].items()}
         self._node_id = self._story["entry"]
         self._status = "playing"
@@ -142,6 +145,8 @@ class Player:
         }
         if self._v2:
             state["stage"] = self._stage_copy()
+        if self._player_name is not None:
+            state["player_name"] = self._player_name
         return state
 
     def _stage_copy(self) -> dict[str, Any]:
@@ -183,6 +188,10 @@ class Player:
             ],
         }
 
+    def _spoken(self, text: str) -> str:
+        """The name is plain data in a plain string; nothing else in a text is special."""
+        return text if self._player_name is None else text.replace("{name}", self._player_name)
+
     def _view_v2(self) -> dict[str, Any]:
         """The screen is the current text plus the persistent stage, including faults."""
         node = self._story["nodes"][self._node_id]
@@ -203,13 +212,15 @@ class Player:
             }
         speaker = node.get("speaker") if node["type"] == "line" else None
         character = self._story["characters"][speaker] if speaker else None
+        named = self._player_name is not None and speaker == self._story["player"].get("character")
         return {
             "type": node["type"],
             "text_id": node["text_id"],
-            "text": node["text"],
+            "text": self._spoken(node["text"]),
             "speaker": speaker,
-            "speaker_name": character["name"] if character else None,
+            "speaker_name": self._player_name if named else (character or {}).get("name"),
             "speaker_color": character.get("color") if character else None,
+            **({} if self._player_name is None else {"player_name": self._player_name}),
             "stage": self._stage_copy(),
             # How to show arriving here (ADR 0065). Not state: no saves, no route traces.
             "transition": self._transition,
@@ -218,7 +229,11 @@ class Player:
             # The settled line's voice clip (ADR 0043); a voice without audio is silent.
             "voice": node.get("voice", {}).get("audio") if node["type"] == "line" else None,
             "options": [
-                {"id": option["id"], "text_id": option["text_id"], "text": option["text"]}
+                {
+                    "id": option["id"],
+                    "text_id": option["text_id"],
+                    "text": self._spoken(option["text"]),
+                }
                 for option in self._options()
             ],
         }
@@ -238,6 +253,8 @@ class Player:
         if self._v2:
             frame["stage"] = self._stage_copy()
             frame["voice"] = self.view["voice"]
+        if self._player_name is not None:
+            frame["player_name"] = self._player_name
         return frame
 
     def save(self) -> bytes:
@@ -256,7 +273,13 @@ class Player:
                 "ending",
                 "fault",
             }
-            fields(saved, required | ({"stage"} if self._v2 else set()), set(), "save")
+            named = self._player_name is not None
+            required |= {"stage"} if self._v2 else set()
+            required |= {"player_name"} if named else set()
+            fields(saved, required, set(), "save")
+            name = saved.get("player_name")
+            if named and (type(name) is not str or not name or clean_name(name, "") != name):
+                raise PackageError("invalid_save")
             if (
                 saved["schema_version"] != ("2" if self._v2 else "1")
                 or saved["package_hash"] != self._package_hash
@@ -272,7 +295,7 @@ class Player:
             kind, status = node["type"], saved["status"]
             valid = False
             if status == "playing" and saved["ending"] is None and saved["fault"] is None:
-                valid = kind == "line" or (
+                valid = kind in ("line", "name") or (
                     kind == "choice"
                     and any(
                         "condition" not in option
@@ -307,6 +330,8 @@ class Player:
         except PackageError:
             raise PlayerError("invalid_save") from None
         self._node_id, self._variables = node_id, dict(variables)
+        if named:
+            self._player_name = name
         self._status, self._ending, self._fault = status, saved["ending"], saved["fault"]
         self._transition = self._effect = self._sound = None
         if stage is not None:
@@ -380,6 +405,9 @@ class Player:
             if selected is None:
                 raise PlayerError("invalid_action")
             target = selected["target"]
+        elif type(action) is str and action.startswith("name:") and node["type"] == "name":
+            self._player_name = clean_name(action[5:], self._story["player"]["default_name"])
+            target = node["next"]
         else:
             raise PlayerError("invalid_action")
         self._settle(target)
@@ -436,7 +464,7 @@ class Player:
             self._node_id = node_id
             node = self._story["nodes"][node_id]
             kind = node["type"]
-            if kind in ("line", "choice"):
+            if kind in ("line", "choice", "name"):
                 if kind == "choice" and not self._options():
                     self._status, self._fault = "fault", "no_available_choices"
                 if kind == "line" and "expression" in node:

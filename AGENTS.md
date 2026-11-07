@@ -321,6 +321,11 @@ combined mode. Never exercised on real AWS; read `docs/runbooks/gpu-sleep-and-wa
 line as before, so native probes are unaffected. The assistant uses its own exact `set_title_screen`, because given the whole
 theme the live model invented every colour. Read `docs/reports/2026-11-07-title-screen.md`.
 
+[ADR 0072](docs/adr/0072-naming-the-player.md) (runtime 0.12.0, prompt v12) lets players name the protagonist: format 2
+`player` and a `name` node, `{name}` in text, and `player_name` in state, saves and traces only when declared. `clean_name` must
+stay identical in `values.py` and `player.gd`. Keep Python, `player.gd` and `validate_story.gd` in step. Read
+`docs/reports/2026-11-07-player-name.md`.
+
 ## Project Snapshot
 
 #134 now has the Langfuse authoring/reviewed-lock decision contract in ADR 0044,

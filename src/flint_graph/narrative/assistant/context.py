@@ -142,6 +142,9 @@ def _outline(key: str, node: dict[str, Any]) -> str:
             )
             parts.append("show " + shown)
         return f"{key} | stage | {'; '.join(parts)} -> {node.get('next')}"
+    if kind == "name":
+        asked = _snippet(node.get("text"))
+        return f"{key} | asks the player's name | {asked} -> {node.get('next')}"
     if kind == "choice":
         options = "; ".join(
             f"{option.get('id')} -> {option.get('target')}"
@@ -293,6 +296,10 @@ def _render(
             header.append(
                 "theme: " + json.dumps(story["theme"], ensure_ascii=False, separators=(",", ":"))
             )
+    if story.get("player"):
+        header.append(
+            "player: " + json.dumps(story["player"], ensure_ascii=False, separators=(",", ":"))
+        )
     if capabilities:
         header.append("generation available: " + ", ".join(capabilities))
         if "voices" in capabilities:

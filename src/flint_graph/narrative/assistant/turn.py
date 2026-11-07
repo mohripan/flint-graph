@@ -30,6 +30,8 @@ from flint_graph.narrative.assistant.operations import (
     GenerateMusic,
     GenerateVoice,
     Proposal,
+    SetEntry,
+    SetPlayer,
     SetTheme,
     SetTitleScreen,
     StartChildSession,
@@ -231,9 +233,13 @@ def _tidied_stage(
                 elif wanted not in own and wanted in pending.get(character, ()) and own:
                     # An expression still being generated: the usual face until it is approved.
                     entry = {**entry, "sprite": "neutral" if "neutral" in own else next(iter(own))}
+                elif not own and character in sprites:
+                    continue  # Someone with no pictures cannot be shown yet, whatever was asked.
             entries.append(entry)
         if entries:
             changed["show"] = entries
+        else:
+            changed.pop("show", None)
     return changed
 
 
@@ -307,9 +313,8 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
     operations: list[Any] = []
     # A title screen waiting on a file still being generated keeps the rest of its choice.
     title_fields = {"background": GenerateBackgrounds, "music": GenerateMusic}
-    # New steps that had nothing left to do, and where each one led.
+    # Steps that had nothing left to do, and where each one led.
     gone: dict[str, str] = {}
-    saved = story.get("nodes") or {}
     for item in proposal.operations:
         if isinstance(item, UpsertNode):
             kind = item.node.get("type")
@@ -319,9 +324,9 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
                 node = _tidied_stage(item.node, sprites, assets, generating, pending)
                 target = node.get("next")
                 if isinstance(target, str) and not any(key in node for key in _STAGE_CHANGES):
-                    # It only played a file still being generated, so there is no step yet.
-                    if item.id not in saved:
-                        gone[item.id] = target
+                    # It only played a file still being generated, so there is no step yet. What
+                    # this proposal leads into it goes straight on; a saved scene stays as it was.
+                    gone[item.id] = target
                     continue
                 item = item.model_copy(update={"node": node})
         elif isinstance(item, SetTheme) and item.theme is not None:
@@ -342,9 +347,53 @@ def _with_tidied_nodes(story: dict[str, Any], proposal: Proposal) -> Proposal:
         operations = [
             item.model_copy(update={"node": _repointed(item.node, gone)})
             if isinstance(item, UpsertNode)
+            else item.model_copy(update={"id": _repointed({"next": item.id}, gone)["next"]})
+            if isinstance(item, SetEntry)
             else item
             for item in operations
         ]
+    return proposal.model_copy(update={"operations": operations})
+
+
+def _with_player(story: dict[str, Any], proposal: Proposal) -> Proposal:
+    """Asking for a name, or writing {name}, only works in a story with a player, and local
+    models often write the node and forget the rest. The name's default is theirs to change."""
+    if story.get("schema_version") != "2" or story.get("player"):
+        return proposal
+
+    def uses_name(node: dict[str, Any]) -> bool:
+        texts = [node.get("text"), *(option.get("text") for option in node.get("options", []))]
+        return node.get("type") == "name" or any(
+            isinstance(text, str) and "{name}" in text for text in texts
+        )
+
+    operations = list(proposal.operations)
+    chosen = any(isinstance(item, SetPlayer) for item in operations)
+    if not chosen and not any(
+        isinstance(item, UpsertNode) and uses_name(item.node) for item in operations
+    ):
+        return proposal
+    if not chosen:
+        operations.insert(0, SetPlayer(op="set_player", default_name="Alex"))
+    # A name nobody is asked for is only ever the default, so ask first, before the story starts.
+    asked = any(node.get("type") == "name" for node in (story.get("nodes") or {}).values()) or any(
+        isinstance(item, UpsertNode) and item.node.get("type") == "name" for item in operations
+    )
+    if not asked:
+        entries = [item for item in operations if isinstance(item, SetEntry)]
+        first = entries[0].id if entries else story["entry"]
+        known = set(story.get("nodes") or {}) | {
+            item.id for item in operations if isinstance(item, UpsertNode)
+        }
+        key = next(
+            name
+            for name in ("ask_name", *(f"ask_name_{number}" for number in range(2, 99)))
+            if name not in known
+        )
+        node = {"type": "name", "text": "What is your name?", "next": first}
+        operations = [item for item in operations if not isinstance(item, SetEntry)]
+        operations.append(UpsertNode(op="upsert_node", id=key, node=node))
+        operations.append(SetEntry(op="set_entry", id=key))
     return proposal.model_copy(update={"operations": operations})
 
 
@@ -653,6 +702,7 @@ async def run_turn(
                 story, add_library_assets(story, parsed, library), dropped_for
             )
             parsed = _with_voice_actions(_with_tidied_nodes(story, parsed), capabilities)
+            parsed = _with_player(story, parsed)
             # A provider without a grammar could still write these; they can only be refused.
             refused: tuple[type, ...] = (StartChildSession,) if child_session else ()
             if "music" not in capabilities:

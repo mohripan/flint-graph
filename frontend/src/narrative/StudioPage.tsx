@@ -505,9 +505,9 @@ export function StudioPage({ onDirtyChange }: {
         </section>
       </div>
       {canWrite && story && <footer className="studio-add"><span>Add to the story</span><div className="studio-actions">
-        {(["line", "choice", "end", "set", "branch"] as const).map(type => <button type="button" className="studio-secondary" key={type}
+        {(["line", "choice", "end", "set", "branch", "name"] as const).filter(type => type !== "name" || story.schema_version === "2").map(type => <button type="button" className="studio-secondary" key={type}
           disabled={readOnly || ((type === "set" || type === "branch") && !Object.keys(story.variables).length)} onClick={() => add(type)}>
-          {type === "line" ? "Add scene" : type === "choice" ? "Add choice" : type === "end" ? "Add ending" : type === "set" ? "Add state change" : "Add condition"}</button>)}
+          {type === "line" ? "Add scene" : type === "choice" ? "Add choice" : type === "end" ? "Add ending" : type === "set" ? "Add state change" : type === "name" ? "Ask the player's name" : "Add condition"}</button>)}
       </div><small>Save explicitly. Ctrl/⌘ + S saves a revision.</small></footer>}
       </div>
     </div>}

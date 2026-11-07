@@ -5,7 +5,7 @@ import type { StoryDraft, StoryNode } from "./types";
 // It is an editor projection; the story still stores one node per line.
 export interface Passage {
   id: string; nodes: string[]; exit: string | null;
-  kind: "scene" | "choice" | "branch" | "end" | "state"; title: string; lines: number;
+  kind: "scene" | "choice" | "branch" | "end" | "state" | "name"; title: string; lines: number;
 }
 
 // Lines, state changes and stage steps run straight on to the next node.
@@ -14,7 +14,7 @@ const linear = (node: StoryNode | undefined): node is Extract<StoryNode, { next:
 
 function targets(node: StoryNode): string[] {
   switch (node.type) {
-    case "line": case "set": case "stage": return [node.next];
+    case "line": case "set": case "stage": case "name": return [node.next];
     case "choice": return node.options.map(option => option.target);
     case "branch": return [node.if_true, node.if_false];
     case "end": return [];
@@ -61,7 +61,7 @@ export function buildPassages(story: StoryDraft): {
     }
     const kind: Passage["kind"] = linear(story.nodes[head])
       ? story.nodes[head].type !== "line" && nodes.length === 1 ? "state" : "scene"
-      : (story.nodes[head].type as "choice" | "branch" | "end");
+      : (story.nodes[head].type as "choice" | "branch" | "end" | "name");
     passages.push({ id: head, nodes, exit, kind, title: title(story, nodes),
       lines: nodes.filter(id => story.nodes[id]?.type === "line").length });
   };
