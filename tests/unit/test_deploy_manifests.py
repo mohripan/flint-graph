@@ -424,12 +424,18 @@ def test_only_the_controller_can_reach_the_instance_role() -> None:
 
 
 def test_the_public_route_reaches_only_what_it_should() -> None:
-    ingress = yaml.safe_load((PRODUCTION / "ingress.yaml").read_text("utf-8"))
+    documents = list(yaml.safe_load_all((PRODUCTION / "ingress.yaml").read_text("utf-8")))
+    ingress = next(item for item in documents if item["metadata"]["name"] == "studio")
     paths = ingress["spec"]["rules"][0]["http"]["paths"]
     routes = {item["path"]: item["backend"]["service"]["name"] for item in paths}
     assert routes == {"/v1": "api", "/health/live": "api", "/": "frontend"}
     live = next(item for item in paths if item["path"] == "/health/live")
     assert live["pathType"] == "Exact"
+    # The playtest's address has nothing of the site's on it, and certainly not the API.
+    frame = next(item for item in documents if item["metadata"]["name"] == "playtest")
+    assert [
+        item["backend"]["service"]["name"] for item in frame["spec"]["rules"][0]["http"]["paths"]
+    ] == ["playtest"]
 
 
 def test_the_production_example_can_be_read_by_the_application(
