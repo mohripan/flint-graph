@@ -12,8 +12,8 @@ configMapGenerator:
 # After running the deploy-images workflow, put the commit it built here. See the runbook.
 images:
   - name: ghcr.io/mohripan/flint-graph-api
-    newTag: 3d5c1cc8b5e4b85466f58e92f849f43fa955a7c9
+    newTag: f18f0c4ee5cd399579013721596424210e8332cc
   - name: ghcr.io/mohripan/flint-graph-frontend
-    newTag: 3d5c1cc8b5e4b85466f58e92f849f43fa955a7c9
+    newTag: f18f0c4ee5cd399579013721596424210e8332cc
   - name: ghcr.io/mohripan/flint-graph-gpu-worker
     newTag: 3d5c1cc8b5e4b85466f58e92f849f43fa955a7c9
