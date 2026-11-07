@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Logo } from "../components/WorkspaceGate";
 import { useAuth } from "../lib/auth";
+import { CONTACT_EMAIL } from "./contact";
 import { linkProps } from "./router";
 import "./site.css";
 
@@ -25,6 +26,7 @@ export function SiteLayout({ children, current }: { children: ReactNode; current
           <nav aria-label="Site" className="flex flex-wrap items-center gap-1">
             {link("/how-it-works", "How it works", current === "how")}
             {link("/join", "Join", current === "join")}
+            <a href={`mailto:${CONTACT_EMAIL}`} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:text-white">Contact us</a>
             <a {...linkProps("/studio")}
               className="ml-1 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-xs transition hover:bg-amber-50">
               {signedIn ? "Open Studio" : "Sign in"}
@@ -39,9 +41,10 @@ export function SiteLayout({ children, current }: { children: ReactNode; current
             <Logo className="h-7 w-7" />
             <span>FlintGraph · a studio for visual novels</span>
           </div>
-          <nav aria-label="Footer" className="flex gap-4">
+          <nav aria-label="Footer" className="flex flex-wrap gap-4">
             <a {...linkProps("/how-it-works")} className="hover:text-slate-800">How it works</a>
             <a {...linkProps("/join")} className="hover:text-slate-800">Join with an invitation</a>
+            <span>Contact us: <a href={`mailto:${CONTACT_EMAIL}`} className="underline hover:text-slate-800">{CONTACT_EMAIL}</a></span>
           </nav>
         </div>
       </footer>

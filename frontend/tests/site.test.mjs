@@ -37,6 +37,14 @@ test("someone without an invitation is told where to ask for one", async () => {
   }
 });
 
+test("every public page has a way to contact us, and shows the address itself", async () => {
+  // A mailto link does nothing for someone with no mail program, so the footer shows the address.
+  const layout = await readFile(new URL("../src/site/SiteLayout.tsx", import.meta.url), "utf8");
+  assert.equal(layout.match(/mailto:\$\{CONTACT_EMAIL\}/g)?.length, 2);
+  assert.ok(layout.includes("Contact us"));
+  assert.match(layout, />\s*\{CONTACT_EMAIL\}\s*</);
+});
+
 test("public pages, the Studio and old Studio links each get their route", () => {
   assert.equal(routes.routeFor("/", ""), "home");
   assert.equal(routes.routeFor("/how-it-works", ""), "how");
