@@ -1,4 +1,5 @@
-# Starts and stops the GPU server. It uses the always-on server's instance role.
+# Starts and stops the GPU server. Lightsail has no instance role, so this uses a key that can do
+# little else, in a Secret that no other pod is given.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,6 +29,8 @@ spec:
                 name: flintgraph-config
             - secretRef:
                 name: flintgraph-env
+            - secretRef:
+                name: flintgraph-aws
           resources:
             requests:
               cpu: 20m

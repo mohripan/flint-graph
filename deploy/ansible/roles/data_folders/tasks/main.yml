@@ -1,0 +1,21 @@
+---
+# The database, the files and Temporal live here, on the server's own disk. There are no backups.
+- name: Create the data folder
+  ansible.builtin.file:
+    path: "{{ flintgraph_data_dir }}"
+    state: directory
+    mode: "0755"
+
+# Fixed folders rather than volumes k3s names at random. The owners are the users their images run as.
+- name: Create a folder for each service
+  ansible.builtin.file:
+    path: "{{ flintgraph_data_dir }}/{{ item.name }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    mode: "0700"
+  loop:
+    - {name: postgres, owner: "0"}
+    - {name: minio, owner: "65532"}
+    - {name: temporal, owner: "1000"}
+  loop_control:
+    label: "{{ item.name }}"

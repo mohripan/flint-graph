@@ -5,7 +5,7 @@ import json
 import aws_cdk as cdk
 import pytest
 from aws_cdk.assertions import Template
-from flintgraph_infra.config import GPU_TAG_KEY, InfraConfig
+from flintgraph_infra.config import DEFAULT_VPC_CIDR, GPU_TAG_KEY, LIGHTSAIL_CIDR, InfraConfig
 from flintgraph_infra.foundation import FoundationStack
 from flintgraph_infra.gpu import GpuStack
 
@@ -15,7 +15,7 @@ def build(**changes):
     config = InfraConfig(**changes)
     env = cdk.Environment(region=config.region)
     foundation = FoundationStack(app, "Foundation", config=config, env=env)
-    gpu = GpuStack(app, "Gpu", foundation=foundation, config=config, env=env)
+    gpu = GpuStack(app, "Gpu", config=config, env=env)
     return Template.from_stack(foundation), Template.from_stack(gpu)
 
 
@@ -24,119 +24,158 @@ def templates():
     return build()
 
 
-def only_instance(template):
+def control(template):
+    rows = template.find_resources("AWS::Lightsail::Instance")
+    assert len(rows) == 1
+    return next(iter(rows.values()))
+
+
+def gpu_instance(template):
     rows = template.find_resources("AWS::EC2::Instance")
     assert len(rows) == 1
     return next(iter(rows.values()))["Properties"]
 
 
-def test_there_is_no_nat_gateway_because_it_would_cost_more_than_the_server(templates):
-    foundation, gpu = templates
-    foundation.resource_count_is("AWS::EC2::NatGateway", 0)
-    gpu.resource_count_is("AWS::EC2::NatGateway", 0)
+def key_statements(foundation):
+    return [
+        statement
+        for policy in foundation.find_resources("AWS::IAM::Policy").values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+    ]
 
 
-def test_only_web_traffic_is_open_to_the_internet_and_nothing_to_the_gpu(templates):
+def test_the_always_on_server_is_the_2_gb_lightsail_plan_on_ubuntu(templates):
     foundation, _ = templates
-    groups = foundation.find_resources("AWS::EC2::SecurityGroup")
-    rules = foundation.find_resources("AWS::EC2::SecurityGroupIngress")
-    inline = [
+    properties = control(foundation)["Properties"]
+    assert properties["BundleId"] == "small_3_2"
+    assert properties["BlueprintId"] == "ubuntu_24_04"
+    assert properties["AvailabilityZone"] == "ap-southeast-2a"
+
+
+def test_only_web_traffic_is_open_to_the_internet(templates):
+    foundation, _ = templates
+    ports = control(foundation)["Properties"]["Networking"]["Ports"]
+    public = [port for port in ports if "0.0.0.0/0" in port.get("Cidrs", [])]
+    assert sorted(port["FromPort"] for port in public) == [80, 443]
+    ssh = next(port for port in ports if port["FromPort"] == 22)
+    assert ssh["CidrListAliases"] == ["lightsail-connect"]
+    assert "Cidrs" not in ssh
+    cluster = {port["FromPort"]: port for port in ports if port["FromPort"] > 443}
+    assert set(cluster) == {6443, 10250, 51820}
+    assert all(port["Cidrs"] == [DEFAULT_VPC_CIDR] for port in cluster.values())
+    assert cluster[51820]["Protocol"] == "udp"
+
+
+def test_nothing_on_the_internet_can_reach_the_gpu(templates):
+    _, gpu = templates
+    rules = [
         rule
-        for group in groups.values()
+        for group in gpu.find_resources("AWS::EC2::SecurityGroup").values()
         for rule in group["Properties"].get("SecurityGroupIngress", [])
     ]
-    standalone = [rule["Properties"] for rule in rules.values()]
-    public = [rule for rule in inline + standalone if rule.get("CidrIp") == "0.0.0.0/0"]
-    assert sorted(rule["FromPort"] for rule in public) == [80, 443]
-    assert not any(rule.get("FromPort") == 22 for rule in inline + standalone), "no SSH"
-    for group in groups.values():
-        if "no inbound" in group["Properties"]["GroupDescription"]:
-            assert "SecurityGroupIngress" not in group["Properties"]
+    rules += [
+        rule["Properties"] for rule in gpu.find_resources("AWS::EC2::SecurityGroupIngress").values()
+    ]
+    assert sorted(rule["FromPort"] for rule in rules) == [10250, 51820]
+    assert all(rule["CidrIp"] == LIGHTSAIL_CIDR for rule in rules)
 
 
-def test_servers_require_imdsv2_with_a_hop_limit_a_pod_can_use(templates):
+def test_there_is_no_nat_gateway_or_new_network_to_pay_for(templates):
     for template in templates:
-        options = only_instance(template)["MetadataOptions"]
-        assert options["HttpTokens"] == "required"
-        assert options["HttpPutResponseHopLimit"] == 2
+        template.resource_count_is("AWS::EC2::NatGateway", 0)
+        template.resource_count_is("AWS::EC2::VPC", 0)
+        template.resource_count_is("AWS::EC2::EIP", 0)
 
 
-def test_disks_are_encrypted_gp3(templates):
-    foundation, gpu = templates
-    for template in (foundation, gpu):
-        ebs = only_instance(template)["BlockDeviceMappings"][0]["Ebs"]
-        assert ebs["Encrypted"] is True
-        assert ebs["VolumeType"] == "gp3"
-    foundation.has_resource_properties("AWS::EC2::Volume", {"Encrypted": True, "VolumeType": "gp3"})
+def test_the_gpu_uses_the_default_vpc_given_when_deploying():
+    _, gpu = build(default_vpc_id="vpc-111", default_subnet_id="subnet-222")
+    assert gpu_instance(gpu)["SubnetId"] == "subnet-222"
+    group = next(iter(gpu.find_resources("AWS::EC2::SecurityGroup").values()))
+    assert group["Properties"]["VpcId"] == "vpc-111"
 
 
-def test_the_data_disk_outlives_the_server_and_the_stack(templates):
+def test_the_gpu_requires_imdsv2_and_keeps_its_role_from_pods(templates):
+    _, gpu = templates
+    options = gpu_instance(gpu)["MetadataOptions"]
+    assert options["HttpTokens"] == "required"
+    assert options["HttpPutResponseHopLimit"] == 1
+
+
+def test_the_gpu_disk_is_encrypted_gp3(templates):
+    _, gpu = templates
+    ebs = gpu_instance(gpu)["BlockDeviceMappings"][0]["Ebs"]
+    assert ebs["Encrypted"] is True
+    assert ebs["VolumeType"] == "gp3"
+    assert ebs["VolumeSize"] == 70
+
+
+def test_deleting_the_stack_cannot_delete_the_only_copy_of_every_project(templates):
     foundation, _ = templates
-    volume = next(iter(foundation.find_resources("AWS::EC2::Volume").values()))
-    assert volume["DeletionPolicy"] == "Retain"
-    assert volume["UpdateReplacePolicy"] == "Retain"
+    assert control(foundation)["DeletionPolicy"] == "Retain"
+    assert control(foundation)["UpdateReplacePolicy"] == "Retain"
+    address = next(iter(foundation.find_resources("AWS::Lightsail::StaticIp").values()))
+    assert address["DeletionPolicy"] == "Retain"
 
 
 def test_there_are_no_backups_because_the_owner_chose_none(templates):
     foundation, _ = templates
     foundation.resource_count_is("AWS::DLM::LifecyclePolicy", 0)
-
-
-def test_the_always_on_server_cannot_run_up_a_surprise_cpu_bill(templates):
-    foundation, _ = templates
-    properties = only_instance(foundation)
-    assert properties["CreditSpecification"] == {"CPUCredits": "standard"}
-    assert properties["DisableApiTermination"] is True
-    assert properties["InstanceType"] == "t3a.medium"
+    assert "AddOns" not in control(foundation)["Properties"]
 
 
 def test_the_gpu_stops_rather_than_terminates_when_it_shuts_itself_down(templates):
     _, gpu = templates
-    properties = only_instance(gpu)
+    properties = gpu_instance(gpu)
     assert properties["InstanceInitiatedShutdownBehavior"] == "stop"
     assert properties["InstanceType"] == "g4dn.xlarge"
     tags = {tag["Key"]: tag["Value"] for tag in properties["Tags"]}
     assert tags[GPU_TAG_KEY] == "1"
-    gpu.resource_count_is("AWS::EC2::EIP", 0)
 
 
-def test_only_the_tagged_gpu_can_be_started_or_stopped(templates):
+def test_only_the_tagged_gpu_can_be_started_or_stopped_with_the_key(templates):
     foundation, _ = templates
-    policies = foundation.find_resources("AWS::IAM::Policy")
-    statements = [
-        statement
-        for policy in policies.values()
-        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
-    ]
-    powerful = [
-        statement
-        for statement in statements
-        if "ec2:StartInstances" in json.dumps(statement["Action"])
-    ]
+    statements = key_statements(foundation)
+    powerful = [s for s in statements if "ec2:StartInstances" in json.dumps(s["Action"])]
     assert len(powerful) == 1
     assert powerful[0]["Condition"] == {"StringEquals": {f"aws:ResourceTag/{GPU_TAG_KEY}": "1"}}
     assert "ec2:TerminateInstances" not in json.dumps(statements)
     assert "ec2:ModifyInstanceAttribute" not in json.dumps(statements)
     assert not any(
-        statement["Resource"] == "*" and statement["Action"] != "ec2:DescribeInstances"
-        for statement in statements
+        s["Resource"] == "*" and s["Action"] != "ec2:DescribeInstances" for s in statements
     )
+
+
+def test_the_keys_secret_never_enters_the_stack(templates):
+    foundation, _ = templates
+    foundation.resource_count_is("AWS::IAM::User", 1)
+    foundation.resource_count_is("AWS::IAM::AccessKey", 0)
 
 
 def test_provisioning_survives_a_reboot_and_names_the_right_role(templates):
     foundation, gpu = templates
-    for template, role in ((foundation, "control"), (gpu, "gpu")):
-        script = json.dumps(only_instance(template)["UserData"])
+    scripts = (
+        ("control", json.dumps(control(foundation)["Properties"]["UserData"])),
+        ("gpu", json.dumps(gpu_instance(gpu)["UserData"])),
+    )
+    for role, script in scripts:
         assert f"flintgraph_role={role}" in script
         assert "ConditionPathExists=!/var/lib/flintgraph-provisioned" in script
         assert "deploy/ansible/site.yml" in script
 
 
+def test_the_always_on_server_waits_for_its_key_and_the_gpu_has_a_role_instead(templates):
+    foundation, gpu = templates
+    wanted = "ConditionPathExists=/root/.aws/credentials"
+    assert wanted in json.dumps(control(foundation)["Properties"]["UserData"])
+    assert wanted not in json.dumps(gpu_instance(gpu)["UserData"])
+    assert "IamInstanceProfile" in gpu_instance(gpu)
+
+
 def test_a_broken_first_boot_cannot_leave_the_gpu_running_for_days(templates):
     foundation, gpu = templates
-    script = json.dumps(only_instance(gpu)["UserData"])
+    script = json.dumps(gpu_instance(gpu)["UserData"])
     assert script.index("shutdown -h +300") < script.index("apt-get update")
-    assert "shutdown" not in json.dumps(only_instance(foundation)["UserData"])
+    assert "shutdown" not in json.dumps(control(foundation)["Properties"]["UserData"])
 
 
 def test_a_budget_alarm_exists_and_emails_when_given_an_address():
@@ -153,3 +192,4 @@ def test_no_email_or_account_is_written_into_the_defaults():
     config = InfraConfig()
     assert config.alert_email is None
     assert config.ami.startswith("ami-"), "pinned, so a new image never replaces a running server"
+    assert set(config.default_vpc_id[4:]) == {"0"}, "the real ID is passed when deploying"

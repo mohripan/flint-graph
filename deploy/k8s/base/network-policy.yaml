@@ -1,15 +1,11 @@
-# The servers' roles can read every secret and start the GPU, and the instance metadata address
-# hands them to anything that asks. Only the controller, which starts and stops the GPU, may ask.
+# The GPU server's role can read the cluster's join token, and the instance metadata address hands
+# it to anything that asks. No pod needs it: the controller has its own key.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: no-instance-role
 spec:
-  podSelector:
-    matchExpressions:
-      - key: app
-        operator: NotIn
-        values: [gpu-controller]
+  podSelector: {}
   policyTypes: [Egress]
   egress:
     - to:

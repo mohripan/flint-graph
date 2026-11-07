@@ -7,7 +7,7 @@ aws_region: ap-southeast-2
 flintgraph_data_dir: /var/lib/flintgraph
 flintgraph_src: /opt/flintgraph/src
 # Kubernetes keeps pods out of swap by default, so this relieves k3s and the system, which frees
-# memory for the pods. About 2 GB of the 4 GB is expected to be in use.
+# memory for the pods. About 1.7 GB of the 2 GB is in use at idle (ADR 0077).
 control_swap_gb: 4
-# Longer than the controller's 4 hour session limit, so this only fires if the controller is gone.
+# Longer than the controller's 3 hour session limit, so this only fires if the controller is gone.
 gpu_max_uptime: 5h
